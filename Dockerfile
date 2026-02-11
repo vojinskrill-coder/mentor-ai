@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Install production dependencies only (fast — no dev deps)
 COPY package.json package-lock.json ./
-RUN npm ci --legacy-peer-deps --omit=dev
+RUN HUSKY=0 npm ci --legacy-peer-deps --omit=dev
 
 # Copy pre-built dist and prisma schema
 COPY dist ./dist
