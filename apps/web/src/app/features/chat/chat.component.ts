@@ -1077,12 +1077,22 @@ export class ChatComponent implements OnInit, OnDestroy {
       // Start YOLO execution if flagged from onboarding redirect
       if (this.yoloPending) {
         this.yoloPending = false;
-        this.chatWsService.emitStartYolo(conversationId);
+        try {
+          await this.chatWsService.waitForConnection();
+          this.chatWsService.emitStartYolo(conversationId);
+        } catch {
+          this.showError('WebSocket connection failed — YOLO mode could not start');
+        }
       }
       // Auto-start manual workflow if flagged from onboarding redirect
       if (this.manualAutostartPending) {
         this.manualAutostartPending = false;
-        this.autoStartManualWorkflow(conversationId);
+        try {
+          await this.chatWsService.waitForConnection();
+          this.autoStartManualWorkflow(conversationId);
+        } catch {
+          // Non-blocking — user can still start manually
+        }
       }
     } catch {
       this.activeConversation$.set(null);

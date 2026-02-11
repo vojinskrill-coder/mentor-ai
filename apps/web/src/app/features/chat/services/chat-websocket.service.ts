@@ -179,6 +179,31 @@ export class ChatWebsocketService {
   }
 
   /**
+   * Returns a promise that resolves once the socket is connected.
+   * If already connected, resolves immediately.
+   */
+  waitForConnection(timeoutMs = 10000): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (this.socket?.connected) {
+        resolve();
+        return;
+      }
+      const timer = setTimeout(() => {
+        reject(new Error('WebSocket connection timeout'));
+      }, timeoutMs);
+      const check = () => {
+        if (this.socket?.connected) {
+          clearTimeout(timer);
+          resolve();
+        } else {
+          setTimeout(check, 100);
+        }
+      };
+      check();
+    });
+  }
+
+  /**
    * Disconnects from the WebSocket server.
    */
   disconnect(): void {
