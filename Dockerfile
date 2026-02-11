@@ -5,27 +5,21 @@ WORKDIR /app
 # Copy all source code first
 COPY . .
 
-# Remove any host node_modules that may have been copied, then install fresh
-RUN rm -rf node_modules && npm ci --legacy-peer-deps
-
-# Debug: show what prisma installed
-RUN ls -la node_modules/prisma/ && ls -la node_modules/prisma/build/ && ls -la node_modules/.bin/ | grep -E "(prisma|nx)"
-
-# Generate Prisma client (use npx with exact version to avoid downloading latest)
-RUN npx prisma@5.22.0 generate --schema=apps/api/prisma/schema.prisma
-
-# Build Angular frontend (production config with fileReplacements)
-RUN npx nx@22.4.5 build web --configuration=production
-
-# Build NestJS API
-RUN npx nx@22.4.5 build api
+# Install deps, generate Prisma client, and build everything in one layer
+# This avoids Docker layer caching issues with node_modules
+RUN rm -rf node_modules \
+    && npm ci --legacy-peer-deps \
+    && ls node_modules/prisma/build/index.js \
+    && node node_modules/prisma/build/index.js generate --schema=apps/api/prisma/schema.prisma \
+    && node node_modules/nx/bin/nx.js build web --configuration=production \
+    && node node_modules/nx/bin/nx.js build api
 
 # Clean up dev dependencies and source to reduce image size
-RUN npm prune --production --legacy-peer-deps 2>/dev/null; \
-    rm -rf apps/web apps/api/src apps/api-e2e Vector_DB_Source shared .angular .nx
+RUN npm prune --production --legacy-peer-deps 2>/dev/null || true
+RUN rm -rf apps/web apps/api/src apps/api-e2e Vector_DB_Source shared .angular .nx
 
-# Re-generate Prisma client after prune
-RUN npx prisma@5.22.0 generate --schema=apps/api/prisma/schema.prisma 2>/dev/null || true
+# Re-generate Prisma client after prune (prisma is in dependencies, should survive)
+RUN node node_modules/prisma/build/index.js generate --schema=apps/api/prisma/schema.prisma 2>/dev/null || true
 
 EXPOSE 3000
 ENV NODE_ENV=production
