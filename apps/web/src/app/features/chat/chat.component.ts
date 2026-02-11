@@ -44,7 +44,6 @@ import { ConceptPanelComponent } from '../knowledge/concept-panel/concept-panel.
 import { ConceptTreeComponent } from './components/concept-tree.component';
 import { ConversationNotesComponent } from './components/conversation-notes.component';
 import { TopicPickerComponent } from './components/topic-picker.component';
-import { DiscoveryChatComponent } from './components/discovery-chat.component';
 import type { CurriculumNode } from '@mentor-ai/shared/types';
 
 /**
@@ -66,7 +65,6 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
     ConceptTreeComponent,
     ConversationNotesComponent,
     TopicPickerComponent,
-    DiscoveryChatComponent,
   ],
   styles: [`
     /* All styles inline - no Tailwind dependency */
@@ -547,8 +545,6 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
           (conceptSelected)="onConceptSelected($event)"
         />
 
-        <app-discovery-chat />
-
         <div class="sidebar-footer">
           <a routerLink="/admin/llm-config">
             <svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -852,16 +848,9 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
               </div>
             </div>
 
-            <!-- Chat Input -->
-            <div style="flex-shrink: 0;">
-              <app-chat-input
-                [disabled]="isLoading$() && !allowWorkflowInput$()"
-                (messageSent)="sendMessage($event)"
-              />
-            </div>
             } @else {
               <!-- Notes View (conversation mode) -->
-              <div class="notes-view">
+              <div class="notes-view" style="flex: 1; overflow-y: auto;">
                 <app-conversation-notes
                   [conversationId]="activeConversationId$()"
                   [conceptId]="activeConversation$()?.conceptId ?? null"
@@ -875,6 +864,13 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
                 />
               </div>
             }
+            <!-- Chat Input (always visible at bottom when conversation is active) -->
+            <div style="flex-shrink: 0;">
+              <app-chat-input
+                [disabled]="isLoading$() && !allowWorkflowInput$()"
+                (messageSent)="sendMessage($event)"
+              />
+            </div>
           } @else if (folderName$()) {
             <!-- Notes View (folder mode only) -->
             <div class="notes-view">
@@ -1421,6 +1417,11 @@ export class ChatComponent implements OnInit, OnDestroy {
   async sendMessage(content: string): Promise<void> {
     const conversationId = this.activeConversationId$();
     if (!conversationId || !content.trim()) return;
+
+    // Auto-switch to Chat tab when sending from Tasks tab
+    if (this.activeTab$() !== 'chat') {
+      this.activeTab$.set('chat');
+    }
 
     // Intercept: if a workflow step is awaiting text input, route to step-continue
     const stepInput = this.currentWorkflowStepInput$();
