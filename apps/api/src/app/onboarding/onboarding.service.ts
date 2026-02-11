@@ -21,7 +21,6 @@ import { ConceptService } from '../knowledge/services/concept.service';
 import { ConceptMatchingService } from '../knowledge/services/concept-matching.service';
 import { ConversationService } from '../conversation/conversation.service';
 import { WebSearchService } from '../web-search/web-search.service';
-import { PDFParse } from 'pdf-parse';
 import { OnboardingMetricService } from './onboarding-metric.service';
 import {
   QUICK_TASK_TEMPLATES,
@@ -67,6 +66,7 @@ export class OnboardingService {
 
     let text: string;
     try {
+      const { PDFParse } = await import('pdf-parse');
       const parser = new PDFParse({ data: pdfBuffer });
       const result = await parser.getText();
       text = result.text?.trim() ?? '';

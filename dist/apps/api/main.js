@@ -17528,7 +17528,7 @@ const web_search_module_1 = __webpack_require__(135);
 const file_upload_module_1 = __webpack_require__(39);
 const onboarding_controller_1 = __webpack_require__(148);
 const onboarding_service_1 = __webpack_require__(149);
-const onboarding_metric_service_1 = __webpack_require__(151);
+const onboarding_metric_service_1 = __webpack_require__(150);
 /**
  * Module for the onboarding quick win flow.
  * Provides sub-5-minute first value experience for new users.
@@ -17872,9 +17872,8 @@ const concept_service_1 = __webpack_require__(114);
 const concept_matching_service_1 = __webpack_require__(119);
 const conversation_service_1 = __webpack_require__(140);
 const web_search_service_1 = __webpack_require__(136);
-const pdf_parse_1 = __webpack_require__(150);
-const onboarding_metric_service_1 = __webpack_require__(151);
-const quick_task_templates_1 = __webpack_require__(152);
+const onboarding_metric_service_1 = __webpack_require__(150);
+const quick_task_templates_1 = __webpack_require__(151);
 /**
  * Service for managing the onboarding quick win flow.
  * Enables users to experience AI value within 5 minutes of registration.
@@ -17907,7 +17906,8 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
         }
         let text;
         try {
-            const parser = new pdf_parse_1.PDFParse({ data: pdfBuffer });
+            const { PDFParse } = await Promise.resolve().then(() => tslib_1.__importStar(__webpack_require__(152)));
+            const parser = new PDFParse({ data: pdfBuffer });
             const result = await parser.getText();
             text = result.text?.trim() ?? '';
             await parser.destroy();
@@ -18534,12 +18534,6 @@ exports.OnboardingService = OnboardingService = OnboardingService_1 = tslib_1.__
 
 /***/ }),
 /* 150 */
-/***/ ((module) => {
-
-module.exports = require("pdf-parse");
-
-/***/ }),
-/* 151 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -18688,7 +18682,7 @@ exports.OnboardingMetricService = OnboardingMetricService = OnboardingMetricServ
 
 
 /***/ }),
-/* 152 */
+/* 151 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -18874,6 +18868,12 @@ ${userContext}
 Please generate a professional, ready-to-use output that demonstrates immediate value.`;
 }
 
+
+/***/ }),
+/* 152 */
+/***/ ((module) => {
+
+module.exports = require("pdf-parse");
 
 /***/ }),
 /* 153 */
