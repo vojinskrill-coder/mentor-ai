@@ -1,6 +1,7 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "npm ci --legacy-peer-deps && npx prisma generate --schema=apps/api/prisma/schema.prisma && npx nx build web --configuration=production && npx nx build api"
+nixpacksConfigPath = "nixpacks.toml"
+buildCommand = "npx prisma generate --schema=apps/api/prisma/schema.prisma && npx nx build web --configuration=production && npx nx build api"
 
 [deploy]
 startCommand = "node dist/api/main.js"
