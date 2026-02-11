@@ -1,0 +1,134 @@
+{
+  "concepts": [
+    {
+      "name": "SWOT Analysis",
+      "slug": "swot-analysis",
+      "category": "Strategy",
+      "definition": "A strategic planning framework that evaluates an organization's Strengths, Weaknesses, Opportunities, and Threats to inform decision-making.",
+      "extendedDescription": "SWOT analysis provides a structured approach to internal and external assessment. Strengths and weaknesses are internal factors (resources, capabilities), while opportunities and threats are external (market trends, competition). The framework helps prioritize strategic initiatives by matching internal capabilities with external opportunities while addressing vulnerabilities.",
+      "departmentTags": ["Strategy", "Operations"],
+      "relatedConcepts": [
+        { "slug": "competitive-advantage", "type": "RELATED" },
+        { "slug": "strategic-planning", "type": "PREREQUISITE" },
+        { "slug": "market-segmentation", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Porter's Five Forces",
+      "slug": "porters-five-forces",
+      "category": "Strategy",
+      "definition": "A framework for analyzing the competitive forces that shape an industry: rivalry, supplier power, buyer power, threat of substitutes, and barriers to entry.",
+      "extendedDescription": "Porter's Five Forces helps businesses understand the competitive dynamics of their industry. By assessing each force, companies can identify where power lies, find strategic positions with less competition, and anticipate shifts in industry profitability. The framework is essential for market entry decisions and competitive strategy development.",
+      "departmentTags": ["Strategy", "Marketing"],
+      "relatedConcepts": [
+        { "slug": "competitive-advantage", "type": "RELATED" },
+        { "slug": "market-positioning", "type": "RELATED" },
+        { "slug": "blue-ocean-strategy", "type": "ADVANCED" }
+      ]
+    },
+    {
+      "name": "Blue Ocean Strategy",
+      "slug": "blue-ocean-strategy",
+      "category": "Strategy",
+      "definition": "A business theory that suggests companies should create uncontested market space rather than competing in existing crowded markets.",
+      "extendedDescription": "Blue Ocean Strategy, developed by W. Chan Kim and Renee Mauborgne, contrasts 'red oceans' (competitive, bloody markets) with 'blue oceans' (new, uncontested spaces). The strategy canvas and four actions framework (eliminate, reduce, raise, create) help companies break the value-cost trade-off and find new demand rather than fighting over existing customers.",
+      "departmentTags": ["Strategy", "Marketing"],
+      "relatedConcepts": [
+        { "slug": "competitive-advantage", "type": "PREREQUISITE" },
+        { "slug": "business-model-canvas", "type": "RELATED" },
+        { "slug": "growth-strategy", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Balanced Scorecard",
+      "slug": "balanced-scorecard",
+      "category": "Strategy",
+      "definition": "A strategic management system that translates vision and strategy into a balanced set of performance measures across financial, customer, process, and learning dimensions.",
+      "extendedDescription": "The Balanced Scorecard, developed by Kaplan and Norton, goes beyond financial metrics to include customer satisfaction, internal processes, and organizational learning. It creates a cause-and-effect chain linking employee skills to process efficiency to customer satisfaction to financial results. This holistic view ensures strategy execution across all organizational levels.",
+      "departmentTags": ["Strategy", "Finance", "Operations"],
+      "relatedConcepts": [
+        { "slug": "strategic-planning", "type": "PREREQUISITE" },
+        { "slug": "financial-modeling", "type": "RELATED" },
+        { "slug": "kpi-management", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Competitive Advantage",
+      "slug": "competitive-advantage",
+      "category": "Strategy",
+      "definition": "A condition or circumstance that puts a company in a favorable or superior business position relative to its competitors.",
+      "extendedDescription": "Competitive advantage can be achieved through cost leadership, differentiation, or focus strategies. Sustainable advantages are built on unique resources, capabilities, or market positions that are difficult for competitors to replicate. Key sources include proprietary technology, brand equity, network effects, economies of scale, and exclusive partnerships.",
+      "departmentTags": ["Strategy", "Marketing"],
+      "relatedConcepts": [
+        { "slug": "porters-five-forces", "type": "PREREQUISITE" },
+        { "slug": "market-positioning", "type": "RELATED" },
+        { "slug": "brand-positioning", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Strategic Planning",
+      "slug": "strategic-planning",
+      "category": "Strategy",
+      "definition": "The systematic process of defining an organization's direction, making decisions on resource allocation, and establishing priorities to achieve long-term goals.",
+      "extendedDescription": "Strategic planning involves environmental scanning, goal setting, strategy formulation, implementation, and evaluation. It bridges the gap between where an organization is and where it wants to be. Effective strategic plans are dynamic documents that adapt to changing conditions while maintaining focus on core objectives and competitive positioning.",
+      "departmentTags": ["Strategy", "Operations"],
+      "relatedConcepts": [
+        { "slug": "swot-analysis", "type": "ADVANCED" },
+        { "slug": "balanced-scorecard", "type": "ADVANCED" },
+        { "slug": "growth-strategy", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Market Positioning",
+      "slug": "market-positioning",
+      "category": "Strategy",
+      "definition": "The strategic process of establishing a company's products or services in a specific place within the market relative to competing offerings.",
+      "extendedDescription": "Market positioning defines how a company wants to be perceived by target customers. It involves identifying key differentiators, understanding competitor positions, and crafting a value proposition that occupies a unique and valuable position in customer minds. Effective positioning is clear, consistent, and defensible against competitive moves.",
+      "departmentTags": ["Strategy", "Marketing"],
+      "relatedConcepts": [
+        { "slug": "competitive-advantage", "type": "PREREQUISITE" },
+        { "slug": "brand-positioning", "type": "RELATED" },
+        { "slug": "market-segmentation", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Business Model Canvas",
+      "slug": "business-model-canvas",
+      "category": "Strategy",
+      "definition": "A strategic management template for developing new or documenting existing business models through nine key building blocks.",
+      "extendedDescription": "The Business Model Canvas, created by Alexander Osterwalder, maps nine elements: customer segments, value propositions, channels, customer relationships, revenue streams, key resources, key activities, key partnerships, and cost structure. It enables rapid visualization, testing, and iteration of business models, making it invaluable for startups and corporate innovation alike.",
+      "departmentTags": ["Strategy", "Finance"],
+      "relatedConcepts": [
+        { "slug": "strategic-planning", "type": "PREREQUISITE" },
+        { "slug": "value-based-pricing", "type": "RELATED" },
+        { "slug": "growth-strategy", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Growth Strategy",
+      "slug": "growth-strategy",
+      "category": "Strategy",
+      "definition": "A plan of action designed to increase a company's market share, revenue, or customer base through organic growth, acquisition, or market expansion.",
+      "extendedDescription": "Growth strategies include market penetration (selling more to existing markets), market development (entering new markets), product development (new offerings for existing markets), and diversification (new products in new markets). The Ansoff Matrix helps visualize these options. Choosing the right growth path depends on industry maturity, competitive dynamics, and organizational capabilities.",
+      "departmentTags": ["Strategy", "Sales", "Marketing"],
+      "relatedConcepts": [
+        { "slug": "diversification-strategy", "type": "ADVANCED" },
+        { "slug": "market-positioning", "type": "RELATED" },
+        { "slug": "sales-forecasting", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Diversification Strategy",
+      "slug": "diversification-strategy",
+      "category": "Strategy",
+      "definition": "A corporate strategy to enter new markets or industries by developing new products or acquiring businesses outside the current scope.",
+      "extendedDescription": "Diversification reduces risk by spreading investments across multiple business areas. Related diversification leverages existing capabilities in new markets, while unrelated diversification enters entirely new industries. Successful diversification requires careful assessment of synergies, integration capabilities, and the risk-return profile of new ventures.",
+      "departmentTags": ["Strategy", "Finance"],
+      "relatedConcepts": [
+        { "slug": "growth-strategy", "type": "PREREQUISITE" },
+        { "slug": "business-model-canvas", "type": "RELATED" },
+        { "slug": "competitive-advantage", "type": "RELATED" }
+      ]
+    }
+  ]
+}

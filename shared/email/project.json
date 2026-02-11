@@ -1,0 +1,19 @@
+{
+  "name": "email",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "shared/email/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/shared/email",
+        "main": "shared/email/src/index.ts",
+        "tsConfig": "shared/email/tsconfig.lib.json",
+        "assets": ["shared/email/*.md"]
+      }
+    }
+  }
+}

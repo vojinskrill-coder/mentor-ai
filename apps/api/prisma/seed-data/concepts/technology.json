@@ -1,0 +1,127 @@
+{
+  "concepts": [
+    {
+      "name": "Technical Debt",
+      "slug": "technical-debt",
+      "category": "Technology",
+      "definition": "The implied cost of additional rework caused by choosing an easy solution now instead of using a better approach that would take longer.",
+      "extendedDescription": "Technical debt accumulates when teams take shortcuts to meet deadlines. Like financial debt, it accrues interest over time through slower development, more bugs, and harder maintenance. Managing technical debt requires tracking, prioritizing, and allocating time for refactoring. Some debt is strategic; most is accidental.",
+      "departmentTags": ["Technology"],
+      "relatedConcepts": [
+        { "slug": "ci-cd-pipelines", "type": "RELATED" },
+        { "slug": "devops-practices", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "API Design",
+      "slug": "api-design",
+      "category": "Technology",
+      "definition": "The process of developing interfaces that allow software applications to communicate effectively, consistently, and securely.",
+      "extendedDescription": "Good API design prioritizes developer experience, consistency, and evolution. RESTful APIs use standard HTTP methods and status codes. Key principles include resource-oriented URLs, versioning strategies, clear error handling, and comprehensive documentation. Well-designed APIs reduce integration friction and increase adoption.",
+      "departmentTags": ["Technology"],
+      "relatedConcepts": [
+        { "slug": "microservices", "type": "RELATED" },
+        { "slug": "security-best-practices", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Scalability Patterns",
+      "slug": "scalability-patterns",
+      "category": "Technology",
+      "definition": "Architectural approaches that enable systems to handle growing amounts of work by adding resources to the system.",
+      "extendedDescription": "Scalability patterns include horizontal scaling (adding machines), vertical scaling (adding power), caching, database sharding, and load balancing. The right approach depends on the bottleneck. Designing for scalability early is easier than retrofitting, but premature optimization can waste resources.",
+      "departmentTags": ["Technology"],
+      "relatedConcepts": [
+        { "slug": "cloud-architecture", "type": "RELATED" },
+        { "slug": "performance-optimization", "type": "RELATED" },
+        { "slug": "microservices", "type": "ADVANCED" }
+      ]
+    },
+    {
+      "name": "DevOps Practices",
+      "slug": "devops-practices",
+      "category": "Technology",
+      "definition": "Cultural and technical practices that unite software development and IT operations to shorten the development lifecycle and deliver high-quality software.",
+      "extendedDescription": "DevOps emphasizes collaboration, automation, and continuous improvement. Key practices include continuous integration, infrastructure as code, monitoring, and incident management. DevOps culture values shared responsibility, transparency, and learning from failures. Metrics like deployment frequency and lead time measure success.",
+      "departmentTags": ["Technology", "Operations"],
+      "relatedConcepts": [
+        { "slug": "ci-cd-pipelines", "type": "RELATED" },
+        { "slug": "cloud-architecture", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Cloud Architecture",
+      "slug": "cloud-architecture",
+      "category": "Technology",
+      "definition": "The design and management of cloud computing environments including components, relationships, and principles governing their design and evolution.",
+      "extendedDescription": "Cloud architecture leverages on-demand computing resources from providers like AWS, Azure, and GCP. Patterns include multi-tier architectures, serverless computing, and containerization. Key considerations are cost optimization, security, reliability, and vendor lock-in. Cloud-native design differs from simply migrating on-premise systems.",
+      "departmentTags": ["Technology"],
+      "relatedConcepts": [
+        { "slug": "scalability-patterns", "type": "RELATED" },
+        { "slug": "microservices", "type": "RELATED" },
+        { "slug": "security-best-practices", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Data Modeling",
+      "slug": "data-modeling",
+      "category": "Technology",
+      "definition": "The process of creating a visual representation of data objects, their relationships, and the rules that govern how data is stored and accessed.",
+      "extendedDescription": "Data modeling progresses from conceptual (business concepts) to logical (detailed attributes) to physical (database implementation). Good data models balance normalization with performance, support current and future needs, and clearly document business rules. They're essential for database design and data integration.",
+      "departmentTags": ["Technology"],
+      "relatedConcepts": [
+        { "slug": "api-design", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Security Best Practices",
+      "slug": "security-best-practices",
+      "category": "Technology",
+      "definition": "Proven approaches and standards for protecting systems, data, and users from security threats and vulnerabilities.",
+      "extendedDescription": "Security best practices cover authentication, authorization, encryption, input validation, and audit logging. Defense in depth provides multiple layers of protection. Security must be built in from the start, not bolted on. Regular security assessments and incident response planning are essential.",
+      "departmentTags": ["Technology", "Legal"],
+      "relatedConcepts": [
+        { "slug": "api-design", "type": "RELATED" },
+        { "slug": "cloud-architecture", "type": "RELATED" },
+        { "slug": "compliance-frameworks", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Performance Optimization",
+      "slug": "performance-optimization",
+      "category": "Technology",
+      "definition": "The process of making a system run more efficiently in terms of speed, resource usage, and responsiveness.",
+      "extendedDescription": "Performance optimization starts with measurement and profiling to identify bottlenecks. Common techniques include caching, database query optimization, code refactoring, and CDN usage. Optimization should target user-impacting metrics. Premature optimization is counterproductive; measure first, then optimize where it matters.",
+      "departmentTags": ["Technology"],
+      "relatedConcepts": [
+        { "slug": "scalability-patterns", "type": "RELATED" },
+        { "slug": "technical-debt", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Microservices",
+      "slug": "microservices",
+      "category": "Technology",
+      "definition": "An architectural style that structures an application as a collection of loosely coupled services, each implementing a specific business capability.",
+      "extendedDescription": "Microservices enable independent development, deployment, and scaling of different application components. Benefits include technology flexibility, fault isolation, and team autonomy. Challenges include distributed system complexity, data consistency, and operational overhead. Microservices suit large applications with multiple teams.",
+      "departmentTags": ["Technology"],
+      "relatedConcepts": [
+        { "slug": "api-design", "type": "PREREQUISITE" },
+        { "slug": "scalability-patterns", "type": "RELATED" },
+        { "slug": "devops-practices", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "CI/CD Pipelines",
+      "slug": "ci-cd-pipelines",
+      "category": "Technology",
+      "definition": "Automated workflows that continuously integrate code changes and deploy them to production environments safely and efficiently.",
+      "extendedDescription": "CI/CD pipelines automate build, test, and deployment processes. Continuous Integration merges code frequently with automated testing. Continuous Deployment extends this to automatic production releases. Pipelines include stages for linting, unit tests, integration tests, security scans, and staged rollouts.",
+      "departmentTags": ["Technology"],
+      "relatedConcepts": [
+        { "slug": "devops-practices", "type": "RELATED" },
+        { "slug": "technical-debt", "type": "RELATED" }
+      ]
+    }
+  ]
+}

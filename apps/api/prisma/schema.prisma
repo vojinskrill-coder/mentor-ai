@@ -1,0 +1,573 @@
+// Mentor AI Platform Database Schema
+// This schema manages global platform settings and tenant registry
+// Each tenant has its own separate database for data isolation (SOC 2 compliant)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Platform-wide settings and configuration
+model Platform {
+  id        String   @id @default(cuid())
+  name      String   @default("Mentor AI")
+  version   String   @default("1.0.0")
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("platform")
+}
+
+// Registry of all tenant databases
+// Each tenant gets their own PostgreSQL database for complete data isolation
+model TenantRegistry {
+  id        String       @id @map("id") // Must have tnt_ prefix, e.g., tnt_cuid123
+  name      String       @unique
+  dbUrl     String       @map("db_url")
+  status    TenantStatus @default(ACTIVE)
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  @@map("tenant_registry")
+}
+
+enum TenantStatus {
+  DRAFT
+  ONBOARDING
+  ACTIVE
+  SUSPENDED
+  PENDING_DELETION
+  DELETED
+}
+
+enum UserRole {
+  TENANT_OWNER
+  ADMIN
+  MEMBER
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+enum Department {
+  FINANCE
+  MARKETING
+  TECHNOLOGY
+  OPERATIONS
+  LEGAL
+  CREATIVE
+  STRATEGY
+  SALES
+}
+
+enum ExportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
+enum ExportFormat {
+  PDF
+  MARKDOWN
+  JSON
+}
+
+// ── Department Persona Types (Story 2.4) ──
+// Persona type for department-specific AI responses
+enum PersonaType {
+  CFO
+  CMO
+  CTO
+  OPERATIONS
+  LEGAL
+  CREATIVE
+  CSO
+  SALES
+}
+
+// Tenant business profile with industry and description
+// Linked to TenantRegistry for database connection info
+model Tenant {
+  id          String       @id // Must have tnt_ prefix, e.g., tnt_cuid123
+  name        String
+  industry    String
+  description String?
+  iconUrl     String?      @map("icon_url")
+  status      TenantStatus @default(DRAFT)
+
+  // Token quota for AI usage (Story 2.2)
+  // Default: 1,000,000 tokens per month
+  tokenQuota  Int          @default(1000000) @map("token_quota")
+
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  // Backup owner for account recovery
+  backupOwnerId          String?   @unique @map("backup_owner_id")
+  backupOwner            User?     @relation("BackupOwner", fields: [backupOwnerId], references: [id])
+  backupOwnerDesignatedAt DateTime? @map("backup_owner_designated_at")
+
+  // Deletion tracking (GDPR compliance)
+  deletionRequestedAt     DateTime? @map("deletion_requested_at")
+  deletionRequestedById   String?   @unique @map("deletion_requested_by_id")
+  deletionScheduledFor    DateTime? @map("deletion_scheduled_for")
+  deletionCancelledAt     DateTime? @map("deletion_cancelled_at")
+  deletionCompletedAt     DateTime? @map("deletion_completed_at")
+  deletionCertificatePath String?   @map("deletion_certificate_path")
+
+  deletionRequestedBy User? @relation("DeletionRequestedBy", fields: [deletionRequestedById], references: [id])
+
+  users        User[]
+  invitations  Invitation[]
+  dataExports  DataExport[]
+
+  @@map("tenant")
+}
+
+// Platform-wide user registry for authentication and email uniqueness
+model User {
+  id        String   @id // Must have usr_ prefix, e.g., usr_cuid123
+  email     String   @unique
+  name      String?
+  role      UserRole @default(MEMBER)
+  tenantId  String   @map("tenant_id")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  // Auth0 integration
+  auth0Id   String?  @unique @map("auth0_id")
+
+  // 2FA fields
+  mfaEnabled        Boolean  @default(false) @map("mfa_enabled")
+  mfaSecret         String?  @map("mfa_secret")
+  recoveryCodesHash String[] @map("recovery_codes_hash")
+
+  // Account lockout
+  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
+  lockoutUntil        DateTime? @map("lockout_until")
+
+  // Soft delete
+  isActive      Boolean   @default(true) @map("is_active")
+  removedAt     DateTime? @map("removed_at")
+  removedById   String?   @map("removed_by_id")
+  removalReason String?   @map("removal_reason") // stores "REASSIGN" or "ARCHIVE"
+
+  // Backup owner inverse relation
+  backupOwnerOf Tenant? @relation("BackupOwner")
+
+  // Deletion requested by inverse relation
+  deletionRequestedFor Tenant? @relation("DeletionRequestedBy")
+
+  // Invitation relations
+  invitationsSent     Invitation[] @relation("InvitedBy")
+  invitationAccepted  Invitation?  @relation("AcceptedByUser")
+
+  // Data export relations
+  dataExports DataExport[]
+
+  // Chat conversation relations
+  conversations Conversation[]
+
+  // Memory relations (Story 2.7)
+  memories Memory[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("user")
+}
+
+// Invitation tracking for team member invites
+model Invitation {
+  id               String           @id // Must have inv_ prefix, e.g., inv_cuid123
+  email            String
+  department       Department
+  role             UserRole         @default(MEMBER)
+  status           InvitationStatus @default(PENDING)
+  token            String           @unique
+  expiresAt        DateTime         @map("expires_at")
+  tenantId         String           @map("tenant_id")
+  tenant           Tenant           @relation(fields: [tenantId], references: [id])
+  invitedById      String           @map("invited_by_id")
+  invitedBy        User             @relation("InvitedBy", fields: [invitedById], references: [id])
+  acceptedByUserId String?          @unique @map("accepted_by_user_id")
+  acceptedByUser   User?            @relation("AcceptedByUser", fields: [acceptedByUserId], references: [id])
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  @@map("invitation")
+}
+
+// Data export tracking for GDPR compliance
+model DataExport {
+  id             String       @id // Must have exp_ prefix, e.g., exp_cuid123
+  userId         String       @map("user_id")
+  tenantId       String       @map("tenant_id")
+  format         ExportFormat
+  dataTypes      String[]     @map("data_types")
+  status         ExportStatus @default(PENDING)
+  filePath       String?      @map("file_path")
+  fileSize       Int?         @map("file_size")
+  encryptionIv   String?      @map("encryption_iv")
+  encryptionTag  String?      @map("encryption_tag")
+  errorMessage   String?      @map("error_message")
+  requestedAt    DateTime     @default(now()) @map("requested_at")
+  completedAt    DateTime?    @map("completed_at")
+  expiresAt      DateTime?    @map("expires_at")
+  downloadCount  Int          @default(0) @map("download_count")
+
+  user   User   @relation(fields: [userId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([userId, tenantId])
+  @@index([status, expiresAt])
+  @@map("data_exports")
+}
+
+// LLM Provider Type enumeration
+enum LlmProviderType {
+  OPENROUTER
+  LOCAL_LLAMA
+  OPENAI
+  ANTHROPIC
+}
+
+// LLM Provider Configuration (platform-level, not per-tenant)
+// Stores API keys (encrypted) and endpoint configuration
+model LlmProviderConfig {
+  id           String          @id @default(cuid())
+  providerType LlmProviderType @map("provider_type")
+  apiKey       String?         @map("api_key") // Encrypted with AES-256-GCM
+  endpoint     String?
+  modelId      String          @map("model_id")
+  isPrimary    Boolean         @default(false) @map("is_primary")
+  isFallback   Boolean         @default(false) @map("is_fallback")
+  isActive     Boolean         @default(true) @map("is_active")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+
+  @@map("llm_provider_configs")
+}
+
+// Audit log for LLM configuration changes
+// Tracks all modifications for compliance and debugging
+model LlmConfigAuditLog {
+  id          String   @id @default(cuid())
+  action      String   // 'CREATE', 'UPDATE', 'DELETE'
+  changedBy   String   @map("changed_by") // User ID who made the change
+  previousVal Json?    @map("previous_value")
+  newVal      Json     @map("new_value")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("llm_config_audit_logs")
+}
+
+// ── Chat Conversation Models (Story 2.1) ──
+// Conversations are tenant-scoped through the User relation
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+// Chat conversation session
+// ID uses sess_ prefix for type identification
+model Conversation {
+  id          String       @id @map("id") // Must have sess_ prefix, e.g., sess_cuid123
+  userId      String       @map("user_id")
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String?
+  personaType PersonaType? @map("persona_type") // Selected department persona (Story 2.4)
+  conceptId   String?      @map("concept_id") // Links to platform Concept.id (no FK - cross-DB)
+  messages    Message[]
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([conceptId])
+  @@map("conversations")
+}
+
+// Individual chat message within a conversation
+// ID uses msg_ prefix for type identification
+model Message {
+  id                String       @id @map("id") // Must have msg_ prefix, e.g., msg_cuid123
+  conversationId    String       @map("conversation_id")
+  conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role              MessageRole
+  content           String       @db.Text
+  // Confidence scoring fields (Story 2.5)
+  confidenceScore   Float?       @map("confidence_score") // 0.0-1.0, null for user messages
+  confidenceFactors Json?        @map("confidence_factors") // Array of ConfidenceFactor objects
+  createdAt         DateTime     @default(now()) @map("created_at")
+
+  @@index([conversationId])
+  @@map("messages")
+}
+
+// ── Token Usage Tracking (Story 2.2) ──
+// Tracks AI token consumption per request for billing and quota enforcement
+// ID uses tku_ prefix for type identification
+model TokenUsage {
+  id             String   @id @map("id") // Must have tku_ prefix, e.g., tku_cuid123
+  tenantId       String   @map("tenant_id")
+  userId         String   @map("user_id")
+  conversationId String?  @map("conversation_id")
+  inputTokens    Int      @map("input_tokens")
+  outputTokens   Int      @map("output_tokens")
+  totalTokens    Int      @map("total_tokens")
+  cost           Decimal  @db.Decimal(10, 6)
+  modelId        String   @map("model_id")
+  providerId     String?  @map("provider_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@index([userId, createdAt])
+  @@index([conversationId])
+  @@map("token_usage")
+}
+
+// ── Onboarding Metrics (Story 2.3) ──
+// Tracks time-to-first-value for onboarding analytics
+// ID uses obm_ prefix for type identification
+model OnboardingMetric {
+  id                 String    @id @map("id") // Must have obm_ prefix, e.g., obm_cuid123
+  tenantId           String    @map("tenant_id")
+  userId             String    @map("user_id")
+  startedAt          DateTime  @map("started_at")
+  completedAt        DateTime? @map("completed_at")
+  timeToFirstValueMs Int?      @map("time_to_first_value_ms")
+  quickTaskType      String    @map("quick_task_type")
+  industry           String
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([userId])
+  @@map("onboarding_metrics")
+}
+
+// ── Notes (Story 2.3a) ──
+// User-saved notes from AI outputs and manual creation
+// ID uses note_ prefix for type identification
+
+enum NoteSource {
+  ONBOARDING
+  CONVERSATION
+  MANUAL
+}
+
+enum NoteType {
+  TASK       // Actionable item
+  NOTE       // Free-form note
+  SUMMARY    // AI-generated conversation summary
+}
+
+enum NoteStatus {
+  PENDING          // Task not done
+  READY_FOR_REVIEW // Workflow step completed, awaiting user review
+  COMPLETED        // Task finished
+}
+
+// ── Concept Relationship Types (Story 3.1) ──
+enum RelationshipType {
+  PREREQUISITE // Must understand this first
+  RELATED      // Related topic
+  ADVANCED     // Deeper dive on topic
+}
+
+// ── Concept Source Tracking (Story 2.15) ──
+// Tracks how a concept was created for auditability
+enum ConceptSource {
+  SEED_DATA      // Pre-loaded from seed JSON files
+  CURRICULUM     // Created via curriculum tree UI
+  AI_DISCOVERED  // Automatically extracted from AI output
+}
+
+model Note {
+  id             String      @id @map("id") // Must have note_ prefix, e.g., note_cuid123
+  title          String
+  content        String      @db.Text
+  source         NoteSource  @default(MANUAL)
+  noteType       NoteType    @default(NOTE) @map("note_type")
+  status         NoteStatus? @map("status")          // Only for TASK type
+  conversationId String?     @map("conversation_id") // Links to tenant conversation
+  conceptId      String?     @map("concept_id")      // Links to platform concept
+  messageId      String?     @map("message_id")      // Links to specific AI message
+  userId         String      @map("user_id")
+  tenantId       String      @map("tenant_id")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  // Sub-task hierarchy
+  parentNoteId       String?  @map("parent_note_id")
+  parent             Note?    @relation("NoteHierarchy", fields: [parentNoteId], references: [id])
+  children           Note[]   @relation("NoteHierarchy")
+
+  // User completion report
+  userReport         String?  @db.Text @map("user_report")
+
+  // AI scoring
+  aiScore            Int?     @map("ai_score")
+  aiFeedback         String?  @db.Text @map("ai_feedback")
+
+  // Workflow linkage
+  expectedOutcome    String?  @db.Text @map("expected_outcome")
+  workflowStepNumber Int?     @map("workflow_step_number")
+
+  @@index([userId])
+  @@index([tenantId])
+  @@index([conversationId])
+  @@index([conceptId])
+  @@index([messageId])
+  @@index([parentNoteId])
+  @@map("notes")
+}
+
+// ── Business Concepts (Story 3.1) ──
+// Platform-level knowledge base shared across all tenants (read-only for tenants)
+// ID uses cpt_ prefix for type identification
+
+model Concept {
+  id                  String   @id @map("id") // Must have cpt_ prefix, e.g., cpt_cuid123
+  name                String   @unique
+  slug                String   @unique // URL-friendly version of name
+  category            String   // Finance, Marketing, Technology, Operations, Legal, Creative
+  definition          String   @db.Text // 2-3 sentence summary
+  extendedDescription String?  @db.Text @map("extended_description")
+  departmentTags      String[] @map("department_tags")
+  embeddingId         String?  @map("embedding_id") // Qdrant point UUID for semantic search
+  source              ConceptSource @default(SEED_DATA) // How the concept was created (Story 2.15)
+  version             Int      @default(1)
+
+  // Curriculum hierarchy fields
+  parentId     String?  @map("parent_id")      // Self-referencing for hierarchy
+  sortOrder    Int      @default(0) @map("sort_order")  // Display order among siblings
+  curriculumId String?  @unique @map("curriculum_id")    // Links to curriculum.json id
+
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  // Hierarchy self-relation
+  parent   Concept?  @relation("ConceptHierarchy", fields: [parentId], references: [id])
+  children Concept[] @relation("ConceptHierarchy")
+
+  // Bidirectional relationships
+  relatedTo   ConceptRelationship[] @relation("SourceConcept")
+  relatedFrom ConceptRelationship[] @relation("TargetConcept")
+
+  // Concept citations (Story 2.6)
+  citations ConceptCitation[]
+
+  // Cached workflow for agent execution
+  workflow ConceptWorkflow?
+
+  @@index([category])
+  @@index([slug])
+  @@index([parentId])
+  @@map("concepts")
+}
+
+// Bidirectional relationships between concepts
+// ID uses crel_ prefix for type identification
+model ConceptRelationship {
+  id               String           @id @default(cuid()) @map("id")
+  sourceConceptId  String           @map("source_concept_id")
+  targetConceptId  String           @map("target_concept_id")
+  relationshipType RelationshipType @map("relationship_type")
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  sourceConcept Concept @relation("SourceConcept", fields: [sourceConceptId], references: [id], onDelete: Cascade)
+  targetConcept Concept @relation("TargetConcept", fields: [targetConceptId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceConceptId, targetConceptId])
+  @@index([sourceConceptId])
+  @@index([targetConceptId])
+  @@map("concept_relationships")
+}
+
+// ── Concept Citations (Story 2.6) ──
+// Links AI messages to business concepts they reference
+// ID uses cit_ prefix for type identification
+model ConceptCitation {
+  id        String   @id @map("id") // Must have cit_ prefix, e.g., cit_cuid123
+  messageId String   @map("message_id")
+  conceptId String   @map("concept_id")
+  position  Int      // Character position in message where citation appears
+  score     Float    // Semantic similarity score (0.0-1.0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([conceptId])
+  @@map("concept_citations")
+}
+
+// ── Concept Workflows (Agent Execution) ──
+// Cached LLM-generated workflow steps for each concept
+// ID uses wfl_ prefix for type identification
+model ConceptWorkflow {
+  id          String   @id @map("id") // Must have wfl_ prefix, e.g., wfl_cuid123
+  conceptId   String   @unique @map("concept_id")
+  steps       Json     // WorkflowStep[] - ordered steps for concept execution
+  version     Int      @default(1)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@index([conceptId])
+  @@map("concept_workflows")
+}
+
+// ── Persistent Memory (Story 2.7) ──
+// Per-user memories for context persistence across conversations
+// ID uses mem_ prefix for type identification
+
+enum MemoryType {
+  CLIENT_CONTEXT
+  PROJECT_CONTEXT
+  USER_PREFERENCE
+  FACTUAL_STATEMENT
+}
+
+enum MemorySource {
+  AI_EXTRACTED   // Automatically extracted from conversation
+  USER_STATED    // Explicitly stated by user
+  USER_CORRECTED // Corrected by user
+}
+
+model Memory {
+  id              String       @id @map("id") // Must have mem_ prefix, e.g., mem_cuid123
+  tenantId        String       @map("tenant_id")
+  userId          String       @map("user_id")
+  type            MemoryType
+  source          MemorySource
+  content         String       @db.Text // The actual memory content
+  subject         String?      // Client name, project name, or topic
+  confidence      Float        @default(1.0) // Extraction confidence (0.0-1.0)
+  embeddingId     String?      @map("embedding_id") // Qdrant vector ID
+  sourceMessageId String?      @map("source_message_id") // Original message reference
+  isDeleted       Boolean      @default(false) @map("is_deleted")
+  deletedAt       DateTime?    @map("deleted_at")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tenantId, userId])
+  @@index([type])
+  @@index([subject])
+  @@map("memories")
+}

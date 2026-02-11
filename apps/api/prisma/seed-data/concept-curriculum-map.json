@@ -1,0 +1,28 @@
+{
+  "description": "Maps English seed concept slugs to Serbian curriculum node IDs. Only high-confidence matches are included. Unmapped concepts use the category-based fallback in listGroupedConversations.",
+  "mappings": {
+    "market-segmentation": "segmentacija-trzista",
+    "customer-personas": "ciljno-trziste-i-profil-kupca",
+    "brand-positioning": "pozicioniranje",
+    "content-strategy": "sadrzaj",
+    "lead-generation": "generisanje-lidova",
+    "conversion-optimization": "konverzija-lidova",
+    "competitive-analysis": "analiza-konkurencije",
+    "brand-equity": "brendiranje",
+    "value-based-pricing": "odredjivanje-cene",
+    "price-elasticity": "elasticnost-cena",
+    "break-even-analysis": "pristupi-kalkulaciji-troskova",
+    "cash-flow-management": "tok-gotovine",
+    "profit-margins": "profitna-marza",
+    "roi-calculation": "kljucni-finansijski-indikatori",
+    "budget-forecasting": "predvidjanje-finansija",
+    "process-optimization": "poslovni-procesi",
+    "supply-chain-management": "lanac-snabdevanja",
+    "quality-control": "kontrola-kvaliteta",
+    "lean-methodology": "lean-proizvodnja",
+    "six-sigma": "six-sigma",
+    "inventory-management": "inventar-zalihe",
+    "capacity-planning": "upravljanje-kapacitetom",
+    "vendor-management": "upravljanje-nabavkom-materijala"
+  }
+}

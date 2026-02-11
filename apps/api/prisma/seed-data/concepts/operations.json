@@ -1,0 +1,130 @@
+{
+  "concepts": [
+    {
+      "name": "Process Optimization",
+      "slug": "process-optimization",
+      "category": "Operations",
+      "definition": "The systematic approach to improving business processes by eliminating waste, reducing variation, and increasing efficiency.",
+      "extendedDescription": "Process optimization begins with mapping current state processes, identifying bottlenecks and waste, and designing improved workflows. Techniques include value stream mapping, workflow automation, and continuous improvement cycles. Success requires measuring key metrics before and after changes to quantify improvements.",
+      "departmentTags": ["Operations"],
+      "relatedConcepts": [
+        { "slug": "lean-methodology", "type": "RELATED" },
+        { "slug": "six-sigma", "type": "RELATED" },
+        { "slug": "capacity-planning", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Supply Chain Management",
+      "slug": "supply-chain-management",
+      "category": "Operations",
+      "definition": "The coordination and management of all activities involved in sourcing, procurement, production, and delivery of products.",
+      "extendedDescription": "Supply chain management optimizes the flow of goods, information, and finances from raw materials to end customers. Key activities include supplier selection, inventory management, logistics, and demand forecasting. Modern supply chains emphasize visibility, agility, and resilience to disruptions.",
+      "departmentTags": ["Operations"],
+      "relatedConcepts": [
+        { "slug": "inventory-management", "type": "RELATED" },
+        { "slug": "vendor-management", "type": "RELATED" },
+        { "slug": "risk-management", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Quality Control",
+      "slug": "quality-control",
+      "category": "Operations",
+      "definition": "The process of ensuring products and services meet specified standards through inspection, testing, and corrective action.",
+      "extendedDescription": "Quality control includes incoming inspection, in-process checks, and final testing. Statistical process control monitors variation to catch problems early. Quality control differs from quality assurance, which focuses on preventing defects through process design. Both are essential for consistent quality.",
+      "departmentTags": ["Operations"],
+      "relatedConcepts": [
+        { "slug": "six-sigma", "type": "RELATED" },
+        { "slug": "process-optimization", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Inventory Management",
+      "slug": "inventory-management",
+      "category": "Operations",
+      "definition": "The practice of ordering, storing, using, and selling a company's inventory, including raw materials, components, and finished goods.",
+      "extendedDescription": "Inventory management balances having enough stock to meet demand against the costs of holding excess inventory. Techniques include just-in-time, economic order quantity, and ABC analysis. Good inventory management reduces carrying costs, prevents stockouts, and improves cash flow.",
+      "departmentTags": ["Operations", "Finance"],
+      "relatedConcepts": [
+        { "slug": "supply-chain-management", "type": "RELATED" },
+        { "slug": "cash-flow-management", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Lean Methodology",
+      "slug": "lean-methodology",
+      "category": "Operations",
+      "definition": "A systematic approach to identifying and eliminating waste through continuous improvement, focusing on creating value for customers.",
+      "extendedDescription": "Lean identifies seven types of waste: overproduction, waiting, transport, overprocessing, inventory, motion, and defects. Tools include value stream mapping, 5S, kanban, and kaizen. Lean principles apply beyond manufacturing to services, software development, and startups.",
+      "departmentTags": ["Operations"],
+      "relatedConcepts": [
+        { "slug": "process-optimization", "type": "RELATED" },
+        { "slug": "six-sigma", "type": "RELATED" },
+        { "slug": "design-thinking", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Six Sigma",
+      "slug": "six-sigma",
+      "category": "Operations",
+      "definition": "A data-driven methodology for eliminating defects and reducing variation in any process, aiming for 3.4 defects per million opportunities.",
+      "extendedDescription": "Six Sigma uses the DMAIC framework: Define, Measure, Analyze, Improve, Control. It emphasizes statistical analysis to identify root causes and validate improvements. Six Sigma projects are led by certified practitioners (Green Belts, Black Belts) and focus on measurable business impact.",
+      "departmentTags": ["Operations"],
+      "relatedConcepts": [
+        { "slug": "quality-control", "type": "RELATED" },
+        { "slug": "lean-methodology", "type": "RELATED" },
+        { "slug": "process-optimization", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Capacity Planning",
+      "slug": "capacity-planning",
+      "category": "Operations",
+      "definition": "The process of determining the production capacity needed to meet changing demands for products or services.",
+      "extendedDescription": "Capacity planning matches resources to demand forecasts. It considers lead times for capacity changes, costs of over/under capacity, and strategic flexibility. Approaches range from lead strategy (capacity before demand) to lag strategy (capacity after demand is proven).",
+      "departmentTags": ["Operations"],
+      "relatedConcepts": [
+        { "slug": "process-optimization", "type": "RELATED" },
+        { "slug": "budget-forecasting", "type": "RELATED" },
+        { "slug": "growth-strategy", "type": "ADVANCED" },
+        { "slug": "sales-forecasting", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Vendor Management",
+      "slug": "vendor-management",
+      "category": "Operations",
+      "definition": "The discipline of managing vendors, including selection, contract negotiation, performance monitoring, and relationship development.",
+      "extendedDescription": "Vendor management ensures suppliers deliver value, quality, and reliability. Key activities include vendor qualification, scorecards, contract management, and risk mitigation. Strategic vendor relationships can provide competitive advantage through innovation, preferential pricing, or supply assurance.",
+      "departmentTags": ["Operations"],
+      "relatedConcepts": [
+        { "slug": "supply-chain-management", "type": "RELATED" },
+        { "slug": "contract-essentials", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Risk Management",
+      "slug": "risk-management",
+      "category": "Operations",
+      "definition": "The identification, assessment, and prioritization of risks followed by coordinated efforts to minimize, monitor, and control their probability or impact.",
+      "extendedDescription": "Risk management involves identifying potential risks, analyzing their likelihood and impact, and developing mitigation strategies. Approaches include avoidance, reduction, transfer (insurance), and acceptance. Enterprise risk management (ERM) takes a holistic view across the organization.",
+      "departmentTags": ["Operations", "Finance", "Legal"],
+      "relatedConcepts": [
+        { "slug": "business-continuity", "type": "RELATED" },
+        { "slug": "supply-chain-management", "type": "RELATED" },
+        { "slug": "strategic-planning", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Business Continuity",
+      "slug": "business-continuity",
+      "category": "Operations",
+      "definition": "The planning and preparation to ensure critical business functions continue during and after a disaster or major disruption.",
+      "extendedDescription": "Business continuity planning identifies critical functions, acceptable downtime, and recovery requirements. Plans address scenarios from IT outages to natural disasters. Key components include backup systems, alternate sites, communication plans, and regular testing. Related to but distinct from disaster recovery, which focuses specifically on IT systems.",
+      "departmentTags": ["Operations", "Technology"],
+      "relatedConcepts": [
+        { "slug": "risk-management", "type": "RELATED" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,140 @@
+{
+  "concepts": [
+    {
+      "name": "Market Segmentation",
+      "slug": "market-segmentation",
+      "category": "Marketing",
+      "definition": "The process of dividing a broad market into distinct subgroups of consumers who have common needs, characteristics, or behaviors.",
+      "extendedDescription": "Market segmentation enables targeted marketing by identifying groups with similar needs. Common segmentation bases include demographics, psychographics, behavior, and geography. Effective segmentation produces segments that are measurable, accessible, substantial, and actionable. This enables more efficient resource allocation and higher conversion rates.",
+      "departmentTags": ["Marketing"],
+      "relatedConcepts": [
+        { "slug": "customer-personas", "type": "ADVANCED" },
+        { "slug": "brand-positioning", "type": "RELATED" },
+        { "slug": "price-elasticity", "type": "RELATED" },
+        { "slug": "market-positioning", "type": "ADVANCED" }
+      ]
+    },
+    {
+      "name": "Customer Personas",
+      "slug": "customer-personas",
+      "category": "Marketing",
+      "definition": "Fictional, generalized representations of ideal customers based on research and data about existing customers.",
+      "extendedDescription": "Personas bring customer segments to life with names, demographics, goals, pain points, and buying behaviors. They help teams make customer-centric decisions by asking 'What would Sarah think?' Well-crafted personas are based on actual customer research, not assumptions, and are regularly updated as the market evolves.",
+      "departmentTags": ["Marketing", "Creative"],
+      "relatedConcepts": [
+        { "slug": "market-segmentation", "type": "PREREQUISITE" },
+        { "slug": "customer-journey", "type": "RELATED" },
+        { "slug": "user-experience-design", "type": "RELATED" },
+        { "slug": "lead-qualification", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Brand Positioning",
+      "slug": "brand-positioning",
+      "category": "Marketing",
+      "definition": "The strategic process of establishing a distinctive place for your brand in the minds of target customers relative to competitors.",
+      "extendedDescription": "Brand positioning defines what makes your brand unique and valuable. It answers: Who is the target? What is the frame of reference? What is the point of difference? Why should customers believe it? Strong positioning is focused, credible, and sustainable over time. It guides all marketing communications and product decisions.",
+      "departmentTags": ["Marketing", "Creative"],
+      "relatedConcepts": [
+        { "slug": "market-segmentation", "type": "PREREQUISITE" },
+        { "slug": "brand-equity", "type": "ADVANCED" },
+        { "slug": "competitive-analysis", "type": "RELATED" },
+        { "slug": "competitive-advantage", "type": "RELATED" },
+        { "slug": "market-positioning", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Content Strategy",
+      "slug": "content-strategy",
+      "category": "Marketing",
+      "definition": "A plan for creating, publishing, and managing useful content that attracts and retains a clearly defined audience.",
+      "extendedDescription": "Content strategy aligns content creation with business goals and audience needs. It includes content audits, editorial calendars, channel strategies, governance, and measurement. Effective content strategy considers the full content lifecycle from creation through archival, ensuring consistency, quality, and efficiency.",
+      "departmentTags": ["Marketing", "Creative"],
+      "relatedConcepts": [
+        { "slug": "storytelling", "type": "RELATED" },
+        { "slug": "lead-generation", "type": "RELATED" },
+        { "slug": "customer-journey", "type": "PREREQUISITE" }
+      ]
+    },
+    {
+      "name": "Lead Generation",
+      "slug": "lead-generation",
+      "category": "Marketing",
+      "definition": "The process of attracting and converting strangers and prospects into someone who has indicated interest in your company's product or service.",
+      "extendedDescription": "Lead generation uses various tactics including content marketing, SEO, paid advertising, social media, and events to capture prospect information. Quality matters more than quantity; effective lead gen focuses on attracting prospects likely to become customers. Lead scoring helps prioritize follow-up efforts.",
+      "departmentTags": ["Marketing"],
+      "relatedConcepts": [
+        { "slug": "conversion-optimization", "type": "RELATED" },
+        { "slug": "content-strategy", "type": "RELATED" },
+        { "slug": "customer-journey", "type": "PREREQUISITE" },
+        { "slug": "sales-pipeline-management", "type": "ADVANCED" },
+        { "slug": "lead-qualification", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Conversion Optimization",
+      "slug": "conversion-optimization",
+      "category": "Marketing",
+      "definition": "The systematic process of increasing the percentage of visitors who complete a desired action on a website or app.",
+      "extendedDescription": "Conversion optimization uses data analysis, user research, and testing to improve conversion rates. Key activities include A/B testing, user experience improvements, persuasive copywriting, and friction reduction. CRO focuses on getting more value from existing traffic rather than acquiring more visitors.",
+      "departmentTags": ["Marketing", "Technology"],
+      "relatedConcepts": [
+        { "slug": "lead-generation", "type": "RELATED" },
+        { "slug": "customer-journey", "type": "PREREQUISITE" },
+        { "slug": "user-experience-design", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Customer Journey",
+      "slug": "customer-journey",
+      "category": "Marketing",
+      "definition": "The complete sum of experiences that customers go through when interacting with your company and brand, from awareness to advocacy.",
+      "extendedDescription": "Customer journey mapping visualizes all touchpoints and emotions across the buyer's experience. Stages typically include awareness, consideration, purchase, retention, and advocacy. Understanding the journey reveals pain points, opportunities, and moments of truth that can be optimized to improve satisfaction and loyalty.",
+      "departmentTags": ["Marketing", "Operations"],
+      "relatedConcepts": [
+        { "slug": "customer-personas", "type": "PREREQUISITE" },
+        { "slug": "conversion-optimization", "type": "RELATED" },
+        { "slug": "content-strategy", "type": "RELATED" },
+        { "slug": "customer-relationship-management", "type": "ADVANCED" }
+      ]
+    },
+    {
+      "name": "Marketing Attribution",
+      "slug": "marketing-attribution",
+      "category": "Marketing",
+      "definition": "The process of determining which marketing touchpoints deserve credit for driving conversions and revenue.",
+      "extendedDescription": "Attribution models range from simple (first-touch, last-touch) to complex (multi-touch, algorithmic). Good attribution helps optimize marketing spend by revealing which channels and campaigns drive results. Challenges include cross-device tracking, offline conversions, and long sales cycles.",
+      "departmentTags": ["Marketing"],
+      "relatedConcepts": [
+        { "slug": "conversion-optimization", "type": "RELATED" },
+        { "slug": "customer-journey", "type": "PREREQUISITE" }
+      ]
+    },
+    {
+      "name": "Brand Equity",
+      "slug": "brand-equity",
+      "category": "Marketing",
+      "definition": "The commercial value that derives from consumer perception of the brand name, beyond the functional value of the product or service.",
+      "extendedDescription": "Brand equity represents the premium value a company generates from a product with a recognizable name. Components include brand awareness, perceived quality, brand associations, and brand loyalty. Strong brand equity enables premium pricing, customer loyalty, and successful brand extensions.",
+      "departmentTags": ["Marketing"],
+      "relatedConcepts": [
+        { "slug": "brand-positioning", "type": "PREREQUISITE" },
+        { "slug": "brand-identity", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Competitive Analysis",
+      "slug": "competitive-analysis",
+      "category": "Marketing",
+      "definition": "A systematic assessment of your competitors' strengths, weaknesses, strategies, and market positions.",
+      "extendedDescription": "Competitive analysis examines direct and indirect competitors across product, pricing, distribution, and promotion. It identifies opportunities and threats, informs differentiation strategy, and helps anticipate competitor moves. Regular analysis keeps strategies current in dynamic markets.",
+      "departmentTags": ["Marketing"],
+      "relatedConcepts": [
+        { "slug": "brand-positioning", "type": "RELATED" },
+        { "slug": "market-segmentation", "type": "PREREQUISITE" },
+        { "slug": "porters-five-forces", "type": "ADVANCED" },
+        { "slug": "swot-analysis", "type": "RELATED" }
+      ]
+    }
+  ]
+}

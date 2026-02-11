@@ -1,0 +1,57 @@
+[22:00:08.120] [INFO] [36mInitializing Storybook[39m
+[22:00:09.113] [DEBUG] Getting package.json info for C:/Users/tanjav/Downloads/BMAD-METHOD-main/mentor-ai/package.json...
+[22:00:09.114] [DEBUG] Getting CLI versions from NPM for storybook...
+[22:00:09.114] [DEBUG] Executing command: npm info storybook version
+[22:00:10.627] [INFO] Adding Storybook version 10.2.6 to your project
+[22:00:10.628] [INFO] Installing Storybook for user specified project type: angular
+[22:00:10.633] [INFO] Framework detected: angular
+[22:00:10.634] [DEBUG] Getting installed version for vitest...
+[22:00:10.634] [DEBUG] Executing command: npm ls --json --depth=99 2>NUL
+[22:00:13.820] [DEBUG] Executing command: npm ls --json --depth=0 2>NUL
+[22:00:17.448] [DEBUG] Error finding installations for vitest: ExecaError: Command failed with exit code 1: npm.cmd ls --json "--depth=0" "2>NUL"
+
+npm error code EINVALIDTAGNAME
+npm error Invalid tag name "2>NUL" of package "2>NUL": Tags may not have any characters that encodeURIComponent encodes.
+npm error A complete log of this run can be found in: C:\Users\tanjav\AppData\Local\npm-cache\_logs\2026-02-04T21_00_14_231Z-debug-0.log
+
+{
+  "error": {
+    "code": "EINVALIDTAGNAME",
+    "summary": "Invalid tag name \"2>NUL\" of package \"2>NUL\": Tags may not have any characters that encodeURIComponent encodes.",
+    "detail": ""
+  }
+}
+[22:00:17.448] [DEBUG] No installations found for vitest
+[22:00:17.449] [DEBUG] Getting installed version for msw...
+[22:00:17.449] [DEBUG] Executing command: npm ls --json --depth=99 2>NUL
+[22:00:21.179] [DEBUG] Executing command: npm ls --json --depth=0 2>NUL
+[22:00:25.593] [DEBUG] Error finding installations for msw: ExecaError: Command failed with exit code 1: npm.cmd ls --json "--depth=0" "2>NUL"
+
+npm error code EINVALIDTAGNAME
+npm error Invalid tag name "2>NUL" of package "2>NUL": Tags may not have any characters that encodeURIComponent encodes.
+npm error A complete log of this run can be found in: C:\Users\tanjav\AppData\Local\npm-cache\_logs\2026-02-04T21_00_21_709Z-debug-0.log
+
+{
+  "error": {
+    "code": "EINVALIDTAGNAME",
+    "summary": "Invalid tag name \"2>NUL\" of package \"2>NUL\": Tags may not have any characters that encodeURIComponent encodes.",
+    "detail": ""
+  }
+}
+[22:00:25.593] [DEBUG] No installations found for msw
+[22:00:25.628] [ERROR] [38;2;241;97;97mSB_CLI_INIT_0002 (MissingAngularJsonError): An angular.json file was not found in the current working directory: .\angular.json
+Storybook needs it to work properly, so please rerun the command at the root of your project, where the angular.json file is located.
+
+More info: https://storybook.js.org/docs/faq#error-no-angularjson-file-found?ref=error
+[39m
+    at new AngularJSON (file:///C:/Users/tanjav/AppData/Local/npm-cache/_npx/d5f2eac0ff7a6388/node_modules/storybook/dist/_node-chunks/chunk-WS7NP7FB.js:5528:13)
+    at Object.configure (file:///C:/Users/tanjav/AppData/Local/npm-cache/_npx/d5f2eac0ff7a6388/node_modules/create-storybook/dist/_node-chunks/chunk-5BPXECTR.js:2272:23)
+    at GeneratorExecutionCommand.executeProjectGenerator (file:///C:/Users/tanjav/AppData/Local/npm-cache/_npx/d5f2eac0ff7a6388/node_modules/create-storybook/dist/_node-chunks/chunk-5BPXECTR.js:1328:80)
+    at GeneratorExecutionCommand.execute (file:///C:/Users/tanjav/AppData/Local/npm-cache/_npx/d5f2eac0ff7a6388/node_modules/create-storybook/dist/_node-chunks/chunk-5BPXECTR.js:1377:38)
+    at executeGeneratorExecution (file:///C:/Users/tanjav/AppData/Local/npm-cache/_npx/d5f2eac0ff7a6388/node_modules/create-storybook/dist/_node-chunks/chunk-5BPXECTR.js:1394:74)
+    at doInitiate (file:///C:/Users/tanjav/AppData/Local/npm-cache/_npx/d5f2eac0ff7a6388/node_modules/create-storybook/dist/_node-chunks/chunk-5BPXECTR.js:2831:74)
+    at async file:///C:/Users/tanjav/AppData/Local/npm-cache/_npx/d5f2eac0ff7a6388/node_modules/create-storybook/dist/_node-chunks/chunk-5BPXECTR.js:2873:20
+    at async withTelemetry (file:///C:/Users/tanjav/AppData/Local/npm-cache/_npx/d5f2eac0ff7a6388/node_modules/storybook/dist/_node-chunks/chunk-AYHC7DAM.js:218:12)
+    at async initiate (file:///C:/Users/tanjav/AppData/Local/npm-cache/_npx/d5f2eac0ff7a6388/node_modules/create-storybook/dist/_node-chunks/chunk-5BPXECTR.js:2866:24)
+    at async _Command.<anonymous> (file:///C:/Users/tanjav/AppData/Local/npm-cache/_npx/d5f2eac0ff7a6388/node_modules/create-storybook/dist/_node-chunks/run-IIT4V4GL.js:2684:144)
+[22:00:25.638] [INFO] Storybook collects completely anonymous usage telemetry. We use it to shape Storybook's roadmap and prioritize features. You can learn more, including how to opt out, at https://storybook.js.org/telemetry

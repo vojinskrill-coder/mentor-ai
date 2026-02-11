@@ -1,0 +1,136 @@
+{
+  "concepts": [
+    {
+      "name": "Value-Based Pricing",
+      "slug": "value-based-pricing",
+      "category": "Finance",
+      "definition": "A pricing strategy that sets prices based on customer perceived value rather than production costs or competitor pricing.",
+      "extendedDescription": "Value-based pricing focuses on understanding what customers are willing to pay based on the benefits they receive. This approach requires deep customer research, understanding of pain points, and clear articulation of your unique value proposition. Companies using this strategy often achieve higher margins because they capture more of the value they create.",
+      "departmentTags": ["Finance", "Marketing"],
+      "relatedConcepts": [
+        { "slug": "price-elasticity", "type": "RELATED" },
+        { "slug": "cost-plus-pricing", "type": "RELATED" },
+        { "slug": "profit-margins", "type": "PREREQUISITE" },
+        { "slug": "competitive-advantage", "type": "RELATED" },
+        { "slug": "sales-negotiation", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Cost-Plus Pricing",
+      "slug": "cost-plus-pricing",
+      "category": "Finance",
+      "definition": "A pricing method that adds a markup percentage to the total cost of producing a product or service.",
+      "extendedDescription": "Cost-plus pricing is straightforward: calculate all costs (materials, labor, overhead) and add a desired profit margin. While simple to implement, this method ignores customer willingness to pay and competitor pricing. It's commonly used in manufacturing, construction, and government contracts where costs are transparent.",
+      "departmentTags": ["Finance", "Operations"],
+      "relatedConcepts": [
+        { "slug": "value-based-pricing", "type": "RELATED" },
+        { "slug": "break-even-analysis", "type": "PREREQUISITE" },
+        { "slug": "profit-margins", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Price Elasticity",
+      "slug": "price-elasticity",
+      "category": "Finance",
+      "definition": "A measure of how sensitive customer demand is to changes in price, indicating whether price increases will grow or shrink revenue.",
+      "extendedDescription": "Price elasticity of demand measures the percentage change in quantity demanded in response to a percentage change in price. Products with elastic demand see significant demand drops when prices rise, while inelastic products maintain demand. Understanding elasticity helps optimize pricing for maximum revenue.",
+      "departmentTags": ["Finance", "Marketing"],
+      "relatedConcepts": [
+        { "slug": "value-based-pricing", "type": "RELATED" },
+        { "slug": "market-segmentation", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Break-Even Analysis",
+      "slug": "break-even-analysis",
+      "category": "Finance",
+      "definition": "A calculation that determines the sales volume at which total revenue equals total costs, resulting in neither profit nor loss.",
+      "extendedDescription": "Break-even analysis helps businesses understand how many units they need to sell or how much revenue they need to generate to cover all costs. The formula divides fixed costs by the contribution margin per unit. This analysis is essential for pricing decisions, business planning, and evaluating new ventures.",
+      "departmentTags": ["Finance"],
+      "relatedConcepts": [
+        { "slug": "profit-margins", "type": "RELATED" },
+        { "slug": "cost-plus-pricing", "type": "ADVANCED" },
+        { "slug": "financial-modeling", "type": "ADVANCED" }
+      ]
+    },
+    {
+      "name": "Cash Flow Management",
+      "slug": "cash-flow-management",
+      "category": "Finance",
+      "definition": "The process of monitoring, analyzing, and optimizing the timing and amounts of money flowing into and out of a business.",
+      "extendedDescription": "Cash flow management ensures a business has sufficient liquidity to meet obligations while maximizing returns on excess cash. It involves forecasting cash needs, managing receivables and payables timing, maintaining appropriate reserves, and making strategic decisions about short-term investments. Poor cash flow management is a leading cause of business failure.",
+      "departmentTags": ["Finance"],
+      "relatedConcepts": [
+        { "slug": "budget-forecasting", "type": "RELATED" },
+        { "slug": "financial-modeling", "type": "ADVANCED" }
+      ]
+    },
+    {
+      "name": "Profit Margins",
+      "slug": "profit-margins",
+      "category": "Finance",
+      "definition": "Financial metrics that measure the percentage of revenue remaining after accounting for costs, expressed as gross, operating, or net margin.",
+      "extendedDescription": "Profit margins reveal business health and efficiency. Gross margin shows profitability after direct costs, operating margin adds operating expenses, and net margin includes all costs including taxes and interest. Tracking margins over time and comparing to industry benchmarks helps identify areas for improvement and competitive positioning.",
+      "departmentTags": ["Finance"],
+      "relatedConcepts": [
+        { "slug": "break-even-analysis", "type": "RELATED" },
+        { "slug": "cost-plus-pricing", "type": "RELATED" },
+        { "slug": "value-based-pricing", "type": "ADVANCED" }
+      ]
+    },
+    {
+      "name": "ROI Calculation",
+      "slug": "roi-calculation",
+      "category": "Finance",
+      "definition": "Return on Investment measures the gain or loss generated on an investment relative to the amount invested, expressed as a percentage.",
+      "extendedDescription": "ROI is calculated by dividing net profit by total investment cost and multiplying by 100. This metric helps compare different investment opportunities and evaluate past decisions. While simple and widely understood, ROI has limitations: it ignores time value of money, risk levels, and opportunity costs. More sophisticated analyses like NPV or IRR address these gaps.",
+      "departmentTags": ["Finance"],
+      "relatedConcepts": [
+        { "slug": "capital-allocation", "type": "RELATED" },
+        { "slug": "financial-modeling", "type": "ADVANCED" }
+      ]
+    },
+    {
+      "name": "Budget Forecasting",
+      "slug": "budget-forecasting",
+      "category": "Finance",
+      "definition": "The process of estimating future financial outcomes based on historical data, trends, and planned activities.",
+      "extendedDescription": "Budget forecasting combines historical analysis, market trends, and business plans to project future revenues and expenses. Effective forecasting uses multiple scenarios (optimistic, realistic, pessimistic), rolling forecasts that update regularly, and variance analysis to improve accuracy over time. It's essential for resource allocation and strategic planning.",
+      "departmentTags": ["Finance"],
+      "relatedConcepts": [
+        { "slug": "cash-flow-management", "type": "RELATED" },
+        { "slug": "financial-modeling", "type": "ADVANCED" },
+        { "slug": "sales-forecasting", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Financial Modeling",
+      "slug": "financial-modeling",
+      "category": "Finance",
+      "definition": "The construction of mathematical representations of a company's financial performance to support decision-making and valuation.",
+      "extendedDescription": "Financial models typically include three-statement models (income statement, balance sheet, cash flow), discounted cash flow analysis, and scenario modeling. Good models are flexible, clearly documented, and based on reasonable assumptions. They support M&A decisions, capital raising, budgeting, and strategic planning.",
+      "departmentTags": ["Finance"],
+      "relatedConcepts": [
+        { "slug": "budget-forecasting", "type": "PREREQUISITE" },
+        { "slug": "break-even-analysis", "type": "PREREQUISITE" },
+        { "slug": "capital-allocation", "type": "RELATED" },
+        { "slug": "business-model-canvas", "type": "RELATED" },
+        { "slug": "balanced-scorecard", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Capital Allocation",
+      "slug": "capital-allocation",
+      "category": "Finance",
+      "definition": "The strategic process of deciding how to deploy financial resources across different investments, projects, or business units.",
+      "extendedDescription": "Capital allocation determines where a company invests its money: R&D, acquisitions, dividends, share buybacks, debt repayment, or new projects. Effective allocation considers expected returns, strategic fit, risk levels, and opportunity costs. Companies that allocate capital well consistently outperform those that don't.",
+      "departmentTags": ["Finance"],
+      "relatedConcepts": [
+        { "slug": "roi-calculation", "type": "PREREQUISITE" },
+        { "slug": "financial-modeling", "type": "RELATED" },
+        { "slug": "strategic-planning", "type": "RELATED" },
+        { "slug": "growth-strategy", "type": "ADVANCED" }
+      ]
+    }
+  ]
+}

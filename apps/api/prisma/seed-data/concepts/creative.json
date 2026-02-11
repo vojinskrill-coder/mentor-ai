@@ -1,0 +1,133 @@
+{
+  "concepts": [
+    {
+      "name": "Design Thinking",
+      "slug": "design-thinking",
+      "category": "Creative",
+      "definition": "A human-centered approach to innovation that integrates the needs of people, technology possibilities, and business requirements.",
+      "extendedDescription": "Design thinking follows five stages: Empathize (understand users), Define (frame the problem), Ideate (generate solutions), Prototype (create quick models), and Test (gather feedback). It emphasizes iteration, experimentation, and learning from failure. Originally from product design, it now applies broadly to business challenges.",
+      "departmentTags": ["Creative", "Operations"],
+      "relatedConcepts": [
+        { "slug": "user-experience-design", "type": "RELATED" },
+        { "slug": "creative-brief", "type": "RELATED" },
+        { "slug": "lean-methodology", "type": "RELATED" },
+        { "slug": "blue-ocean-strategy", "type": "RELATED" },
+        { "slug": "business-model-canvas", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Brand Identity",
+      "slug": "brand-identity",
+      "category": "Creative",
+      "definition": "The visible elements of a brand that identify and distinguish it in consumers' minds, including logo, colors, typography, and visual style.",
+      "extendedDescription": "Brand identity translates brand positioning into visual and verbal expression. A comprehensive identity system includes primary and secondary logos, color palette, typography, imagery style, and voice. Consistency across touchpoints builds recognition and trust. Brand guidelines document standards for proper usage.",
+      "departmentTags": ["Creative", "Marketing"],
+      "relatedConcepts": [
+        { "slug": "brand-positioning", "type": "PREREQUISITE" },
+        { "slug": "color-theory", "type": "RELATED" },
+        { "slug": "typography-fundamentals", "type": "RELATED" },
+        { "slug": "competitive-advantage", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Visual Hierarchy",
+      "slug": "visual-hierarchy",
+      "category": "Creative",
+      "definition": "The arrangement of design elements to guide viewers' attention through content in order of importance.",
+      "extendedDescription": "Visual hierarchy uses size, color, contrast, spacing, and position to create focal points and reading paths. Good hierarchy makes content scannable and emphasizes key messages. It applies to everything from web pages to presentations to packaging. Testing with eye tracking can validate hierarchy effectiveness.",
+      "departmentTags": ["Creative"],
+      "relatedConcepts": [
+        { "slug": "layout-principles", "type": "RELATED" },
+        { "slug": "typography-fundamentals", "type": "RELATED" },
+        { "slug": "user-experience-design", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "User Experience Design",
+      "slug": "user-experience-design",
+      "category": "Creative",
+      "definition": "The process of creating products that provide meaningful, relevant, and enjoyable experiences to users.",
+      "extendedDescription": "UX design encompasses all aspects of user interaction with a product. Key activities include user research, persona development, journey mapping, wireframing, prototyping, and usability testing. Good UX balances user needs with business goals and technical constraints. It's iterative and data-informed.",
+      "departmentTags": ["Creative", "Technology"],
+      "relatedConcepts": [
+        { "slug": "design-thinking", "type": "RELATED" },
+        { "slug": "customer-personas", "type": "RELATED" },
+        { "slug": "customer-journey", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Creative Brief",
+      "slug": "creative-brief",
+      "category": "Creative",
+      "definition": "A document that outlines the strategic direction and parameters for a creative project, aligning stakeholders on objectives and constraints.",
+      "extendedDescription": "A creative brief includes background, objectives, target audience, key message, mandatories, tone, deliverables, timeline, and budget. Good briefs inspire creativity while providing clear guardrails. They save time by preventing misalignment and unnecessary revisions. Briefs should be concise yet complete.",
+      "departmentTags": ["Creative", "Marketing"],
+      "relatedConcepts": [
+        { "slug": "brand-positioning", "type": "PREREQUISITE" },
+        { "slug": "customer-personas", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Typography Fundamentals",
+      "slug": "typography-fundamentals",
+      "category": "Creative",
+      "definition": "The art and technique of arranging type to make written language legible, readable, and visually appealing.",
+      "extendedDescription": "Typography involves selecting typefaces, point sizes, line lengths, line spacing, and letter spacing. Choices affect readability, mood, and brand perception. Web typography adds considerations for screen rendering and responsive design. Good typography enhances communication without calling attention to itself.",
+      "departmentTags": ["Creative"],
+      "relatedConcepts": [
+        { "slug": "visual-hierarchy", "type": "RELATED" },
+        { "slug": "brand-identity", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Color Theory",
+      "slug": "color-theory",
+      "category": "Creative",
+      "definition": "Principles and guidelines for using color effectively in visual design, including relationships between colors and their psychological effects.",
+      "extendedDescription": "Color theory covers the color wheel, color harmonies (complementary, analogous, triadic), warm vs cool colors, and color psychology. In branding, color creates recognition and emotional connection. Accessibility requires sufficient contrast. Cultural meanings of colors vary globally.",
+      "departmentTags": ["Creative"],
+      "relatedConcepts": [
+        { "slug": "brand-identity", "type": "RELATED" },
+        { "slug": "visual-hierarchy", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Layout Principles",
+      "slug": "layout-principles",
+      "category": "Creative",
+      "definition": "Foundational rules for arranging visual elements on a page or screen, including grids, alignment, proximity, and white space.",
+      "extendedDescription": "Layout principles create order and guide the eye. Grid systems provide structure and consistency. Alignment creates visual connection. Proximity groups related elements. White space gives content room to breathe. Good layout balances structure with visual interest.",
+      "departmentTags": ["Creative"],
+      "relatedConcepts": [
+        { "slug": "visual-hierarchy", "type": "RELATED" },
+        { "slug": "user-experience-design", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Storytelling",
+      "slug": "storytelling",
+      "category": "Creative",
+      "definition": "The art of using narrative structure and techniques to communicate messages in a compelling and memorable way.",
+      "extendedDescription": "Business storytelling uses narrative elements—characters, conflict, resolution—to make messages resonate. Stories are more memorable than facts alone. Effective stories are authentic, relevant, and emotionally engaging. Applications range from brand narratives to presentations to case studies.",
+      "departmentTags": ["Creative", "Marketing"],
+      "relatedConcepts": [
+        { "slug": "content-strategy", "type": "RELATED" },
+        { "slug": "brand-positioning", "type": "RELATED" },
+        { "slug": "sales-enablement", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Creative Direction",
+      "slug": "creative-direction",
+      "category": "Creative",
+      "definition": "The practice of guiding the overall creative vision and aesthetic of a project, brand, or campaign.",
+      "extendedDescription": "Creative directors set creative vision, ensure consistency, mentor team members, and make final creative decisions. They bridge strategy and execution, translating business objectives into creative concepts. Leadership skills are as important as creative skills. They manage both ideas and people.",
+      "departmentTags": ["Creative"],
+      "relatedConcepts": [
+        { "slug": "brand-identity", "type": "RELATED" },
+        { "slug": "creative-brief", "type": "PREREQUISITE" },
+        { "slug": "design-thinking", "type": "RELATED" }
+      ]
+    }
+  ]
+}

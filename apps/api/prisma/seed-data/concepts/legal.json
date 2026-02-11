@@ -1,0 +1,130 @@
+{
+  "concepts": [
+    {
+      "name": "Contract Essentials",
+      "slug": "contract-essentials",
+      "category": "Legal",
+      "definition": "The fundamental elements that make a contract legally binding: offer, acceptance, consideration, capacity, and legality.",
+      "extendedDescription": "Valid contracts require a clear offer, unambiguous acceptance, exchange of value (consideration), parties with legal capacity, and lawful purpose. Understanding these elements helps identify risks in agreements. Business contracts should also address term, termination, warranties, indemnification, and dispute resolution.",
+      "departmentTags": ["Legal"],
+      "relatedConcepts": [
+        { "slug": "terms-of-service", "type": "RELATED" },
+        { "slug": "nda-fundamentals", "type": "RELATED" },
+        { "slug": "liability-protection", "type": "RELATED" },
+        { "slug": "sales-negotiation", "type": "ADVANCED" }
+      ]
+    },
+    {
+      "name": "Intellectual Property",
+      "slug": "intellectual-property",
+      "category": "Legal",
+      "definition": "Legal rights that protect creations of the mind, including patents, trademarks, copyrights, and trade secrets.",
+      "extendedDescription": "IP rights give creators exclusive control over their innovations and creative works. Patents protect inventions, trademarks protect brands, copyrights protect creative expression, and trade secrets protect confidential business information. IP strategy is crucial for protecting competitive advantage and monetizing innovation.",
+      "departmentTags": ["Legal", "Technology"],
+      "relatedConcepts": [
+        { "slug": "nda-fundamentals", "type": "RELATED" },
+        { "slug": "contract-essentials", "type": "PREREQUISITE" }
+      ]
+    },
+    {
+      "name": "Compliance Frameworks",
+      "slug": "compliance-frameworks",
+      "category": "Legal",
+      "definition": "Structured sets of guidelines and best practices that organizations follow to meet legal, regulatory, or industry standards.",
+      "extendedDescription": "Common frameworks include SOC 2, ISO 27001, HIPAA, PCI DSS, and industry-specific regulations. Compliance requires policies, procedures, controls, monitoring, and documentation. While compliance doesn't guarantee security, it provides a baseline and demonstrates due diligence to stakeholders.",
+      "departmentTags": ["Legal", "Technology"],
+      "relatedConcepts": [
+        { "slug": "data-privacy-gdpr", "type": "RELATED" },
+        { "slug": "security-best-practices", "type": "RELATED" },
+        { "slug": "regulatory-requirements", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Data Privacy (GDPR)",
+      "slug": "data-privacy-gdpr",
+      "category": "Legal",
+      "definition": "Laws and regulations governing how organizations collect, store, process, and protect personal information of individuals.",
+      "extendedDescription": "GDPR, CCPA, and similar laws give individuals rights over their personal data, including access, correction, deletion, and portability. Organizations must have lawful bases for processing, implement privacy by design, and report breaches. Non-compliance can result in significant fines and reputational damage.",
+      "departmentTags": ["Legal", "Technology"],
+      "relatedConcepts": [
+        { "slug": "compliance-frameworks", "type": "RELATED" },
+        { "slug": "terms-of-service", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Employment Law Basics",
+      "slug": "employment-law-basics",
+      "category": "Legal",
+      "definition": "The body of law governing the employer-employee relationship, including hiring, compensation, working conditions, and termination.",
+      "extendedDescription": "Employment law covers anti-discrimination, wage and hour requirements, workplace safety, leave policies, and termination procedures. Laws vary by jurisdiction. Common pitfalls include misclassifying workers as contractors, inadequate documentation, and improper termination procedures.",
+      "departmentTags": ["Legal", "Operations"],
+      "relatedConcepts": [
+        { "slug": "regulatory-requirements", "type": "RELATED" },
+        { "slug": "contract-essentials", "type": "PREREQUISITE" }
+      ]
+    },
+    {
+      "name": "Liability Protection",
+      "slug": "liability-protection",
+      "category": "Legal",
+      "definition": "Legal mechanisms that shield businesses and individuals from personal responsibility for business debts, claims, or legal actions.",
+      "extendedDescription": "Liability protection comes from business structure (LLC, corporation), contracts (indemnification, limitation of liability), insurance, and operational practices. No protection is absolute; piercing the corporate veil can occur with fraud or failure to maintain separation. Risk management complements legal protection.",
+      "departmentTags": ["Legal", "Finance"],
+      "relatedConcepts": [
+        { "slug": "contract-essentials", "type": "PREREQUISITE" },
+        { "slug": "risk-management", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Terms of Service",
+      "slug": "terms-of-service",
+      "category": "Legal",
+      "definition": "Legal agreements between a service provider and users that establish the rules, restrictions, and guidelines for using the service.",
+      "extendedDescription": "Terms of Service (ToS) define user responsibilities, acceptable use, intellectual property rights, disclaimers, limitation of liability, and dispute resolution. Enforceability depends on presentation and user acceptance. ToS should be clear, accessible, and regularly updated as services evolve.",
+      "departmentTags": ["Legal"],
+      "relatedConcepts": [
+        { "slug": "contract-essentials", "type": "PREREQUISITE" },
+        { "slug": "data-privacy-gdpr", "type": "RELATED" },
+        { "slug": "liability-protection", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "NDA Fundamentals",
+      "slug": "nda-fundamentals",
+      "category": "Legal",
+      "definition": "Non-disclosure agreements are contracts that protect confidential information shared between parties.",
+      "extendedDescription": "NDAs define what information is confidential, how it can be used, duration of protection, and consequences of breach. Mutual NDAs protect both parties. Key considerations include scope (too broad may be unenforceable), exclusions (publicly available info), and survival period after agreement ends.",
+      "departmentTags": ["Legal"],
+      "relatedConcepts": [
+        { "slug": "contract-essentials", "type": "PREREQUISITE" },
+        { "slug": "intellectual-property", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Regulatory Requirements",
+      "slug": "regulatory-requirements",
+      "category": "Legal",
+      "definition": "Rules and standards established by government agencies that businesses must follow within specific industries or activities.",
+      "extendedDescription": "Regulations vary by industry (healthcare, finance, food), activity (data handling, advertising), and jurisdiction. Compliance requires understanding applicable rules, implementing controls, monitoring changes, and maintaining documentation. Regulatory expertise often requires specialized legal counsel.",
+      "departmentTags": ["Legal"],
+      "relatedConcepts": [
+        { "slug": "compliance-frameworks", "type": "RELATED" },
+        { "slug": "employment-law-basics", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Due Diligence",
+      "slug": "due-diligence",
+      "category": "Legal",
+      "definition": "The comprehensive investigation and analysis of a business or individual before entering into an agreement, investment, or transaction.",
+      "extendedDescription": "Due diligence examines financials, legal matters, operations, and strategic fit. In M&A, it uncovers risks and validates assumptions. In vendor selection, it assesses capability and stability. Thorough due diligence prevents surprises and supports informed decision-making.",
+      "departmentTags": ["Legal", "Finance"],
+      "relatedConcepts": [
+        { "slug": "risk-management", "type": "RELATED" },
+        { "slug": "contract-essentials", "type": "RELATED" },
+        { "slug": "strategic-planning", "type": "RELATED" },
+        { "slug": "diversification-strategy", "type": "ADVANCED" }
+      ]
+    }
+  ]
+}

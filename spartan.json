@@ -1,0 +1,5 @@
+{
+  "$schema": "node_modules/@spartan-ng/cli/src/generators/ui/schema.json",
+  "directory": "shared/ui/src/lib",
+  "tags": "scope:shared,type:ui"
+}

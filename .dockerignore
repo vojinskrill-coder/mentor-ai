@@ -1,0 +1,14 @@
+node_modules
+dist
+.angular
+.nx
+.git
+*.md
+.env*
+.eslintrc*
+.prettierrc*
+.editorconfig
+.husky
+.storybook
+coverage
+tmp

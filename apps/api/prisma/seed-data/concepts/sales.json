@@ -1,0 +1,134 @@
+{
+  "concepts": [
+    {
+      "name": "Sales Pipeline Management",
+      "slug": "sales-pipeline-management",
+      "category": "Sales",
+      "definition": "The process of tracking and managing sales opportunities through defined stages from initial contact to closed deal.",
+      "extendedDescription": "Sales pipeline management involves defining clear stages (prospecting, qualification, proposal, negotiation, closing), tracking deals through each stage, and analyzing conversion rates between stages. Effective pipeline management enables accurate forecasting, identifies bottlenecks, and ensures reps focus on the highest-value opportunities. Key metrics include pipeline velocity, stage conversion rates, and average deal size.",
+      "departmentTags": ["Sales", "Operations"],
+      "relatedConcepts": [
+        { "slug": "lead-qualification", "type": "RELATED" },
+        { "slug": "sales-forecasting", "type": "ADVANCED" },
+        { "slug": "customer-relationship-management", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Lead Qualification",
+      "slug": "lead-qualification",
+      "category": "Sales",
+      "definition": "The process of evaluating potential customers to determine their likelihood of becoming paying customers based on defined criteria.",
+      "extendedDescription": "Lead qualification frameworks like BANT (Budget, Authority, Need, Timeline) and MEDDIC (Metrics, Economic Buyer, Decision Criteria, Decision Process, Identify Pain, Champion) help sales teams prioritize prospects. Proper qualification prevents wasted effort on low-probability deals and ensures sales resources focus on the most promising opportunities.",
+      "departmentTags": ["Sales", "Marketing"],
+      "relatedConcepts": [
+        { "slug": "sales-pipeline-management", "type": "PREREQUISITE" },
+        { "slug": "consultative-selling", "type": "RELATED" },
+        { "slug": "customer-personas", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Sales Forecasting",
+      "slug": "sales-forecasting",
+      "category": "Sales",
+      "definition": "The process of estimating future sales revenue based on historical data, pipeline analysis, and market conditions.",
+      "extendedDescription": "Accurate sales forecasting combines quantitative methods (weighted pipeline, historical trends, regression analysis) with qualitative inputs (rep confidence, market intelligence). Forecasts inform hiring, budgeting, inventory, and strategic decisions. Common approaches include bottom-up (deal-by-deal), top-down (market-based), and blended methodologies.",
+      "departmentTags": ["Sales", "Finance"],
+      "relatedConcepts": [
+        { "slug": "sales-pipeline-management", "type": "PREREQUISITE" },
+        { "slug": "revenue-operations", "type": "RELATED" },
+        { "slug": "financial-modeling", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Customer Relationship Management",
+      "slug": "customer-relationship-management",
+      "category": "Sales",
+      "definition": "A strategy and system for managing all interactions and relationships with current and potential customers to improve business outcomes.",
+      "extendedDescription": "CRM encompasses both the strategy of building long-term customer relationships and the technology platforms (Salesforce, HubSpot, etc.) that support it. Effective CRM tracks the complete customer lifecycle, enables personalized communication, centralizes customer data, and provides analytics for decision-making. It bridges sales, marketing, and customer service functions.",
+      "departmentTags": ["Sales", "Marketing", "Operations"],
+      "relatedConcepts": [
+        { "slug": "sales-pipeline-management", "type": "RELATED" },
+        { "slug": "customer-journey", "type": "RELATED" },
+        { "slug": "account-based-selling", "type": "ADVANCED" }
+      ]
+    },
+    {
+      "name": "Consultative Selling",
+      "slug": "consultative-selling",
+      "category": "Sales",
+      "definition": "A sales approach where the salesperson acts as an advisor, focusing on understanding customer needs before recommending solutions.",
+      "extendedDescription": "Consultative selling shifts from product-pushing to problem-solving. It involves deep discovery conversations, active listening, needs analysis, and tailored solution design. This approach builds trust, creates larger deal sizes, and increases customer lifetime value. Key skills include asking powerful questions, identifying hidden pain points, and connecting solutions to business outcomes.",
+      "departmentTags": ["Sales"],
+      "relatedConcepts": [
+        { "slug": "lead-qualification", "type": "PREREQUISITE" },
+        { "slug": "sales-negotiation", "type": "RELATED" },
+        { "slug": "upselling-and-cross-selling", "type": "ADVANCED" }
+      ]
+    },
+    {
+      "name": "Account-Based Selling",
+      "slug": "account-based-selling",
+      "category": "Sales",
+      "definition": "A strategic approach that treats individual high-value accounts as markets of one, with coordinated sales and marketing efforts tailored to each account.",
+      "extendedDescription": "Account-based selling (ABS) focuses resources on a defined set of target accounts with the highest revenue potential. It involves deep account research, multi-threading across stakeholders, personalized outreach, and coordinated campaigns. ABS aligns sales and marketing teams around specific accounts rather than broad lead generation, typically yielding higher win rates and larger deal sizes.",
+      "departmentTags": ["Sales", "Marketing"],
+      "relatedConcepts": [
+        { "slug": "customer-relationship-management", "type": "PREREQUISITE" },
+        { "slug": "lead-qualification", "type": "RELATED" },
+        { "slug": "sales-enablement", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Sales Enablement",
+      "slug": "sales-enablement",
+      "category": "Sales",
+      "definition": "The process of providing sales teams with the resources, tools, content, and training they need to effectively engage buyers and close deals.",
+      "extendedDescription": "Sales enablement bridges the gap between marketing content creation and sales execution. It includes battle cards, case studies, ROI calculators, competitive comparisons, training programs, and playbooks. Effective enablement programs measure adoption and impact on sales outcomes, ensuring resources actually help reps win more deals.",
+      "departmentTags": ["Sales", "Marketing"],
+      "relatedConcepts": [
+        { "slug": "consultative-selling", "type": "RELATED" },
+        { "slug": "account-based-selling", "type": "RELATED" },
+        { "slug": "content-strategy", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Revenue Operations",
+      "slug": "revenue-operations",
+      "category": "Sales",
+      "definition": "A business function that aligns sales, marketing, and customer success operations to drive full-funnel accountability and revenue growth.",
+      "extendedDescription": "Revenue Operations (RevOps) breaks down silos between go-to-market teams by unifying processes, data, and technology. It manages the tech stack, ensures data integrity, standardizes reporting, and optimizes the end-to-end revenue process. RevOps provides a single source of truth for pipeline, forecasting, and performance metrics across all revenue-generating functions.",
+      "departmentTags": ["Sales", "Operations", "Finance"],
+      "relatedConcepts": [
+        { "slug": "sales-forecasting", "type": "RELATED" },
+        { "slug": "sales-pipeline-management", "type": "RELATED" },
+        { "slug": "kpi-management", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Upselling and Cross-Selling",
+      "slug": "upselling-and-cross-selling",
+      "category": "Sales",
+      "definition": "Sales techniques to increase revenue from existing customers by selling higher-tier products (upselling) or complementary products (cross-selling).",
+      "extendedDescription": "Upselling encourages customers to purchase a more premium version of what they're buying, while cross-selling suggests related or complementary products. Both strategies leverage existing customer relationships and trust to grow revenue without acquisition costs. Success depends on understanding customer needs, timing recommendations appropriately, and ensuring genuine value addition.",
+      "departmentTags": ["Sales", "Marketing"],
+      "relatedConcepts": [
+        { "slug": "consultative-selling", "type": "PREREQUISITE" },
+        { "slug": "customer-relationship-management", "type": "RELATED" },
+        { "slug": "value-based-pricing", "type": "RELATED" }
+      ]
+    },
+    {
+      "name": "Sales Negotiation",
+      "slug": "sales-negotiation",
+      "category": "Sales",
+      "definition": "The strategic process of reaching a mutually beneficial agreement between a seller and buyer on terms, pricing, and conditions of a deal.",
+      "extendedDescription": "Effective sales negotiation balances win-win outcomes with protecting margins and deal value. Key principles include understanding the buyer's BATNA (Best Alternative to Negotiated Agreement), anchoring with value rather than price, trading concessions strategically, and maintaining deal momentum. Skills include active listening, creative problem-solving, handling objections, and knowing when to walk away.",
+      "departmentTags": ["Sales", "Legal"],
+      "relatedConcepts": [
+        { "slug": "consultative-selling", "type": "PREREQUISITE" },
+        { "slug": "value-based-pricing", "type": "RELATED" },
+        { "slug": "contract-management", "type": "RELATED" }
+      ]
+    }
+  ]
+}
