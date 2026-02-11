@@ -13,13 +13,13 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Generate Prisma client
-RUN npx prisma generate --schema=apps/api/prisma/schema.prisma
+RUN ./node_modules/.bin/prisma generate --schema=apps/api/prisma/schema.prisma
 
 # Build Angular frontend (production config with fileReplacements)
-RUN npx nx build web --configuration=production
+RUN ./node_modules/.bin/nx build web --configuration=production
 
 # Build NestJS API
-RUN npx nx build api
+RUN ./node_modules/.bin/nx build api
 
 # ─── Stage 3: Production image ───────────────────────────────
 FROM node:20-alpine AS runner
@@ -32,7 +32,7 @@ COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
 
 # Prisma needs the schema for runtime
-RUN npx prisma generate --schema=apps/api/prisma/schema.prisma
+RUN ./node_modules/.bin/prisma generate --schema=apps/api/prisma/schema.prisma
 
 EXPOSE 3000
 ENV NODE_ENV=production
