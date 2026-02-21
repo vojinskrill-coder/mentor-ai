@@ -53,6 +53,30 @@ export class QdrantClientService implements OnModuleInit {
    * @param size - Vector dimension size
    * @param distance - Distance metric (default: Cosine)
    */
+  /**
+   * Deletes and recreates a collection with new vector configuration.
+   * Use when vector dimensions change (e.g. switching embedding models).
+   */
+  async recreateCollection(
+    name: string,
+    size: number,
+    distance: 'Cosine' | 'Euclid' | 'Dot' = 'Cosine'
+  ): Promise<void> {
+    const client = this.getClient();
+
+    try {
+      await client.deleteCollection(name);
+      this.logger.log({ message: 'Deleted Qdrant collection', name });
+    } catch {
+      // Collection doesn't exist — that's fine
+    }
+
+    await client.createCollection(name, {
+      vectors: { size, distance },
+    });
+    this.logger.log({ message: 'Created Qdrant collection', name, size, distance });
+  }
+
   async ensureCollection(
     name: string,
     size: number,

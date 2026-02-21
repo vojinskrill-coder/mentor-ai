@@ -140,9 +140,10 @@ model User {
   id        String   @id // Must have usr_ prefix, e.g., usr_cuid123
   email     String   @unique
   name      String?
-  role      UserRole @default(MEMBER)
-  tenantId  String   @map("tenant_id")
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  role       UserRole    @default(MEMBER)
+  department Department? @map("department") // Business Brain domain isolation (Story 3.2)
+  tenantId   String      @map("tenant_id")
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
 
   // Auth0 integration
   auth0Id   String?  @unique @map("auth0_id")
@@ -240,6 +241,7 @@ enum LlmProviderType {
   LOCAL_LLAMA
   OPENAI
   ANTHROPIC
+  LM_STUDIO
 }
 
 // LLM Provider Configuration (platform-level, not per-tenant)

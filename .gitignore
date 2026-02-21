@@ -38,5 +38,19 @@ testem.log
 .DS_Store
 Thumbs.db
 
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+
 .nx/cache
 .nx/workspace-data
+
+.angular
+
+__screenshots__/
+
+vitest.config.*.timestamp*
+
+storybook-staticnul

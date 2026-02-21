@@ -17,6 +17,7 @@ import type {
 import { OpenRouterProvider } from './providers/openrouter.provider';
 import { LocalLlamaProvider } from './providers/local-llama.provider';
 import { OpenAIProvider } from './providers/openai.provider';
+import { LmStudioProvider } from './providers/lm-studio.provider';
 
 const ENCRYPTION_ALGORITHM = 'aes-256-gcm';
 const API_KEY_MASK = '***masked***';
@@ -40,10 +41,7 @@ export class LlmConfigService {
         message: 'LLM_CONFIG_ENCRYPTION_KEY not set, using default (not secure for production)',
       });
       // Generate a consistent default key for development (32 bytes = 64 hex chars)
-      this.encryptionKey = Buffer.from(
-        '0'.repeat(64),
-        'hex'
-      );
+      this.encryptionKey = Buffer.from('0'.repeat(64), 'hex');
     } else {
       this.encryptionKey = Buffer.from(keyHex, 'hex');
     }
@@ -96,9 +94,7 @@ export class LlmConfigService {
     const primaryConfig = await this.prisma.llmProviderConfig.create({
       data: {
         providerType: primaryProvider.type,
-        apiKey: primaryProvider.apiKey
-          ? this.encrypt(primaryProvider.apiKey)
-          : null,
+        apiKey: primaryProvider.apiKey ? this.encrypt(primaryProvider.apiKey) : null,
         endpoint: primaryProvider.endpoint,
         modelId: primaryProvider.modelId,
         isPrimary: true,
@@ -112,9 +108,7 @@ export class LlmConfigService {
       fallbackConfig = await this.prisma.llmProviderConfig.create({
         data: {
           providerType: fallbackProvider.type,
-          apiKey: fallbackProvider.apiKey
-            ? this.encrypt(fallbackProvider.apiKey)
-            : null,
+          apiKey: fallbackProvider.apiKey ? this.encrypt(fallbackProvider.apiKey) : null,
           endpoint: fallbackProvider.endpoint,
           modelId: fallbackProvider.modelId,
           isPrimary: false,
@@ -131,9 +125,7 @@ export class LlmConfigService {
       currentConfig,
       {
         primaryProvider: this.mapToResponse(primaryConfig),
-        fallbackProvider: fallbackConfig
-          ? this.mapToResponse(fallbackConfig)
-          : null,
+        fallbackProvider: fallbackConfig ? this.mapToResponse(fallbackConfig) : null,
       }
     );
 
@@ -146,9 +138,7 @@ export class LlmConfigService {
 
     return {
       primaryProvider: this.mapToResponse(primaryConfig),
-      fallbackProvider: fallbackConfig
-        ? this.mapToResponse(fallbackConfig)
-        : null,
+      fallbackProvider: fallbackConfig ? this.mapToResponse(fallbackConfig) : null,
     };
   }
 
@@ -193,8 +183,7 @@ export class LlmConfigService {
         resourceInfo,
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown validation error';
+      const errorMessage = error instanceof Error ? error.message : 'Unknown validation error';
 
       this.logger.warn({
         message: 'Provider validation failed',
@@ -246,11 +235,22 @@ export class LlmConfigService {
     }
   }
 
-  private createProvider(
-    type: LlmProviderType,
-    apiKey?: string,
-    endpoint?: string
-  ) {
+  /**
+   * Gets the configured endpoint for a provider.
+   * @param providerType - Type of provider to get endpoint for
+   * @returns Endpoint URL or null if not found
+   */
+  async getProviderEndpoint(providerType: LlmProviderType): Promise<string | null> {
+    const config = await this.prisma.llmProviderConfig.findFirst({
+      where: {
+        providerType,
+        isActive: true,
+      },
+    });
+    return config?.endpoint ?? null;
+  }
+
+  private createProvider(type: LlmProviderType, apiKey?: string, endpoint?: string) {
     switch (type) {
       case 'OPENROUTER':
         if (!apiKey) {
@@ -276,6 +276,9 @@ export class LlmConfigService {
           });
         }
         return new OpenAIProvider({ apiKey });
+
+      case 'LM_STUDIO':
+        return new LmStudioProvider({ endpoint: endpoint ?? 'http://localhost:1234' });
 
       case 'ANTHROPIC':
         throw new BadRequestException({
@@ -331,9 +334,7 @@ export class LlmConfigService {
       data: {
         action,
         changedBy,
-        previousVal: previousVal
-          ? JSON.parse(JSON.stringify(previousVal))
-          : undefined,
+        previousVal: previousVal ? JSON.parse(JSON.stringify(previousVal)) : undefined,
         newVal: JSON.parse(JSON.stringify(newVal)),
       },
     });
@@ -351,11 +352,7 @@ export class LlmConfigService {
    */
   private encrypt(text: string): string {
     const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv(
-      ENCRYPTION_ALGORITHM,
-      this.encryptionKey,
-      iv
-    );
+    const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, this.encryptionKey, iv);
     let encrypted = cipher.update(text, 'utf8', 'hex');
     encrypted += cipher.final('hex');
     const authTag = cipher.getAuthTag();
@@ -374,11 +371,7 @@ export class LlmConfigService {
     const [ivHex, authTagHex, encryptedText] = parts as [string, string, string];
     const iv = Buffer.from(ivHex, 'hex');
     const authTag = Buffer.from(authTagHex, 'hex');
-    const decipher = crypto.createDecipheriv(
-      ENCRYPTION_ALGORITHM,
-      this.encryptionKey,
-      iv
-    );
+    const decipher = crypto.createDecipheriv(ENCRYPTION_ALGORITHM, this.encryptionKey, iv);
     decipher.setAuthTag(authTag);
     let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
     decrypted += decipher.final('utf8');

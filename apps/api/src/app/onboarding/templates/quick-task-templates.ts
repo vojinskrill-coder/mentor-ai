@@ -1,8 +1,10 @@
 import { Department, QuickTask } from '@mentor-ai/shared/types';
 
 /**
- * Pre-defined quick tasks for the onboarding flow.
- * Each task is optimized for fast, high-quality AI output.
+ * @deprecated Story 3.2 — Quick-task templates are superseded by the
+ * Autonomous Business Brain concept seeding (BrainSeedingService).
+ * Kept for backward compatibility with legacy onboarding flows.
+ * New onboarding uses brain seeding via department-based concept categories.
  */
 export const QUICK_TASK_TEMPLATES: QuickTask[] = [
   // Finance tasks

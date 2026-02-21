@@ -259,6 +259,7 @@ export enum LlmProviderType {
   LOCAL_LLAMA = 'LOCAL_LLAMA',
   OPENAI = 'OPENAI',
   ANTHROPIC = 'ANTHROPIC',
+  LM_STUDIO = 'LM_STUDIO',
 }
 
 /** Single LLM provider configuration */
@@ -396,9 +397,9 @@ export interface CreateConversationRequest {
 
 /** Curriculum node from reference JSON */
 export interface CurriculumNode {
-  id: string;           // slug identifier
+  id: string; // slug identifier
   parentId: string | null;
-  label: string;        // Serbian display name
+  label: string; // Serbian display name
   sortOrder: number;
 }
 
@@ -406,15 +407,15 @@ export interface CurriculumNode {
 export interface ConceptHierarchyNode {
   curriculumId: string;
   label: string;
-  conceptId?: string;         // DB concept ID if created
+  conceptId?: string; // DB concept ID if created
   children: ConceptHierarchyNode[];
-  conversationCount: number;  // Total conversations in this subtree
-  conversations: Conversation[];  // Direct conversations (only on leaf concepts)
+  conversationCount: number; // Total conversations in this subtree
+  conversations: Conversation[]; // Direct conversations (only on leaf concepts)
 }
 
 /** Full concept tree structure for sidebar */
 export interface ConceptTreeData {
-  tree: ConceptHierarchyNode[];  // Hierarchical (replaces old categories)
+  tree: ConceptHierarchyNode[]; // Hierarchical (replaces old categories)
   uncategorized: Conversation[];
 }
 
@@ -1486,7 +1487,7 @@ export interface YoloConfig {
   maxConcurrency: number;
   maxConceptsHardStop: number;
   retryAttempts: number;
-  retryBaseDelayMs?: number;      // Exponential backoff base (default 5000ms)
+  retryBaseDelayMs?: number; // Exponential backoff base (default 5000ms)
   circuitBreakerCooldownMs?: number; // Pause after consecutive failures (default 30000ms)
 }
 

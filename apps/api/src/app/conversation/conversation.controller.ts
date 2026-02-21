@@ -11,6 +11,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { DepartmentGuard } from '../knowledge/guards/department.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../auth/strategies/jwt.strategy';
 import { ConversationService } from './conversation.service';
@@ -30,7 +31,7 @@ export class ConversationController {
   constructor(
     private readonly conversationService: ConversationService,
     private readonly curriculumService: CurriculumService,
-    private readonly conceptService: ConceptService,
+    private readonly conceptService: ConceptService
   ) {}
 
   /**
@@ -52,9 +53,9 @@ export class ConversationController {
       // Story 2.13: Fire-and-forget dynamic relationship creation for newly created concepts
       // Deviation: uses .catch() instead of try/catch — fire-and-forget pattern requires it
       if (conceptId) {
-        this.conceptService
-          .createDynamicRelationships(conceptId)
-          .catch(() => { /* non-blocking */ });
+        this.conceptService.createDynamicRelationships(conceptId).catch(() => {
+          /* non-blocking */
+        });
       }
     }
 
@@ -99,10 +100,28 @@ export class ConversationController {
   }
 
   /**
+   * Business Brain tree — active + pending concepts grouped by category (Story 3.2).
+   * Filtered by the user's department → visible categories.
+   */
+  @Get('brain-tree')
+  @HttpCode(HttpStatus.OK)
+  async getBrainTree(@CurrentUser() user: CurrentUserPayload) {
+    const tree = await this.conversationService.getBrainTree(
+      user.tenantId,
+      user.userId,
+      user.department,
+      user.role
+    );
+
+    return { data: tree };
+  }
+
+  /**
    * Get a single conversation with all its messages.
-   * Validates ownership before returning.
+   * Validates ownership and department scope before returning.
    */
   @Get(':id')
+  @UseGuards(DepartmentGuard)
   @HttpCode(HttpStatus.OK)
   async getConversation(
     @CurrentUser() user: CurrentUserPayload,
@@ -127,11 +146,7 @@ export class ConversationController {
     @CurrentUser() user: CurrentUserPayload,
     @Param('id') conversationId: string
   ) {
-    await this.conversationService.deleteConversation(
-      user.tenantId,
-      conversationId,
-      user.userId
-    );
+    await this.conversationService.deleteConversation(user.tenantId, conversationId, user.userId);
   }
 
   /**

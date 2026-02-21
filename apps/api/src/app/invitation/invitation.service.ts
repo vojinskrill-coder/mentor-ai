@@ -8,12 +8,10 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
-import {
-  generateInvitationId,
-  generateInviteToken,
-} from '@mentor-ai/shared/utils';
+import { generateInvitationId, generateInviteToken } from '@mentor-ai/shared/utils';
 import { InvitationStatus, Department, UserRole } from '@mentor-ai/shared/prisma';
 import { EmailService } from '@mentor-ai/shared/email';
+import { BrainSeedingService } from '../knowledge/services/brain-seeding.service';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 
 export interface InvitationResult {
@@ -60,16 +58,11 @@ export class InvitationService {
   constructor(
     private readonly prisma: PlatformPrismaService,
     private readonly emailService: EmailService,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly brainSeedingService: BrainSeedingService
   ) {
-    this.maxTeamMembers = this.configService.get<number>(
-      'MAX_TEAM_MEMBERS',
-      5
-    );
-    this.appUrl = this.configService.get<string>(
-      'FRONTEND_URL',
-      'http://localhost:4200'
-    );
+    this.maxTeamMembers = this.configService.get<number>('MAX_TEAM_MEMBERS', 5);
+    this.appUrl = this.configService.get<string>('FRONTEND_URL', 'http://localhost:4200');
   }
 
   async checkUserLimit(tenantId: string): Promise<UserLimitCheck> {
@@ -106,8 +99,7 @@ export class InvitationService {
         type: 'user_limit_reached',
         title: 'User Limit Reached',
         status: 403,
-        detail:
-          'User limit reached. Upgrade your plan to add more team members.',
+        detail: 'User limit reached. Upgrade your plan to add more team members.',
         currentCount: limitCheck.currentCount,
         limit: limitCheck.limit,
       });
@@ -128,8 +120,7 @@ export class InvitationService {
         type: 'duplicate_invitation',
         title: 'Duplicate Invitation',
         status: 409,
-        detail:
-          'A pending invitation already exists for this email address in your workspace.',
+        detail: 'A pending invitation already exists for this email address in your workspace.',
       });
     }
 
@@ -204,9 +195,7 @@ export class InvitationService {
     };
   }
 
-  async getInvitationsByTenant(
-    tenantId: string
-  ): Promise<InvitationWithDetails[]> {
+  async getInvitationsByTenant(tenantId: string): Promise<InvitationWithDetails[]> {
     return this.prisma.invitation.findMany({
       where: { tenantId },
       include: {
@@ -217,9 +206,7 @@ export class InvitationService {
     });
   }
 
-  async getPendingInvitations(
-    tenantId: string
-  ): Promise<InvitationWithDetails[]> {
+  async getPendingInvitations(tenantId: string): Promise<InvitationWithDetails[]> {
     const now = new Date();
 
     // Auto-expire stale invitations
@@ -269,15 +256,11 @@ export class InvitationService {
         type: 'invitation_revoked',
         title: 'Invitation Revoked',
         status: 410,
-        detail:
-          'This invitation has been revoked. Please request a new invite.',
+        detail: 'This invitation has been revoked. Please request a new invite.',
       });
     }
 
-    if (
-      invitation.status === InvitationStatus.EXPIRED ||
-      invitation.expiresAt < new Date()
-    ) {
+    if (invitation.status === InvitationStatus.EXPIRED || invitation.expiresAt < new Date()) {
       // Auto-update status if expired
       if (invitation.status === InvitationStatus.PENDING) {
         await this.prisma.invitation.update({
@@ -290,8 +273,7 @@ export class InvitationService {
         type: 'invitation_expired',
         title: 'Invitation Expired',
         status: 410,
-        detail:
-          'This invitation has expired. Please request a new invite.',
+        detail: 'This invitation has expired. Please request a new invite.',
       });
     }
 
@@ -315,7 +297,7 @@ export class InvitationService {
     const invitation = await this.validateInviteToken(token);
 
     // Use transaction for atomicity
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // Check if user already belongs to this tenant
       const existingUser = await tx.user.findFirst({
         where: { email: userEmail.toLowerCase(), tenantId: invitation.tenantId },
@@ -335,15 +317,17 @@ export class InvitationService {
           tenantId: invitation.tenantId,
           role: existingUser.role,
           department: invitation.department,
+          isNewMember: false,
         };
       }
 
-      // Add user to the invited tenant
+      // Add user to the invited tenant with department from invitation
       await tx.user.update({
         where: { id: userId },
         data: {
           tenantId: invitation.tenantId,
           role: invitation.role,
+          department: invitation.department,
         },
       });
 
@@ -359,14 +343,32 @@ export class InvitationService {
         tenantId: invitation.tenantId,
         role: invitation.role,
         department: invitation.department,
+        isNewMember: true,
       };
     });
+
+    // Story 3.2: Seed pending tasks for new team member (fire-and-forget)
+    if (result.isNewMember) {
+      this.brainSeedingService
+        .seedPendingTasksForUser(userId, result.tenantId, result.department, result.role)
+        .catch((err) => {
+          this.logger.warn({
+            message: 'Brain seeding failed after invitation acceptance',
+            userId,
+            tenantId: result.tenantId,
+            error: err?.message,
+          });
+        });
+    }
+
+    return {
+      tenantId: result.tenantId,
+      role: result.role,
+      department: result.department,
+    };
   }
 
-  async revokeInvitation(
-    invitationId: string,
-    tenantId: string
-  ): Promise<void> {
+  async revokeInvitation(invitationId: string, tenantId: string): Promise<void> {
     const invitation = await this.prisma.invitation.findUnique({
       where: { id: invitationId },
     });

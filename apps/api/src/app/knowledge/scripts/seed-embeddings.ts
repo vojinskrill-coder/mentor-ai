@@ -1,5 +1,6 @@
 /**
- * Seed script: Generates and stores OpenAI embeddings for all curriculum concepts in Qdrant.
+ * Seed script: Generates and stores embeddings for all curriculum concepts in Qdrant
+ * using LM Studio's local nomic-embed-text model.
  *
  * Usage:
  *   npx ts-node -P apps/api/tsconfig.json apps/api/src/app/knowledge/scripts/seed-embeddings.ts
@@ -8,7 +9,8 @@
  *   npx nx run api:seed-embeddings
  *
  * Prerequisites:
- *   - OpenAI API key configured in LLM provider config (OPENAI provider)
+ *   - LM Studio running locally with nomic-embed-text model loaded
+ *   - LM Studio configured as active provider (or defaults to http://127.0.0.1:1234)
  *   - Qdrant Cloud URL and API key in .env (QDRANT_URL, QDRANT_API_KEY)
  *   - Concepts seeded in the database
  */
@@ -23,7 +25,9 @@ import { Logger } from '@nestjs/common';
 
 const logger = new Logger('SeedEmbeddings');
 
-interface OpenAIBatchResponse {
+const DEFAULT_LM_STUDIO_ENDPOINT = 'http://127.0.0.1:1234';
+
+interface EmbeddingBatchResponse {
   data: Array<{ embedding: number[]; index: number }>;
   model: string;
   usage: { prompt_tokens: number; total_tokens: number };
@@ -55,17 +59,15 @@ async function main() {
     return;
   }
 
-  // Get OpenAI API key for batch embedding calls
-  const apiKey = await llmConfigService.getDecryptedApiKey(LlmProviderType.OPENAI);
-  if (!apiKey) {
-    logger.error('OpenAI API key not configured. Cannot generate embeddings.');
-    await app.close();
-    process.exit(1);
-  }
+  // Get LM Studio endpoint from config or use default
+  const endpoint =
+    (await llmConfigService.getProviderEndpoint(LlmProviderType.LM_STUDIO)) ??
+    DEFAULT_LM_STUDIO_ENDPOINT;
+  logger.log(`Using LM Studio endpoint: ${endpoint}`);
 
   // Process in batches with batch embedding API calls
   const BATCH_SIZE = 20;
-  const BATCH_DELAY_MS = 500;
+  const BATCH_DELAY_MS = 200;
   let processed = 0;
   let failed = 0;
 
@@ -73,33 +75,29 @@ async function main() {
     const batch = conceptsWithoutEmbeddings.slice(i, i + BATCH_SIZE);
 
     // Build texts for batch embedding
-    const texts = batch.map(
-      (c) => `${c.name} (${c.category}): ${c.definition}`
-    );
+    const texts = batch.map((c) => `${c.name} (${c.category}): ${c.definition}`);
 
     try {
-      // Call OpenAI with batch input (single API call for 20 texts)
-      const response = await fetch('https://api.openai.com/v1/embeddings', {
+      // Call LM Studio with batch input (single API call for up to 20 texts)
+      const response = await fetch(`${endpoint}/v1/embeddings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: 'text-embedding-3-small',
+          model: 'text-embedding-nomic-embed-text-v1.5',
           input: texts,
-          dimensions: 1024,
         }),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        logger.error(`OpenAI API error: ${response.status} ${errorText}`);
+        logger.error(`LM Studio API error: ${response.status} ${errorText}`);
         failed += batch.length;
         continue;
       }
 
-      const data = (await response.json()) as OpenAIBatchResponse;
+      const data = (await response.json()) as EmbeddingBatchResponse;
 
       // Store each embedding in Qdrant via EmbeddingService
       for (let j = 0; j < batch.length; j++) {

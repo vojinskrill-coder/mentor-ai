@@ -49,7 +49,7 @@ export class GoogleAuthController {
   constructor(
     private readonly configService: ConfigService,
     private readonly authService: AuthService,
-    private readonly prisma: PlatformPrismaService,
+    private readonly prisma: PlatformPrismaService
   ) {}
 
   /**
@@ -70,9 +70,7 @@ export class GoogleAuthController {
     const jwtSecret = this.configService.get<string>('JWT_SECRET');
 
     if (!clientId || !jwtSecret) {
-      throw new BadRequestException(
-        'Google OAuth is not configured on the server'
-      );
+      throw new BadRequestException('Google OAuth is not configured on the server');
     }
 
     // Exchange authorization code for tokens
@@ -100,13 +98,8 @@ export class GoogleAuthController {
       );
       tokenData = response.data;
     } catch (error: any) {
-      this.logger.error(
-        'Google token exchange failed',
-        error?.response?.data || error.message
-      );
-      throw new UnauthorizedException(
-        'Failed to exchange authorization code with Google'
-      );
+      this.logger.error('Google token exchange failed', error?.response?.data || error.message);
+      throw new UnauthorizedException('Failed to exchange authorization code with Google');
     }
 
     // Decode the ID token to get user info
@@ -116,29 +109,23 @@ export class GoogleAuthController {
     }
 
     // Find existing user by email
-    const existingUser = await this.authService.findUserByEmail(
-      idTokenPayload.email
-    );
+    const existingUser = await this.authService.findUserByEmail(idTokenPayload.email);
 
     let user: {
       userId: string;
       email: string;
       tenantId: string;
       role: string;
+      department: string | null;
     };
 
     if (existingUser) {
       // Link Google ID if not already linked
       if (!existingUser.auth0Id) {
-        await this.authService.linkAuth0Identity(
-          existingUser.id,
-          idTokenPayload.sub
-        );
+        await this.authService.linkAuth0Identity(existingUser.id, idTokenPayload.sub);
 
         if (existingUser.tenant.status === 'DRAFT') {
-          await this.authService.updateTenantStatusToOnboarding(
-            existingUser.tenantId
-          );
+          await this.authService.updateTenantStatusToOnboarding(existingUser.tenantId);
         }
       }
 
@@ -147,6 +134,7 @@ export class GoogleAuthController {
         email: existingUser.email,
         tenantId: existingUser.tenantId,
         role: existingUser.role,
+        department: existingUser.department ?? null,
       };
     } else {
       // New user — auto-register with ONBOARDING status
@@ -188,6 +176,7 @@ export class GoogleAuthController {
         email: normalizedEmail,
         tenantId,
         role: UserRole.TENANT_OWNER,
+        department: null,
       };
     }
 
@@ -202,6 +191,7 @@ export class GoogleAuthController {
         userId: user.userId,
         tenantId: user.tenantId,
         role: user.role,
+        department: user.department,
       },
       jwtSecret,
       { expiresIn: '24h', algorithm: 'HS256' }

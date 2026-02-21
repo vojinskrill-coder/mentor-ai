@@ -1,11 +1,4 @@
-import {
-  IsString,
-  IsOptional,
-  IsEnum,
-  IsNotEmpty,
-  IsUrl,
-  ValidateNested,
-} from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNotEmpty, IsUrl, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { LlmProviderType } from '@mentor-ai/shared/types';
 
@@ -18,7 +11,7 @@ class ProviderConfigDto {
   @IsOptional()
   apiKey?: string;
 
-  @IsUrl({}, { message: 'Endpoint must be a valid URL' })
+  @IsUrl({ require_tld: false }, { message: 'Endpoint must be a valid URL' })
   @IsOptional()
   endpoint?: string;
 

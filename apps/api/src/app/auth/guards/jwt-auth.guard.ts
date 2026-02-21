@@ -1,26 +1,25 @@
-import {
-  ExecutionContext,
-  Injectable,
-  Logger,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { ExecutionContext, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AuthGuard } from '@nestjs/passport';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { PrismaClient } from '@mentor-ai/shared/prisma';
 
-/** Dev mode mock user for local development (fallback when no real JWT) */
-const DEV_USER = {
+/** Static fallback when no active tenant exists yet (fresh DB) */
+const DEV_USER_FALLBACK = {
   userId: 'dev-user-001',
   tenantId: 'dev-tenant-001',
   email: 'dev@mentor-ai.local',
   role: 'PLATFORM_OWNER' as const,
+  department: null as string | null,
   permissions: ['*'],
 };
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
   private readonly logger = new Logger(JwtAuthGuard.name);
+  /** Cached dev user resolved from DB (avoids repeat queries) */
+  private resolvedDevUser: typeof DEV_USER_FALLBACK | null = null;
 
   constructor(
     private reflector: Reflector,
@@ -61,12 +60,66 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
         }
       }
 
-      // No real token or validation failed - use dev fallback
-      request.user = DEV_USER;
+      // Resolve real tenant/user from DB (cached after first lookup)
+      request.user = await this.getDevUser();
       return true;
     }
 
     return super.canActivate(context) as Promise<boolean>;
+  }
+
+  /**
+   * Resolves a real active tenant and its owner for dev mode.
+   * Uses a standalone PrismaClient to avoid DI module dependency issues.
+   * Falls back to static IDs if no active tenant exists yet.
+   * Result is cached so DB is only queried once per server start.
+   */
+  private async getDevUser(): Promise<typeof DEV_USER_FALLBACK> {
+    if (this.resolvedDevUser) return this.resolvedDevUser;
+
+    const prisma = new PrismaClient();
+    try {
+      const tenant = await prisma.tenant.findFirst({
+        where: { status: 'ACTIVE' },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      });
+
+      if (tenant) {
+        const user = await prisma.user.findFirst({
+          where: { tenantId: tenant.id, isActive: true },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, email: true, role: true, department: true },
+        });
+
+        if (user) {
+          this.resolvedDevUser = {
+            userId: user.id,
+            tenantId: tenant.id,
+            email: user.email,
+            role: 'PLATFORM_OWNER' as const,
+            department: user.department,
+            permissions: ['*'],
+          };
+          this.logger.log({
+            message: 'Dev mode: resolved real tenant/user',
+            tenantId: tenant.id,
+            userId: user.id,
+          });
+          return this.resolvedDevUser;
+        }
+      }
+    } catch (err) {
+      this.logger.warn({
+        message: 'Dev mode: failed to resolve tenant, using fallback',
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+    } finally {
+      await prisma.$disconnect();
+    }
+
+    this.resolvedDevUser = DEV_USER_FALLBACK;
+    return this.resolvedDevUser;
   }
 
   handleRequest<TUser>(err: Error | null, user: TUser, info: Error): TUser {

@@ -14,7 +14,20 @@
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
-    "paths": {}
+    "strict": true,
+    "strictNullChecks": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "paths": {
+      "@mentor-ai/shared/types": ["shared/types/src/index.ts"],
+      "@mentor-ai/shared/utils": ["shared/utils/src/index.ts"],
+      "@mentor-ai/shared/prisma": ["shared/prisma/src/index.ts"],
+      "@mentor-ai/shared/tenant-context": ["shared/tenant-context/src/index.ts"],
+      "@mentor-ai/shared/ui": ["shared/ui/src/index.ts"],
+      "@mentor-ai/shared/email": ["shared/email/src/index.ts"]
+    }
   },
   "exclude": ["node_modules", "tmp"]
 }

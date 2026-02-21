@@ -10,7 +10,7 @@ export class ValidateProviderDto {
   @IsOptional()
   apiKey?: string;
 
-  @IsUrl({}, { message: 'Endpoint must be a valid URL' })
+  @IsUrl({ require_tld: false }, { message: 'Endpoint must be a valid URL' })
   @IsOptional()
   endpoint?: string;
 }

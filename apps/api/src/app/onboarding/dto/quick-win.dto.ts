@@ -1,4 +1,12 @@
-import { IsString, IsNotEmpty, MaxLength, MinLength, IsOptional, IsArray } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  MaxLength,
+  MinLength,
+  IsOptional,
+  IsArray,
+  IsIn,
+} from 'class-validator';
 
 /**
  * DTO for setting up company details during onboarding step 1.
@@ -61,6 +69,28 @@ export class QuickWinDto {
   @IsString()
   @IsNotEmpty()
   industry!: string;
+}
+
+/**
+ * DTO for setting the user's department/role during onboarding (Story 3.2).
+ */
+export class SetDepartmentDto {
+  @IsOptional()
+  @IsIn(
+    [
+      'MARKETING',
+      'FINANCE',
+      'SALES',
+      'OPERATIONS',
+      'TECHNOLOGY',
+      'STRATEGY',
+      'LEGAL',
+      'CREATIVE',
+      null,
+    ],
+    { message: 'department must be a valid Department enum value or null' }
+  )
+  department?: string | null;
 }
 
 /**

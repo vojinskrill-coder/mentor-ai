@@ -17,7 +17,9 @@ import { CitationService } from '../knowledge/services/citation.service';
 import { AiGatewayService } from '../ai-gateway/ai-gateway.service';
 import { NotesService } from '../notes/notes.service';
 import { WebSearchService } from '../web-search/web-search.service';
+import { BusinessContextService } from '../knowledge/services/business-context.service';
 import { generateSystemPrompt } from '../personas/templates/persona-prompts';
+import { getVisibleCategories } from '../knowledge/config/department-categories';
 
 const MAX_RECURSION_DEPTH = 10;
 
@@ -51,8 +53,16 @@ export interface ExecutionCallbacks {
   onStepComplete: (stepId: string, fullContent: string, citations: ConceptCitation[]) => void;
   onStepFailed: (stepId: string, error: string) => void;
   onStepAwaitingConfirmation: (upcomingStep: ExecutionPlanStep) => void;
-  onComplete: (status: 'completed' | 'cancelled' | 'failed', completedSteps: number, totalSteps: number) => void;
-  saveMessage: (role: 'system' | 'user' | 'assistant', content: string, conceptId?: string) => Promise<string>;
+  onComplete: (
+    status: 'completed' | 'cancelled' | 'failed',
+    completedSteps: number,
+    totalSteps: number
+  ) => void;
+  saveMessage: (
+    role: 'system' | 'user' | 'assistant',
+    content: string,
+    conceptId?: string
+  ) => Promise<string>;
 }
 
 @Injectable()
@@ -75,6 +85,7 @@ export class WorkflowService {
     private readonly aiGatewayService: AiGatewayService,
     private readonly notesService: NotesService,
     private readonly webSearchService: WebSearchService,
+    private readonly businessContextService: BusinessContextService
   ) {}
 
   // ─── Workflow Generation ──────────────────────────────────────
@@ -85,7 +96,7 @@ export class WorkflowService {
   async getOrGenerateWorkflow(
     conceptId: string,
     tenantId: string,
-    userId: string,
+    userId: string
   ): Promise<{ conceptName: string; steps: WorkflowStep[] }> {
     const existing = await this.prisma.conceptWorkflow.findUnique({
       where: { conceptId },
@@ -105,7 +116,7 @@ export class WorkflowService {
   private async generateWorkflow(
     conceptId: string,
     tenantId: string,
-    userId: string,
+    userId: string
   ): Promise<{ conceptName: string; steps: WorkflowStep[] }> {
     const concept = await this.conceptService.findById(conceptId);
 
@@ -119,7 +130,7 @@ export class WorkflowService {
       concept.definition,
       concept.extendedDescription,
       prerequisites,
-      concept.departmentTags,
+      concept.departmentTags
     );
 
     // LLM call to generate workflow steps
@@ -137,7 +148,7 @@ export class WorkflowService {
       },
       (chunk: string) => {
         responseContent += chunk;
-      },
+      }
     );
 
     const steps = this.parseWorkflowSteps(responseContent);
@@ -166,7 +177,7 @@ export class WorkflowService {
     definition: string,
     extendedDescription: string | undefined,
     prerequisites: string[],
-    departmentTags: string[],
+    departmentTags: string[]
   ): string {
     return `Generiši radni tok za IZVRŠAVANJE poslovne analize i PROIZVODNJU rezultata koristeći koncept "${name}".
 
@@ -189,7 +200,10 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
 
   private parseWorkflowSteps(response: string): WorkflowStep[] {
     try {
-      const cleaned = response.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      const cleaned = response
+        .replace(/```json?\n?/g, '')
+        .replace(/```/g, '')
+        .trim();
       const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
       if (!jsonMatch) throw new Error('No JSON array found');
 
@@ -200,7 +214,9 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
         stepNumber: (step.stepNumber as number) ?? index + 1,
         title: (step.title as string) || `Step ${index + 1}`,
         description: (step.description as string) || '',
-        promptTemplate: (step.promptTemplate as string) || `Perform a comprehensive analysis of "{{conceptName}}" applied specifically to this business. {{businessContext}}. Produce a structured deliverable with concrete findings and recommendations.`,
+        promptTemplate:
+          (step.promptTemplate as string) ||
+          `Perform a comprehensive analysis of "{{conceptName}}" applied specifically to this business. {{businessContext}}. Produce a structured deliverable with concrete findings and recommendations.`,
         expectedOutcome: (step.expectedOutcome as string) || '',
         estimatedMinutes: (step.estimatedMinutes as number) ?? 5,
         departmentTag: (step.departmentTag as string) || undefined,
@@ -210,14 +226,17 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
         message: 'Failed to parse workflow steps, using fallback',
         error: error instanceof Error ? error.message : 'Unknown',
       });
-      return [{
-        stepNumber: 1,
-        title: 'Apply concept to business',
-        description: 'Perform analysis using this concept for the specific business',
-        promptTemplate: 'Apply the "{{conceptName}}" framework to this specific business. {{businessContext}}. Produce a structured analysis with actionable recommendations.',
-        expectedOutcome: 'Concrete analysis deliverable with recommendations',
-        estimatedMinutes: 10,
-      }];
+      return [
+        {
+          stepNumber: 1,
+          title: 'Apply concept to business',
+          description: 'Perform analysis using this concept for the specific business',
+          promptTemplate:
+            'Apply the "{{conceptName}}" framework to this specific business. {{businessContext}}. Produce a structured analysis with actionable recommendations.',
+          expectedOutcome: 'Concrete analysis deliverable with recommendations',
+          estimatedMinutes: 10,
+        },
+      ];
     }
   }
 
@@ -242,7 +261,7 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
             (r) =>
               r.relationshipType === 'PREREQUISITE' &&
               r.direction === 'outgoing' &&
-              allIds.has(r.concept.id),
+              allIds.has(r.concept.id)
           )
           .map((r) => r.concept.id);
         graph.set(id, prereqs);
@@ -297,7 +316,7 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
     taskIds: string[],
     userId: string,
     tenantId: string,
-    conversationId: string,
+    _conversationId: string
   ): Promise<ExecutionPlan> {
     // Load pending tasks
     const tasks = await this.prisma.note.findMany({
@@ -346,7 +365,9 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
     });
 
     if (conceptIds.length === 0) {
-      throw new Error('Nema relevantnih koncepata za odabrane zadatke. Proverite da li su koncepti učitani u bazu znanja.');
+      throw new Error(
+        'Nema relevantnih koncepata za odabrane zadatke. Proverite da li su koncepti učitani u bazu znanja.'
+      );
     }
 
     // Resolve ordering
@@ -357,7 +378,7 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
       orderedConceptIds.map(async (conceptId) => ({
         conceptId,
         workflow: await this.getOrGenerateWorkflow(conceptId, tenantId, userId),
-      })),
+      }))
     );
 
     const planSteps: ExecutionPlanStep[] = [];
@@ -420,7 +441,7 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
     conversationId: string,
     userId: string,
     tenantId: string,
-    callbacks: ExecutionCallbacks,
+    callbacks: ExecutionCallbacks
   ): Promise<void> {
     const plan = this.activePlans.get(planId);
     if (!plan) throw new Error(`Plan ${planId} not found`);
@@ -478,7 +499,7 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
           userId,
           tenantId,
           (chunk) => callbacks.onStepChunk(step.stepId, chunk),
-          completedSummaries,
+          completedSummaries
         );
 
         // Check cancellation after step
@@ -565,6 +586,20 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
       }
     }
 
+    // Story 3.2: Discover related concepts and create new pending tasks
+    const completedConceptIds = [
+      ...new Set(plan.steps.filter((s) => s.status === 'completed').map((s) => s.conceptId)),
+    ];
+    if (completedConceptIds.length > 0) {
+      this.discoverAndCreatePendingTasks(completedConceptIds, userId, tenantId).catch((err) => {
+        this.logger.warn({
+          message: 'Post-execution discovery failed',
+          planId,
+          error: err instanceof Error ? err.message : 'Unknown',
+        });
+      });
+    }
+
     plan.status = 'completed';
     callbacks.onComplete('completed', completedCount, plan.steps.length);
     this.scheduledCleanup(planId);
@@ -581,21 +616,23 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
     userId: string,
     tenantId: string,
     onChunk: (chunk: string) => void,
-    completedSummaries: Array<{ title: string; conceptName: string; summary: string }> = [],
+    completedSummaries: Array<{ title: string; conceptName: string; summary: string }> = []
   ): Promise<{ content: string; citations: ConceptCitation[] }> {
     // Load the workflow to get the prompt template
     const workflow = await this.getOrGenerateWorkflow(step.conceptId, tenantId, userId);
     const workflowStep = workflow.steps.find((s) => s.stepNumber === step.workflowStepNumber);
 
     if (!workflowStep) {
-      throw new Error(`Workflow step ${step.workflowStepNumber} not found for concept ${step.conceptId}`);
+      throw new Error(
+        `Workflow step ${step.workflowStepNumber} not found for concept ${step.conceptId}`
+      );
     }
 
     // 1. Semantic search: find relevant concepts via Qdrant embeddings
     const searchText = `${step.title} ${step.description ?? ''} ${step.conceptName}`;
-    const embeddingMatches = await this.conceptMatchingService.findRelevantConcepts(
-      searchText, { limit: 5, threshold: 0.5 },
-    ).catch(() => [] as import('@mentor-ai/shared/types').ConceptMatch[]);
+    const embeddingMatches = await this.conceptMatchingService
+      .findRelevantConcepts(searchText, { limit: 5, threshold: 0.5 })
+      .catch(() => [] as import('@mentor-ai/shared/types').ConceptMatch[]);
 
     // Collect: primary concept + all embedding matches
     const conceptIdsToLoad = new Set<string>([step.conceptId]);
@@ -650,6 +687,18 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
       if (tenant.industry) businessInfo += `\nIndustry: ${tenant.industry}`;
       if (tenant.description) businessInfo += `\nDescription: ${tenant.description}`;
       businessInfo += '\n--- END BUSINESS CONTEXT ---';
+    }
+
+    // 3.2 Story 3.2: Load tenant-wide Business Brain context (all memories)
+    let brainContext = '';
+    try {
+      brainContext = await this.businessContextService.getBusinessContext(tenantId);
+    } catch (err) {
+      this.logger.warn({
+        message: 'Business context load failed (non-blocking)',
+        tenantId,
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
     }
 
     // 3.5. Web search: enrich with real-time data (always when available)
@@ -711,7 +760,7 @@ PRIMER LOŠEG ODGOVORA (ZABRANJENO):
 Da biste je primenili na vaše poslovanje, trebalo bi da:
 1. Identifikujete vaše ključne snage..."
 ---
-Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}${businessInfo}${webSearchContext}`;
+Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}${businessInfo}${brainContext}${webSearchContext}`;
 
     if (step.departmentTag) {
       const personaPrompt = generateSystemPrompt(step.departmentTag);
@@ -728,13 +777,17 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}$
         systemPromptText += `\nREZIME: ${prev.summary}`;
       }
       systemPromptText += '\n--- KRAJ ZAVRŠENIH KORAKA ---';
-      systemPromptText += '\nKRITIČNO: NE ponavljaj analize ili preporuke iz prethodnih koraka. Nadogradi na njima i fokusiraj se SAMO na nove uvide specifične za trenutni zadatak.';
+      systemPromptText +=
+        '\nKRITIČNO: NE ponavljaj analize ili preporuke iz prethodnih koraka. Nadogradi na njima i fokusiraj se SAMO na nove uvide specifične za trenutni zadatak.';
     }
 
     // 5. Build user prompt from template
     const prompt = workflowStep.promptTemplate
       .replace(/\{\{conceptName\}\}/g, step.conceptName)
-      .replace(/\{\{businessContext\}\}/g, tenant ? `for ${tenant.name} (${tenant.industry ?? 'business'})` : 'for this business');
+      .replace(
+        /\{\{businessContext\}\}/g,
+        tenant ? `for ${tenant.name} (${tenant.industry ?? 'business'})` : 'for this business'
+      );
 
     // 6. Stream AI response
     let fullContent = '';
@@ -751,7 +804,7 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}$
       (chunk: string) => {
         fullContent += chunk;
         onChunk(chunk);
-      },
+      }
     );
 
     // 7. Inject citations from KNOWN input concepts (not post-hoc output scanning)
@@ -761,7 +814,7 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}$
       try {
         const citationResult = this.citationInjectorService.injectCitations(
           fullContent,
-          citationCandidates,
+          citationCandidates
         );
         contentWithCitations = citationResult.content;
         citations = citationResult.citations;
@@ -818,7 +871,7 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}$
    */
   buildSearchQuery(
     step: ExecutionPlanStep,
-    tenant: { name?: string; industry?: string | null } | null,
+    tenant: { name?: string; industry?: string | null } | null
   ): string {
     const parts: string[] = [];
 
@@ -829,8 +882,20 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}$
 
     // Extract action keywords from step title (strip filler words)
     const fillerWords = new Set([
-      'create', 'a', 'the', 'draft', 'build', 'develop', 'perform', 'run',
-      'kreiraj', 'izradi', 'napravi', 'izvrši', 'uradi', 'za',
+      'create',
+      'a',
+      'the',
+      'draft',
+      'build',
+      'develop',
+      'perform',
+      'run',
+      'kreiraj',
+      'izradi',
+      'napravi',
+      'izvrši',
+      'uradi',
+      'za',
     ]);
     const titleWords = step.title
       .split(/\s+/)
@@ -862,6 +927,112 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}$
    */
   formatWebContext(results: EnrichedSearchResult[]): string {
     return this.webSearchService.formatSourcesAsObsidian(results);
+  }
+
+  /**
+   * Story 3.2: Post-execution discovery hook.
+   * Traverses relationship edges from completed concepts and creates new PENDING tasks
+   * for the user, scoped to their visible categories.
+   * Capped at 10 new tasks per execution to prevent explosion.
+   */
+  private async discoverAndCreatePendingTasks(
+    completedConceptIds: string[],
+    userId: string,
+    tenantId: string
+  ): Promise<number> {
+    const MAX_NEW_TASKS = 10;
+
+    // Get user's department to scope discoveries
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { department: true, role: true },
+    });
+    const visibleCategories = getVisibleCategories(
+      user?.department ?? null,
+      user?.role ?? 'MEMBER'
+    );
+
+    // Load all outgoing relationships from completed concepts
+    const relationships = await this.prisma.conceptRelationship.findMany({
+      where: {
+        sourceConceptId: { in: completedConceptIds },
+      },
+      include: {
+        targetConcept: { select: { id: true, name: true, category: true } },
+      },
+    });
+
+    if (relationships.length === 0) return 0;
+
+    // Get target concept IDs
+    const targetConceptIds = relationships.map((r) => r.targetConcept.id);
+
+    // Check which targets already have a conversation or pending task for this user
+    const [existingConversations, existingTasks] = await Promise.all([
+      this.prisma.note.findMany({
+        where: {
+          userId,
+          tenantId,
+          conceptId: { in: targetConceptIds },
+          noteType: NoteType.TASK,
+        },
+        select: { conceptId: true },
+      }),
+      // Also check if there are already completed conversations via notes
+      this.prisma.note.findMany({
+        where: {
+          userId,
+          tenantId,
+          conceptId: { in: targetConceptIds },
+          noteType: NoteType.TASK,
+          status: NoteStatus.COMPLETED,
+        },
+        select: { conceptId: true },
+      }),
+    ]);
+
+    const existingConceptIds = new Set([
+      ...existingConversations.map((n) => n.conceptId),
+      ...existingTasks.map((n) => n.conceptId),
+    ]);
+
+    // Filter to only new concepts within user's visible categories
+    const newConcepts = relationships
+      .map((r) => r.targetConcept)
+      .filter((c) => !existingConceptIds.has(c.id))
+      .filter((c) => !visibleCategories || visibleCategories.includes(c.category));
+
+    // Deduplicate
+    const uniqueNew = [...new Map(newConcepts.map((c) => [c.id, c])).values()];
+    const toSeed = uniqueNew.slice(0, MAX_NEW_TASKS);
+
+    if (toSeed.length === 0) return 0;
+
+    // Create PENDING task Notes
+    const noteData = toSeed.map((concept) => ({
+      id: `note_${createId()}`,
+      title: concept.name,
+      content: `Istraži koncept: ${concept.name}`,
+      source: NoteSource.CONVERSATION,
+      noteType: NoteType.TASK,
+      status: NoteStatus.PENDING,
+      conceptId: concept.id,
+      userId,
+      tenantId,
+    }));
+
+    await this.prisma.note.createMany({ data: noteData });
+
+    this.logger.log({
+      message: 'Post-execution discovery: new pending tasks created',
+      userId,
+      tenantId,
+      completedConceptIds,
+      newTaskCount: noteData.length,
+      newConceptNames: toSeed.map((c) => c.name),
+    });
+
+    return noteData.length;
   }
 
   private scheduledCleanup(planId: string): void {

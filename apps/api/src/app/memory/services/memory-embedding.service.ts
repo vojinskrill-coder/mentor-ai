@@ -17,12 +17,15 @@ export interface MemorySearchResult {
   type: MemoryType;
 }
 
+/** Default LM Studio endpoint when not configured in DB */
+const DEFAULT_LM_STUDIO_ENDPOINT = 'http://127.0.0.1:1234';
+
 /**
  * Service for generating and managing memory embeddings.
  * Integrates with Qdrant Cloud for vector storage and semantic search.
  *
  * Collections are per-tenant: `memories_${tenantId}`
- * Dimensions: 1024 (BGE-M3 compatible)
+ * Dimensions: 768 (nomic-embed-text-v1.5)
  *
  * Story 2.7: Persistent Memory Across Conversations
  */
@@ -33,11 +36,11 @@ export class MemoryEmbeddingService {
   /** Default similarity threshold for semantic search */
   private readonly DEFAULT_THRESHOLD = 0.7;
 
-  /** Embedding dimension (1024 for BGE-M3 compatibility) */
-  private readonly EMBEDDING_DIMENSION = 1024;
+  /** Embedding dimension (768 for nomic-embed-text-v1.5) */
+  private readonly EMBEDDING_DIMENSION = 768;
 
-  /** OpenAI model for embedding generation */
-  private readonly EMBEDDING_MODEL = 'text-embedding-3-small';
+  /** LM Studio model for embedding generation */
+  private readonly EMBEDDING_MODEL = 'text-embedding-nomic-embed-text-v1.5';
 
   constructor(
     private readonly memoryService: MemoryService,
@@ -148,7 +151,7 @@ export class MemoryEmbeddingService {
     tenantId: string,
     userId: string,
     query: string,
-    limit: number = 10,
+    limit = 10,
     threshold: number = this.DEFAULT_THRESHOLD
   ): Promise<MemorySearchResult[]> {
     this.logger.debug({
@@ -206,7 +209,7 @@ export class MemoryEmbeddingService {
     tenantId: string,
     userId: string,
     query: string,
-    limit: number = 10
+    limit = 10
   ): Promise<MemorySearchResult[]> {
     this.logger.debug({
       message: 'Performing hybrid search for memories',
@@ -220,22 +223,12 @@ export class MemoryEmbeddingService {
     const potentialNames = query.match(/[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*/g) || [];
 
     // Get semantic search results
-    const semanticResults = await this.semanticSearch(
-      tenantId,
-      userId,
-      query,
-      limit
-    );
+    const semanticResults = await this.semanticSearch(tenantId, userId, query, limit);
 
     // Get keyword matches for extracted names
     const keywordResults: MemorySearchResult[] = [];
     for (const name of potentialNames.slice(0, 3)) {
-      const memories = await this.memoryService.findRelevantMemories(
-        tenantId,
-        userId,
-        name,
-        5
-      );
+      const memories = await this.memoryService.findRelevantMemories(tenantId, userId, name, 5);
 
       for (const memory of memories) {
         if (memory.subject?.toLowerCase().includes(name.toLowerCase())) {
@@ -289,34 +282,28 @@ export class MemoryEmbeddingService {
   }
 
   /**
-   * Generates an embedding vector using OpenAI text-embedding-3-small (1024-dim).
+   * Generates an embedding vector using LM Studio nomic-embed-text (768-dim).
    */
   private async embedText(text: string): Promise<number[] | null> {
-    const apiKey = await this.llmConfigService.getDecryptedApiKey(
-      LlmProviderType.OPENAI
-    );
-    if (!apiKey) {
-      this.logger.error('OpenAI API key not configured — cannot generate embeddings');
-      return null;
-    }
+    const endpoint =
+      (await this.llmConfigService.getProviderEndpoint(LlmProviderType.LM_STUDIO)) ??
+      DEFAULT_LM_STUDIO_ENDPOINT;
 
     try {
-      const response = await fetch('https://api.openai.com/v1/embeddings', {
+      const response = await fetch(`${endpoint}/v1/embeddings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
           model: this.EMBEDDING_MODEL,
           input: text,
-          dimensions: this.EMBEDDING_DIMENSION,
         }),
       });
 
       if (!response.ok) {
         this.logger.error({
-          message: 'OpenAI embedding API error',
+          message: 'LM Studio embedding API error',
           status: response.status,
         });
         return null;
@@ -328,7 +315,7 @@ export class MemoryEmbeddingService {
       return data.data[0]?.embedding ?? null;
     } catch (error) {
       this.logger.error({
-        message: 'Failed to generate embedding',
+        message: 'Failed to generate embedding via LM Studio',
         error: error instanceof Error ? error.message : 'Unknown',
       });
       return null;
@@ -344,12 +331,7 @@ export class MemoryEmbeddingService {
     query: string,
     limit: number
   ): Promise<MemorySearchResult[]> {
-    const memories = await this.memoryService.findRelevantMemories(
-      tenantId,
-      userId,
-      query,
-      limit
-    );
+    const memories = await this.memoryService.findRelevantMemories(tenantId, userId, query, limit);
     return memories.map((memory, index) => ({
       memoryId: memory.id,
       score: 0.9 - index * 0.05,

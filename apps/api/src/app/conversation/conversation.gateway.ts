@@ -21,13 +21,29 @@ import { CitationInjectorService } from '../knowledge/services/citation-injector
 import { CitationService } from '../knowledge/services/citation.service';
 import { MemoryContextBuilderService } from '../memory/services/memory-context-builder.service';
 import { MemoryExtractionService } from '../memory/services/memory-extraction.service';
+import { MemoryService } from '../memory/services/memory.service';
 import { ConceptExtractionService } from '../knowledge/services/concept-extraction.service';
 import { WorkflowService } from '../workflow/workflow.service';
 import { YoloSchedulerService } from '../workflow/yolo-scheduler.service';
 import { WebSearchService } from '../web-search/web-search.service';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
-import { MessageRole, type ChatMessageSend, type ChatMessage, type ConceptCitation, type ExecutionPlanStep, type WorkflowPlanReadyPayload, type WorkflowStepProgressPayload, type WorkflowCompletePayload, type WorkflowConversationsCreatedPayload, type WorkflowStepConfirmationPayload, type WorkflowStepAwaitingInputPayload, type WorkflowStepMessagePayload, type WorkflowNavigatePayload } from '@mentor-ai/shared/types';
+import { MemoryType, MemorySource } from '@mentor-ai/shared/types';
+import {
+  MessageRole,
+  type ChatMessageSend,
+  type ChatMessage,
+  type ConceptCitation,
+  type ExecutionPlanStep,
+  type WorkflowPlanReadyPayload,
+  type WorkflowStepProgressPayload,
+  type WorkflowCompletePayload,
+  type WorkflowConversationsCreatedPayload,
+  type WorkflowStepConfirmationPayload,
+  type WorkflowStepAwaitingInputPayload,
+  type WorkflowStepMessagePayload,
+  type WorkflowNavigatePayload,
+} from '@mentor-ai/shared/types';
 
 interface AuthenticatedSocket extends Socket {
   userId: string;
@@ -53,9 +69,7 @@ interface JwtPayload extends JwtPayloadBase {
     credentials: true,
   },
 })
-export class ConversationGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
-{
+export class ConversationGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server!: Server;
 
@@ -75,11 +89,12 @@ export class ConversationGateway
     private readonly citationService: CitationService,
     private readonly memoryContextBuilder: MemoryContextBuilderService,
     private readonly memoryExtractionService: MemoryExtractionService,
+    private readonly memoryService: MemoryService,
     private readonly workflowService: WorkflowService,
     private readonly conceptService: ConceptService,
     private readonly conceptExtractionService: ConceptExtractionService,
     private readonly yoloScheduler: YoloSchedulerService,
-    private readonly webSearchService: WebSearchService,
+    private readonly webSearchService: WebSearchService
   ) {
     this.auth0Domain = this.configService.get<string>('AUTH0_DOMAIN') ?? '';
     this.auth0Audience = this.configService.get<string>('AUTH0_AUDIENCE') ?? '';
@@ -150,10 +165,8 @@ export class ConversationGateway
 
       const payload = await this.verifyToken(token);
       const authenticatedClient = client as AuthenticatedSocket;
-      authenticatedClient.userId =
-        payload['https://mentor-ai.com/user_id'] ?? payload.sub;
-      authenticatedClient.tenantId =
-        payload['https://mentor-ai.com/tenant_id'] ?? '';
+      authenticatedClient.userId = payload['https://mentor-ai.com/user_id'] ?? payload.sub;
+      authenticatedClient.tenantId = payload['https://mentor-ai.com/tenant_id'] ?? '';
 
       // Join tenant-specific room for isolation
       await client.join(`tenant:${authenticatedClient.tenantId}`);
@@ -189,10 +202,7 @@ export class ConversationGateway
    * Saves user message, streams AI response, and saves AI message.
    */
   @SubscribeMessage('chat:message-send')
-  async handleMessage(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: ChatMessageSend
-  ) {
+  async handleMessage(@ConnectedSocket() client: Socket, @MessageBody() payload: ChatMessageSend) {
     const authenticatedClient = client as AuthenticatedSocket;
     const { conversationId, content } = payload;
 
@@ -268,18 +278,24 @@ export class ConversationGateway
       // Pre-AI enrichment: concept search + memory context + web search in parallel
       const webSearchEnabled = (payload as any).webSearchEnabled !== false;
       const [relevantConcepts, memoryContext, webSearchResults] = await Promise.all([
-        this.conceptMatchingService.findRelevantConcepts(content, {
-          limit: 5,
-          threshold: 0.5,
-          personaType: conversation.personaType ?? undefined,
-        }).catch(() => [] as import('@mentor-ai/shared/types').ConceptMatch[]),
-        this.memoryContextBuilder.buildContext(
-          content,
-          authenticatedClient.userId,
-          authenticatedClient.tenantId,
-        ).catch(() => ({ context: '', attributions: [] as import('@mentor-ai/shared/types').MemoryAttribution[], estimatedTokens: 0 })),
+        this.conceptMatchingService
+          .findRelevantConcepts(content, {
+            limit: 5,
+            threshold: 0.5,
+            personaType: conversation.personaType ?? undefined,
+          })
+          .catch(() => [] as import('@mentor-ai/shared/types').ConceptMatch[]),
+        this.memoryContextBuilder
+          .buildContext(content, authenticatedClient.userId, authenticatedClient.tenantId)
+          .catch(() => ({
+            context: '',
+            attributions: [] as import('@mentor-ai/shared/types').MemoryAttribution[],
+            estimatedTokens: 0,
+          })),
         webSearchEnabled && this.webSearchService.isAvailable()
-          ? this.webSearchService.searchAndExtract(content, 3).catch(() => [] as import('@mentor-ai/shared/types').EnrichedSearchResult[])
+          ? this.webSearchService
+              .searchAndExtract(content, 3)
+              .catch(() => [] as import('@mentor-ai/shared/types').EnrichedSearchResult[])
           : Promise.resolve([] as import('@mentor-ai/shared/types').EnrichedSearchResult[]),
       ]);
 
@@ -296,17 +312,20 @@ export class ConversationGateway
             if (full.extendedDescription) {
               enrichedContext += `DETAILS: ${full.extendedDescription}\n`;
             }
-          } catch { /* skip if concept not found */ }
+          } catch {
+            /* skip if concept not found */
+          }
         }
         enrichedContext += '--- END CONCEPT KNOWLEDGE ---\n';
-        enrichedContext += 'Apply these concepts in your response. When referencing a concept, use [[Concept Name]] notation.\n';
+        enrichedContext +=
+          'Apply these concepts in your response. When referencing a concept, use [[Concept Name]] notation.\n';
         enrichedContext += 'VAŽNO: Odgovaraj na srpskom jeziku.\n';
       }
 
       if (memoryContext.context) {
         enrichedContext = this.memoryContextBuilder.injectIntoSystemPrompt(
           enrichedContext,
-          memoryContext,
+          memoryContext
         );
       }
 
@@ -351,19 +370,20 @@ export class ConversationGateway
       if (relevantConcepts.length > 0) {
         const citationResult = this.citationInjectorService.injectCitations(
           fullContent,
-          relevantConcepts,
+          relevantConcepts
         );
         contentWithCitations = citationResult.content;
         citations = citationResult.citations;
       }
 
       // Parse memory attributions from the AI response
-      const memoryAttributions = memoryContext.attributions.length > 0
-        ? this.memoryContextBuilder.parseAttributionsFromResponse(
-            fullContent,
-            memoryContext.attributions,
-          )
-        : [];
+      const memoryAttributions =
+        memoryContext.attributions.length > 0
+          ? this.memoryContextBuilder.parseAttributionsFromResponse(
+              fullContent,
+              memoryContext.attributions
+            )
+          : [];
 
       // Save AI message with citations in content (Story 2.5 + 2.6)
       const aiMessage = await this.conversationService.addMessage(
@@ -392,11 +412,13 @@ export class ConversationGateway
         fullContent: contentWithCitations,
         metadata: {
           totalChunks: chunkIndex,
-          confidence: confidence ? {
-            score: confidence.score,
-            level: confidence.level,
-            factors: confidence.factors,
-          } : null,
+          confidence: confidence
+            ? {
+                score: confidence.score,
+                level: confidence.level,
+                factors: confidence.factors,
+              }
+            : null,
           citations,
           memoryAttributions,
         },
@@ -472,42 +494,74 @@ export class ConversationGateway
       });
 
       // Fire-and-forget: extract memories from this exchange
-      this.memoryExtractionService.extractMemories(
-        conversation.messages.concat([
-          { id: userMessage.id, conversationId, role: MessageRole.USER, content, confidenceScore: null, confidenceFactors: null, createdAt: new Date().toISOString() },
-          { id: aiMessage.id, conversationId, role: MessageRole.ASSISTANT, content: fullContent, confidenceScore: null, confidenceFactors: null, createdAt: new Date().toISOString() },
-        ]),
-        authenticatedClient.userId,
-        authenticatedClient.tenantId,
-      ).catch((err: unknown) => {
-        this.logger.warn({
-          message: 'Memory extraction failed (non-blocking)',
-          conversationId,
-          error: err instanceof Error ? err.message : 'Unknown error',
+      this.memoryExtractionService
+        .extractMemories(
+          conversation.messages.concat([
+            {
+              id: userMessage.id,
+              conversationId,
+              role: MessageRole.USER,
+              content,
+              confidenceScore: null,
+              confidenceFactors: null,
+              createdAt: new Date().toISOString(),
+            },
+            {
+              id: aiMessage.id,
+              conversationId,
+              role: MessageRole.ASSISTANT,
+              content: fullContent,
+              confidenceScore: null,
+              confidenceFactors: null,
+              createdAt: new Date().toISOString(),
+            },
+          ]),
+          authenticatedClient.userId,
+          authenticatedClient.tenantId
+        )
+        .catch((err: unknown) => {
+          this.logger.warn({
+            message: 'Memory extraction failed (non-blocking)',
+            conversationId,
+            error: err instanceof Error ? err.message : 'Unknown error',
+          });
         });
-      });
 
       // Fire-and-forget: extract and create new concepts from AI output (Story 2.15)
       // Deviation: uses .catch() instead of async/await per project-context.md rule
       // "Always use async/await over raw Promises". Rationale: concept extraction is
       // optional post-processing; failure must not block message delivery (AC6).
-      this.conceptExtractionService.extractAndCreateConcepts(fullContent, {
-        conversationId,
-        conceptId: conversation.conceptId ?? undefined,
-      }).catch((err: unknown) => {
-        this.logger.warn({
-          message: 'Concept extraction failed (non-blocking)',
+      this.conceptExtractionService
+        .extractAndCreateConcepts(fullContent, {
           conversationId,
-          error: err instanceof Error ? err.message : 'Unknown error',
+          conceptId: conversation.conceptId ?? undefined,
+        })
+        .catch((err: unknown) => {
+          this.logger.warn({
+            message: 'Concept extraction failed (non-blocking)',
+            conversationId,
+            error: err instanceof Error ? err.message : 'Unknown error',
+          });
         });
-      });
 
       // Auto-detect affirmative or selective task execution on welcome conversation
       if (conversation.messages.length <= 4) {
         const lowerContent = content.toLowerCase().trim();
-        const affirmatives = ['da', 'yes', 'izvrši', 'izvrsi', 'hajde', 'naravno', 'svakako', 'pokreni sve'];
-        const isFullAffirmative = affirmatives.some((p) =>
-          lowerContent === p || lowerContent.startsWith(p + ' ') || lowerContent.startsWith(p + ','),
+        const affirmatives = [
+          'da',
+          'yes',
+          'izvrši',
+          'izvrsi',
+          'hajde',
+          'naravno',
+          'svakako',
+          'pokreni sve',
+        ];
+        const isFullAffirmative = affirmatives.some(
+          (p) =>
+            lowerContent === p ||
+            lowerContent.startsWith(p + ' ') ||
+            lowerContent.startsWith(p + ',')
         );
 
         // Detect selective execution: "pokreni 1, 3, 5" or "pokreni prvi"
@@ -516,7 +570,7 @@ export class ConversationGateway
 
         const pendingTasks = await this.notesService.getPendingTasksByUser(
           authenticatedClient.userId,
-          authenticatedClient.tenantId,
+          authenticatedClient.tenantId
         );
 
         if (pendingTasks.length > 0) {
@@ -564,8 +618,7 @@ export class ConversationGateway
 
       client.emit('chat:error', {
         type: 'processing_error',
-        message:
-          error instanceof Error ? error.message : 'Failed to process message',
+        message: error instanceof Error ? error.message : 'Failed to process message',
       });
     }
   }
@@ -621,7 +674,10 @@ If there are no meaningful tasks, respond with an empty array: []`;
       // Parse the JSON response
       const jsonMatch = taskResponseContent.match(/\[[\s\S]*\]/);
       if (!jsonMatch) {
-        this.logger.debug({ message: 'No JSON array found in task generation response', conversationId });
+        this.logger.debug({
+          message: 'No JSON array found in task generation response',
+          conversationId,
+        });
         return;
       }
 
@@ -678,11 +734,7 @@ If there are no meaningful tasks, respond with an empty array: []`;
     aiResponse: string
   ): Promise<void> {
     // Check if conversation already has a concept assigned
-    const conv = await this.conversationService.getConversation(
-      tenantId,
-      conversationId,
-      userId
-    );
+    const conv = await this.conversationService.getConversation(tenantId, conversationId, userId);
     if (conv.conceptId) return;
 
     // Use semantic search to find best matching concept
@@ -701,9 +753,11 @@ If there are no meaningful tasks, respond with an empty array: []`;
       );
 
       // Retroactively link existing tasks that had no concept
-      await this.notesService.updateConceptIdForConversation(
-        conversationId, topMatch.conceptId, tenantId
-      ).catch(() => {});
+      await this.notesService
+        .updateConceptIdForConversation(conversationId, topMatch.conceptId, tenantId)
+        .catch(() => {
+          /* ignore — best-effort linkage */
+        });
 
       client.emit('chat:concept-detected', {
         conversationId,
@@ -725,10 +779,22 @@ If there are no meaningful tasks, respond with an empty array: []`;
 
   private hasExplicitTaskIntent(userMessage: string): boolean {
     const taskKeywords = [
-      'kreiraj task', 'kreiraj zadat', 'napravi task', 'napravi zadat',
-      'kreiraj plan', 'napravi plan', 'kreiraj workflow', 'napravi workflow',
-      'generiši task', 'generiši zadat', 'kreiraj korake', 'napravi korake',
-      'create task', 'create plan', 'make a plan', 'make task',
+      'kreiraj task',
+      'kreiraj zadat',
+      'napravi task',
+      'napravi zadat',
+      'kreiraj plan',
+      'napravi plan',
+      'kreiraj workflow',
+      'napravi workflow',
+      'generiši task',
+      'generiši zadat',
+      'kreiraj korake',
+      'napravi korake',
+      'create task',
+      'create plan',
+      'make a plan',
+      'make task',
     ];
     const lowerMsg = userMessage.toLowerCase();
     return taskKeywords.some((kw) => lowerMsg.includes(kw));
@@ -766,7 +832,9 @@ Ako nema zadataka, odgovori sa: []`;
       await this.aiGatewayService.streamCompletionWithContext(
         [{ role: 'user', content: extractPrompt }],
         { tenantId, userId, skipRateLimit: true, skipQuotaCheck: true },
-        (chunk: string) => { extractedContent += chunk; }
+        (chunk: string) => {
+          extractedContent += chunk;
+        }
       );
 
       const jsonMatch = extractedContent.match(/\[[\s\S]*\]/);
@@ -832,7 +900,7 @@ Ako nema zadataka, odgovori sa: []`;
   @SubscribeMessage('workflow:run-agents')
   async handleRunAgents(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { taskIds: string[]; conversationId: string },
+    @MessageBody() payload: { taskIds: string[]; conversationId: string }
   ): Promise<void> {
     const authenticatedClient = client as AuthenticatedSocket;
 
@@ -848,7 +916,7 @@ Ako nema zadataka, odgovori sa: []`;
         payload.taskIds,
         authenticatedClient.userId,
         authenticatedClient.tenantId,
-        payload.conversationId,
+        payload.conversationId
       );
 
       const event: WorkflowPlanReadyPayload = {
@@ -875,7 +943,7 @@ Ako nema zadataka, odgovori sa: []`;
   @SubscribeMessage('workflow:approve')
   async handleWorkflowApproval(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { planId: string; approved: boolean; conversationId: string },
+    @MessageBody() payload: { planId: string; approved: boolean; conversationId: string }
   ): Promise<void> {
     const authenticatedClient = client as AuthenticatedSocket;
 
@@ -901,14 +969,16 @@ Ako nema zadataka, odgovori sa: []`;
     if (plan) {
       const conceptIds = [...new Set(plan.steps.map((s: ExecutionPlanStep) => s.conceptId))];
       for (const conceptId of conceptIds) {
-        const conceptName = plan.steps.find((s: ExecutionPlanStep) => s.conceptId === conceptId)?.conceptName ?? 'Zadatak';
+        const conceptName =
+          plan.steps.find((s: ExecutionPlanStep) => s.conceptId === conceptId)?.conceptName ??
+          'Zadatak';
         try {
           const conv = await this.conversationService.createConversation(
             authenticatedClient.tenantId,
             authenticatedClient.userId,
             conceptName,
             undefined,
-            conceptId,
+            conceptId
           );
           conceptConversations.set(conceptId, conv.id);
         } catch (err) {
@@ -927,7 +997,8 @@ Ako nema zadataka, odgovori sa: []`;
           .filter((id) => conceptConversations.has(id))
           .map((id) => ({
             conceptId: id,
-            conceptName: plan.steps.find((s: ExecutionPlanStep) => s.conceptId === id)?.conceptName ?? '',
+            conceptName:
+              plan.steps.find((s: ExecutionPlanStep) => s.conceptId === id)?.conceptName ?? '',
             conversationId: conceptConversations.get(id)!,
           })),
         originalConversationId: payload.conversationId,
@@ -947,146 +1018,154 @@ Ako nema zadataka, odgovori sa: []`;
     }
 
     // Fire-and-forget execution
-    this.workflowService.executePlan(
-      payload.planId,
-      payload.conversationId,
-      authenticatedClient.userId,
-      authenticatedClient.tenantId,
-      {
-        onStepStart: (stepId) => {
-          const stepInfo = plan?.steps.find((s: ExecutionPlanStep) => s.stepId === stepId);
-          const stepIndex = plan?.steps.findIndex((s: ExecutionPlanStep) => s.stepId === stepId) ?? -1;
-          const event: WorkflowStepProgressPayload = {
-            planId: payload.planId,
-            stepId,
-            stepTitle: stepInfo?.title,
-            stepIndex,
-            totalSteps,
-            status: 'in_progress',
-            conversationId: payload.conversationId,
-          };
-          client.emit('workflow:step-progress', event);
-        },
-        onStepChunk: (_stepId, chunk) => {
-          client.emit('chat:message-chunk', { content: chunk, index: -1 });
-        },
-        onStepComplete: (stepId, fullContent, citations) => {
-          const stepInfo = plan?.steps.find((s: ExecutionPlanStep) => s.stepId === stepId);
-          const stepIndex = plan?.steps.findIndex((s: ExecutionPlanStep) => s.stepId === stepId) ?? -1;
-          const event: WorkflowStepProgressPayload = {
-            planId: payload.planId,
-            stepId,
-            stepTitle: stepInfo?.title,
-            stepIndex,
-            totalSteps,
-            status: 'completed',
-            content: fullContent,
-            citations,
-            conversationId: payload.conversationId,
-          };
-          client.emit('workflow:step-progress', event);
+    this.workflowService
+      .executePlan(
+        payload.planId,
+        payload.conversationId,
+        authenticatedClient.userId,
+        authenticatedClient.tenantId,
+        {
+          onStepStart: (stepId) => {
+            const stepInfo = plan?.steps.find((s: ExecutionPlanStep) => s.stepId === stepId);
+            const stepIndex =
+              plan?.steps.findIndex((s: ExecutionPlanStep) => s.stepId === stepId) ?? -1;
+            const event: WorkflowStepProgressPayload = {
+              planId: payload.planId,
+              stepId,
+              stepTitle: stepInfo?.title,
+              stepIndex,
+              totalSteps,
+              status: 'in_progress',
+              conversationId: payload.conversationId,
+            };
+            client.emit('workflow:step-progress', event);
+          },
+          onStepChunk: (_stepId, chunk) => {
+            client.emit('chat:message-chunk', { content: chunk, index: -1 });
+          },
+          onStepComplete: (stepId, fullContent, citations) => {
+            const stepInfo = plan?.steps.find((s: ExecutionPlanStep) => s.stepId === stepId);
+            const stepIndex =
+              plan?.steps.findIndex((s: ExecutionPlanStep) => s.stepId === stepId) ?? -1;
+            const event: WorkflowStepProgressPayload = {
+              planId: payload.planId,
+              stepId,
+              stepTitle: stepInfo?.title,
+              stepIndex,
+              totalSteps,
+              status: 'completed',
+              content: fullContent,
+              citations,
+              conversationId: payload.conversationId,
+            };
+            client.emit('workflow:step-progress', event);
 
-          // Emit complete step message for chat rendering
-          const stepMsg: WorkflowStepMessagePayload = {
-            planId: payload.planId,
-            conversationId: payload.conversationId,
-            messageId: stepId,
-            content: fullContent,
-            stepIndex,
-            totalSteps,
-            inputType: 'confirmation',
-            conceptName: stepInfo?.conceptName ?? '',
-          };
-          client.emit('workflow:step-message', stepMsg);
-        },
-        onStepFailed: (stepId, error) => {
-          const stepInfo = plan?.steps.find((s: ExecutionPlanStep) => s.stepId === stepId);
-          const stepIndex = plan?.steps.findIndex((s: ExecutionPlanStep) => s.stepId === stepId) ?? -1;
-          const event: WorkflowStepProgressPayload = {
-            planId: payload.planId,
-            stepId,
-            stepTitle: stepInfo?.title,
-            stepIndex,
-            totalSteps,
-            status: 'failed',
-            content: error,
-            conversationId: payload.conversationId,
-          };
-          client.emit('workflow:step-progress', event);
-        },
-        onStepAwaitingConfirmation: (upcomingStep) => {
-          const stepIndex = plan?.steps.findIndex((s: ExecutionPlanStep) => s.stepId === upcomingStep.stepId) ?? -1;
-          const event: WorkflowStepConfirmationPayload = {
-            planId: payload.planId,
-            completedStepId: '',
-            nextStep: {
+            // Emit complete step message for chat rendering
+            const stepMsg: WorkflowStepMessagePayload = {
+              planId: payload.planId,
+              conversationId: payload.conversationId,
+              messageId: stepId,
+              content: fullContent,
+              stepIndex,
+              totalSteps,
+              inputType: 'confirmation',
+              conceptName: stepInfo?.conceptName ?? '',
+            };
+            client.emit('workflow:step-message', stepMsg);
+          },
+          onStepFailed: (stepId, error) => {
+            const stepInfo = plan?.steps.find((s: ExecutionPlanStep) => s.stepId === stepId);
+            const stepIndex =
+              plan?.steps.findIndex((s: ExecutionPlanStep) => s.stepId === stepId) ?? -1;
+            const event: WorkflowStepProgressPayload = {
+              planId: payload.planId,
+              stepId,
+              stepTitle: stepInfo?.title,
+              stepIndex,
+              totalSteps,
+              status: 'failed',
+              content: error,
+              conversationId: payload.conversationId,
+            };
+            client.emit('workflow:step-progress', event);
+          },
+          onStepAwaitingConfirmation: (upcomingStep) => {
+            const stepIndex =
+              plan?.steps.findIndex((s: ExecutionPlanStep) => s.stepId === upcomingStep.stepId) ??
+              -1;
+            const event: WorkflowStepConfirmationPayload = {
+              planId: payload.planId,
+              completedStepId: '',
+              nextStep: {
+                stepId: upcomingStep.stepId,
+                title: upcomingStep.title,
+                description: upcomingStep.description,
+                conceptName: upcomingStep.conceptName,
+                stepIndex,
+                totalSteps,
+              },
+              conversationId: payload.conversationId,
+            };
+            client.emit('workflow:step-awaiting-confirmation', event);
+
+            // New interactive event with inputType discriminator
+            const inputEvent: WorkflowStepAwaitingInputPayload = {
+              planId: payload.planId,
               stepId: upcomingStep.stepId,
-              title: upcomingStep.title,
-              description: upcomingStep.description,
+              stepTitle: upcomingStep.title,
+              stepDescription: upcomingStep.description,
               conceptName: upcomingStep.conceptName,
               stepIndex,
               totalSteps,
-            },
-            conversationId: payload.conversationId,
-          };
-          client.emit('workflow:step-awaiting-confirmation', event);
+              inputType: 'confirmation',
+              conversationId: payload.conversationId,
+            };
+            client.emit('workflow:step-awaiting-input', inputEvent);
+          },
+          onComplete: (status, completedSteps, totalStepsCount) => {
+            const event: WorkflowCompletePayload = {
+              planId: payload.planId,
+              status,
+              completedSteps,
+              totalSteps: totalStepsCount,
+              conversationId: payload.conversationId,
+            };
+            client.emit('workflow:complete', event);
 
-          // New interactive event with inputType discriminator
-          const inputEvent: WorkflowStepAwaitingInputPayload = {
-            planId: payload.planId,
-            stepId: upcomingStep.stepId,
-            stepTitle: upcomingStep.title,
-            stepDescription: upcomingStep.description,
-            conceptName: upcomingStep.conceptName,
-            stepIndex,
-            totalSteps,
-            inputType: 'confirmation',
-            conversationId: payload.conversationId,
-          };
-          client.emit('workflow:step-awaiting-input', inputEvent);
-        },
-        onComplete: (status, completedSteps, totalStepsCount) => {
-          const event: WorkflowCompletePayload = {
-            planId: payload.planId,
-            status,
-            completedSteps,
-            totalSteps: totalStepsCount,
-            conversationId: payload.conversationId,
-          };
-          client.emit('workflow:complete', event);
-
-          // Refresh notes on frontend
-          client.emit('chat:notes-updated', {
-            conversationId: payload.conversationId,
-            count: 0,
-          });
-        },
-        saveMessage: async (_role, content, conceptId) => {
-          // Route message to the concept's conversation if available
-          const targetConvId = conceptId && conceptConversations.has(conceptId)
-            ? conceptConversations.get(conceptId)!
-            : payload.conversationId;
-          const msg = await this.conversationService.addMessage(
-            authenticatedClient.tenantId,
-            targetConvId,
-            MessageRole.ASSISTANT,
-            content,
-          );
-          return msg.id;
-        },
-      },
-    ).catch((err: unknown) => {
-      this.logger.error({
-        message: 'Workflow execution failed',
-        planId: payload.planId,
-        error: err instanceof Error ? err.message : 'Unknown error',
+            // Refresh notes on frontend
+            client.emit('chat:notes-updated', {
+              conversationId: payload.conversationId,
+              count: 0,
+            });
+          },
+          saveMessage: async (_role, content, conceptId) => {
+            // Route message to the concept's conversation if available
+            const targetConvId =
+              conceptId && conceptConversations.has(conceptId)
+                ? conceptConversations.get(conceptId)!
+                : payload.conversationId;
+            const msg = await this.conversationService.addMessage(
+              authenticatedClient.tenantId,
+              targetConvId,
+              MessageRole.ASSISTANT,
+              content
+            );
+            return msg.id;
+          },
+        }
+      )
+      .catch((err: unknown) => {
+        this.logger.error({
+          message: 'Workflow execution failed',
+          planId: payload.planId,
+          error: err instanceof Error ? err.message : 'Unknown error',
+        });
+        client.emit('workflow:error', {
+          planId: payload.planId,
+          message: err instanceof Error ? err.message : 'Execution failed',
+          conversationId: payload.conversationId,
+        });
       });
-      client.emit('workflow:error', {
-        planId: payload.planId,
-        message: err instanceof Error ? err.message : 'Execution failed',
-        conversationId: payload.conversationId,
-      });
-    });
   }
 
   /**
@@ -1095,7 +1174,7 @@ Ako nema zadataka, odgovori sa: []`;
   @SubscribeMessage('workflow:cancel')
   handleWorkflowCancel(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { planId: string; conversationId: string },
+    @MessageBody() payload: { planId: string; conversationId: string }
   ): void {
     const cancelled = this.workflowService.cancelPlan(payload.planId);
     if (!cancelled) {
@@ -1114,13 +1193,33 @@ Ako nema zadataka, odgovori sa: []`;
   @SubscribeMessage('workflow:step-continue')
   handleStepContinue(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { planId: string; conversationId: string; userInput?: string },
+    @MessageBody() payload: { planId: string; conversationId: string; userInput?: string }
   ): void {
+    const authenticatedClient = client as AuthenticatedSocket;
     this.logger.log({
       message: 'User confirmed next workflow step',
       planId: payload.planId,
       hasUserInput: !!payload.userInput,
     });
+
+    // Story 3.2: Store user input as Business Brain memory (fire-and-forget)
+    if (payload.userInput && payload.userInput.trim().length > 10) {
+      this.memoryService
+        .createMemory(authenticatedClient.tenantId, authenticatedClient.userId, {
+          type: MemoryType.FACTUAL_STATEMENT,
+          source: MemorySource.USER_STATED,
+          content: payload.userInput.trim(),
+          subject: 'workflow-input',
+          confidence: 1.0,
+        })
+        .catch((err) => {
+          this.logger.warn({
+            message: 'Failed to store workflow user input as memory',
+            error: err instanceof Error ? err.message : 'Unknown',
+          });
+        });
+    }
+
     this.workflowService.continueStep(payload.planId, payload.userInput);
   }
 
@@ -1131,7 +1230,7 @@ Ako nema zadataka, odgovori sa: []`;
   @SubscribeMessage('workflow:start-yolo')
   async handleStartYolo(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { conversationId: string },
+    @MessageBody() payload: { conversationId: string }
   ): Promise<void> {
     const authenticatedClient = client as AuthenticatedSocket;
 
@@ -1164,16 +1263,14 @@ Ako nema zadataka, odgovori sa: []`;
       const conceptIds = [...new Set(tasks.filter((t) => t.conceptId).map((t) => t.conceptId!))];
 
       for (const conceptId of conceptIds) {
-        const conceptName =
-          tasks.find((t) => t.conceptId === conceptId)?.title ??
-          'Zadatak';
+        const conceptName = tasks.find((t) => t.conceptId === conceptId)?.title ?? 'Zadatak';
         try {
           const conv = await this.conversationService.createConversation(
             authenticatedClient.tenantId,
             authenticatedClient.userId,
             conceptName,
             undefined,
-            conceptId,
+            conceptId
           );
           conceptConversations.set(conceptId, conv.id);
         } catch (err) {
@@ -1192,8 +1289,7 @@ Ako nema zadataka, odgovori sa: []`;
           .filter((id) => conceptConversations.has(id))
           .map((id) => ({
             conceptId: id,
-            conceptName:
-              tasks.find((t) => t.conceptId === id)?.title ?? '',
+            conceptName: tasks.find((t) => t.conceptId === id)?.title ?? '',
             conversationId: conceptConversations.get(id)!,
           })),
         originalConversationId: payload.conversationId,
@@ -1235,7 +1331,7 @@ Ako nema zadataka, odgovori sa: []`;
                 authenticatedClient.tenantId,
                 targetConvId,
                 MessageRole.ASSISTANT,
-                content,
+                content
               );
               return msg.id;
             },
@@ -1246,7 +1342,7 @@ Ako nema zadataka, odgovori sa: []`;
                   authenticatedClient.userId,
                   conceptName,
                   undefined,
-                  conceptId,
+                  conceptId
                 );
                 conceptConversations.set(conceptId, conv.id);
                 client.emit('workflow:conversations-created', {
@@ -1264,7 +1360,11 @@ Ako nema zadataka, odgovori sa: []`;
                 return null;
               }
             },
-            onConceptDiscovered: (conceptId: string, conceptName: string, discoveredConversationId: string) => {
+            onConceptDiscovered: (
+              conceptId: string,
+              conceptName: string,
+              discoveredConversationId: string
+            ) => {
               client.emit('chat:concept-detected', {
                 conversationId: payload.conversationId,
                 conceptId,
@@ -1273,7 +1373,7 @@ Ako nema zadataka, odgovori sa: []`;
               });
             },
           },
-          conceptConversations,
+          conceptConversations
         )
         .catch((err: unknown) => {
           this.logger.error({
@@ -1298,13 +1398,138 @@ Ako nema zadataka, odgovori sa: []`;
   }
 
   /**
+   * Story 3.2: Handles per-domain YOLO execution start.
+   * Scopes YOLO to a single category (domain).
+   */
+  @SubscribeMessage('yolo:start-domain')
+  async handleStartDomainYolo(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { conversationId: string; category: string }
+  ): Promise<void> {
+    const authenticatedClient = client as AuthenticatedSocket;
+
+    try {
+      this.logger.log({
+        message: 'Per-domain YOLO requested',
+        userId: authenticatedClient.userId,
+        category: payload.category,
+        conversationId: payload.conversationId,
+      });
+
+      // Create per-concept conversations for discovered tasks
+      const conceptConversations = new Map<string, string>();
+
+      // Start YOLO with category scoping
+      const config = { maxConcurrency: 3, maxConceptsHardStop: 100, retryAttempts: 3 };
+
+      this.yoloScheduler
+        .startYoloExecution(
+          authenticatedClient.tenantId,
+          authenticatedClient.userId,
+          payload.conversationId,
+          config,
+          {
+            onProgress: (progress) => {
+              client.emit('workflow:yolo-progress', progress);
+            },
+            onComplete: (result) => {
+              client.emit('workflow:yolo-complete', result);
+              client.emit('chat:notes-updated', {
+                conversationId: payload.conversationId,
+                count: 0,
+              });
+            },
+            onError: (error) => {
+              client.emit('workflow:error', {
+                message: error,
+                conversationId: payload.conversationId,
+              });
+            },
+            saveMessage: async (_role, content, conceptId) => {
+              const targetConvId =
+                conceptId && conceptConversations.has(conceptId)
+                  ? conceptConversations.get(conceptId)!
+                  : payload.conversationId;
+              const msg = await this.conversationService.addMessage(
+                authenticatedClient.tenantId,
+                targetConvId,
+                MessageRole.ASSISTANT,
+                content
+              );
+              return msg.id;
+            },
+            createConversationForConcept: async (conceptId: string, conceptName: string) => {
+              try {
+                const conv = await this.conversationService.createConversation(
+                  authenticatedClient.tenantId,
+                  authenticatedClient.userId,
+                  conceptName,
+                  undefined,
+                  conceptId
+                );
+                conceptConversations.set(conceptId, conv.id);
+                client.emit('workflow:conversations-created', {
+                  planId: 'yolo-domain',
+                  conversations: [{ conceptId, conceptName, conversationId: conv.id }],
+                  originalConversationId: payload.conversationId,
+                });
+                return conv.id;
+              } catch (err) {
+                this.logger.warn({
+                  message: 'Failed to create conversation for domain YOLO concept',
+                  conceptId,
+                  error: err instanceof Error ? err.message : 'Unknown',
+                });
+                return null;
+              }
+            },
+            onConceptDiscovered: (
+              conceptId: string,
+              conceptName: string,
+              discoveredConversationId: string
+            ) => {
+              client.emit('chat:concept-detected', {
+                conversationId: payload.conversationId,
+                conceptId,
+                conceptName,
+                discoveredConversationId,
+              });
+            },
+          },
+          conceptConversations,
+          payload.category // Story 3.2: per-domain scope
+        )
+        .catch((err: unknown) => {
+          this.logger.error({
+            message: 'Domain YOLO execution failed',
+            category: payload.category,
+            error: err instanceof Error ? err.message : 'Unknown error',
+          });
+          client.emit('workflow:error', {
+            message: err instanceof Error ? err.message : 'Domain YOLO failed',
+            conversationId: payload.conversationId,
+          });
+        });
+    } catch (error) {
+      this.logger.error({
+        message: 'Failed to start domain YOLO',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      client.emit('workflow:error', {
+        message: error instanceof Error ? error.message : 'Failed to start domain YOLO',
+        conversationId: payload.conversationId,
+      });
+    }
+  }
+
+  /**
    * Builds, auto-approves, and executes a workflow plan for welcome conversation.
    * Skips the plan overlay — user sees inline progress directly.
    */
   private async autoExecuteWorkflow(
     client: Socket,
     taskIds: string[],
-    conversationId: string,
+    conversationId: string
   ): Promise<void> {
     const authenticatedClient = client as AuthenticatedSocket;
 
@@ -1313,7 +1538,7 @@ Ako nema zadataka, odgovori sa: []`;
       taskIds,
       authenticatedClient.userId,
       authenticatedClient.tenantId,
-      conversationId,
+      conversationId
     );
     const totalSteps = plan.steps.length;
 
@@ -1322,14 +1547,16 @@ Ako nema zadataka, odgovori sa: []`;
     const conceptIds = [...new Set(plan.steps.map((s: ExecutionPlanStep) => s.conceptId))];
 
     for (const conceptId of conceptIds) {
-      const conceptName = plan.steps.find((s: ExecutionPlanStep) => s.conceptId === conceptId)?.conceptName ?? 'Zadatak';
+      const conceptName =
+        plan.steps.find((s: ExecutionPlanStep) => s.conceptId === conceptId)?.conceptName ??
+        'Zadatak';
       try {
         const conv = await this.conversationService.createConversation(
           authenticatedClient.tenantId,
           authenticatedClient.userId,
           conceptName,
           undefined,
-          conceptId,
+          conceptId
         );
         conceptConversations.set(conceptId, conv.id);
       } catch (err) {
@@ -1348,7 +1575,8 @@ Ako nema zadataka, odgovori sa: []`;
         .filter((id) => conceptConversations.has(id))
         .map((id) => ({
           conceptId: id,
-          conceptName: plan.steps.find((s: ExecutionPlanStep) => s.conceptId === id)?.conceptName ?? '',
+          conceptName:
+            plan.steps.find((s: ExecutionPlanStep) => s.conceptId === id)?.conceptName ?? '',
           conversationId: conceptConversations.get(id)!,
         })),
       originalConversationId: conversationId,
@@ -1367,119 +1595,145 @@ Ako nema zadataka, odgovori sa: []`;
     }
 
     // 4. Execute immediately (no plan overlay)
-    this.workflowService.executePlan(
-      plan.planId,
-      conversationId,
-      authenticatedClient.userId,
-      authenticatedClient.tenantId,
-      {
-        onStepStart: (stepId) => {
-          const stepInfo = plan.steps.find((s: ExecutionPlanStep) => s.stepId === stepId);
-          const stepIndex = plan.steps.findIndex((s: ExecutionPlanStep) => s.stepId === stepId);
-          const event: WorkflowStepProgressPayload = {
-            planId: plan.planId, stepId,
-            stepTitle: stepInfo?.title, stepIndex, totalSteps,
-            status: 'in_progress', conversationId,
-          };
-          client.emit('workflow:step-progress', event);
-        },
-        onStepChunk: (_stepId, chunk) => {
-          client.emit('chat:message-chunk', { content: chunk, index: -1 });
-        },
-        onStepComplete: (stepId, fullContent, citations) => {
-          const stepInfo = plan.steps.find((s: ExecutionPlanStep) => s.stepId === stepId);
-          const stepIndex = plan.steps.findIndex((s: ExecutionPlanStep) => s.stepId === stepId);
-          const event: WorkflowStepProgressPayload = {
-            planId: plan.planId, stepId,
-            stepTitle: stepInfo?.title, stepIndex, totalSteps,
-            status: 'completed', content: fullContent, citations, conversationId,
-          };
-          client.emit('workflow:step-progress', event);
+    this.workflowService
+      .executePlan(
+        plan.planId,
+        conversationId,
+        authenticatedClient.userId,
+        authenticatedClient.tenantId,
+        {
+          onStepStart: (stepId) => {
+            const stepInfo = plan.steps.find((s: ExecutionPlanStep) => s.stepId === stepId);
+            const stepIndex = plan.steps.findIndex((s: ExecutionPlanStep) => s.stepId === stepId);
+            const event: WorkflowStepProgressPayload = {
+              planId: plan.planId,
+              stepId,
+              stepTitle: stepInfo?.title,
+              stepIndex,
+              totalSteps,
+              status: 'in_progress',
+              conversationId,
+            };
+            client.emit('workflow:step-progress', event);
+          },
+          onStepChunk: (_stepId, chunk) => {
+            client.emit('chat:message-chunk', { content: chunk, index: -1 });
+          },
+          onStepComplete: (stepId, fullContent, citations) => {
+            const stepInfo = plan.steps.find((s: ExecutionPlanStep) => s.stepId === stepId);
+            const stepIndex = plan.steps.findIndex((s: ExecutionPlanStep) => s.stepId === stepId);
+            const event: WorkflowStepProgressPayload = {
+              planId: plan.planId,
+              stepId,
+              stepTitle: stepInfo?.title,
+              stepIndex,
+              totalSteps,
+              status: 'completed',
+              content: fullContent,
+              citations,
+              conversationId,
+            };
+            client.emit('workflow:step-progress', event);
 
-          // Emit complete step message for chat rendering
-          const stepMsg: WorkflowStepMessagePayload = {
-            planId: plan.planId,
-            conversationId,
-            messageId: stepId,
-            content: fullContent,
-            stepIndex,
-            totalSteps,
-            inputType: 'confirmation',
-            conceptName: stepInfo?.conceptName ?? '',
-          };
-          client.emit('workflow:step-message', stepMsg);
-        },
-        onStepFailed: (stepId, error) => {
-          const stepInfo = plan.steps.find((s: ExecutionPlanStep) => s.stepId === stepId);
-          const stepIndex = plan.steps.findIndex((s: ExecutionPlanStep) => s.stepId === stepId);
-          const event: WorkflowStepProgressPayload = {
-            planId: plan.planId, stepId,
-            stepTitle: stepInfo?.title, stepIndex, totalSteps,
-            status: 'failed', content: error, conversationId,
-          };
-          client.emit('workflow:step-progress', event);
-        },
-        onStepAwaitingConfirmation: (upcomingStep) => {
-          const stepIndex = plan.steps.findIndex((s: ExecutionPlanStep) => s.stepId === upcomingStep.stepId);
-          const event: WorkflowStepConfirmationPayload = {
-            planId: plan.planId,
-            completedStepId: '',
-            nextStep: {
+            // Emit complete step message for chat rendering
+            const stepMsg: WorkflowStepMessagePayload = {
+              planId: plan.planId,
+              conversationId,
+              messageId: stepId,
+              content: fullContent,
+              stepIndex,
+              totalSteps,
+              inputType: 'confirmation',
+              conceptName: stepInfo?.conceptName ?? '',
+            };
+            client.emit('workflow:step-message', stepMsg);
+          },
+          onStepFailed: (stepId, error) => {
+            const stepInfo = plan.steps.find((s: ExecutionPlanStep) => s.stepId === stepId);
+            const stepIndex = plan.steps.findIndex((s: ExecutionPlanStep) => s.stepId === stepId);
+            const event: WorkflowStepProgressPayload = {
+              planId: plan.planId,
+              stepId,
+              stepTitle: stepInfo?.title,
+              stepIndex,
+              totalSteps,
+              status: 'failed',
+              content: error,
+              conversationId,
+            };
+            client.emit('workflow:step-progress', event);
+          },
+          onStepAwaitingConfirmation: (upcomingStep) => {
+            const stepIndex = plan.steps.findIndex(
+              (s: ExecutionPlanStep) => s.stepId === upcomingStep.stepId
+            );
+            const event: WorkflowStepConfirmationPayload = {
+              planId: plan.planId,
+              completedStepId: '',
+              nextStep: {
+                stepId: upcomingStep.stepId,
+                title: upcomingStep.title,
+                description: upcomingStep.description,
+                conceptName: upcomingStep.conceptName,
+                stepIndex,
+                totalSteps,
+              },
+              conversationId,
+            };
+            client.emit('workflow:step-awaiting-confirmation', event);
+
+            // New interactive event with inputType discriminator
+            const inputEvent: WorkflowStepAwaitingInputPayload = {
+              planId: plan.planId,
               stepId: upcomingStep.stepId,
-              title: upcomingStep.title,
-              description: upcomingStep.description,
+              stepTitle: upcomingStep.title,
+              stepDescription: upcomingStep.description,
               conceptName: upcomingStep.conceptName,
               stepIndex,
               totalSteps,
-            },
-            conversationId,
-          };
-          client.emit('workflow:step-awaiting-confirmation', event);
-
-          // New interactive event with inputType discriminator
-          const inputEvent: WorkflowStepAwaitingInputPayload = {
-            planId: plan.planId,
-            stepId: upcomingStep.stepId,
-            stepTitle: upcomingStep.title,
-            stepDescription: upcomingStep.description,
-            conceptName: upcomingStep.conceptName,
-            stepIndex,
-            totalSteps,
-            inputType: 'confirmation',
-            conversationId,
-          };
-          client.emit('workflow:step-awaiting-input', inputEvent);
-        },
-        onComplete: (status, completedSteps, totalStepsCount) => {
-          const event: WorkflowCompletePayload = {
-            planId: plan.planId, status,
-            completedSteps, totalSteps: totalStepsCount, conversationId,
-          };
-          client.emit('workflow:complete', event);
-          client.emit('chat:notes-updated', { conversationId, count: 0 });
-        },
-        saveMessage: async (_role, content, conceptId) => {
-          const targetConvId = conceptId && conceptConversations.has(conceptId)
-            ? conceptConversations.get(conceptId)!
-            : conversationId;
-          const msg = await this.conversationService.addMessage(
-            authenticatedClient.tenantId, targetConvId, MessageRole.ASSISTANT, content,
-          );
-          return msg.id;
-        },
-      },
-    ).catch((err: unknown) => {
-      this.logger.error({
-        message: 'Auto-execute plan failed',
-        planId: plan.planId,
-        error: err instanceof Error ? err.message : 'Unknown error',
+              inputType: 'confirmation',
+              conversationId,
+            };
+            client.emit('workflow:step-awaiting-input', inputEvent);
+          },
+          onComplete: (status, completedSteps, totalStepsCount) => {
+            const event: WorkflowCompletePayload = {
+              planId: plan.planId,
+              status,
+              completedSteps,
+              totalSteps: totalStepsCount,
+              conversationId,
+            };
+            client.emit('workflow:complete', event);
+            client.emit('chat:notes-updated', { conversationId, count: 0 });
+          },
+          saveMessage: async (_role, content, conceptId) => {
+            const targetConvId =
+              conceptId && conceptConversations.has(conceptId)
+                ? conceptConversations.get(conceptId)!
+                : conversationId;
+            const msg = await this.conversationService.addMessage(
+              authenticatedClient.tenantId,
+              targetConvId,
+              MessageRole.ASSISTANT,
+              content
+            );
+            return msg.id;
+          },
+        }
+      )
+      .catch((err: unknown) => {
+        this.logger.error({
+          message: 'Auto-execute plan failed',
+          planId: plan.planId,
+          error: err instanceof Error ? err.message : 'Unknown error',
+        });
+        client.emit('workflow:error', {
+          planId: plan.planId,
+          message: err instanceof Error ? err.message : 'Execution failed',
+          conversationId,
+        });
       });
-      client.emit('workflow:error', {
-        planId: plan.planId,
-        message: err instanceof Error ? err.message : 'Execution failed',
-        conversationId,
-      });
-    });
   }
 
   // ─── Discovery Chat (Story 2.17) ─────────────────────────────
@@ -1492,7 +1746,7 @@ Ako nema zadataka, odgovori sa: []`;
   @SubscribeMessage('discovery:send-message')
   async handleDiscoveryMessage(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { content: string },
+    @MessageBody() payload: { content: string }
   ): Promise<void> {
     const authenticatedClient = client as AuthenticatedSocket;
     const { content } = payload;
@@ -1508,7 +1762,7 @@ Ako nema zadataka, odgovori sa: []`;
       // Build minimal business context
       const businessContext = await this.buildBusinessContext(
         authenticatedClient.tenantId,
-        authenticatedClient.userId,
+        authenticatedClient.userId
       );
 
       // Web search for discovery context
@@ -1545,7 +1799,7 @@ ${businessContext}${webContext}`;
             chunk,
             index: chunkIndex++,
           });
-        },
+        }
       );
 
       client.emit('discovery:message-complete', {
@@ -1572,21 +1826,14 @@ ${businessContext}${webContext}`;
     }
   }
 
-  private async buildBusinessContext(
-    tenantId: string,
-    userId: string
-  ): Promise<string> {
+  private async buildBusinessContext(tenantId: string, userId: string): Promise<string> {
     try {
       const [tenant, onboardingNote] = await Promise.all([
         this.prisma.tenant.findUnique({
           where: { id: tenantId },
           select: { name: true, industry: true, description: true },
         }),
-        this.notesService.getLatestNoteBySource(
-          userId,
-          tenantId,
-          NoteSource.ONBOARDING
-        ),
+        this.notesService.getLatestNoteBySource(userId, tenantId, NoteSource.ONBOARDING),
       ]);
 
       if (!tenant) {
@@ -1608,7 +1855,8 @@ ${businessContext}${webContext}`;
       }
 
       context += '--- END BUSINESS CONTEXT ---\n';
-      context += 'Use this business context to personalize your responses.\nVAŽNO: Odgovaraj na srpskom jeziku.';
+      context +=
+        'Use this business context to personalize your responses.\nVAŽNO: Odgovaraj na srpskom jeziku.';
 
       this.logger.log({
         message: 'Business context built for chat',

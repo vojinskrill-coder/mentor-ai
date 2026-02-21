@@ -81,6 +81,13 @@ export class OnboardingService {
   }
 
   /**
+   * Saves the user's department/role selection (Story 3.2).
+   */
+  async setDepartment(department: string | null): Promise<void> {
+    await firstValueFrom(this.http.patch(`${this.baseUrl}/set-department`, { department }));
+  }
+
+  /**
    * Completes onboarding, saves the note, and transitions tenant to ACTIVE.
    */
   async completeOnboarding(
@@ -89,10 +96,11 @@ export class OnboardingService {
     executionMode?: string
   ): Promise<OnboardingCompleteResponse> {
     const response = await firstValueFrom(
-      this.http.post<{ data: OnboardingCompleteResponse }>(
-        `${this.baseUrl}/complete`,
-        { taskId, generatedOutput, executionMode }
-      )
+      this.http.post<{ data: OnboardingCompleteResponse }>(`${this.baseUrl}/complete`, {
+        taskId,
+        generatedOutput,
+        executionMode,
+      })
     );
     return response.data;
   }
@@ -127,9 +135,7 @@ export class OnboardingService {
    */
   async getTasksByIndustry(industry: string): Promise<QuickTask[]> {
     const response = await firstValueFrom(
-      this.http.get<{ data: QuickTask[] }>(
-        `${this.baseUrl}/tasks/${encodeURIComponent(industry)}`
-      )
+      this.http.get<{ data: QuickTask[] }>(`${this.baseUrl}/tasks/${encodeURIComponent(industry)}`)
     );
     return response.data;
   }

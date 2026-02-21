@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
 import { TenantPrismaService } from '@mentor-ai/shared/tenant-context';
 import { Prisma } from '@prisma/client';
@@ -22,6 +17,7 @@ import { ConceptService } from '../knowledge/services/concept.service';
 import { CurriculumService } from '../knowledge/services/curriculum.service';
 import { CitationService } from '../knowledge/services/citation.service';
 import { NotesService } from '../notes/notes.service';
+import { getVisibleCategories, ALL_CATEGORIES } from '../knowledge/config/department-categories';
 
 /**
  * Service for managing chat conversations.
@@ -36,7 +32,7 @@ export class ConversationService {
     private readonly conceptService: ConceptService,
     private readonly curriculumService: CurriculumService,
     private readonly citationService: CitationService,
-    private readonly notesService: NotesService,
+    private readonly notesService: NotesService
   ) {}
 
   /**
@@ -156,10 +152,7 @@ export class ConversationService {
    * @param userId - User ID to filter conversations
    * @returns Array of conversations (without messages)
    */
-  async listConversations(
-    tenantId: string,
-    userId: string
-  ): Promise<Conversation[]> {
+  async listConversations(tenantId: string, userId: string): Promise<Conversation[]> {
     const prisma = await this.tenantPrisma.getClient(tenantId);
 
     const conversations = await prisma.conversation.findMany({
@@ -174,10 +167,7 @@ export class ConversationService {
    * Lists conversations grouped by curriculum hierarchy for tree display.
    * Builds a sparse tree showing only branches that have active conversations.
    */
-  async listGroupedConversations(
-    tenantId: string,
-    userId: string
-  ): Promise<ConceptTreeData> {
+  async listGroupedConversations(tenantId: string, userId: string): Promise<ConceptTreeData> {
     const prisma = await this.tenantPrisma.getClient(tenantId);
 
     const conversations = await prisma.conversation.findMany({
@@ -286,7 +276,10 @@ export class ConversationService {
       }
 
       // Build category → concepts grouping
-      const byCategory = new Map<string, { conceptId: string; name: string; convs: Conversation[] }[]>();
+      const byCategory = new Map<
+        string,
+        { conceptId: string; name: string; convs: Conversation[] }[]
+      >();
       for (const [conceptId, info] of conceptDetails) {
         const cat = info.category || 'General';
         if (!byCategory.has(cat)) byCategory.set(cat, []);
@@ -323,17 +316,13 @@ export class ConversationService {
 
       return {
         tree,
-        uncategorized: [...uncategorized, ...remainingOrphaned].map((c) =>
-          this.mapConversation(c)
-        ),
+        uncategorized: [...uncategorized, ...remainingOrphaned].map((c) => this.mapConversation(c)),
       };
     }
 
     return {
       tree,
-      uncategorized: [...uncategorized, ...orphaned].map((c) =>
-        this.mapConversation(c)
-      ),
+      uncategorized: [...uncategorized, ...orphaned].map((c) => this.mapConversation(c)),
     };
   }
 
@@ -343,7 +332,10 @@ export class ConversationService {
   private buildHierarchyTree(
     nodes: CurriculumNode[],
     convsByCurriculumId: Map<string, Conversation[]>,
-    activeConceptMap: Map<string, { id: string; name: string; curriculumId: string; parentId: string | null }>
+    activeConceptMap: Map<
+      string,
+      { id: string; name: string; curriculumId: string; parentId: string | null }
+    >
   ): ConceptHierarchyNode[] {
     const nodeMap = new Map(nodes.map((n) => [n.id, n]));
     const childrenMap = new Map<string | null, CurriculumNode[]>();
@@ -377,9 +369,149 @@ export class ConversationService {
 
     // Get root nodes (those whose parentId is not in our needed set)
     const roots = nodes.filter((n) => !n.parentId || !nodeMap.has(n.parentId));
-    return roots
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map(buildNode);
+    return roots.sort((a, b) => a.sortOrder - b.sortOrder).map(buildNode);
+  }
+
+  /**
+   * Builds the Business Brain tree (Story 3.2).
+   * Shows only concepts with conversations (completed) or pending tasks.
+   * Filtered by user's department → visible categories.
+   */
+  async getBrainTree(
+    tenantId: string,
+    userId: string,
+    department: string | null,
+    role: string
+  ): Promise<{
+    categories: Array<{
+      name: string;
+      concepts: Array<{
+        id: string;
+        name: string;
+        slug: string;
+        status: 'completed' | 'pending';
+        completedByUserId?: string;
+        conversationId?: string;
+        pendingNoteId?: string;
+      }>;
+    }>;
+  }> {
+    const prisma = await this.tenantPrisma.getClient(tenantId);
+
+    // 1. Get all conversations with concepts (all users in tenant)
+    const convRows = await prisma.conversation.findMany({
+      where: { conceptId: { not: null } },
+      select: { conceptId: true, userId: true, id: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    // 2. Get pending task notes
+    const isOwner = role === 'PLATFORM_OWNER' || role === 'TENANT_OWNER' || !department;
+    const pendingTasks = await this.notesService.getPendingTaskConceptIds(
+      tenantId,
+      isOwner ? undefined : userId
+    );
+
+    // 3. Collect unique concept IDs and build lookup maps
+    const allConceptIds = new Set<string>();
+    const completedMap = new Map<string, { userId: string; conversationId: string }>();
+    const pendingMap = new Map<string, { userId: string; noteId: string }>();
+
+    for (const conv of convRows) {
+      if (conv.conceptId) {
+        allConceptIds.add(conv.conceptId);
+        if (!completedMap.has(conv.conceptId)) {
+          completedMap.set(conv.conceptId, {
+            userId: conv.userId,
+            conversationId: conv.id,
+          });
+        }
+      }
+    }
+
+    for (const task of pendingTasks) {
+      allConceptIds.add(task.conceptId);
+      if (!pendingMap.has(task.conceptId)) {
+        pendingMap.set(task.conceptId, {
+          userId: task.userId,
+          noteId: task.noteId,
+        });
+      }
+    }
+
+    if (allConceptIds.size === 0) {
+      return { categories: [] };
+    }
+
+    // 4. Load concept details
+    const conceptMap = await this.conceptService.findByIds([...allConceptIds]);
+
+    // 5. Get visible categories for this user
+    const visibleCategories = getVisibleCategories(department, role);
+
+    // 6. Group by category
+    const categoryGroups = new Map<
+      string,
+      Array<{
+        id: string;
+        name: string;
+        slug: string;
+        status: 'completed' | 'pending';
+        completedByUserId?: string;
+        conversationId?: string;
+        pendingNoteId?: string;
+      }>
+    >();
+
+    for (const [conceptId, info] of conceptMap) {
+      // Filter by visible categories (null = no filter, owner sees all)
+      if (visibleCategories && !visibleCategories.includes(info.category)) {
+        continue;
+      }
+
+      const completed = completedMap.get(conceptId);
+      const pending = pendingMap.get(conceptId);
+      const status = completed ? 'completed' : 'pending';
+
+      const concept: {
+        id: string;
+        name: string;
+        slug: string;
+        status: 'completed' | 'pending';
+        completedByUserId?: string;
+        conversationId?: string;
+        pendingNoteId?: string;
+      } = {
+        id: conceptId,
+        name: info.name,
+        slug: info.slug,
+        status,
+      };
+
+      if (completed) {
+        concept.completedByUserId = completed.userId;
+        concept.conversationId = completed.conversationId;
+      }
+      if (pending) {
+        concept.pendingNoteId = pending.noteId;
+      }
+
+      if (!categoryGroups.has(info.category)) {
+        categoryGroups.set(info.category, []);
+      }
+      categoryGroups.get(info.category)!.push(concept);
+    }
+
+    // 7. Build sorted category list (ordered by ALL_CATEGORIES index)
+    const categories = [...categoryGroups.entries()]
+      .map(([name, concepts]) => ({ name, concepts }))
+      .sort((a, b) => {
+        const orderA = (ALL_CATEGORIES as readonly string[]).indexOf(a.name);
+        const orderB = (ALL_CATEGORIES as readonly string[]).indexOf(b.name);
+        return (orderA === -1 ? 999 : orderA) - (orderB === -1 ? 999 : orderB);
+      });
+
+    return { categories };
   }
 
   /**
@@ -647,26 +779,24 @@ export class ConversationService {
     };
   }
 
-  private mapConversationWithMessages(
-    conversation: {
+  private mapConversationWithMessages(conversation: {
+    id: string;
+    userId: string;
+    title: string | null;
+    personaType?: string | null;
+    conceptId?: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    messages: Array<{
       id: string;
-      userId: string;
-      title: string | null;
-      personaType?: string | null;
-      conceptId?: string | null;
+      conversationId: string;
+      role: string;
+      content: string;
+      confidenceScore?: number | null;
+      confidenceFactors?: unknown;
       createdAt: Date;
-      updatedAt: Date;
-      messages: Array<{
-        id: string;
-        conversationId: string;
-        role: string;
-        content: string;
-        confidenceScore?: number | null;
-        confidenceFactors?: unknown;
-        createdAt: Date;
-      }>;
-    }
-  ): ConversationWithMessages {
+    }>;
+  }): ConversationWithMessages {
     return {
       ...this.mapConversation(conversation),
       messages: conversation.messages.map((m) => this.mapMessage(m)),

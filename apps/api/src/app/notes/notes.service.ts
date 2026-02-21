@@ -47,7 +47,7 @@ export class NotesService {
 
   constructor(
     private readonly prisma: PlatformPrismaService,
-    private readonly aiGateway: AiGatewayService,
+    private readonly aiGateway: AiGatewayService
   ) {}
 
   /**
@@ -136,11 +136,7 @@ export class NotesService {
   /**
    * Gets the most recent note for a user filtered by source.
    */
-  async getLatestNoteBySource(
-    userId: string,
-    tenantId: string,
-    source: NoteSource
-  ) {
+  async getLatestNoteBySource(userId: string, tenantId: string, source: NoteSource) {
     return this.prisma.note.findFirst({
       where: { userId, tenantId, source },
       orderBy: { createdAt: 'desc' },
@@ -168,11 +164,7 @@ export class NotesService {
   /**
    * Gets notes for a specific concept.
    */
-  async getByConcept(
-    conceptId: string,
-    userId: string,
-    tenantId: string
-  ): Promise<NoteItem[]> {
+  async getByConcept(conceptId: string, userId: string, tenantId: string): Promise<NoteItem[]> {
     const notes = await this.prisma.note.findMany({
       where: { conceptId, userId, tenantId, parentNoteId: null },
       include: {
@@ -204,7 +196,7 @@ export class NotesService {
     conceptIds: string[],
     conversationId: string,
     userId: string,
-    tenantId: string,
+    tenantId: string
   ): Promise<number> {
     if (conceptIds.length === 0) return 0;
     const result = await this.prisma.note.updateMany({
@@ -250,13 +242,35 @@ export class NotesService {
   }
 
   /**
+   * Gets pending task concept IDs for the brain tree (Story 3.2).
+   * If userId is provided, returns only that user's pending tasks.
+   * If omitted, returns all pending tasks for the tenant (PLATFORM_OWNER view).
+   */
+  async getPendingTaskConceptIds(
+    tenantId: string,
+    userId?: string
+  ): Promise<Array<{ conceptId: string; userId: string; noteId: string }>> {
+    const where: Record<string, unknown> = {
+      tenantId,
+      noteType: NoteType.TASK,
+      status: NoteStatus.PENDING,
+      conceptId: { not: null },
+    };
+    if (userId) where.userId = userId;
+
+    const notes = await this.prisma.note.findMany({
+      where,
+      select: { conceptId: true, userId: true, id: true },
+    });
+    return notes
+      .filter((n): n is typeof n & { conceptId: string } => n.conceptId !== null)
+      .map((n) => ({ conceptId: n.conceptId, userId: n.userId, noteId: n.id }));
+  }
+
+  /**
    * Updates the status of a note/task.
    */
-  async updateStatus(
-    noteId: string,
-    status: NoteStatus,
-    tenantId: string
-  ): Promise<NoteItem> {
+  async updateStatus(noteId: string, status: NoteStatus, tenantId: string): Promise<NoteItem> {
     const note = await this.prisma.note.findFirst({
       where: { id: noteId, tenantId },
     });
@@ -312,11 +326,7 @@ export class NotesService {
   /**
    * Submits a user completion report for a note/task.
    */
-  async submitReport(
-    noteId: string,
-    report: string,
-    tenantId: string
-  ): Promise<NoteItem> {
+  async submitReport(noteId: string, report: string, tenantId: string): Promise<NoteItem> {
     const note = await this.prisma.note.findFirst({
       where: { id: noteId, tenantId },
     });
@@ -333,11 +343,7 @@ export class NotesService {
   /**
    * AI-scores a user's completion report.
    */
-  async scoreReport(
-    noteId: string,
-    userId: string,
-    tenantId: string
-  ): Promise<NoteItem> {
+  async scoreReport(noteId: string, userId: string, tenantId: string): Promise<NoteItem> {
     const note = await this.prisma.note.findFirst({
       where: { id: noteId, tenantId },
     });
@@ -371,7 +377,9 @@ Odgovori ISKLJUČIVO u JSON formatu:
     await this.aiGateway.streamCompletionWithContext(
       [{ role: 'user', content: scoringPrompt }],
       { tenantId, userId },
-      (chunk) => { fullResponse += chunk; }
+      (chunk) => {
+        fullResponse += chunk;
+      }
     );
 
     let score = 50;

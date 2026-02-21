@@ -9,6 +9,7 @@ export interface JwtPayload {
   tenantId: string;
   role: string;
   userId: string;
+  department?: string | null;
   iat: number;
   exp: number;
 }
@@ -19,6 +20,7 @@ export interface CurrentUserPayload {
   role: 'PLATFORM_OWNER' | 'TENANT_OWNER' | 'ADMIN' | 'MEMBER';
   email: string;
   auth0Id: string;
+  department: string | null; // Business Brain domain isolation (Story 3.2)
 }
 
 @Injectable()
@@ -48,6 +50,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       role: (payload.role as CurrentUserPayload['role']) || 'MEMBER',
       email: payload.email,
       auth0Id: payload.sub,
+      department: payload.department ?? null,
     };
   }
 }

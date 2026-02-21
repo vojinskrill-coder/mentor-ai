@@ -2,7 +2,21 @@ import { Injectable, inject } from '@angular/core';
 import { io, Socket } from 'socket.io-client';
 import { AuthService } from '../../../core/auth/auth.service';
 import { environment } from '../../../../environments/environment';
-import type { ChatMessageChunk, ChatComplete, WorkflowPlanReadyPayload, WorkflowStepProgressPayload, WorkflowCompletePayload, WorkflowErrorPayload, WorkflowConversationsCreatedPayload, WorkflowStepConfirmationPayload, WorkflowStepAwaitingInputPayload, WorkflowStepMessagePayload, WorkflowNavigatePayload, YoloProgressPayload, YoloCompletePayload } from '@mentor-ai/shared/types';
+import type {
+  ChatMessageChunk,
+  ChatComplete,
+  WorkflowPlanReadyPayload,
+  WorkflowStepProgressPayload,
+  WorkflowCompletePayload,
+  WorkflowErrorPayload,
+  WorkflowConversationsCreatedPayload,
+  WorkflowStepConfirmationPayload,
+  WorkflowStepAwaitingInputPayload,
+  WorkflowStepMessagePayload,
+  WorkflowNavigatePayload,
+  YoloProgressPayload,
+  YoloCompletePayload,
+} from '@mentor-ai/shared/types';
 
 interface MessageReceivedData {
   messageId: string;
@@ -19,7 +33,11 @@ type MessageChunkCallback = (data: ChatMessageChunk) => void;
 type CompleteCallback = (data: ChatComplete) => void;
 type ErrorCallback = (error: ChatErrorData) => void;
 type NotesUpdatedCallback = (data: { conversationId: string; count: number }) => void;
-type ConceptDetectedCallback = (data: { conversationId: string; conceptId: string; conceptName: string }) => void;
+type ConceptDetectedCallback = (data: {
+  conversationId: string;
+  conceptId: string;
+  conceptName: string;
+}) => void;
 type PlanReadyCallback = (data: WorkflowPlanReadyPayload) => void;
 type StepProgressCallback = (data: WorkflowStepProgressPayload) => void;
 type WorkflowCompleteCallback = (data: WorkflowCompletePayload) => void;
@@ -29,7 +47,11 @@ type StepConfirmationCallback = (data: WorkflowStepConfirmationPayload) => void;
 type StepAwaitingInputCallback = (data: WorkflowStepAwaitingInputPayload) => void;
 type StepMessageCallback = (data: WorkflowStepMessagePayload) => void;
 type NavigateToConversationCallback = (data: WorkflowNavigatePayload) => void;
-type TasksCreatedForExecutionCallback = (data: { conversationId: string; taskIds: string[]; taskCount: number }) => void;
+type TasksCreatedForExecutionCallback = (data: {
+  conversationId: string;
+  taskIds: string[];
+  taskCount: number;
+}) => void;
 type YoloProgressCallback = (data: YoloProgressPayload) => void;
 type YoloCompleteCallback = (data: YoloCompletePayload) => void;
 type DiscoveryChunkCallback = (data: { chunk: string; index: number }) => void;
@@ -113,9 +135,12 @@ export class ChatWebsocketService {
       this.notesUpdatedCallbacks.forEach((cb) => cb(data));
     });
 
-    this.socket.on('chat:concept-detected', (data: { conversationId: string; conceptId: string; conceptName: string }) => {
-      this.conceptDetectedCallbacks.forEach((cb) => cb(data));
-    });
+    this.socket.on(
+      'chat:concept-detected',
+      (data: { conversationId: string; conceptId: string; conceptName: string }) => {
+        this.conceptDetectedCallbacks.forEach((cb) => cb(data));
+      }
+    );
 
     this.socket.on('workflow:plan-ready', (data: WorkflowPlanReadyPayload) => {
       this.planReadyCallbacks.forEach((cb) => cb(data));
@@ -133,13 +158,19 @@ export class ChatWebsocketService {
       this.workflowErrorCallbacks.forEach((cb) => cb(data));
     });
 
-    this.socket.on('workflow:conversations-created', (data: WorkflowConversationsCreatedPayload) => {
-      this.conversationsCreatedCallbacks.forEach((cb) => cb(data));
-    });
+    this.socket.on(
+      'workflow:conversations-created',
+      (data: WorkflowConversationsCreatedPayload) => {
+        this.conversationsCreatedCallbacks.forEach((cb) => cb(data));
+      }
+    );
 
-    this.socket.on('workflow:step-awaiting-confirmation', (data: WorkflowStepConfirmationPayload) => {
-      this.stepConfirmationCallbacks.forEach((cb) => cb(data));
-    });
+    this.socket.on(
+      'workflow:step-awaiting-confirmation',
+      (data: WorkflowStepConfirmationPayload) => {
+        this.stepConfirmationCallbacks.forEach((cb) => cb(data));
+      }
+    );
 
     this.socket.on('workflow:step-awaiting-input', (data: WorkflowStepAwaitingInputPayload) => {
       this.stepAwaitingInputCallbacks.forEach((cb) => cb(data));
@@ -153,9 +184,12 @@ export class ChatWebsocketService {
       this.navigateToConversationCallbacks.forEach((cb) => cb(data));
     });
 
-    this.socket.on('chat:tasks-created-for-execution', (data: { conversationId: string; taskIds: string[]; taskCount: number }) => {
-      this.tasksCreatedForExecutionCallbacks.forEach((cb) => cb(data));
-    });
+    this.socket.on(
+      'chat:tasks-created-for-execution',
+      (data: { conversationId: string; taskIds: string[]; taskCount: number }) => {
+        this.tasksCreatedForExecutionCallbacks.forEach((cb) => cb(data));
+      }
+    );
 
     this.socket.on('workflow:yolo-progress', (data: YoloProgressPayload) => {
       this.yoloProgressCallbacks.forEach((cb) => cb(data));
@@ -250,6 +284,12 @@ export class ChatWebsocketService {
   emitStartYolo(conversationId: string): void {
     if (!this.socket?.connected) return;
     this.socket.emit('workflow:start-yolo', { conversationId });
+  }
+
+  /** Story 3.2: Start per-domain YOLO execution */
+  emitStartDomainYolo(conversationId: string, category: string): void {
+    if (!this.socket?.connected) return;
+    this.socket.emit('yolo:start-domain', { conversationId, category });
   }
 
   emitDiscoveryMessage(content: string): void {

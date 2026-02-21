@@ -105,7 +105,7 @@ export interface CompletionResult {
 @Injectable()
 export class AiGatewayService {
   private readonly logger = new Logger(AiGatewayService.name);
-  /** Request timeout in milliseconds (120 seconds — GPT-5.2 needs longer for complex prompts) */
+  /** Request timeout in milliseconds */
   private readonly requestTimeoutMs = 120 * 1000;
 
   constructor(
@@ -175,19 +175,13 @@ export class AiGatewayService {
     }
 
     if (systemPrompt) {
-      messagesWithPersona = [
-        { role: 'system', content: systemPrompt },
-        ...messages,
-      ];
+      messagesWithPersona = [{ role: 'system', content: systemPrompt }, ...messages];
     }
 
     // Check rate limits
     let rateLimit: RateLimitInfo | undefined;
     if (!options.skipRateLimit) {
-      const rateLimitResult = await this.rateLimiterService.checkLimits(
-        tenantId,
-        userId
-      );
+      const rateLimitResult = await this.rateLimiterService.checkLimits(tenantId, userId);
       rateLimit = rateLimitResult;
 
       if (!rateLimitResult.allowed) {
@@ -247,7 +241,8 @@ export class AiGatewayService {
           type: 'circuit_open',
           title: 'Service Temporarily Unavailable',
           status: 503,
-          detail: 'AI service is temporarily unavailable due to recent failures. Please try again later.',
+          detail:
+            'AI service is temporarily unavailable due to recent failures. Please try again later.',
           correlationId,
         },
         HttpStatus.SERVICE_UNAVAILABLE
@@ -448,18 +443,12 @@ export class AiGatewayService {
           };
         } catch (fallbackError) {
           const fallbackProviderId = `${config.fallbackProvider.providerType}:${config.fallbackProvider.modelId}`;
-          await this.circuitBreakerService.recordFailure(
-            fallbackProviderId,
-            correlationId
-          );
+          await this.circuitBreakerService.recordFailure(fallbackProviderId, correlationId);
 
           this.logger.error({
             message: 'Fallback provider also failed',
             correlationId,
-            error:
-              fallbackError instanceof Error
-                ? fallbackError.message
-                : 'Unknown error',
+            error: fallbackError instanceof Error ? fallbackError.message : 'Unknown error',
           });
         }
       }
@@ -476,10 +465,7 @@ export class AiGatewayService {
    * @param onChunk - Callback for each streamed chunk
    * @throws InternalServerErrorException if no provider is configured or streaming fails
    */
-  async streamCompletion(
-    messages: ChatMessage[],
-    onChunk: (chunk: string) => void
-  ): Promise<void> {
+  async streamCompletion(messages: ChatMessage[], onChunk: (chunk: string) => void): Promise<void> {
     const config = await this.llmConfigService.getConfig();
 
     if (!config.primaryProvider) {
@@ -504,6 +490,14 @@ export class AiGatewayService {
           break;
         case 'LOCAL_LLAMA':
           await this.streamFromLocalLlama(
+            messages,
+            modelId,
+            config.primaryProvider.endpoint ?? '',
+            onChunk
+          );
+          break;
+        case 'LM_STUDIO':
+          await this.streamFromLmStudio(
             messages,
             modelId,
             config.primaryProvider.endpoint ?? '',
@@ -575,23 +569,22 @@ export class AiGatewayService {
     try {
       switch (providerType) {
         case 'OPENROUTER':
-          await this.streamFromOpenRouter(
-            messages,
-            modelId,
-            onChunk,
-            controller.signal
-          );
+          await this.streamFromOpenRouter(messages, modelId, onChunk, controller.signal);
           break;
         case 'OPENAI':
-          await this.streamFromOpenAI(
-            messages,
-            modelId,
-            onChunk,
-            controller.signal
-          );
+          await this.streamFromOpenAI(messages, modelId, onChunk, controller.signal);
           break;
         case 'LOCAL_LLAMA':
           await this.streamFromLocalLlama(
+            messages,
+            modelId,
+            endpoint ?? '',
+            onChunk,
+            controller.signal
+          );
+          break;
+        case 'LM_STUDIO':
+          await this.streamFromLmStudio(
             messages,
             modelId,
             endpoint ?? '',
@@ -677,6 +670,15 @@ export class AiGatewayService {
             controller.signal
           );
           break;
+        case 'LM_STUDIO':
+          await this.streamFromLmStudio(
+            messages,
+            fallbackProvider.modelId,
+            fallbackProvider.endpoint ?? '',
+            onChunk,
+            controller.signal
+          );
+          break;
         default:
           throw new InternalServerErrorException({
             type: 'fallback_not_supported',
@@ -708,9 +710,7 @@ export class AiGatewayService {
     onChunk: (chunk: string) => void,
     signal?: AbortSignal
   ): Promise<void> {
-    const apiKey = await this.llmConfigService.getDecryptedApiKey(
-      LlmProviderType.OPENROUTER
-    );
+    const apiKey = await this.llmConfigService.getDecryptedApiKey(LlmProviderType.OPENROUTER);
 
     if (!apiKey) {
       throw new InternalServerErrorException({
@@ -721,25 +721,21 @@ export class AiGatewayService {
       });
     }
 
-    const response = await fetch(
-      'https://openrouter.ai/api/v1/chat/completions',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-          'HTTP-Referer':
-            this.configService.get<string>('APP_URL') ?? 'http://localhost:4200',
-          'X-Title': 'Mentor AI',
-        },
-        body: JSON.stringify({
-          model: modelId,
-          messages,
-          stream: true,
-        }),
-        signal,
-      }
-    );
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+        'HTTP-Referer': this.configService.get<string>('APP_URL') ?? 'http://localhost:4200',
+        'X-Title': 'Mentor AI',
+      },
+      body: JSON.stringify({
+        model: modelId,
+        messages,
+        stream: true,
+      }),
+      signal,
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -801,9 +797,7 @@ export class AiGatewayService {
     onChunk: (chunk: string) => void,
     signal?: AbortSignal
   ): Promise<void> {
-    const apiKey = await this.llmConfigService.getDecryptedApiKey(
-      LlmProviderType.OPENAI
-    );
+    const apiKey = await this.llmConfigService.getDecryptedApiKey(LlmProviderType.OPENAI);
 
     if (!apiKey) {
       throw new InternalServerErrorException({
@@ -814,22 +808,19 @@ export class AiGatewayService {
       });
     }
 
-    const response = await fetch(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: modelId,
-          messages,
-          stream: true,
-        }),
-        signal,
-      }
-    );
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: modelId,
+        messages,
+        stream: true,
+      }),
+      signal,
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -971,21 +962,21 @@ export class AiGatewayService {
   ): Promise<void> {
     switch (fallbackProvider.providerType) {
       case 'OPENROUTER':
-        await this.streamFromOpenRouter(
-          messages,
-          fallbackProvider.modelId,
-          onChunk
-        );
+        await this.streamFromOpenRouter(messages, fallbackProvider.modelId, onChunk);
         break;
       case 'OPENAI':
-        await this.streamFromOpenAI(
-          messages,
-          fallbackProvider.modelId,
-          onChunk
-        );
+        await this.streamFromOpenAI(messages, fallbackProvider.modelId, onChunk);
         break;
       case 'LOCAL_LLAMA':
         await this.streamFromLocalLlama(
+          messages,
+          fallbackProvider.modelId,
+          fallbackProvider.endpoint ?? '',
+          onChunk
+        );
+        break;
+      case 'LM_STUDIO':
+        await this.streamFromLmStudio(
           messages,
           fallbackProvider.modelId,
           fallbackProvider.endpoint ?? '',
@@ -999,6 +990,68 @@ export class AiGatewayService {
           status: 500,
           detail: `Fallback provider ${fallbackProvider.providerType} is not supported`,
         });
+    }
+  }
+
+  private async streamFromLmStudio(
+    messages: ChatMessage[],
+    modelId: string,
+    endpoint: string,
+    onChunk: (chunk: string) => void,
+    signal?: AbortSignal
+  ): Promise<void> {
+    const baseUrl = endpoint || 'http://localhost:1234';
+    const url = `${baseUrl}/v1/chat/completions`;
+
+    this.logger.log({
+      message: 'LM Studio request starting (non-streaming)',
+      url,
+      modelId,
+      messageCount: messages.length,
+    });
+
+    // Use non-streaming mode — SSE streaming via Node.js native fetch in webpack
+    // has compatibility issues on Windows. Non-streaming works reliably.
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: modelId,
+        messages,
+        stream: false,
+        max_tokens: 1024,
+      }),
+      signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      this.logger.error({
+        message: 'LM Studio error response',
+        status: response.status,
+        errorText,
+      });
+      throw new InternalServerErrorException({
+        type: 'lm_studio_error',
+        title: 'LM Studio Error',
+        status: 500,
+        detail: `LM Studio returned ${response.status}: ${errorText}`,
+      });
+    }
+
+    const data = (await response.json()) as OpenRouterResponse;
+    const content = data.choices[0]?.message?.content ?? data.choices[0]?.delta?.content ?? '';
+
+    this.logger.log({
+      message: 'LM Studio response received',
+      contentLength: content.length,
+      finishReason: data.choices[0]?.finish_reason,
+    });
+
+    if (content) {
+      onChunk(content);
     }
   }
 }

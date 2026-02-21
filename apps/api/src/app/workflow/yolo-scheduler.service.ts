@@ -14,6 +14,7 @@ import { ConceptService } from '../knowledge/services/concept.service';
 import { ConceptMatchingService } from '../knowledge/services/concept-matching.service';
 import { CurriculumService } from '../knowledge/services/curriculum.service';
 import { ConceptExtractionService } from '../knowledge/services/concept-extraction.service';
+import { ALL_CATEGORIES } from '../knowledge/config/department-categories';
 
 // ─── Internal Types ─────────────────────────────────────────────
 
@@ -80,7 +81,7 @@ export class YoloSchedulerService {
     private readonly conceptService: ConceptService,
     private readonly conceptMatchingService: ConceptMatchingService,
     private readonly curriculumService: CurriculumService,
-    private readonly conceptExtractionService: ConceptExtractionService,
+    private readonly conceptExtractionService: ConceptExtractionService
   ) {}
 
   /**
@@ -94,13 +95,49 @@ export class YoloSchedulerService {
     config: YoloConfig,
     callbacks: YoloCallbacks,
     conceptConversations: Map<string, string>,
+    category?: string // Story 3.2: per-domain scoping
   ): Promise<string> {
     const planId = `yolo_${createId()}`;
 
-    // Load all pending TASK notes for this tenant
-    const taskNotes = await this.prisma.note.findMany({
-      where: { tenantId, noteType: 'TASK', status: 'PENDING' },
+    // Load pending TASK notes for this tenant
+    let taskNotes = await this.prisma.note.findMany({
+      where: { tenantId, noteType: 'TASK', status: 'PENDING', conceptId: { not: null } },
     });
+
+    // Story 3.2: Per-domain or foundation-weighted selection
+    if (taskNotes.length > 0) {
+      const conceptIds = [...new Set(taskNotes.map((n) => n.conceptId!))];
+      const concepts = await this.prisma.concept.findMany({
+        where: { id: { in: conceptIds } },
+        select: { id: true, category: true },
+      });
+      const conceptCategoryMap = new Map(concepts.map((c) => [c.id, c.category]));
+
+      if (category) {
+        // Per-domain: only concepts in the specified category
+        taskNotes = taskNotes.filter(
+          (n) => n.conceptId && conceptCategoryMap.get(n.conceptId) === category
+        );
+      } else {
+        // Foundation run: proportional weighting across tiers
+        // Tier 1 (indices 0-5): up to 60 concepts
+        // Tier 2 (indices 6-9): up to 25 concepts
+        // Tier 3 (indices 10+): up to 15 concepts
+        const tier1Cats = new Set(ALL_CATEGORIES.slice(0, 6));
+        const tier2Cats = new Set(ALL_CATEGORIES.slice(6, 10));
+        const tier1: typeof taskNotes = [];
+        const tier2: typeof taskNotes = [];
+        const tier3: typeof taskNotes = [];
+        for (const note of taskNotes) {
+          const cat = note.conceptId ? conceptCategoryMap.get(note.conceptId) : null;
+          if (!cat) continue;
+          if (tier1Cats.has(cat as (typeof ALL_CATEGORIES)[number])) tier1.push(note);
+          else if (tier2Cats.has(cat as (typeof ALL_CATEGORIES)[number])) tier2.push(note);
+          else tier3.push(note);
+        }
+        taskNotes = [...tier1.slice(0, 60), ...tier2.slice(0, 25), ...tier3.slice(0, 15)];
+      }
+    }
 
     if (taskNotes.length === 0) {
       callbacks.onError('No pending tasks found');
@@ -120,7 +157,7 @@ export class YoloSchedulerService {
         } catch {
           // Fallback — concept name resolved from note title below
         }
-      }),
+      })
     );
     for (const note of notesWithConcepts) {
       tasks.set(note.id, {
@@ -178,7 +215,10 @@ export class YoloSchedulerService {
 
     this.activeRuns.set(planId, state);
 
-    this.addLog(state, `YOLO started: ${tasks.size} tasks, maxConcurrency=${config.maxConcurrency}`);
+    this.addLog(
+      state,
+      `YOLO started: ${tasks.size} tasks, maxConcurrency=${config.maxConcurrency}`
+    );
 
     // Emit initial progress
     callbacks.onProgress(this.buildProgressPayload(state));
@@ -226,7 +266,10 @@ export class YoloSchedulerService {
       // Circuit breaker: pause if too many consecutive failures (likely DB outage)
       if (state.consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
         const cooldown = config.circuitBreakerCooldownMs ?? CIRCUIT_BREAKER_COOLDOWN_MS;
-        this.addLog(state, `Circuit breaker: ${state.consecutiveFailures} consecutive failures, pausing ${cooldown / 1000}s`);
+        this.addLog(
+          state,
+          `Circuit breaker: ${state.consecutiveFailures} consecutive failures, pausing ${cooldown / 1000}s`
+        );
         await new Promise((r) => setTimeout(r, cooldown));
         state.consecutiveFailures = 0;
       }
@@ -258,13 +301,15 @@ export class YoloSchedulerService {
             this.addLog(state, `Completed: ${task.conceptName}`);
 
             // Mark the original task note as COMPLETED
-            this.notesService.updateStatus(task.taskId, NoteStatus.COMPLETED, state.tenantId).catch((err) => {
-              this.logger.warn({
-                message: 'Failed to mark task as completed',
-                taskId: task.taskId,
-                error: err instanceof Error ? err.message : 'Unknown',
+            this.notesService
+              .updateStatus(task.taskId, NoteStatus.COMPLETED, state.tenantId)
+              .catch((err) => {
+                this.logger.warn({
+                  message: 'Failed to mark task as completed',
+                  taskId: task.taskId,
+                  error: err instanceof Error ? err.message : 'Unknown',
+                });
               });
-            });
 
             // Extract and create new concepts from AI output (Story 2.15)
             // Runs BEFORE discovery so new concepts have graph edges for traversal
@@ -272,17 +317,18 @@ export class YoloSchedulerService {
             state.workerOutputs.delete(task.taskId);
             if (workerOutput && state.totalConceptsCreated < 20) {
               try {
-                const extractionResult = await this.conceptExtractionService.extractAndCreateConcepts(
-                  workerOutput,
-                  {
+                const extractionResult =
+                  await this.conceptExtractionService.extractAndCreateConcepts(workerOutput, {
                     conversationId: state.conversationId,
                     conceptId: task.conceptId,
                     maxNew: Math.min(5, 20 - state.totalConceptsCreated),
-                  },
-                );
+                  });
                 state.totalConceptsCreated += extractionResult.created.length;
                 if (extractionResult.created.length > 0) {
-                  this.addLog(state, `Created ${extractionResult.created.length} new concepts from AI output`);
+                  this.addLog(
+                    state,
+                    `Created ${extractionResult.created.length} new concepts from AI output`
+                  );
                 }
               } catch (err) {
                 this.logger.warn({
@@ -307,7 +353,10 @@ export class YoloSchedulerService {
               // Exponential backoff: 5s, 15s, 45s...
               const baseDelay = config.retryBaseDelayMs ?? RETRY_BASE_DELAY_MS;
               const delay = baseDelay * Math.pow(3, task.retries - 1);
-              this.addLog(state, `Retrying (${task.retries}/${config.retryAttempts}) in ${delay / 1000}s: ${task.conceptName}`);
+              this.addLog(
+                state,
+                `Retrying (${task.retries}/${config.retryAttempts}) in ${delay / 1000}s: ${task.conceptName}`
+              );
               await new Promise((r) => setTimeout(r, delay));
               task.status = 'ready';
               state.readyQueue.push(taskId);
@@ -315,7 +364,10 @@ export class YoloSchedulerService {
               task.status = 'failed';
               state.failedCount++;
               state.failedConcepts.add(task.conceptId);
-              this.addLog(state, `Failed: ${task.conceptName} — ${err instanceof Error ? err.message : 'Unknown'}`);
+              this.addLog(
+                state,
+                `Failed: ${task.conceptName} — ${err instanceof Error ? err.message : 'Unknown'}`
+              );
             }
             this.releaseLock(state, task.conceptId);
             this.reEvaluateReadyQueue(state);
@@ -349,7 +401,10 @@ export class YoloSchedulerService {
     if (hardStopped) status = 'hard-stopped';
     else if (state.failedCount > 0 && state.completedCount === 0) status = 'failed';
 
-    this.addLog(state, `YOLO finished: ${status}, completed=${state.completedCount}, failed=${state.failedCount}, duration=${durationMs}ms`);
+    this.addLog(
+      state,
+      `YOLO finished: ${status}, completed=${state.completedCount}, failed=${state.failedCount}, duration=${durationMs}ms`
+    );
 
     callbacks.onComplete({
       planId: state.planId,
@@ -374,7 +429,7 @@ export class YoloSchedulerService {
   private async executeWorker(
     state: YoloRunState,
     task: YoloTask,
-    callbacks: YoloCallbacks,
+    callbacks: YoloCallbacks
   ): Promise<void> {
     const { tenantId, userId } = state;
 
@@ -383,7 +438,9 @@ export class YoloSchedulerService {
 
     // Generate/load workflow for this concept
     const workflow = await this.workflowService.getOrGenerateWorkflow(
-      task.conceptId, tenantId, userId,
+      task.conceptId,
+      tenantId,
+      userId
     );
 
     const completedSummaries: Array<{ title: string; conceptName: string; summary: string }> = [];
@@ -417,14 +474,15 @@ export class YoloSchedulerService {
       callbacks.onProgress(this.buildProgressPayload(state));
 
       // Execute the step using WorkflowService's shared logic
-      let fullContent = '';
       const result = await this.workflowService.executeStepAutonomous(
         step,
         conversationId,
         userId,
         tenantId,
-        (chunk) => { fullContent += chunk; }, // Collect chunks silently — no per-step streaming in YOLO
-        completedSummaries,
+        () => {
+          /* Collect chunks silently — no per-step streaming in YOLO */
+        },
+        completedSummaries
       );
 
       // Emit step-complete progress (Story 2.16)
@@ -463,9 +521,7 @@ export class YoloSchedulerService {
     }
 
     // Store concatenated summaries for concept discovery
-    const outputForDiscovery = completedSummaries
-      .map((s) => `${s.title}: ${s.summary}`)
-      .join('\n');
+    const outputForDiscovery = completedSummaries.map((s) => `${s.title}: ${s.summary}`).join('\n');
     state.workerOutputs.set(task.taskId, outputForDiscovery);
 
     // Clean up step tracking (Story 2.16)
@@ -478,7 +534,7 @@ export class YoloSchedulerService {
     state: YoloRunState,
     task: YoloTask,
     aiOutput: string,
-    callbacks: YoloCallbacks,
+    callbacks: YoloCallbacks
   ): Promise<void> {
     if (state.tasks.size >= state.config.maxConceptsHardStop) return;
 
@@ -496,7 +552,10 @@ export class YoloSchedulerService {
           source: `graph:${rel.relationshipType}`,
         });
       }
-      this.addLog(state, `Graph discovery for ${task.conceptName}: ${candidates.length} candidates`);
+      this.addLog(
+        state,
+        `Graph discovery for ${task.conceptName}: ${candidates.length} candidates`
+      );
     } catch (err) {
       this.logger.warn({
         message: 'Graph discovery failed',
@@ -507,10 +566,10 @@ export class YoloSchedulerService {
 
     // Phase 2: Semantic search (cross-language may still find some matches)
     try {
-      const matches = await this.conceptMatchingService.findRelevantConcepts(
-        aiOutput,
-        { limit: 10, threshold: 0.55 },
-      );
+      const matches = await this.conceptMatchingService.findRelevantConcepts(aiOutput, {
+        limit: 10,
+        threshold: 0.55,
+      });
       for (const match of matches) {
         if (!candidates.some((c) => c.conceptId === match.conceptId)) {
           candidates.push({
@@ -532,8 +591,12 @@ export class YoloSchedulerService {
       if (state.discoveredConceptIds.has(candidate.conceptId)) continue;
       if (state.tasks.size >= state.config.maxConceptsHardStop) break;
       await this.addDiscoveredConcept(
-        state, candidate.conceptId, candidate.conceptName,
-        candidate.source, task.conceptName, callbacks,
+        state,
+        candidate.conceptId,
+        candidate.conceptName,
+        candidate.source,
+        task.conceptName,
+        callbacks
       );
     }
   }
@@ -544,7 +607,7 @@ export class YoloSchedulerService {
     conceptName: string,
     source: string,
     parentName: string,
-    callbacks: YoloCallbacks,
+    callbacks: YoloCallbacks
   ): Promise<void> {
     try {
       state.discoveredConceptIds.add(conceptId);
@@ -565,7 +628,10 @@ export class YoloSchedulerService {
         .createDynamicRelationships(conceptId, conceptName)
         .then((res) => {
           if (res.relationshipsCreated > 0) {
-            this.addLog(state, `Created ${res.relationshipsCreated} relationships for ${conceptName}`);
+            this.addLog(
+              state,
+              `Created ${res.relationshipsCreated} relationships for ${conceptName}`
+            );
           }
         })
         .catch((err) =>
@@ -573,7 +639,7 @@ export class YoloSchedulerService {
             message: 'Dynamic relationship creation failed',
             conceptName,
             error: err instanceof Error ? err.message : 'Unknown',
-          }),
+          })
         );
 
       // Create PENDING task note
@@ -647,7 +713,7 @@ export class YoloSchedulerService {
             (r) =>
               r.relationshipType === 'PREREQUISITE' &&
               r.direction === 'outgoing' &&
-              allConceptIds.includes(r.concept.id),
+              allConceptIds.includes(r.concept.id)
           )
           .map((r) => r.concept.id);
         task.dependencies = prereqs;
@@ -663,8 +729,8 @@ export class YoloSchedulerService {
     for (const [taskId, task] of state.tasks) {
       if (task.status !== 'pending') continue;
 
-      const allDepsMet = task.dependencies.every(
-        (depConceptId) => state.completedConcepts.has(depConceptId),
+      const allDepsMet = task.dependencies.every((depConceptId) =>
+        state.completedConcepts.has(depConceptId)
       );
       if (allDepsMet && !state.readyQueue.includes(taskId)) {
         task.status = 'ready';

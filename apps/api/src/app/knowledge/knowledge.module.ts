@@ -12,6 +12,9 @@ import { CitationService } from './services/citation.service';
 import { EmbeddingService } from './services/embedding.service';
 import { CurriculumService } from './services/curriculum.service';
 import { ConceptExtractionService } from './services/concept-extraction.service';
+import { BrainSeedingService } from './services/brain-seeding.service';
+import { BusinessContextService } from './services/business-context.service';
+import { DepartmentGuard } from './guards/department.guard';
 
 /**
  * Module for business concepts knowledge base.
@@ -19,6 +22,7 @@ import { ConceptExtractionService } from './services/concept-extraction.service'
  *
  * Story 2.6: Added citation services for concept matching and injection.
  * Story 2.13: Added AiGatewayModule for dynamic relationship creation.
+ * Story 3.2: Added BrainSeedingService + BusinessContextService.
  */
 @Module({
   imports: [TenantModule, AuthModule, LlmConfigModule, AiGatewayModule],
@@ -32,6 +36,9 @@ import { ConceptExtractionService } from './services/concept-extraction.service'
     EmbeddingService,
     CurriculumService,
     ConceptExtractionService,
+    BrainSeedingService,
+    BusinessContextService,
+    DepartmentGuard,
   ],
   exports: [
     ConceptService,
@@ -42,6 +49,9 @@ import { ConceptExtractionService } from './services/concept-extraction.service'
     EmbeddingService,
     CurriculumService,
     ConceptExtractionService,
+    BrainSeedingService,
+    BusinessContextService,
+    DepartmentGuard,
   ],
 })
 export class KnowledgeModule {}

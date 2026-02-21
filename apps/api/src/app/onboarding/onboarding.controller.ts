@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   Headers,
@@ -16,7 +17,13 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { OnboardingService } from './onboarding.service';
 import type { UploadedFileType } from '../file-upload/file-upload.service';
-import { SetupCompanyDto, QuickWinDto, OnboardingCompleteDto, BusinessContextDto } from './dto/quick-win.dto';
+import {
+  SetupCompanyDto,
+  QuickWinDto,
+  OnboardingCompleteDto,
+  BusinessContextDto,
+  SetDepartmentDto,
+} from './dto/quick-win.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { MfaRequiredGuard } from '../auth/guards/mfa-required.guard';
 import { SkipMfa } from '../auth/decorators/skip-mfa.decorator';
@@ -223,9 +230,10 @@ export class OnboardingController {
    * Returns all available quick tasks.
    */
   @Get('tasks')
-  getAllTasks(
-    @Headers('x-correlation-id') correlationId?: string
-  ): { data: QuickTask[]; correlationId?: string } {
+  getAllTasks(@Headers('x-correlation-id') correlationId?: string): {
+    data: QuickTask[];
+    correlationId?: string;
+  } {
     const tasks = this.onboardingService.getAllTasks();
 
     return {
@@ -289,6 +297,20 @@ export class OnboardingController {
       data: result,
       ...(correlationId && { correlationId }),
     };
+  }
+
+  /**
+   * PATCH /api/onboarding/set-department
+   * Saves the user's department/role selection (Story 3.2).
+   */
+  @Patch('set-department')
+  @HttpCode(HttpStatus.OK)
+  async setDepartment(
+    @Body() dto: SetDepartmentDto,
+    @CurrentUser() user: CurrentUserPayload
+  ): Promise<{ data: { success: boolean } }> {
+    await this.onboardingService.setDepartment(user.userId, dto.department ?? null);
+    return { data: { success: true } };
   }
 
   /**

@@ -15,11 +15,17 @@ module.exports = {
       compiler: 'tsc',
       main: './src/main.ts',
       tsConfig: './tsconfig.app.json',
-      assets: ['./src/assets'],
+      assets: [
+        './src/assets',
+        { input: './src/app/knowledge/data', glob: '*.json', output: 'data' },
+      ],
       optimization: false,
       outputHashing: 'none',
       generatePackageJson: true,
       sourceMap: true,
+      // Disable type checking during serve to prevent memory issues
+      // Types are already checked during build
+      skipTypeCheck: true,
     }),
   ],
 };

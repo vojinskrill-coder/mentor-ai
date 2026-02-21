@@ -1,11 +1,13 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
-import { TenantStatus as PrismaTenantStatus, NoteSource, NoteType, NoteStatus, UserRole } from '@mentor-ai/shared/prisma';
+import {
+  TenantStatus as PrismaTenantStatus,
+  NoteSource,
+  NoteType,
+  NoteStatus,
+  UserRole,
+  Department,
+} from '@mentor-ai/shared/prisma';
 import type {
   OnboardingStatus,
   QuickTask,
@@ -21,6 +23,7 @@ import { ConceptService } from '../knowledge/services/concept.service';
 import { ConceptMatchingService } from '../knowledge/services/concept-matching.service';
 import { ConversationService } from '../conversation/conversation.service';
 import { WebSearchService } from '../web-search/web-search.service';
+import { BrainSeedingService } from '../knowledge/services/brain-seeding.service';
 import { OnboardingMetricService } from './onboarding-metric.service';
 import {
   QUICK_TASK_TEMPLATES,
@@ -47,6 +50,7 @@ export class OnboardingService {
     private readonly conceptMatchingService: ConceptMatchingService,
     private readonly conversationService: ConversationService,
     private readonly webSearchService: WebSearchService,
+    private readonly brainSeedingService: BrainSeedingService
   ) {}
 
   /**
@@ -165,7 +169,10 @@ export class OnboardingService {
       try {
         const websiteContent = await this.webSearchService.fetchWebpage(websiteUrl);
         if (websiteContent) {
-          const enrichedDesc = [description, `\n\n--- Website Content (${websiteUrl}) ---\n${websiteContent}`]
+          const enrichedDesc = [
+            description,
+            `\n\n--- Website Content (${websiteUrl}) ---\n${websiteContent}`,
+          ]
             .filter(Boolean)
             .join('');
           await this.prisma.tenant.update({
@@ -196,6 +203,17 @@ export class OnboardingService {
   }
 
   /**
+   * Sets the user's department during onboarding (Story 3.2).
+   * null = owner/CEO (sees all categories).
+   */
+  async setDepartment(userId: string, department: string | null): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { department: (department as Department) ?? null },
+    });
+  }
+
+  /**
    * Gets the current onboarding status for a user.
    */
   async getStatus(tenantId: string, userId: string): Promise<OnboardingStatus> {
@@ -218,6 +236,34 @@ export class OnboardingService {
       return {
         currentStep: 1 as const,
         tenantStatus: 'DRAFT' as TenantStatus,
+        selectedIndustry: undefined,
+        selectedTaskId: undefined,
+        startedAt: undefined,
+      };
+    }
+
+    // If user already has conversations, they've used the system — skip onboarding
+    const conversationCount = await this.prisma.conversation.count({
+      where: { userId },
+    });
+
+    if (conversationCount > 0) {
+      // Auto-upgrade tenant to ACTIVE if still in DRAFT/ONBOARDING
+      if (tenant.status === 'DRAFT' || tenant.status === 'ONBOARDING') {
+        await this.prisma.tenant.update({
+          where: { id: tenantId },
+          data: { status: 'ACTIVE' },
+        });
+        this.logger.log({
+          message: 'Auto-upgraded tenant to ACTIVE (user has existing conversations)',
+          tenantId,
+          userId,
+          conversationCount,
+        });
+      }
+      return {
+        currentStep: 'complete' as const,
+        tenantStatus: 'ACTIVE' as TenantStatus,
         selectedIndustry: undefined,
         selectedTaskId: undefined,
         startedAt: undefined,
@@ -344,21 +390,22 @@ Please provide a comprehensive business analysis.`;
     const industry = tenant?.industry ?? 'General';
     const companyDescription = tenant?.description ?? '';
 
-    // Fetch relevant concepts from the knowledge base
-    const conceptsResult = await this.conceptService.findAll({ limit: 50 });
-    const conceptNames = conceptsResult.data.map(
-      (c) => `${c.name} (${c.category}): ${c.definition}`
-    );
+    // Fetch relevant concepts to ground the business brain in domain knowledge
+    const conceptsResult = await this.conceptService.findAll({ limit: 30 });
+    const conceptSummaries = conceptsResult.data
+      .map((c) => `- ${c.name} (${c.category}): ${c.definition}`)
+      .join('\n');
 
-    const systemPrompt = `You are a business strategist creating a personalized action plan. Based on the business profile and available business concepts, generate 5-8 actionable focus areas and tasks.
+    const systemPrompt = `You are a senior business strategist and management consultant with 20+ years of experience. Your task is to create a personalized "Business Brain" — a set of actionable, prioritized tasks that will drive measurable business improvement.
 
 For each task, provide:
-- **Title**: A clear, action-oriented title
-- **Description**: 2-3 sentences explaining what to do and why
-- **Category**: Which department/function it belongs to
-- **Priority**: High, Medium, or Low
+1. **Title** — Clear, action-oriented title
+2. **Description** — 2-3 sentences explaining what to do and WHY it matters for this specific business
+3. **Priority** — High / Medium / Low
+4. **Department** — Which department owns this task
+5. **Related Concept** — Which business concept from the provided list this task applies
 
-Format your response as a clear numbered list. Make tasks specific to their business, not generic. Reference relevant business concepts where applicable.`;
+Generate 8-10 tasks. Be specific to the company's industry, current state, and departments. Avoid generic advice.`;
 
     const userPrompt = `Company: ${companyName}
 Industry: ${industry}
@@ -366,12 +413,12 @@ ${companyDescription ? `Description: ${companyDescription}` : ''}
 
 Current Business State: ${businessState}
 
-Active Departments/Functions: ${departments.join(', ')}
+Active Departments: ${departments.join(', ')}
 
 Available Business Concepts:
-${conceptNames.slice(0, 30).join('\n')}
+${conceptSummaries}
 
-Generate personalized tasks and focus areas for this business.`;
+Generate a personalized Business Brain with 8-10 prioritized tasks.`;
 
     const startTime = Date.now();
     let fullOutput = '';
@@ -569,6 +616,28 @@ Generate personalized tasks and focus areas for this business.`;
       });
     }
 
+    // Story 3.2: Seed Brain pending tasks based on user's department (fire-and-forget)
+    // Loads user's department from DB and seeds concept tasks accordingly
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { department: true, role: true },
+    });
+    this.brainSeedingService
+      .seedPendingTasksForUser(
+        userId,
+        tenantId,
+        (user?.department as string) ?? null,
+        user?.role ?? 'TENANT_OWNER'
+      )
+      .catch((err) => {
+        this.logger.warn({
+          message: 'Brain seeding failed after onboarding (non-blocking)',
+          userId,
+          tenantId,
+          error: err instanceof Error ? err.message : 'Unknown',
+        });
+      });
+
     this.logger.log({
       message: 'Onboarding completed successfully',
       tenantId,
@@ -610,9 +679,9 @@ Generate personalized tasks and focus areas for this business.`;
 
     const allMatches = new Map<string, ConceptMatch>();
     for (const query of queries) {
-      const matches = await this.conceptMatchingService.findRelevantConcepts(
-        query, { limit: 20, threshold: 0.3 },
-      ).catch(() => [] as ConceptMatch[]);
+      const matches = await this.conceptMatchingService
+        .findRelevantConcepts(query, { limit: 20, threshold: 0.3 })
+        .catch(() => [] as ConceptMatch[]);
       for (const m of matches) {
         const existing = allMatches.get(m.conceptId);
         if (!existing || m.score > existing.score) {
@@ -698,7 +767,9 @@ Napiši personalizovanu dobrodošlicu.`;
           { role: 'user', content: welcomeUserPrompt },
         ],
         { tenantId, userId, skipRateLimit: true, skipQuotaCheck: true },
-        (chunk: string) => { welcomeMsg += chunk; },
+        (chunk: string) => {
+          welcomeMsg += chunk;
+        }
       );
     } catch (err) {
       this.logger.warn({
@@ -707,27 +778,33 @@ Napiši personalizovanu dobrodošlicu.`;
       });
       // Fallback to simple template if LLM fails
       const taskList = diversified
-        .map((m, i) => `${i + 1}. **${this.buildActionTitle(m.conceptName)}**${i === 0 ? ' (preporučeno)' : ''}`)
+        .map(
+          (m, i) =>
+            `${i + 1}. **${this.buildActionTitle(m.conceptName)}**${i === 0 ? ' (preporučeno)' : ''}`
+        )
         .join('\n');
       welcomeMsg = `Dobrodošli! Pripremili smo ${diversified.length} zadataka za vaše poslovanje:\n\n${taskList}\n\nOdgovorite "da" da pokrenete sve zadatke.`;
     }
 
     // Create welcome conversation linked to the first matched concept
     const conversation = await this.conversationService.createConversation(
-      tenantId, userId, 'Dobrodošli u Mentor AI',
-      undefined,                    // personaType
-      diversified[0]?.conceptId,    // link to first matched concept for tree display
+      tenantId,
+      userId,
+      'Dobrodošli u Mentor AI',
+      undefined, // personaType
+      diversified[0]?.conceptId // link to first matched concept for tree display
     );
     await this.conversationService.addMessage(
-      tenantId, conversation.id, 'ASSISTANT' as MessageRole, welcomeMsg,
+      tenantId,
+      conversation.id,
+      'ASSISTANT' as MessageRole,
+      welcomeMsg
     );
 
     // Link all onboarding task notes to the welcome conversation
     // so they appear in the notes panel when viewing this conversation
     const conceptIds = diversified.map((m) => m.conceptId);
-    await this.notesService.linkNotesToConversation(
-      conceptIds, conversation.id, userId, tenantId,
-    );
+    await this.notesService.linkNotesToConversation(conceptIds, conversation.id, userId, tenantId);
 
     this.logger.log({
       message: 'Initial plan generated from embeddings',
@@ -745,12 +822,15 @@ Napiši personalizovanu dobrodošlicu.`;
     const lower = conceptName.toLowerCase();
     if (lower.includes('swot')) return 'Izvršite SWOT Analizu';
     if (lower.includes('value proposition')) return 'Definišite Vrednosnu Ponudu';
-    if (lower.includes('marketing plan') || lower.includes('marketing strategy')) return 'Kreirajte Marketing Plan';
+    if (lower.includes('marketing plan') || lower.includes('marketing strategy'))
+      return 'Kreirajte Marketing Plan';
     if (lower.includes('business model')) return 'Mapirajte Poslovni Model';
     if (lower.includes('cash flow')) return 'Analizirajte Novčani Tok';
     if (lower.includes('pricing')) return 'Razvijte Strategiju Cena';
-    if (lower.includes('competitor') || lower.includes('competitive')) return 'Analizirajte Konkurenciju';
-    if (lower.includes('target market') || lower.includes('segmentation')) return 'Definišite Ciljno Tržište';
+    if (lower.includes('competitor') || lower.includes('competitive'))
+      return 'Analizirajte Konkurenciju';
+    if (lower.includes('target market') || lower.includes('segmentation'))
+      return 'Definišite Ciljno Tržište';
     if (lower.includes('financial plan')) return 'Kreirajte Finansijski Plan';
     if (lower.includes('brand')) return 'Razvijte Strategiju Brenda';
     return `Primenite ${conceptName}`;
