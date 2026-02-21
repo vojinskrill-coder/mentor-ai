@@ -190,7 +190,8 @@ export declare enum LlmProviderType {
     OPENROUTER = "OPENROUTER",
     LOCAL_LLAMA = "LOCAL_LLAMA",
     OPENAI = "OPENAI",
-    ANTHROPIC = "ANTHROPIC"
+    ANTHROPIC = "ANTHROPIC",
+    LM_STUDIO = "LM_STUDIO"
 }
 /** Single LLM provider configuration */
 export interface LlmProviderConfig {

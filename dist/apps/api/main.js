@@ -33,17 +33,17 @@ const health_module_1 = __webpack_require__(18);
 const registration_module_1 = __webpack_require__(25);
 const auth_module_1 = __webpack_require__(40);
 const invitation_module_1 = __webpack_require__(59);
-const team_module_1 = __webpack_require__(75);
-const llm_config_module_1 = __webpack_require__(80);
-const ai_gateway_module_1 = __webpack_require__(92);
-const conversation_module_1 = __webpack_require__(108);
-const onboarding_module_1 = __webpack_require__(147);
-const personas_module_1 = __webpack_require__(154);
-const knowledge_module_1 = __webpack_require__(112);
-const memory_module_1 = __webpack_require__(126);
-const qdrant_module_1 = __webpack_require__(157);
-const web_search_module_1 = __webpack_require__(135);
-const admin_module_1 = __webpack_require__(158);
+const team_module_1 = __webpack_require__(122);
+const llm_config_module_1 = __webpack_require__(73);
+const ai_gateway_module_1 = __webpack_require__(86);
+const conversation_module_1 = __webpack_require__(127);
+const onboarding_module_1 = __webpack_require__(152);
+const personas_module_1 = __webpack_require__(159);
+const knowledge_module_1 = __webpack_require__(72);
+const memory_module_1 = __webpack_require__(131);
+const qdrant_module_1 = __webpack_require__(162);
+const web_search_module_1 = __webpack_require__(140);
+const admin_module_1 = __webpack_require__(163);
 // Serve Angular static files in production (combined deploy)
 const staticPath = (0, path_1.join)(__dirname, '..', '..', 'web', 'browser');
 const serveStaticImports = (0, fs_1.existsSync)(staticPath)
@@ -2070,12 +2070,14 @@ const config_1 = __webpack_require__(5);
 const passport_1 = __webpack_require__(41);
 const core_1 = __webpack_require__(2);
 const public_decorator_1 = __webpack_require__(46);
-/** Dev mode mock user for local development (fallback when no real JWT) */
-const DEV_USER = {
+const prisma_1 = __webpack_require__(34);
+/** Static fallback when no active tenant exists yet (fresh DB) */
+const DEV_USER_FALLBACK = {
     userId: 'dev-user-001',
     tenantId: 'dev-tenant-001',
     email: 'dev@mentor-ai.local',
     role: 'PLATFORM_OWNER',
+    department: null,
     permissions: ['*'],
 };
 let JwtAuthGuard = JwtAuthGuard_1 = class JwtAuthGuard extends (0, passport_1.AuthGuard)('jwt') {
@@ -2084,6 +2086,8 @@ let JwtAuthGuard = JwtAuthGuard_1 = class JwtAuthGuard extends (0, passport_1.Au
         this.reflector = reflector;
         this.configService = configService;
         this.logger = new common_1.Logger(JwtAuthGuard_1.name);
+        /** Cached dev user resolved from DB (avoids repeat queries) */
+        this.resolvedDevUser = null;
     }
     async canActivate(context) {
         // Check if route is marked as public
@@ -2113,11 +2117,63 @@ let JwtAuthGuard = JwtAuthGuard_1 = class JwtAuthGuard extends (0, passport_1.Au
                     this.logger.debug('Dev mode: JWT validation failed, using dev user fallback');
                 }
             }
-            // No real token or validation failed - use dev fallback
-            request.user = DEV_USER;
+            // Resolve real tenant/user from DB (cached after first lookup)
+            request.user = await this.getDevUser();
             return true;
         }
         return super.canActivate(context);
+    }
+    /**
+     * Resolves a real active tenant and its owner for dev mode.
+     * Uses a standalone PrismaClient to avoid DI module dependency issues.
+     * Falls back to static IDs if no active tenant exists yet.
+     * Result is cached so DB is only queried once per server start.
+     */
+    async getDevUser() {
+        if (this.resolvedDevUser)
+            return this.resolvedDevUser;
+        const prisma = new prisma_1.PrismaClient();
+        try {
+            const tenant = await prisma.tenant.findFirst({
+                where: { status: 'ACTIVE' },
+                orderBy: { createdAt: 'desc' },
+                select: { id: true },
+            });
+            if (tenant) {
+                const user = await prisma.user.findFirst({
+                    where: { tenantId: tenant.id, isActive: true },
+                    orderBy: { createdAt: 'asc' },
+                    select: { id: true, email: true, role: true, department: true },
+                });
+                if (user) {
+                    this.resolvedDevUser = {
+                        userId: user.id,
+                        tenantId: tenant.id,
+                        email: user.email,
+                        role: 'PLATFORM_OWNER',
+                        department: user.department,
+                        permissions: ['*'],
+                    };
+                    this.logger.log({
+                        message: 'Dev mode: resolved real tenant/user',
+                        tenantId: tenant.id,
+                        userId: user.id,
+                    });
+                    return this.resolvedDevUser;
+                }
+            }
+        }
+        catch (err) {
+            this.logger.warn({
+                message: 'Dev mode: failed to resolve tenant, using fallback',
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+        }
+        finally {
+            await prisma.$disconnect();
+        }
+        this.resolvedDevUser = DEV_USER_FALLBACK;
+        return this.resolvedDevUser;
     }
     handleRequest(err, user, info) {
         if (err || !user) {
@@ -2206,6 +2262,7 @@ let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(pas
             role: payload.role || 'MEMBER',
             email: payload.email,
             auth0Id: payload.sub,
+            department: payload.department ?? null,
         };
     }
 };
@@ -2436,6 +2493,7 @@ let GoogleAuthController = GoogleAuthController_1 = class GoogleAuthController {
                 email: existingUser.email,
                 tenantId: existingUser.tenantId,
                 role: existingUser.role,
+                department: existingUser.department ?? null,
             };
         }
         else {
@@ -2474,6 +2532,7 @@ let GoogleAuthController = GoogleAuthController_1 = class GoogleAuthController {
                 email: normalizedEmail,
                 tenantId,
                 role: prisma_1.UserRole.TENANT_OWNER,
+                department: null,
             };
         }
         // MFA is currently disabled — skip MFA check entirely
@@ -2485,6 +2544,7 @@ let GoogleAuthController = GoogleAuthController_1 = class GoogleAuthController {
             userId: user.userId,
             tenantId: user.tenantId,
             role: user.role,
+            department: user.department,
         }, jwtSecret, { expiresIn: '24h', algorithm: 'HS256' });
         return {
             status: 'success',
@@ -2596,14 +2656,15 @@ const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const email_1 = __webpack_require__(60);
 const tenant_context_1 = __webpack_require__(9);
-const invitation_controller_1 = __webpack_require__(72);
-const invitation_service_1 = __webpack_require__(73);
+const knowledge_module_1 = __webpack_require__(72);
+const invitation_controller_1 = __webpack_require__(119);
+const invitation_service_1 = __webpack_require__(120);
 let InvitationModule = class InvitationModule {
 };
 exports.InvitationModule = InvitationModule;
 exports.InvitationModule = InvitationModule = tslib_1.__decorate([
     (0, common_1.Module)({
-        imports: [config_1.ConfigModule, email_1.EmailModule, tenant_context_1.TenantModule], // TenantModule provides PlatformPrismaService
+        imports: [config_1.ConfigModule, email_1.EmailModule, tenant_context_1.TenantModule, knowledge_module_1.KnowledgeModule],
         controllers: [invitation_controller_1.InvitationController],
         providers: [invitation_service_1.InvitationService],
         exports: [invitation_service_1.InvitationService],
@@ -3704,1092 +3765,73 @@ exports.EmailModule = EmailModule = tslib_1.__decorate([
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
-var _a, _b, _c, _d, _e, _f;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.InvitationController = void 0;
+exports.KnowledgeModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const invitation_service_1 = __webpack_require__(73);
-const create_invitation_dto_1 = __webpack_require__(74);
-const jwt_auth_guard_1 = __webpack_require__(45);
-const roles_guard_1 = __webpack_require__(54);
-const roles_decorator_1 = __webpack_require__(53);
-const current_user_decorator_1 = __webpack_require__(47);
-const jwt_strategy_1 = __webpack_require__(48);
-let InvitationController = class InvitationController {
-    constructor(invitationService) {
-        this.invitationService = invitationService;
-    }
-    async createInvitation(dto, user, correlationId) {
-        const result = await this.invitationService.createInvitation(dto, user.userId, user.tenantId);
-        return {
-            status: 'success',
-            message: 'Invitation sent successfully',
-            data: result,
-            ...(correlationId && { correlationId }),
-        };
-    }
-    async listInvitations(user, correlationId) {
-        const invitations = await this.invitationService.getInvitationsByTenant(user.tenantId);
-        return {
-            status: 'success',
-            data: invitations,
-            ...(correlationId && { correlationId }),
-        };
-    }
-    async validateToken(token, correlationId) {
-        const invitation = await this.invitationService.validateInviteToken(token);
-        return {
-            status: 'success',
-            data: {
-                id: invitation.id,
-                email: invitation.email,
-                department: invitation.department,
-                role: invitation.role,
-                tenantName: invitation.tenant.name,
-                expiresAt: invitation.expiresAt,
-            },
-            ...(correlationId && { correlationId }),
-        };
-    }
-    async acceptInvitation(token, user, correlationId) {
-        const result = await this.invitationService.acceptInvitation(token, user.userId, user.email);
-        return {
-            status: 'success',
-            message: 'Invitation accepted. Welcome to the team!',
-            data: result,
-            ...(correlationId && { correlationId }),
-        };
-    }
-    async revokeInvitation(invitationId, user, correlationId) {
-        await this.invitationService.revokeInvitation(invitationId, user.tenantId);
-        return {
-            status: 'success',
-            message: 'Invitation revoked',
-            ...(correlationId && { correlationId }),
-        };
-    }
+const tenant_context_1 = __webpack_require__(9);
+const auth_module_1 = __webpack_require__(40);
+const llm_config_module_1 = __webpack_require__(73);
+const ai_gateway_module_1 = __webpack_require__(86);
+const knowledge_controller_1 = __webpack_require__(102);
+const concept_service_1 = __webpack_require__(103);
+const concept_seed_service_1 = __webpack_require__(107);
+const concept_matching_service_1 = __webpack_require__(108);
+const citation_injector_service_1 = __webpack_require__(112);
+const citation_service_1 = __webpack_require__(105);
+const embedding_service_1 = __webpack_require__(109);
+const curriculum_service_1 = __webpack_require__(106);
+const concept_extraction_service_1 = __webpack_require__(113);
+const brain_seeding_service_1 = __webpack_require__(115);
+const business_context_service_1 = __webpack_require__(117);
+const department_guard_1 = __webpack_require__(118);
+/**
+ * Module for business concepts knowledge base.
+ * Provides services for querying, seeding, and citing concepts.
+ *
+ * Story 2.6: Added citation services for concept matching and injection.
+ * Story 2.13: Added AiGatewayModule for dynamic relationship creation.
+ * Story 3.2: Added BrainSeedingService + BusinessContextService.
+ */
+let KnowledgeModule = class KnowledgeModule {
 };
-exports.InvitationController = InvitationController;
-tslib_1.__decorate([
-    (0, common_1.Post)(),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
-    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
-    tslib_1.__param(0, (0, common_1.Body)()),
-    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(2, (0, common_1.Headers)('x-correlation-id')),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_b = typeof create_invitation_dto_1.CreateInvitationDto !== "undefined" && create_invitation_dto_1.CreateInvitationDto) === "function" ? _b : Object, typeof (_c = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _c : Object, String]),
-    tslib_1.__metadata("design:returntype", Promise)
-], InvitationController.prototype, "createInvitation", null);
-tslib_1.__decorate([
-    (0, common_1.Get)(),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('TENANT_OWNER', 'ADMIN'),
-    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(1, (0, common_1.Headers)('x-correlation-id')),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_d = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _d : Object, String]),
-    tslib_1.__metadata("design:returntype", Promise)
-], InvitationController.prototype, "listInvitations", null);
-tslib_1.__decorate([
-    (0, common_1.Get)('validate/:token'),
-    tslib_1.__param(0, (0, common_1.Param)('token')),
-    tslib_1.__param(1, (0, common_1.Headers)('x-correlation-id')),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [String, String]),
-    tslib_1.__metadata("design:returntype", Promise)
-], InvitationController.prototype, "validateToken", null);
-tslib_1.__decorate([
-    (0, common_1.Post)('accept/:token'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
-    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
-    tslib_1.__param(0, (0, common_1.Param)('token')),
-    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(2, (0, common_1.Headers)('x-correlation-id')),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [String, typeof (_e = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _e : Object, String]),
-    tslib_1.__metadata("design:returntype", Promise)
-], InvitationController.prototype, "acceptInvitation", null);
-tslib_1.__decorate([
-    (0, common_1.Post)(':id/revoke'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
-    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
-    tslib_1.__param(0, (0, common_1.Param)('id')),
-    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(2, (0, common_1.Headers)('x-correlation-id')),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [String, typeof (_f = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _f : Object, String]),
-    tslib_1.__metadata("design:returntype", Promise)
-], InvitationController.prototype, "revokeInvitation", null);
-exports.InvitationController = InvitationController = tslib_1.__decorate([
-    (0, common_1.Controller)('invitations'),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof invitation_service_1.InvitationService !== "undefined" && invitation_service_1.InvitationService) === "function" ? _a : Object])
-], InvitationController);
+exports.KnowledgeModule = KnowledgeModule;
+exports.KnowledgeModule = KnowledgeModule = tslib_1.__decorate([
+    (0, common_1.Module)({
+        imports: [tenant_context_1.TenantModule, auth_module_1.AuthModule, llm_config_module_1.LlmConfigModule, ai_gateway_module_1.AiGatewayModule],
+        controllers: [knowledge_controller_1.KnowledgeController],
+        providers: [
+            concept_service_1.ConceptService,
+            concept_seed_service_1.ConceptSeedService,
+            concept_matching_service_1.ConceptMatchingService,
+            citation_injector_service_1.CitationInjectorService,
+            citation_service_1.CitationService,
+            embedding_service_1.EmbeddingService,
+            curriculum_service_1.CurriculumService,
+            concept_extraction_service_1.ConceptExtractionService,
+            brain_seeding_service_1.BrainSeedingService,
+            business_context_service_1.BusinessContextService,
+            department_guard_1.DepartmentGuard,
+        ],
+        exports: [
+            concept_service_1.ConceptService,
+            concept_seed_service_1.ConceptSeedService,
+            concept_matching_service_1.ConceptMatchingService,
+            citation_injector_service_1.CitationInjectorService,
+            citation_service_1.CitationService,
+            embedding_service_1.EmbeddingService,
+            curriculum_service_1.CurriculumService,
+            concept_extraction_service_1.ConceptExtractionService,
+            brain_seeding_service_1.BrainSeedingService,
+            business_context_service_1.BusinessContextService,
+            department_guard_1.DepartmentGuard,
+        ],
+    })
+], KnowledgeModule);
 
 
 /***/ }),
 /* 73 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var InvitationService_1;
-var _a, _b, _c;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.InvitationService = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const config_1 = __webpack_require__(5);
-const tenant_context_1 = __webpack_require__(9);
-const utils_1 = __webpack_require__(29);
-const prisma_1 = __webpack_require__(34);
-const email_1 = __webpack_require__(60);
-let InvitationService = InvitationService_1 = class InvitationService {
-    constructor(prisma, emailService, configService) {
-        this.prisma = prisma;
-        this.emailService = emailService;
-        this.configService = configService;
-        this.logger = new common_1.Logger(InvitationService_1.name);
-        this.maxTeamMembers = this.configService.get('MAX_TEAM_MEMBERS', 5);
-        this.appUrl = this.configService.get('FRONTEND_URL', 'http://localhost:4200');
-    }
-    async checkUserLimit(tenantId) {
-        const [activeUsers, pendingInvitations] = await Promise.all([
-            this.prisma.user.count({ where: { tenantId } }),
-            this.prisma.invitation.count({
-                where: {
-                    tenantId,
-                    status: prisma_1.InvitationStatus.PENDING,
-                    expiresAt: { gt: new Date() },
-                },
-            }),
-        ]);
-        const currentCount = activeUsers + pendingInvitations;
-        return {
-            allowed: currentCount < this.maxTeamMembers,
-            currentCount,
-            limit: this.maxTeamMembers,
-        };
-    }
-    async createInvitation(dto, inviterId, tenantId) {
-        const normalizedEmail = dto.email.toLowerCase();
-        // Check user limit
-        const limitCheck = await this.checkUserLimit(tenantId);
-        if (!limitCheck.allowed) {
-            throw new common_1.ForbiddenException({
-                type: 'user_limit_reached',
-                title: 'User Limit Reached',
-                status: 403,
-                detail: 'User limit reached. Upgrade your plan to add more team members.',
-                currentCount: limitCheck.currentCount,
-                limit: limitCheck.limit,
-            });
-        }
-        // Check for duplicate pending invitation
-        const existingInvitation = await this.prisma.invitation.findFirst({
-            where: {
-                email: normalizedEmail,
-                tenantId,
-                status: prisma_1.InvitationStatus.PENDING,
-                expiresAt: { gt: new Date() },
-            },
-        });
-        if (existingInvitation) {
-            throw new common_1.ConflictException({
-                type: 'duplicate_invitation',
-                title: 'Duplicate Invitation',
-                status: 409,
-                detail: 'A pending invitation already exists for this email address in your workspace.',
-            });
-        }
-        // Check if email is already a member of the tenant
-        const existingMember = await this.prisma.user.findFirst({
-            where: { email: normalizedEmail, tenantId },
-        });
-        if (existingMember) {
-            throw new common_1.ConflictException({
-                type: 'already_member',
-                title: 'Already a Member',
-                status: 409,
-                detail: 'This user is already a member of your workspace.',
-            });
-        }
-        const invitationId = (0, utils_1.generateInvitationId)();
-        const token = (0, utils_1.generateInviteToken)();
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 7);
-        const invitation = await this.prisma.invitation.create({
-            data: {
-                id: invitationId,
-                email: normalizedEmail,
-                department: dto.department,
-                status: prisma_1.InvitationStatus.PENDING,
-                token,
-                expiresAt,
-                tenantId,
-                invitedById: inviterId,
-            },
-        });
-        // Send invitation email
-        const inviter = await this.prisma.user.findUnique({
-            where: { id: inviterId },
-            select: { name: true, email: true },
-        });
-        const tenant = await this.prisma.tenant.findUnique({
-            where: { id: tenantId },
-            select: { name: true },
-        });
-        const inviteLink = `${this.appUrl}/invite/${token}`;
-        const emailResult = await this.emailService.sendInvitationEmail({
-            to: normalizedEmail,
-            inviterName: inviter?.name ?? inviter?.email ?? 'A team member',
-            tenantName: tenant?.name ?? 'Your workspace',
-            inviteLink,
-            department: dto.department,
-        });
-        if (!emailResult.success) {
-            this.logger.warn(`Failed to send invitation email to ${normalizedEmail} for tenant ${tenantId}`);
-        }
-        return {
-            id: invitation.id,
-            email: invitation.email,
-            department: invitation.department,
-            status: invitation.status,
-            token: invitation.token,
-            expiresAt: invitation.expiresAt,
-            tenantId: invitation.tenantId,
-            invitedById: invitation.invitedById,
-            createdAt: invitation.createdAt,
-        };
-    }
-    async getInvitationsByTenant(tenantId) {
-        return this.prisma.invitation.findMany({
-            where: { tenantId },
-            include: {
-                tenant: { select: { name: true } },
-                invitedBy: { select: { email: true, name: true } },
-            },
-            orderBy: { createdAt: 'desc' },
-        });
-    }
-    async getPendingInvitations(tenantId) {
-        const now = new Date();
-        // Auto-expire stale invitations
-        await this.prisma.invitation.updateMany({
-            where: {
-                tenantId,
-                status: prisma_1.InvitationStatus.PENDING,
-                expiresAt: { lt: now },
-            },
-            data: { status: prisma_1.InvitationStatus.EXPIRED },
-        });
-        return this.prisma.invitation.findMany({
-            where: {
-                tenantId,
-                status: prisma_1.InvitationStatus.PENDING,
-                expiresAt: { gt: now },
-            },
-            include: {
-                tenant: { select: { name: true } },
-                invitedBy: { select: { email: true, name: true } },
-            },
-            orderBy: { createdAt: 'desc' },
-        });
-    }
-    async validateInviteToken(token) {
-        const invitation = await this.prisma.invitation.findUnique({
-            where: { token },
-            include: {
-                tenant: { select: { name: true } },
-                invitedBy: { select: { email: true, name: true } },
-            },
-        });
-        if (!invitation) {
-            throw new common_1.NotFoundException({
-                type: 'invitation_not_found',
-                title: 'Invitation Not Found',
-                status: 404,
-                detail: 'This invitation link is invalid.',
-            });
-        }
-        if (invitation.status === prisma_1.InvitationStatus.REVOKED) {
-            throw new common_1.GoneException({
-                type: 'invitation_revoked',
-                title: 'Invitation Revoked',
-                status: 410,
-                detail: 'This invitation has been revoked. Please request a new invite.',
-            });
-        }
-        if (invitation.status === prisma_1.InvitationStatus.EXPIRED ||
-            invitation.expiresAt < new Date()) {
-            // Auto-update status if expired
-            if (invitation.status === prisma_1.InvitationStatus.PENDING) {
-                await this.prisma.invitation.update({
-                    where: { id: invitation.id },
-                    data: { status: prisma_1.InvitationStatus.EXPIRED },
-                });
-            }
-            throw new common_1.GoneException({
-                type: 'invitation_expired',
-                title: 'Invitation Expired',
-                status: 410,
-                detail: 'This invitation has expired. Please request a new invite.',
-            });
-        }
-        if (invitation.status === prisma_1.InvitationStatus.ACCEPTED) {
-            throw new common_1.ConflictException({
-                type: 'invitation_already_accepted',
-                title: 'Already Accepted',
-                status: 409,
-                detail: 'This invitation has already been accepted.',
-            });
-        }
-        return invitation;
-    }
-    async acceptInvitation(token, userId, userEmail) {
-        const invitation = await this.validateInviteToken(token);
-        // Use transaction for atomicity
-        return this.prisma.$transaction(async (tx) => {
-            // Check if user already belongs to this tenant
-            const existingUser = await tx.user.findFirst({
-                where: { email: userEmail.toLowerCase(), tenantId: invitation.tenantId },
-            });
-            if (existingUser) {
-                // User already a member, just mark invitation accepted
-                await tx.invitation.update({
-                    where: { id: invitation.id },
-                    data: {
-                        status: prisma_1.InvitationStatus.ACCEPTED,
-                        acceptedByUserId: existingUser.id,
-                    },
-                });
-                return {
-                    tenantId: invitation.tenantId,
-                    role: existingUser.role,
-                    department: invitation.department,
-                };
-            }
-            // Add user to the invited tenant
-            await tx.user.update({
-                where: { id: userId },
-                data: {
-                    tenantId: invitation.tenantId,
-                    role: invitation.role,
-                },
-            });
-            await tx.invitation.update({
-                where: { id: invitation.id },
-                data: {
-                    status: prisma_1.InvitationStatus.ACCEPTED,
-                    acceptedByUserId: userId,
-                },
-            });
-            return {
-                tenantId: invitation.tenantId,
-                role: invitation.role,
-                department: invitation.department,
-            };
-        });
-    }
-    async revokeInvitation(invitationId, tenantId) {
-        const invitation = await this.prisma.invitation.findUnique({
-            where: { id: invitationId },
-        });
-        if (!invitation) {
-            throw new common_1.NotFoundException({
-                type: 'invitation_not_found',
-                title: 'Invitation Not Found',
-                status: 404,
-                detail: 'The specified invitation was not found.',
-            });
-        }
-        if (invitation.tenantId !== tenantId) {
-            throw new common_1.ForbiddenException({
-                type: 'invitation_access_denied',
-                title: 'Access Denied',
-                status: 403,
-                detail: 'You do not have permission to revoke this invitation.',
-            });
-        }
-        if (invitation.status !== prisma_1.InvitationStatus.PENDING) {
-            throw new common_1.ConflictException({
-                type: 'invitation_not_pending',
-                title: 'Cannot Revoke',
-                status: 409,
-                detail: `Cannot revoke invitation with status: ${invitation.status}`,
-            });
-        }
-        await this.prisma.invitation.update({
-            where: { id: invitationId },
-            data: { status: prisma_1.InvitationStatus.REVOKED },
-        });
-    }
-};
-exports.InvitationService = InvitationService;
-exports.InvitationService = InvitationService = InvitationService_1 = tslib_1.__decorate([
-    (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof email_1.EmailService !== "undefined" && email_1.EmailService) === "function" ? _b : Object, typeof (_c = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _c : Object])
-], InvitationService);
-
-
-/***/ }),
-/* 74 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var _a;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.CreateInvitationDto = void 0;
-const tslib_1 = __webpack_require__(4);
-const class_validator_1 = __webpack_require__(37);
-const prisma_1 = __webpack_require__(34);
-class CreateInvitationDto {
-}
-exports.CreateInvitationDto = CreateInvitationDto;
-tslib_1.__decorate([
-    (0, class_validator_1.IsEmail)({}, { message: 'Please provide a valid email address' }),
-    tslib_1.__metadata("design:type", String)
-], CreateInvitationDto.prototype, "email", void 0);
-tslib_1.__decorate([
-    (0, class_validator_1.IsEnum)(prisma_1.Department, { message: 'Department must be one of: FINANCE, MARKETING, TECHNOLOGY, OPERATIONS, LEGAL, CREATIVE' }),
-    tslib_1.__metadata("design:type", typeof (_a = typeof prisma_1.Department !== "undefined" && prisma_1.Department) === "function" ? _a : Object)
-], CreateInvitationDto.prototype, "department", void 0);
-
-
-/***/ }),
-/* 75 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.TeamModule = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const config_1 = __webpack_require__(5);
-const email_1 = __webpack_require__(60);
-const tenant_context_1 = __webpack_require__(9);
-const auth_module_1 = __webpack_require__(40);
-const team_controller_1 = __webpack_require__(76);
-const team_service_1 = __webpack_require__(77);
-let TeamModule = class TeamModule {
-};
-exports.TeamModule = TeamModule;
-exports.TeamModule = TeamModule = tslib_1.__decorate([
-    (0, common_1.Module)({
-        imports: [config_1.ConfigModule, email_1.EmailModule, auth_module_1.AuthModule, tenant_context_1.TenantModule], // TenantModule provides PlatformPrismaService
-        controllers: [team_controller_1.TeamController],
-        providers: [team_service_1.TeamService],
-        exports: [team_service_1.TeamService],
-    })
-], TeamModule);
-
-
-/***/ }),
-/* 76 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.TeamController = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const team_service_1 = __webpack_require__(77);
-const remove_member_dto_1 = __webpack_require__(78);
-const designate_backup_owner_dto_1 = __webpack_require__(79);
-const jwt_auth_guard_1 = __webpack_require__(45);
-const roles_guard_1 = __webpack_require__(54);
-const mfa_required_guard_1 = __webpack_require__(58);
-const roles_decorator_1 = __webpack_require__(53);
-const current_user_decorator_1 = __webpack_require__(47);
-const jwt_strategy_1 = __webpack_require__(48);
-let TeamController = class TeamController {
-    constructor(teamService) {
-        this.teamService = teamService;
-    }
-    async getMembers(user, correlationId) {
-        const members = await this.teamService.getTeamMembers(user.tenantId);
-        return {
-            status: 'success',
-            data: members,
-            ...(correlationId && { correlationId }),
-        };
-    }
-    async removeMember(memberId, dto, user, correlationId) {
-        await this.teamService.removeMember(memberId, user.tenantId, user.userId, dto.strategy);
-        return {
-            status: 'success',
-            data: null,
-            message: 'Member removed',
-            ...(correlationId && { correlationId }),
-        };
-    }
-    async getBackupOwner(user, correlationId) {
-        const backupOwner = await this.teamService.getBackupOwner(user.tenantId);
-        return {
-            status: 'success',
-            data: backupOwner,
-            ...(correlationId && { correlationId }),
-        };
-    }
-    async getEligibleBackupOwners(user, correlationId) {
-        const eligible = await this.teamService.getEligibleBackupOwners(user.tenantId);
-        return {
-            status: 'success',
-            data: eligible,
-            ...(correlationId && { correlationId }),
-        };
-    }
-    async designateBackupOwner(dto, user, correlationId) {
-        const result = await this.teamService.designateBackupOwner(user.tenantId, dto.backupOwnerId, user.userId);
-        return {
-            status: 'success',
-            data: result,
-            message: 'Backup owner designated',
-            ...(correlationId && { correlationId }),
-        };
-    }
-    async removeBackupDesignation(user, correlationId) {
-        await this.teamService.removeBackupDesignation(user.tenantId);
-        return {
-            status: 'success',
-            data: null,
-            message: 'Backup owner removed',
-            ...(correlationId && { correlationId }),
-        };
-    }
-    async initiateRecovery(user, req, correlationId) {
-        const ipAddress = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-            req.ip ||
-            'unknown';
-        const result = await this.teamService.initiateRecovery(user.tenantId, user.userId, ipAddress);
-        return {
-            status: 'success',
-            data: { recoveredUserId: result.recoveredUserId },
-            message: result.message,
-            ...(correlationId && { correlationId }),
-        };
-    }
-    async getBackupOwnerStatus(user, correlationId) {
-        const status = await this.teamService.getBackupOwnerStatus(user.tenantId);
-        return {
-            status: 'success',
-            data: status,
-            ...(correlationId && { correlationId }),
-        };
-    }
-};
-exports.TeamController = TeamController;
-tslib_1.__decorate([
-    (0, common_1.Get)('members'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('TENANT_OWNER', 'ADMIN'),
-    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(1, (0, common_1.Headers)('x-correlation-id')),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_b = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _b : Object, String]),
-    tslib_1.__metadata("design:returntype", Promise)
-], TeamController.prototype, "getMembers", null);
-tslib_1.__decorate([
-    (0, common_1.Post)('members/:id/remove'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
-    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
-    tslib_1.__param(0, (0, common_1.Param)('id')),
-    tslib_1.__param(1, (0, common_1.Body)()),
-    tslib_1.__param(2, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(3, (0, common_1.Headers)('x-correlation-id')),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [String, typeof (_c = typeof remove_member_dto_1.RemoveMemberDto !== "undefined" && remove_member_dto_1.RemoveMemberDto) === "function" ? _c : Object, typeof (_d = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _d : Object, String]),
-    tslib_1.__metadata("design:returntype", Promise)
-], TeamController.prototype, "removeMember", null);
-tslib_1.__decorate([
-    (0, common_1.Get)('backup-owner'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
-    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(1, (0, common_1.Headers)('x-correlation-id')),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_e = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _e : Object, String]),
-    tslib_1.__metadata("design:returntype", Promise)
-], TeamController.prototype, "getBackupOwner", null);
-tslib_1.__decorate([
-    (0, common_1.Get)('backup-owner/eligible'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
-    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(1, (0, common_1.Headers)('x-correlation-id')),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_f = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _f : Object, String]),
-    tslib_1.__metadata("design:returntype", Promise)
-], TeamController.prototype, "getEligibleBackupOwners", null);
-tslib_1.__decorate([
-    (0, common_1.Post)('backup-owner'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
-    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
-    tslib_1.__param(0, (0, common_1.Body)()),
-    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(2, (0, common_1.Headers)('x-correlation-id')),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_g = typeof designate_backup_owner_dto_1.DesignateBackupOwnerDto !== "undefined" && designate_backup_owner_dto_1.DesignateBackupOwnerDto) === "function" ? _g : Object, typeof (_h = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _h : Object, String]),
-    tslib_1.__metadata("design:returntype", Promise)
-], TeamController.prototype, "designateBackupOwner", null);
-tslib_1.__decorate([
-    (0, common_1.Delete)('backup-owner'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
-    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
-    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(1, (0, common_1.Headers)('x-correlation-id')),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_j = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _j : Object, String]),
-    tslib_1.__metadata("design:returntype", Promise)
-], TeamController.prototype, "removeBackupDesignation", null);
-tslib_1.__decorate([
-    (0, common_1.Post)('backup-owner/recovery'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, mfa_required_guard_1.MfaRequiredGuard),
-    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
-    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(1, (0, common_1.Req)()),
-    tslib_1.__param(2, (0, common_1.Headers)('x-correlation-id')),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_k = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _k : Object, Object, String]),
-    tslib_1.__metadata("design:returntype", Promise)
-], TeamController.prototype, "initiateRecovery", null);
-tslib_1.__decorate([
-    (0, common_1.Get)('backup-owner/status'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('TENANT_OWNER', 'ADMIN'),
-    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(1, (0, common_1.Headers)('x-correlation-id')),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_l = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _l : Object, String]),
-    tslib_1.__metadata("design:returntype", Promise)
-], TeamController.prototype, "getBackupOwnerStatus", null);
-exports.TeamController = TeamController = tslib_1.__decorate([
-    (0, common_1.Controller)('team'),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof team_service_1.TeamService !== "undefined" && team_service_1.TeamService) === "function" ? _a : Object])
-], TeamController);
-
-
-/***/ }),
-/* 77 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var TeamService_1;
-var _a, _b;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.TeamService = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const tenant_context_1 = __webpack_require__(9);
-const email_1 = __webpack_require__(60);
-let TeamService = TeamService_1 = class TeamService {
-    constructor(prisma, emailService) {
-        this.prisma = prisma;
-        this.emailService = emailService;
-        this.logger = new common_1.Logger(TeamService_1.name);
-    }
-    async getTeamMembers(tenantId) {
-        const users = await this.prisma.user.findMany({
-            where: { tenantId, isActive: true },
-            select: {
-                id: true,
-                email: true,
-                name: true,
-                role: true,
-                createdAt: true,
-                invitationAccepted: {
-                    select: { department: true },
-                },
-            },
-            orderBy: { createdAt: 'asc' },
-        });
-        return users.map((user) => ({
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: user.role,
-            department: user.invitationAccepted?.department ?? null,
-            createdAt: user.createdAt,
-        }));
-    }
-    async getMemberById(memberId, tenantId) {
-        const user = await this.prisma.user.findFirst({
-            where: { id: memberId, tenantId, isActive: true },
-            select: {
-                id: true,
-                email: true,
-                name: true,
-                role: true,
-                createdAt: true,
-                invitationAccepted: {
-                    select: { department: true },
-                },
-            },
-        });
-        if (!user) {
-            throw new common_1.NotFoundException({
-                type: 'member_not_found',
-                title: 'Member Not Found',
-                status: 404,
-                detail: 'The specified team member was not found.',
-            });
-        }
-        return {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: user.role,
-            department: user.invitationAccepted?.department ?? null,
-            createdAt: user.createdAt,
-        };
-    }
-    async removeMember(memberId, tenantId, ownerId, strategy) {
-        // Verify member exists and belongs to tenant
-        const member = await this.prisma.user.findFirst({
-            where: { id: memberId, tenantId, isActive: true },
-            select: { id: true, email: true, name: true, role: true },
-        });
-        if (!member) {
-            throw new common_1.NotFoundException({
-                type: 'member_not_found',
-                title: 'Member Not Found',
-                status: 404,
-                detail: 'The specified team member was not found.',
-            });
-        }
-        // Self-removal prevention (AC4)
-        if (memberId === ownerId) {
-            // Check if this is the only owner
-            const ownerCount = await this.prisma.user.count({
-                where: {
-                    tenantId,
-                    role: 'TENANT_OWNER',
-                    isActive: true,
-                },
-            });
-            if (ownerCount <= 1) {
-                throw new common_1.ForbiddenException({
-                    type: 'self_removal_denied',
-                    title: 'Cannot Remove Yourself',
-                    status: 403,
-                    detail: 'You cannot remove yourself. Designate a backup Owner first.',
-                });
-            }
-        }
-        // Soft delete in a transaction
-        await this.prisma.$transaction(async (tx) => {
-            await tx.user.update({
-                where: { id: memberId },
-                data: {
-                    isActive: false,
-                    removedAt: new Date(),
-                    removedById: ownerId,
-                    removalReason: strategy,
-                },
-            });
-            // Future: reassign notes/conversations when those models exist
-        });
-        // Send removal notification email AFTER transaction commits (per dev notes)
-        const owner = await this.prisma.user.findUnique({
-            where: { id: ownerId },
-            select: { email: true },
-        });
-        const tenant = await this.prisma.tenant.findUnique({
-            where: { id: tenantId },
-            select: { name: true },
-        });
-        const emailResult = await this.emailService.sendRemovalNotificationEmail({
-            to: member.email,
-            memberName: member.name ?? '',
-            tenantName: tenant?.name ?? 'Your workspace',
-            strategy,
-            contactEmail: owner?.email,
-        });
-        if (!emailResult.success) {
-            this.logger.warn(`Failed to send removal notification to ${member.email} for tenant ${tenantId}`);
-        }
-        this.logger.log(`Member ${memberId} removed from tenant ${tenantId} by ${ownerId} with strategy ${strategy}`);
-        return { removedUserId: memberId, strategy };
-    }
-    async getBackupOwner(tenantId) {
-        const tenant = await this.prisma.tenant.findUnique({
-            where: { id: tenantId },
-            include: {
-                backupOwner: {
-                    select: {
-                        id: true,
-                        email: true,
-                        name: true,
-                        isActive: true,
-                    },
-                },
-            },
-        });
-        if (!tenant?.backupOwner ||
-            !tenant.backupOwner.isActive ||
-            !tenant.backupOwnerDesignatedAt) {
-            return null;
-        }
-        return {
-            id: tenant.backupOwner.id,
-            email: tenant.backupOwner.email,
-            name: tenant.backupOwner.name,
-            designatedAt: tenant.backupOwnerDesignatedAt.toISOString(),
-        };
-    }
-    async getEligibleBackupOwners(tenantId) {
-        const tenant = await this.prisma.tenant.findUnique({
-            where: { id: tenantId },
-            select: { backupOwnerId: true },
-        });
-        const users = await this.prisma.user.findMany({
-            where: {
-                tenantId,
-                isActive: true,
-                role: { not: 'TENANT_OWNER' },
-                ...(tenant?.backupOwnerId
-                    ? { id: { not: tenant.backupOwnerId } }
-                    : {}),
-            },
-            select: {
-                id: true,
-                email: true,
-                name: true,
-                role: true,
-                createdAt: true,
-                invitationAccepted: {
-                    select: { department: true },
-                },
-            },
-            orderBy: { name: 'asc' },
-        });
-        return users.map((user) => ({
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: user.role,
-            department: user.invitationAccepted?.department ?? null,
-            createdAt: user.createdAt,
-        }));
-    }
-    async designateBackupOwner(tenantId, backupOwnerId, designatedById) {
-        const now = new Date();
-        // Validate and designate in a transaction to prevent TOCTOU race
-        const candidate = await this.prisma.$transaction(async (tx) => {
-            // Verify candidate exists, is active, belongs to tenant
-            const user = await tx.user.findFirst({
-                where: { id: backupOwnerId, tenantId, isActive: true },
-                select: { id: true, email: true, name: true, role: true },
-            });
-            if (!user) {
-                throw new common_1.NotFoundException({
-                    type: 'member_not_found',
-                    title: 'Member Not Found',
-                    status: 404,
-                    detail: 'The specified team member was not found or is inactive.',
-                });
-            }
-            // Prevent TENANT_OWNER from being backup owner
-            if (user.role === 'TENANT_OWNER') {
-                throw new common_1.BadRequestException({
-                    type: 'invalid_backup_candidate',
-                    title: 'Invalid Backup Owner Candidate',
-                    status: 400,
-                    detail: 'A Tenant Owner cannot be designated as backup owner. Choose an Admin or Member.',
-                });
-            }
-            // Update tenant with backup owner
-            await tx.tenant.update({
-                where: { id: tenantId },
-                data: {
-                    backupOwnerId: user.id,
-                    backupOwnerDesignatedAt: now,
-                },
-            });
-            return user;
-        });
-        // Send email notification AFTER transaction commits
-        const designator = await this.prisma.user.findUnique({
-            where: { id: designatedById },
-            select: { name: true, email: true },
-        });
-        const tenant = await this.prisma.tenant.findUnique({
-            where: { id: tenantId },
-            select: { name: true },
-        });
-        const emailResult = await this.emailService.sendBackupOwnerDesignationEmail({
-            to: candidate.email,
-            tenantName: tenant?.name ?? 'Your workspace',
-            designatedBy: designator?.name ?? designator?.email ?? 'Workspace Owner',
-            designatedName: candidate.name ?? '',
-        });
-        if (!emailResult.success) {
-            this.logger.warn(`Failed to send backup owner designation email to ${candidate.email} for tenant ${tenantId}`);
-        }
-        this.logger.log(`Backup owner designated: ${candidate.id} for tenant ${tenantId} by ${designatedById}`);
-        return {
-            id: candidate.id,
-            email: candidate.email,
-            name: candidate.name,
-            designatedAt: now.toISOString(),
-        };
-    }
-    async removeBackupDesignation(tenantId) {
-        await this.prisma.tenant.update({
-            where: { id: tenantId },
-            data: {
-                backupOwnerId: null,
-                backupOwnerDesignatedAt: null,
-            },
-        });
-        this.logger.log(`Backup owner designation removed for tenant ${tenantId}`);
-    }
-    async initiateRecovery(tenantId, backupOwnerId, ipAddress) {
-        // Verify caller IS the designated backup owner AND is still active
-        const tenant = await this.prisma.tenant.findUnique({
-            where: { id: tenantId },
-            select: {
-                backupOwnerId: true,
-                name: true,
-                backupOwner: {
-                    select: { isActive: true },
-                },
-            },
-        });
-        if (!tenant ||
-            tenant.backupOwnerId !== backupOwnerId ||
-            !tenant.backupOwner?.isActive) {
-            throw new common_1.ForbiddenException({
-                type: 'not_backup_owner',
-                title: 'Not Authorized',
-                status: 403,
-                detail: 'You are not the designated backup owner for this workspace.',
-            });
-        }
-        // Find the primary owner
-        const primaryOwner = await this.prisma.user.findFirst({
-            where: { tenantId, role: 'TENANT_OWNER', isActive: true },
-            select: { id: true, email: true, name: true },
-        });
-        if (!primaryOwner) {
-            throw new common_1.NotFoundException({
-                type: 'owner_not_found',
-                title: 'Owner Not Found',
-                status: 404,
-                detail: 'Could not find the primary owner for this workspace.',
-            });
-        }
-        // Reset primary owner's 2FA
-        await this.prisma.user.update({
-            where: { id: primaryOwner.id },
-            data: {
-                mfaEnabled: false,
-                mfaSecret: null,
-                failedLoginAttempts: 0,
-                lockoutUntil: null,
-            },
-        });
-        // Send recovery notification email AFTER DB update
-        const backupOwner = await this.prisma.user.findUnique({
-            where: { id: backupOwnerId },
-            select: { name: true },
-        });
-        const emailResult = await this.emailService.sendRecoveryNotificationEmail({
-            to: primaryOwner.email,
-            ownerName: primaryOwner.name ?? '',
-            tenantName: tenant.name ?? 'Your workspace',
-            backupOwnerName: backupOwner?.name ?? 'Backup Owner',
-            recoveryTimestamp: new Date(),
-            ipAddress,
-        });
-        if (!emailResult.success) {
-            this.logger.warn(`Failed to send recovery notification to ${primaryOwner.email} for tenant ${tenantId}`);
-        }
-        this.logger.log(`Recovery initiated for tenant ${tenantId} by backup owner ${backupOwnerId} from IP ${ipAddress}`);
-        return {
-            recoveredUserId: primaryOwner.id,
-            message: 'Recovery completed. Primary owner 2FA has been reset.',
-        };
-    }
-    async getBackupOwnerStatus(tenantId) {
-        const tenant = await this.prisma.tenant.findUnique({
-            where: { id: tenantId },
-            select: {
-                createdAt: true,
-                backupOwnerId: true,
-                backupOwner: {
-                    select: { isActive: true },
-                },
-            },
-        });
-        if (!tenant) {
-            throw new common_1.NotFoundException({
-                type: 'tenant_not_found',
-                title: 'Tenant Not Found',
-                status: 404,
-                detail: 'The specified tenant was not found.',
-            });
-        }
-        const hasBackupOwner = !!tenant.backupOwnerId && !!tenant.backupOwner?.isActive;
-        const tenantAgeDays = Math.floor((Date.now() - tenant.createdAt.getTime()) / (1000 * 60 * 60 * 24));
-        const showWarning = !hasBackupOwner && tenantAgeDays >= 30;
-        return { hasBackupOwner, tenantAgeDays, showWarning };
-    }
-};
-exports.TeamService = TeamService;
-exports.TeamService = TeamService = TeamService_1 = tslib_1.__decorate([
-    (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof email_1.EmailService !== "undefined" && email_1.EmailService) === "function" ? _b : Object])
-], TeamService);
-
-
-/***/ }),
-/* 78 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.RemoveMemberDto = void 0;
-const tslib_1 = __webpack_require__(4);
-const class_validator_1 = __webpack_require__(37);
-class RemoveMemberDto {
-}
-exports.RemoveMemberDto = RemoveMemberDto;
-tslib_1.__decorate([
-    (0, class_validator_1.IsIn)(['REASSIGN', 'ARCHIVE'], {
-        message: 'Strategy must be one of: REASSIGN, ARCHIVE',
-    }),
-    tslib_1.__metadata("design:type", String)
-], RemoveMemberDto.prototype, "strategy", void 0);
-
-
-/***/ }),
-/* 79 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.DesignateBackupOwnerDto = void 0;
-const tslib_1 = __webpack_require__(4);
-const class_validator_1 = __webpack_require__(37);
-class DesignateBackupOwnerDto {
-}
-exports.DesignateBackupOwnerDto = DesignateBackupOwnerDto;
-tslib_1.__decorate([
-    (0, class_validator_1.IsString)({ message: 'backupOwnerId must be a string' }),
-    (0, class_validator_1.IsNotEmpty)({ message: 'backupOwnerId is required' }),
-    tslib_1.__metadata("design:type", String)
-], DesignateBackupOwnerDto.prototype, "backupOwnerId", void 0);
-
-
-/***/ }),
-/* 80 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -4800,8 +3842,8 @@ const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const tenant_context_1 = __webpack_require__(9);
 const auth_module_1 = __webpack_require__(40);
-const llm_config_controller_1 = __webpack_require__(81);
-const llm_config_service_1 = __webpack_require__(82);
+const llm_config_controller_1 = __webpack_require__(74);
+const llm_config_service_1 = __webpack_require__(75);
 let LlmConfigModule = class LlmConfigModule {
 };
 exports.LlmConfigModule = LlmConfigModule;
@@ -4816,7 +3858,7 @@ exports.LlmConfigModule = LlmConfigModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 81 */
+/* 74 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -4829,9 +3871,9 @@ const jwt_auth_guard_1 = __webpack_require__(45);
 const roles_guard_1 = __webpack_require__(54);
 const roles_decorator_1 = __webpack_require__(53);
 const current_user_decorator_1 = __webpack_require__(47);
-const llm_config_service_1 = __webpack_require__(82);
-const update_llm_config_dto_1 = __webpack_require__(87);
-const validate_provider_dto_1 = __webpack_require__(91);
+const llm_config_service_1 = __webpack_require__(75);
+const update_llm_config_dto_1 = __webpack_require__(81);
+const validate_provider_dto_1 = __webpack_require__(85);
 /**
  * Controller for platform-level LLM provider configuration.
  * All endpoints require PLATFORM_OWNER role (via JWT claims).
@@ -4906,7 +3948,7 @@ exports.LlmConfigController = LlmConfigController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 82 */
+/* 75 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -4917,11 +3959,12 @@ exports.LlmConfigService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const crypto = tslib_1.__importStar(__webpack_require__(83));
+const crypto = tslib_1.__importStar(__webpack_require__(76));
 const tenant_context_1 = __webpack_require__(9);
-const openrouter_provider_1 = __webpack_require__(84);
-const local_llama_provider_1 = __webpack_require__(85);
-const openai_provider_1 = __webpack_require__(86);
+const openrouter_provider_1 = __webpack_require__(77);
+const local_llama_provider_1 = __webpack_require__(78);
+const openai_provider_1 = __webpack_require__(79);
+const lm_studio_provider_1 = __webpack_require__(80);
 const ENCRYPTION_ALGORITHM = 'aes-256-gcm';
 const API_KEY_MASK = '***masked***';
 /**
@@ -5110,6 +4153,20 @@ let LlmConfigService = LlmConfigService_1 = class LlmConfigService {
             });
         }
     }
+    /**
+     * Gets the configured endpoint for a provider.
+     * @param providerType - Type of provider to get endpoint for
+     * @returns Endpoint URL or null if not found
+     */
+    async getProviderEndpoint(providerType) {
+        const config = await this.prisma.llmProviderConfig.findFirst({
+            where: {
+                providerType,
+                isActive: true,
+            },
+        });
+        return config?.endpoint ?? null;
+    }
     createProvider(type, apiKey, endpoint) {
         switch (type) {
             case 'OPENROUTER':
@@ -5134,6 +4191,8 @@ let LlmConfigService = LlmConfigService_1 = class LlmConfigService {
                     });
                 }
                 return new openai_provider_1.OpenAIProvider({ apiKey });
+            case 'LM_STUDIO':
+                return new lm_studio_provider_1.LmStudioProvider({ endpoint: endpoint ?? 'http://localhost:1234' });
             case 'ANTHROPIC':
                 throw new common_1.BadRequestException({
                     type: 'provider_not_implemented',
@@ -5220,13 +4279,13 @@ exports.LlmConfigService = LlmConfigService = LlmConfigService_1 = tslib_1.__dec
 
 
 /***/ }),
-/* 83 */
+/* 76 */
 /***/ ((module) => {
 
 module.exports = require("node:crypto");
 
 /***/ }),
-/* 84 */
+/* 77 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -5317,7 +4376,7 @@ exports.OpenRouterProvider = OpenRouterProvider;
 
 
 /***/ }),
-/* 85 */
+/* 78 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -5471,7 +4530,7 @@ exports.LocalLlamaProvider = LocalLlamaProvider;
 
 
 /***/ }),
-/* 86 */
+/* 79 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -5556,7 +4615,64 @@ exports.OpenAIProvider = OpenAIProvider;
 
 
 /***/ }),
-/* 87 */
+/* 80 */
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.LmStudioProvider = void 0;
+const DEFAULT_LM_STUDIO_ENDPOINT = 'http://localhost:1234';
+/**
+ * LM Studio provider implementation.
+ * Uses the OpenAI-compatible API exposed by LM Studio at a configurable local endpoint.
+ * No API key required by default.
+ */
+class LmStudioProvider {
+    constructor(options) {
+        this.endpoint = options.endpoint ?? DEFAULT_LM_STUDIO_ENDPOINT;
+    }
+    async validateCredentials() {
+        try {
+            const response = await fetch(`${this.endpoint}/v1/models`, {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            return response.ok;
+        }
+        catch {
+            return false;
+        }
+    }
+    async fetchModels() {
+        const response = await fetch(`${this.endpoint}/v1/models`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to fetch models: ${response.statusText}`);
+        }
+        const data = (await response.json());
+        return data.data.map((model) => ({
+            id: model.id,
+            name: model.id,
+            costPer1kTokens: null,
+            contextLength: undefined,
+        }));
+    }
+    async getResourceInfo() {
+        return {
+            gpuRequired: false,
+            gpuMemoryGb: undefined,
+            cpuCores: undefined,
+            ramGb: undefined,
+        };
+    }
+}
+exports.LmStudioProvider = LmStudioProvider;
+
+
+/***/ }),
+/* 81 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -5565,8 +4681,8 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.UpdateLlmConfigDto = void 0;
 const tslib_1 = __webpack_require__(4);
 const class_validator_1 = __webpack_require__(37);
-const class_transformer_1 = __webpack_require__(88);
-const types_1 = __webpack_require__(89);
+const class_transformer_1 = __webpack_require__(82);
+const types_1 = __webpack_require__(83);
 class ProviderConfigDto {
 }
 tslib_1.__decorate([
@@ -5580,7 +4696,7 @@ tslib_1.__decorate([
     tslib_1.__metadata("design:type", String)
 ], ProviderConfigDto.prototype, "apiKey", void 0);
 tslib_1.__decorate([
-    (0, class_validator_1.IsUrl)({}, { message: 'Endpoint must be a valid URL' }),
+    (0, class_validator_1.IsUrl)({ require_tld: false }, { message: 'Endpoint must be a valid URL' }),
     (0, class_validator_1.IsOptional)(),
     tslib_1.__metadata("design:type", String)
 ], ProviderConfigDto.prototype, "endpoint", void 0);
@@ -5607,23 +4723,23 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 88 */
+/* 82 */
 /***/ ((module) => {
 
 module.exports = require("class-transformer");
 
 /***/ }),
-/* 89 */
+/* 83 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const tslib_1 = __webpack_require__(4);
-tslib_1.__exportStar(__webpack_require__(90), exports);
+tslib_1.__exportStar(__webpack_require__(84), exports);
 
 
 /***/ }),
-/* 90 */
+/* 84 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -5723,6 +4839,7 @@ var LlmProviderType;
     LlmProviderType["LOCAL_LLAMA"] = "LOCAL_LLAMA";
     LlmProviderType["OPENAI"] = "OPENAI";
     LlmProviderType["ANTHROPIC"] = "ANTHROPIC";
+    LlmProviderType["LM_STUDIO"] = "LM_STUDIO";
 })(LlmProviderType || (exports.LlmProviderType = LlmProviderType = {}));
 // ── Chat Conversation Types (Story 2.1) ──
 // NOTE: MessageRole intentionally mirrors the Prisma schema enum.
@@ -5911,7 +5028,7 @@ var NoteStatus;
 
 
 /***/ }),
-/* 91 */
+/* 85 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -5920,7 +5037,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ValidateProviderDto = void 0;
 const tslib_1 = __webpack_require__(4);
 const class_validator_1 = __webpack_require__(37);
-const types_1 = __webpack_require__(89);
+const types_1 = __webpack_require__(83);
 class ValidateProviderDto {
 }
 exports.ValidateProviderDto = ValidateProviderDto;
@@ -5935,14 +5052,14 @@ tslib_1.__decorate([
     tslib_1.__metadata("design:type", String)
 ], ValidateProviderDto.prototype, "apiKey", void 0);
 tslib_1.__decorate([
-    (0, class_validator_1.IsUrl)({}, { message: 'Endpoint must be a valid URL' }),
+    (0, class_validator_1.IsUrl)({ require_tld: false }, { message: 'Endpoint must be a valid URL' }),
     (0, class_validator_1.IsOptional)(),
     tslib_1.__metadata("design:type", String)
 ], ValidateProviderDto.prototype, "endpoint", void 0);
 
 
 /***/ }),
-/* 92 */
+/* 86 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -5952,17 +5069,17 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const tenant_context_1 = __webpack_require__(9);
-const llm_config_module_1 = __webpack_require__(80);
-const ai_gateway_service_1 = __webpack_require__(93);
-const redis_service_1 = __webpack_require__(98);
-const rate_limiter_service_1 = __webpack_require__(97);
-const token_tracker_service_1 = __webpack_require__(102);
-const quota_service_1 = __webpack_require__(101);
-const request_queue_service_1 = __webpack_require__(106);
-const circuit_breaker_service_1 = __webpack_require__(104);
-const cost_calculator_service_1 = __webpack_require__(105);
-const confidence_service_1 = __webpack_require__(94);
-const improvement_suggestions_service_1 = __webpack_require__(107);
+const llm_config_module_1 = __webpack_require__(73);
+const ai_gateway_service_1 = __webpack_require__(87);
+const redis_service_1 = __webpack_require__(92);
+const rate_limiter_service_1 = __webpack_require__(91);
+const token_tracker_service_1 = __webpack_require__(96);
+const quota_service_1 = __webpack_require__(95);
+const request_queue_service_1 = __webpack_require__(100);
+const circuit_breaker_service_1 = __webpack_require__(98);
+const cost_calculator_service_1 = __webpack_require__(99);
+const confidence_service_1 = __webpack_require__(88);
+const improvement_suggestions_service_1 = __webpack_require__(101);
 let AiGatewayModule = class AiGatewayModule {
 };
 exports.AiGatewayModule = AiGatewayModule;
@@ -5999,7 +5116,7 @@ exports.AiGatewayModule = AiGatewayModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 93 */
+/* 87 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -6010,15 +5127,15 @@ exports.AiGatewayService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const llm_config_service_1 = __webpack_require__(82);
-const types_1 = __webpack_require__(89);
-const confidence_service_1 = __webpack_require__(94);
-const persona_prompts_1 = __webpack_require__(96);
-const rate_limiter_service_1 = __webpack_require__(97);
-const quota_service_1 = __webpack_require__(101);
-const circuit_breaker_service_1 = __webpack_require__(104);
-const token_tracker_service_1 = __webpack_require__(102);
-const cost_calculator_service_1 = __webpack_require__(105);
+const llm_config_service_1 = __webpack_require__(75);
+const types_1 = __webpack_require__(83);
+const confidence_service_1 = __webpack_require__(88);
+const persona_prompts_1 = __webpack_require__(90);
+const rate_limiter_service_1 = __webpack_require__(91);
+const quota_service_1 = __webpack_require__(95);
+const circuit_breaker_service_1 = __webpack_require__(98);
+const token_tracker_service_1 = __webpack_require__(96);
+const cost_calculator_service_1 = __webpack_require__(99);
 const cuid2_1 = __webpack_require__(32);
 /**
  * Service for streaming AI completions from configured LLM providers.
@@ -6035,7 +5152,7 @@ let AiGatewayService = AiGatewayService_1 = class AiGatewayService {
         this.costCalculatorService = costCalculatorService;
         this.confidenceService = confidenceService;
         this.logger = new common_1.Logger(AiGatewayService_1.name);
-        /** Request timeout in milliseconds (120 seconds — GPT-5.2 needs longer for complex prompts) */
+        /** Request timeout in milliseconds */
         this.requestTimeoutMs = 120 * 1000;
     }
     /**
@@ -6312,6 +5429,9 @@ let AiGatewayService = AiGatewayService_1 = class AiGatewayService {
                 case 'LOCAL_LLAMA':
                     await this.streamFromLocalLlama(messages, modelId, config.primaryProvider.endpoint ?? '', onChunk);
                     break;
+                case 'LM_STUDIO':
+                    await this.streamFromLmStudio(messages, modelId, config.primaryProvider.endpoint ?? '', onChunk);
+                    break;
                 case 'ANTHROPIC':
                     throw new common_1.InternalServerErrorException({
                         type: 'provider_not_implemented',
@@ -6375,6 +5495,9 @@ let AiGatewayService = AiGatewayService_1 = class AiGatewayService {
                 case 'LOCAL_LLAMA':
                     await this.streamFromLocalLlama(messages, modelId, endpoint ?? '', onChunk, controller.signal);
                     break;
+                case 'LM_STUDIO':
+                    await this.streamFromLmStudio(messages, modelId, endpoint ?? '', onChunk, controller.signal);
+                    break;
                 case 'ANTHROPIC':
                     throw new common_1.InternalServerErrorException({
                         type: 'provider_not_implemented',
@@ -6427,6 +5550,9 @@ let AiGatewayService = AiGatewayService_1 = class AiGatewayService {
                     break;
                 case 'LOCAL_LLAMA':
                     await this.streamFromLocalLlama(messages, fallbackProvider.modelId, fallbackProvider.endpoint ?? '', onChunk, controller.signal);
+                    break;
+                case 'LM_STUDIO':
+                    await this.streamFromLmStudio(messages, fallbackProvider.modelId, fallbackProvider.endpoint ?? '', onChunk, controller.signal);
                     break;
                 default:
                     throw new common_1.InternalServerErrorException({
@@ -6677,6 +5803,9 @@ let AiGatewayService = AiGatewayService_1 = class AiGatewayService {
             case 'LOCAL_LLAMA':
                 await this.streamFromLocalLlama(messages, fallbackProvider.modelId, fallbackProvider.endpoint ?? '', onChunk);
                 break;
+            case 'LM_STUDIO':
+                await this.streamFromLmStudio(messages, fallbackProvider.modelId, fallbackProvider.endpoint ?? '', onChunk);
+                break;
             default:
                 throw new common_1.InternalServerErrorException({
                     type: 'fallback_not_supported',
@@ -6684,6 +5813,57 @@ let AiGatewayService = AiGatewayService_1 = class AiGatewayService {
                     status: 500,
                     detail: `Fallback provider ${fallbackProvider.providerType} is not supported`,
                 });
+        }
+    }
+    async streamFromLmStudio(messages, modelId, endpoint, onChunk, signal) {
+        const baseUrl = endpoint || 'http://localhost:1234';
+        const url = `${baseUrl}/v1/chat/completions`;
+        this.logger.log({
+            message: 'LM Studio request starting (non-streaming)',
+            url,
+            modelId,
+            messageCount: messages.length,
+        });
+        // Use non-streaming mode — SSE streaming via Node.js native fetch in webpack
+        // has compatibility issues on Windows. Non-streaming works reliably.
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model: modelId,
+                messages,
+                stream: false,
+                max_tokens: 1024,
+            }),
+            signal,
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            this.logger.error({
+                message: 'LM Studio error response',
+                status: response.status,
+                errorText,
+            });
+            throw new common_1.InternalServerErrorException({
+                type: 'lm_studio_error',
+                title: 'LM Studio Error',
+                status: 500,
+                detail: `LM Studio returned ${response.status}: ${errorText}`,
+            });
+        }
+        const data = (await response.json());
+        const content = data.choices[0]?.message?.content ??
+            data.choices[0]?.delta?.content ??
+            '';
+        this.logger.log({
+            message: 'LM Studio response received',
+            contentLength: content.length,
+            finishReason: data.choices[0]?.finish_reason,
+        });
+        if (content) {
+            onChunk(content);
         }
     }
 };
@@ -6695,7 +5875,7 @@ exports.AiGatewayService = AiGatewayService = AiGatewayService_1 = tslib_1.__dec
 
 
 /***/ }),
-/* 94 */
+/* 88 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -6704,8 +5884,8 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ConfidenceService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const types_1 = __webpack_require__(89);
-const hedging_detector_1 = __webpack_require__(95);
+const types_1 = __webpack_require__(83);
+const hedging_detector_1 = __webpack_require__(89);
 /**
  * Configuration for confidence factor weights.
  * Weights must sum to 1.0.
@@ -6931,7 +6111,7 @@ exports.ConfidenceService = ConfidenceService = ConfidenceService_1 = tslib_1.__
 
 
 /***/ }),
-/* 95 */
+/* 89 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -7068,7 +6248,7 @@ function getHedgingConfidenceScore(text) {
 
 
 /***/ }),
-/* 96 */
+/* 90 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -7478,7 +6658,7 @@ function generateSystemPrompt(type) {
 
 
 /***/ }),
-/* 97 */
+/* 91 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -7489,7 +6669,7 @@ exports.RateLimiterService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const redis_service_1 = __webpack_require__(98);
+const redis_service_1 = __webpack_require__(92);
 /**
  * Service for enforcing rate limits on AI gateway requests.
  * Implements per-tenant and per-user rate limiting using sliding window algorithm.
@@ -7636,7 +6816,7 @@ exports.RateLimiterService = RateLimiterService = RateLimiterService_1 = tslib_1
 
 
 /***/ }),
-/* 98 */
+/* 92 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -7647,8 +6827,8 @@ exports.RedisService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const redis_1 = __webpack_require__(99);
-const ratelimit_1 = __webpack_require__(100);
+const redis_1 = __webpack_require__(93);
+const ratelimit_1 = __webpack_require__(94);
 /**
  * Service for managing Redis connections and rate limiters using Upstash.
  * Provides a centralized Redis client and factory methods for rate limiters.
@@ -7801,19 +6981,19 @@ exports.RedisService = RedisService = RedisService_1 = tslib_1.__decorate([
 
 
 /***/ }),
-/* 99 */
+/* 93 */
 /***/ ((module) => {
 
 module.exports = require("@upstash/redis");
 
 /***/ }),
-/* 100 */
+/* 94 */
 /***/ ((module) => {
 
 module.exports = require("@upstash/ratelimit");
 
 /***/ }),
-/* 101 */
+/* 95 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -7825,7 +7005,7 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const tenant_context_1 = __webpack_require__(9);
-const token_tracker_service_1 = __webpack_require__(102);
+const token_tracker_service_1 = __webpack_require__(96);
 /**
  * Service for enforcing token quotas on AI usage.
  * Prevents tenants from exceeding their allocated token limits.
@@ -7942,7 +7122,7 @@ exports.QuotaService = QuotaService = QuotaService_1 = tslib_1.__decorate([
 
 
 /***/ }),
-/* 102 */
+/* 96 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -7954,7 +7134,7 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
 const cuid2_1 = __webpack_require__(32);
-const library_1 = __webpack_require__(103);
+const library_1 = __webpack_require__(97);
 /**
  * Service for tracking AI token consumption and costs.
  * Records all AI requests for billing and quota enforcement.
@@ -8142,13 +7322,13 @@ exports.TokenTrackerService = TokenTrackerService = TokenTrackerService_1 = tsli
 
 
 /***/ }),
-/* 103 */
+/* 97 */
 /***/ ((module) => {
 
 module.exports = require("@prisma/client/runtime/library");
 
 /***/ }),
-/* 104 */
+/* 98 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -8158,9 +7338,9 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CircuitBreakerService = exports.CircuitBreakerEvent = exports.CircuitBreakerStatus = exports.CircuitBreakerState = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const redis_service_1 = __webpack_require__(98);
+const redis_service_1 = __webpack_require__(92);
 const cuid2_1 = __webpack_require__(32);
-const types_1 = __webpack_require__(89);
+const types_1 = __webpack_require__(83);
 Object.defineProperty(exports, "CircuitBreakerState", ({ enumerable: true, get: function () { return types_1.CircuitBreakerState; } }));
 Object.defineProperty(exports, "CircuitBreakerStatus", ({ enumerable: true, get: function () { return types_1.CircuitBreakerStatus; } }));
 Object.defineProperty(exports, "CircuitBreakerEvent", ({ enumerable: true, get: function () { return types_1.CircuitBreakerEvent; } }));
@@ -8423,7 +7603,7 @@ exports.CircuitBreakerService = CircuitBreakerService = CircuitBreakerService_1 
 
 
 /***/ }),
-/* 105 */
+/* 99 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -8601,7 +7781,7 @@ exports.CostCalculatorService = CostCalculatorService = CostCalculatorService_1 
 
 
 /***/ }),
-/* 106 */
+/* 100 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -8611,7 +7791,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.RequestQueueService = exports.PRIORITY_MAP = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const redis_service_1 = __webpack_require__(98);
+const redis_service_1 = __webpack_require__(92);
 const client_1 = __webpack_require__(11);
 const cuid2_1 = __webpack_require__(32);
 /**
@@ -8836,7 +8016,7 @@ exports.RequestQueueService = RequestQueueService = RequestQueueService_1 = tsli
 
 
 /***/ }),
-/* 107 */
+/* 101 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -8845,7 +8025,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ImprovementSuggestionsService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const types_1 = __webpack_require__(89);
+const types_1 = __webpack_require__(83);
 /**
  * Mapping of confidence factors to improvement suggestions.
  */
@@ -9107,644 +8287,7 @@ exports.ImprovementSuggestionsService = ImprovementSuggestionsService = Improvem
 
 
 /***/ }),
-/* 108 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.ConversationModule = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const config_1 = __webpack_require__(5);
-const tenant_context_1 = __webpack_require__(9);
-const auth_module_1 = __webpack_require__(40);
-const ai_gateway_module_1 = __webpack_require__(92);
-const notes_module_1 = __webpack_require__(109);
-const knowledge_module_1 = __webpack_require__(112);
-const memory_module_1 = __webpack_require__(126);
-const workflow_module_1 = __webpack_require__(134);
-const web_search_module_1 = __webpack_require__(135);
-const conversation_controller_1 = __webpack_require__(139);
-const conversation_service_1 = __webpack_require__(140);
-const conversation_gateway_1 = __webpack_require__(143);
-let ConversationModule = class ConversationModule {
-};
-exports.ConversationModule = ConversationModule;
-exports.ConversationModule = ConversationModule = tslib_1.__decorate([
-    (0, common_1.Module)({
-        imports: [config_1.ConfigModule, auth_module_1.AuthModule, ai_gateway_module_1.AiGatewayModule, tenant_context_1.TenantModule, notes_module_1.NotesModule, knowledge_module_1.KnowledgeModule, memory_module_1.MemoryModule, workflow_module_1.WorkflowModule, web_search_module_1.WebSearchModule],
-        controllers: [conversation_controller_1.ConversationController],
-        providers: [conversation_service_1.ConversationService, conversation_gateway_1.ConversationGateway],
-        exports: [conversation_service_1.ConversationService],
-    })
-], ConversationModule);
-
-
-/***/ }),
-/* 109 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.NotesModule = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const tenant_context_1 = __webpack_require__(9);
-const auth_module_1 = __webpack_require__(40);
-const ai_gateway_module_1 = __webpack_require__(92);
-const notes_service_1 = __webpack_require__(110);
-const notes_controller_1 = __webpack_require__(111);
-/**
- * Module for managing user notes.
- * Provides note creation, storage, and retrieval for AI-generated content.
- */
-let NotesModule = class NotesModule {
-};
-exports.NotesModule = NotesModule;
-exports.NotesModule = NotesModule = tslib_1.__decorate([
-    (0, common_1.Module)({
-        imports: [
-            tenant_context_1.TenantModule, // Provides PlatformPrismaService
-            auth_module_1.AuthModule, // For JwtAuthGuard
-            ai_gateway_module_1.AiGatewayModule, // For AI scoring
-        ],
-        controllers: [notes_controller_1.NotesController],
-        providers: [notes_service_1.NotesService],
-        exports: [notes_service_1.NotesService],
-    })
-], NotesModule);
-
-
-/***/ }),
-/* 110 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var NotesService_1;
-var _a, _b;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.NotesService = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const cuid2_1 = __webpack_require__(32);
-const tenant_context_1 = __webpack_require__(9);
-const prisma_1 = __webpack_require__(34);
-const ai_gateway_service_1 = __webpack_require__(93);
-/**
- * Service for managing user notes.
- * Provides CRUD operations for notes created from AI outputs and manual entry.
- */
-let NotesService = NotesService_1 = class NotesService {
-    constructor(prisma, aiGateway) {
-        this.prisma = prisma;
-        this.aiGateway = aiGateway;
-        this.logger = new common_1.Logger(NotesService_1.name);
-    }
-    /**
-     * Creates a new note.
-     *
-     * @param dto - Note creation data
-     * @returns The created note with its ID
-     */
-    async createNote(dto) {
-        const id = `note_${(0, cuid2_1.createId)()}`;
-        this.logger.log({
-            message: 'Creating note',
-            noteId: id,
-            userId: dto.userId,
-            tenantId: dto.tenantId,
-            source: dto.source,
-            titleLength: dto.title.length,
-            contentLength: dto.content.length,
-        });
-        await this.prisma.note.create({
-            data: {
-                id,
-                title: dto.title,
-                content: dto.content,
-                source: dto.source,
-                noteType: dto.noteType ?? prisma_1.NoteType.NOTE,
-                status: dto.noteType === prisma_1.NoteType.TASK ? (dto.status ?? prisma_1.NoteStatus.PENDING) : null,
-                conversationId: dto.conversationId ?? null,
-                conceptId: dto.conceptId ?? null,
-                messageId: dto.messageId ?? null,
-                userId: dto.userId,
-                tenantId: dto.tenantId,
-                parentNoteId: dto.parentNoteId ?? null,
-                expectedOutcome: dto.expectedOutcome ?? null,
-                workflowStepNumber: dto.workflowStepNumber ?? null,
-            },
-        });
-        this.logger.log({
-            message: 'Note created successfully',
-            noteId: id,
-            userId: dto.userId,
-            tenantId: dto.tenantId,
-        });
-        return { id };
-    }
-    /**
-     * Gets a note by ID.
-     *
-     * @param noteId - The note ID to retrieve
-     * @param tenantId - The tenant ID for authorization
-     * @returns The note or null if not found
-     */
-    async getNoteById(noteId, tenantId) {
-        return this.prisma.note.findFirst({
-            where: {
-                id: noteId,
-                tenantId,
-            },
-        });
-    }
-    /**
-     * Gets all notes for a user.
-     *
-     * @param userId - The user ID
-     * @param tenantId - The tenant ID
-     * @returns Array of notes for the user
-     */
-    async getNotesByUser(userId, tenantId) {
-        return this.prisma.note.findMany({
-            where: {
-                userId,
-                tenantId,
-            },
-            orderBy: {
-                createdAt: 'desc',
-            },
-        });
-    }
-    /**
-     * Gets the most recent note for a user filtered by source.
-     */
-    async getLatestNoteBySource(userId, tenantId, source) {
-        return this.prisma.note.findFirst({
-            where: { userId, tenantId, source },
-            orderBy: { createdAt: 'desc' },
-        });
-    }
-    /**
-     * Gets top-level notes for a conversation, with children included.
-     */
-    async getByConversation(conversationId, userId, tenantId) {
-        const notes = await this.prisma.note.findMany({
-            where: { conversationId, userId, tenantId, parentNoteId: null },
-            include: {
-                children: { orderBy: { workflowStepNumber: 'asc' } },
-            },
-            orderBy: { createdAt: 'desc' },
-        });
-        return notes.map((n) => this.mapToNoteItemWithChildren(n));
-    }
-    /**
-     * Gets notes for a specific concept.
-     */
-    async getByConcept(conceptId, userId, tenantId) {
-        const notes = await this.prisma.note.findMany({
-            where: { conceptId, userId, tenantId, parentNoteId: null },
-            include: {
-                children: { orderBy: { workflowStepNumber: 'asc' } },
-            },
-            orderBy: { createdAt: 'desc' },
-        });
-        return notes.map((n) => this.mapToNoteItemWithChildren(n));
-    }
-    /**
-     * Gets distinct concept IDs from notes for a user/tenant.
-     * Used for concept tree growth — shows concepts discovered via tasks.
-     */
-    async getDiscoveredConceptIds(userId, tenantId) {
-        const notes = await this.prisma.note.findMany({
-            where: { userId, tenantId, conceptId: { not: null } },
-            select: { conceptId: true },
-            distinct: ['conceptId'],
-        });
-        return notes.map((n) => n.conceptId).filter(Boolean);
-    }
-    /**
-     * Links orphan notes (no conversationId) for given concepts to a conversation.
-     * Used after onboarding creates tasks per-concept, then creates the welcome conversation.
-     */
-    async linkNotesToConversation(conceptIds, conversationId, userId, tenantId) {
-        if (conceptIds.length === 0)
-            return 0;
-        const result = await this.prisma.note.updateMany({
-            where: {
-                conceptId: { in: conceptIds },
-                conversationId: null,
-                userId,
-                tenantId,
-            },
-            data: { conversationId },
-        });
-        return result.count;
-    }
-    /**
-     * Updates conceptId for all notes of a conversation that have no concept set.
-     * Used when a conversation is auto-classified to retroactively link its tasks.
-     */
-    async updateConceptIdForConversation(conversationId, conceptId, tenantId) {
-        await this.prisma.note.updateMany({
-            where: {
-                conversationId,
-                tenantId,
-                conceptId: null,
-            },
-            data: { conceptId },
-        });
-    }
-    /**
-     * Gets all pending tasks for a user/tenant.
-     * Used for auto-triggering workflow execution from chat.
-     */
-    async getPendingTasksByUser(userId, tenantId) {
-        return this.prisma.note.findMany({
-            where: { userId, tenantId, noteType: 'TASK', status: 'PENDING' },
-            orderBy: { createdAt: 'asc' },
-        });
-    }
-    /**
-     * Updates the status of a note/task.
-     */
-    async updateStatus(noteId, status, tenantId) {
-        const note = await this.prisma.note.findFirst({
-            where: { id: noteId, tenantId },
-        });
-        if (!note) {
-            throw new common_1.NotFoundException(`Note ${noteId} not found`);
-        }
-        const updated = await this.prisma.note.update({
-            where: { id: noteId },
-            data: { status },
-        });
-        return this.mapToNoteItem(updated);
-    }
-    /**
-     * Updates a note's title and content.
-     */
-    async updateNote(noteId, title, content, tenantId) {
-        const note = await this.prisma.note.findFirst({
-            where: { id: noteId, tenantId },
-        });
-        if (!note) {
-            throw new common_1.NotFoundException(`Note ${noteId} not found`);
-        }
-        const data = {};
-        if (title !== undefined)
-            data.title = title;
-        if (content !== undefined)
-            data.content = content;
-        const updated = await this.prisma.note.update({
-            where: { id: noteId },
-            data,
-        });
-        return this.mapToNoteItem(updated);
-    }
-    /**
-     * Deletes a note.
-     */
-    async deleteNote(noteId, tenantId) {
-        const note = await this.prisma.note.findFirst({
-            where: { id: noteId, tenantId },
-        });
-        if (!note) {
-            throw new common_1.NotFoundException(`Note ${noteId} not found`);
-        }
-        await this.prisma.note.delete({ where: { id: noteId } });
-    }
-    /**
-     * Submits a user completion report for a note/task.
-     */
-    async submitReport(noteId, report, tenantId) {
-        const note = await this.prisma.note.findFirst({
-            where: { id: noteId, tenantId },
-        });
-        if (!note) {
-            throw new common_1.NotFoundException(`Note ${noteId} not found`);
-        }
-        const updated = await this.prisma.note.update({
-            where: { id: noteId },
-            data: { userReport: report },
-        });
-        return this.mapToNoteItem(updated);
-    }
-    /**
-     * AI-scores a user's completion report.
-     */
-    async scoreReport(noteId, userId, tenantId) {
-        const note = await this.prisma.note.findFirst({
-            where: { id: noteId, tenantId },
-        });
-        if (!note) {
-            throw new common_1.NotFoundException(`Note ${noteId} not found`);
-        }
-        if (!note.userReport) {
-            throw new common_1.NotFoundException(`Note ${noteId} has no report to score`);
-        }
-        const scoringPrompt = `Ti si AI mentor za poslovanje. Oceni izveštaj korisnika o završenom zadatku.
-
-ZADATAK:
-Naslov: ${note.title}
-Opis: ${note.content}
-${note.expectedOutcome ? `Očekivani ishod: ${note.expectedOutcome}` : ''}
-
-IZVEŠTAJ KORISNIKA:
-${note.userReport}
-
-Oceni na skali 0-100 na osnovu:
-- Kompletnost: Da li su svi aspekti zadatka pokriveni?
-- Specifičnost: Da li su navedeni konkretni detalji umesto opštih fraza?
-- Kvalitet analize: Da li je korisnik pokazao razumevanje?
-- Primenljivost: Da li se rezultati mogu primeniti u praksi?
-
-Odgovori ISKLJUČIVO u JSON formatu:
-{"score": <broj 0-100>, "feedback": "<2-3 rečenice na srpskom sa konkretnim savetima za poboljšanje>"}`;
-        let fullResponse = '';
-        await this.aiGateway.streamCompletionWithContext([{ role: 'user', content: scoringPrompt }], { tenantId, userId }, (chunk) => { fullResponse += chunk; });
-        let score = 50;
-        let feedback = 'Ocenjivanje nije uspelo. Pokušajte ponovo.';
-        try {
-            const jsonMatch = fullResponse.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                const parsed = JSON.parse(jsonMatch[0]);
-                score = Math.max(0, Math.min(100, Number(parsed.score) || 50));
-                feedback = parsed.feedback || feedback;
-            }
-        }
-        catch {
-            this.logger.warn({
-                message: 'Failed to parse AI scoring response',
-                noteId,
-                response: fullResponse.substring(0, 200),
-            });
-        }
-        const updated = await this.prisma.note.update({
-            where: { id: noteId },
-            data: { aiScore: score, aiFeedback: feedback },
-        });
-        return this.mapToNoteItem(updated);
-    }
-    mapToNoteItem(note) {
-        return {
-            id: note.id,
-            title: note.title,
-            content: note.content,
-            source: note.source,
-            noteType: note.noteType,
-            status: note.status,
-            conversationId: note.conversationId,
-            conceptId: note.conceptId,
-            messageId: note.messageId,
-            createdAt: note.createdAt.toISOString(),
-            updatedAt: note.updatedAt.toISOString(),
-            parentNoteId: note.parentNoteId ?? null,
-            userReport: note.userReport ?? null,
-            aiScore: note.aiScore ?? null,
-            aiFeedback: note.aiFeedback ?? null,
-            expectedOutcome: note.expectedOutcome ?? null,
-            workflowStepNumber: note.workflowStepNumber ?? null,
-        };
-    }
-    mapToNoteItemWithChildren(note) {
-        const mapped = this.mapToNoteItem(note);
-        if (note.children && note.children.length > 0) {
-            mapped.children = note.children.map((c) => this.mapToNoteItem(c));
-        }
-        return mapped;
-    }
-};
-exports.NotesService = NotesService;
-exports.NotesService = NotesService = NotesService_1 = tslib_1.__decorate([
-    (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object])
-], NotesService);
-
-
-/***/ }),
-/* 111 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var _a;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.NotesController = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const jwt_auth_guard_1 = __webpack_require__(45);
-const current_user_decorator_1 = __webpack_require__(47);
-const notes_service_1 = __webpack_require__(110);
-const prisma_1 = __webpack_require__(34);
-let NotesController = class NotesController {
-    constructor(notesService) {
-        this.notesService = notesService;
-    }
-    /**
-     * Create a new note (manual).
-     */
-    async createNote(user, body) {
-        const result = await this.notesService.createNote({
-            title: body.title,
-            content: body.content,
-            source: prisma_1.NoteSource.MANUAL,
-            noteType: body.noteType ?? prisma_1.NoteType.NOTE,
-            status: body.noteType === 'TASK' ? (body.status ?? prisma_1.NoteStatus.PENDING) : undefined,
-            conversationId: body.conversationId,
-            conceptId: body.conceptId,
-            userId: user.userId,
-            tenantId: user.tenantId,
-        });
-        return { data: result };
-    }
-    /**
-     * Get notes for a specific conversation.
-     */
-    async getByConversation(user, conversationId) {
-        const notes = await this.notesService.getByConversation(conversationId, user.userId, user.tenantId);
-        return { data: notes };
-    }
-    /**
-     * Get notes for a specific concept.
-     */
-    async getByConcept(user, conceptId) {
-        const notes = await this.notesService.getByConcept(conceptId, user.userId, user.tenantId);
-        return { data: notes };
-    }
-    /**
-     * Update a note's status (toggle task completion).
-     */
-    async updateStatus(user, id, body) {
-        const note = await this.notesService.updateStatus(id, body.status, user.tenantId);
-        return { data: note };
-    }
-    /**
-     * Update a note's title and/or content.
-     */
-    async updateNote(user, id, body) {
-        const note = await this.notesService.updateNote(id, body.title, body.content, user.tenantId);
-        return { data: note };
-    }
-    /**
-     * Submit a user completion report for a note/task.
-     */
-    async submitReport(user, id, body) {
-        const note = await this.notesService.submitReport(id, body.report, user.tenantId);
-        return { data: note };
-    }
-    /**
-     * AI-score a user's completion report.
-     */
-    async scoreReport(user, id) {
-        const note = await this.notesService.scoreReport(id, user.userId, user.tenantId);
-        return { data: note };
-    }
-    /**
-     * Delete a note.
-     */
-    async deleteNote(user, id) {
-        await this.notesService.deleteNote(id, user.tenantId);
-    }
-};
-exports.NotesController = NotesController;
-tslib_1.__decorate([
-    (0, common_1.Post)(),
-    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
-    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(1, (0, common_1.Body)()),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object, Object]),
-    tslib_1.__metadata("design:returntype", Promise)
-], NotesController.prototype, "createNote", null);
-tslib_1.__decorate([
-    (0, common_1.Get)('conversation/:conversationId'),
-    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(1, (0, common_1.Param)('conversationId')),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object, String]),
-    tslib_1.__metadata("design:returntype", Promise)
-], NotesController.prototype, "getByConversation", null);
-tslib_1.__decorate([
-    (0, common_1.Get)('concept/:conceptId'),
-    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(1, (0, common_1.Param)('conceptId')),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object, String]),
-    tslib_1.__metadata("design:returntype", Promise)
-], NotesController.prototype, "getByConcept", null);
-tslib_1.__decorate([
-    (0, common_1.Patch)(':id/status'),
-    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(1, (0, common_1.Param)('id')),
-    tslib_1.__param(2, (0, common_1.Body)()),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object, String, Object]),
-    tslib_1.__metadata("design:returntype", Promise)
-], NotesController.prototype, "updateStatus", null);
-tslib_1.__decorate([
-    (0, common_1.Patch)(':id'),
-    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(1, (0, common_1.Param)('id')),
-    tslib_1.__param(2, (0, common_1.Body)()),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object, String, Object]),
-    tslib_1.__metadata("design:returntype", Promise)
-], NotesController.prototype, "updateNote", null);
-tslib_1.__decorate([
-    (0, common_1.Post)(':id/report'),
-    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(1, (0, common_1.Param)('id')),
-    tslib_1.__param(2, (0, common_1.Body)()),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object, String, Object]),
-    tslib_1.__metadata("design:returntype", Promise)
-], NotesController.prototype, "submitReport", null);
-tslib_1.__decorate([
-    (0, common_1.Post)(':id/score'),
-    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(1, (0, common_1.Param)('id')),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object, String]),
-    tslib_1.__metadata("design:returntype", Promise)
-], NotesController.prototype, "scoreReport", null);
-tslib_1.__decorate([
-    (0, common_1.Delete)(':id'),
-    (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),
-    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__param(1, (0, common_1.Param)('id')),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object, String]),
-    tslib_1.__metadata("design:returntype", Promise)
-], NotesController.prototype, "deleteNote", null);
-exports.NotesController = NotesController = tslib_1.__decorate([
-    (0, common_1.Controller)('v1/notes'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _a : Object])
-], NotesController);
-
-
-/***/ }),
-/* 112 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.KnowledgeModule = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const tenant_context_1 = __webpack_require__(9);
-const auth_module_1 = __webpack_require__(40);
-const llm_config_module_1 = __webpack_require__(80);
-const ai_gateway_module_1 = __webpack_require__(92);
-const knowledge_controller_1 = __webpack_require__(113);
-const concept_service_1 = __webpack_require__(114);
-const concept_seed_service_1 = __webpack_require__(118);
-const concept_matching_service_1 = __webpack_require__(119);
-const citation_injector_service_1 = __webpack_require__(123);
-const citation_service_1 = __webpack_require__(116);
-const embedding_service_1 = __webpack_require__(120);
-const curriculum_service_1 = __webpack_require__(117);
-const concept_extraction_service_1 = __webpack_require__(124);
-/**
- * Module for business concepts knowledge base.
- * Provides services for querying, seeding, and citing concepts.
- *
- * Story 2.6: Added citation services for concept matching and injection.
- * Story 2.13: Added AiGatewayModule for dynamic relationship creation.
- */
-let KnowledgeModule = class KnowledgeModule {
-};
-exports.KnowledgeModule = KnowledgeModule;
-exports.KnowledgeModule = KnowledgeModule = tslib_1.__decorate([
-    (0, common_1.Module)({
-        imports: [tenant_context_1.TenantModule, auth_module_1.AuthModule, llm_config_module_1.LlmConfigModule, ai_gateway_module_1.AiGatewayModule],
-        controllers: [knowledge_controller_1.KnowledgeController],
-        providers: [
-            concept_service_1.ConceptService,
-            concept_seed_service_1.ConceptSeedService,
-            concept_matching_service_1.ConceptMatchingService,
-            citation_injector_service_1.CitationInjectorService,
-            citation_service_1.CitationService,
-            embedding_service_1.EmbeddingService,
-            curriculum_service_1.CurriculumService,
-            concept_extraction_service_1.ConceptExtractionService,
-        ],
-        exports: [
-            concept_service_1.ConceptService,
-            concept_seed_service_1.ConceptSeedService,
-            concept_matching_service_1.ConceptMatchingService,
-            citation_injector_service_1.CitationInjectorService,
-            citation_service_1.CitationService,
-            embedding_service_1.EmbeddingService,
-            curriculum_service_1.CurriculumService,
-            concept_extraction_service_1.ConceptExtractionService,
-        ],
-    })
-], KnowledgeModule);
-
-
-/***/ }),
-/* 113 */
+/* 102 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -9754,9 +8297,9 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.KnowledgeController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const concept_service_1 = __webpack_require__(114);
-const citation_service_1 = __webpack_require__(116);
-const curriculum_service_1 = __webpack_require__(117);
+const concept_service_1 = __webpack_require__(103);
+const citation_service_1 = __webpack_require__(105);
+const curriculum_service_1 = __webpack_require__(106);
 /**
  * Controller for business concepts knowledge base endpoints.
  * Provides read-only access to the platform's concept library.
@@ -10028,7 +8571,7 @@ exports.KnowledgeController = KnowledgeController = KnowledgeController_1 = tsli
 
 
 /***/ }),
-/* 114 */
+/* 103 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -10039,8 +8582,8 @@ exports.ConceptService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const ai_gateway_service_1 = __webpack_require__(93);
-const relationship_prompt_1 = __webpack_require__(115);
+const ai_gateway_service_1 = __webpack_require__(87);
+const relationship_prompt_1 = __webpack_require__(104);
 /**
  * Service for querying and managing business concepts.
  * Provides read-only access to the platform's knowledge base.
@@ -10453,7 +8996,7 @@ exports.ConceptService = ConceptService = ConceptService_1 = tslib_1.__decorate(
 
 
 /***/ }),
-/* 115 */
+/* 104 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -10523,7 +9066,7 @@ If no meaningful relationships exist, return an empty array: []`;
 
 
 /***/ }),
-/* 116 */
+/* 105 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -10732,7 +9275,7 @@ exports.CitationService = CitationService = CitationService_1 = tslib_1.__decora
 
 
 /***/ }),
-/* 117 */
+/* 106 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -10906,7 +9449,7 @@ exports.CurriculumService = CurriculumService = CurriculumService_1 = tslib_1.__
 
 
 /***/ }),
-/* 118 */
+/* 107 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -11167,7 +9710,7 @@ exports.ConceptSeedService = ConceptSeedService = ConceptSeedService_1 = tslib_1
 
 
 /***/ }),
-/* 119 */
+/* 108 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -11178,7 +9721,7 @@ exports.ConceptMatchingService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const embedding_service_1 = __webpack_require__(120);
+const embedding_service_1 = __webpack_require__(109);
 /**
  * Service for finding relevant business concepts using semantic search.
  * Integrates with EmbeddingService for vector similarity search.
@@ -11407,7 +9950,7 @@ exports.ConceptMatchingService = ConceptMatchingService = ConceptMatchingService
 
 
 /***/ }),
-/* 120 */
+/* 109 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -11417,15 +9960,17 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.EmbeddingService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const node_crypto_1 = __webpack_require__(83);
+const node_crypto_1 = __webpack_require__(76);
 const tenant_context_1 = __webpack_require__(9);
-const llm_config_service_1 = __webpack_require__(82);
-const qdrant_client_service_1 = __webpack_require__(121);
-const types_1 = __webpack_require__(89);
+const llm_config_service_1 = __webpack_require__(75);
+const qdrant_client_service_1 = __webpack_require__(110);
+const types_1 = __webpack_require__(83);
+/** Default LM Studio endpoint when not configured in DB */
+const DEFAULT_LM_STUDIO_ENDPOINT = 'http://127.0.0.1:1234';
 /**
- * Embedding service using OpenAI text-embedding-3-small (1024-dim) + Qdrant Cloud.
+ * Embedding service using LM Studio nomic-embed-text (768-dim) + Qdrant Cloud.
  *
- * - embed(): Calls OpenAI API to generate 1024-dim embeddings
+ * - embed(): Calls LM Studio local API to generate 768-dim embeddings
  * - store(): Upserts embedding vector to Qdrant 'concepts' collection
  * - search(): Cosine similarity search via Qdrant
  * - delete(): Removes point from Qdrant collection
@@ -11436,8 +9981,8 @@ let EmbeddingService = EmbeddingService_1 = class EmbeddingService {
         this.llmConfigService = llmConfigService;
         this.qdrantClient = qdrantClient;
         this.logger = new common_1.Logger(EmbeddingService_1.name);
-        this.EMBEDDING_MODEL = 'text-embedding-3-small';
-        this.EMBEDDING_DIMENSIONS = 1024;
+        this.EMBEDDING_MODEL = 'text-embedding-nomic-embed-text-v1.5';
+        this.EMBEDDING_DIMENSIONS = 768;
         this.COLLECTION_NAME = 'concepts';
     }
     async onModuleInit() {
@@ -11456,34 +10001,26 @@ let EmbeddingService = EmbeddingService_1 = class EmbeddingService {
         }
     }
     /**
-     * Generates an embedding for text content using OpenAI API.
+     * Generates an embedding for text content using LM Studio local API.
      */
     async embed(text) {
-        const apiKey = await this.llmConfigService.getDecryptedApiKey(types_1.LlmProviderType.OPENAI);
-        if (!apiKey) {
-            this.logger.error('OpenAI API key not configured — cannot generate embeddings');
-            return {
-                embeddingId: `emb_fallback_${Date.now()}`,
-                vector: new Array(this.EMBEDDING_DIMENSIONS).fill(0),
-            };
-        }
+        const endpoint = (await this.llmConfigService.getProviderEndpoint(types_1.LlmProviderType.LM_STUDIO)) ??
+            DEFAULT_LM_STUDIO_ENDPOINT;
         try {
-            const response = await fetch('https://api.openai.com/v1/embeddings', {
+            const response = await fetch(`${endpoint}/v1/embeddings`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${apiKey}`,
                 },
                 body: JSON.stringify({
                     model: this.EMBEDDING_MODEL,
                     input: text,
-                    dimensions: this.EMBEDDING_DIMENSIONS,
                 }),
             });
             if (!response.ok) {
                 const errorText = await response.text();
                 this.logger.error({
-                    message: 'OpenAI embedding API error',
+                    message: 'LM Studio embedding API error',
                     status: response.status,
                     error: errorText,
                 });
@@ -11502,10 +10039,10 @@ let EmbeddingService = EmbeddingService_1 = class EmbeddingService {
             }
             const vector = first.embedding;
             this.logger.debug({
-                message: 'Embedding generated',
+                message: 'Embedding generated via LM Studio',
                 model: data.model,
                 dimensions: vector.length,
-                tokensUsed: data.usage.total_tokens,
+                tokensUsed: data.usage?.total_tokens,
             });
             return {
                 embeddingId: `emb_${Date.now()}`,
@@ -11514,7 +10051,7 @@ let EmbeddingService = EmbeddingService_1 = class EmbeddingService {
         }
         catch (error) {
             this.logger.error({
-                message: 'Failed to generate embedding',
+                message: 'Failed to generate embedding via LM Studio',
                 error: error instanceof Error ? error.message : 'Unknown error',
             });
             return {
@@ -11674,7 +10211,7 @@ exports.EmbeddingService = EmbeddingService = EmbeddingService_1 = tslib_1.__dec
 
 
 /***/ }),
-/* 121 */
+/* 110 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -11685,7 +10222,7 @@ exports.QdrantClientService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const js_client_rest_1 = __webpack_require__(122);
+const js_client_rest_1 = __webpack_require__(111);
 /**
  * Shared Qdrant client service.
  * Provides a singleton QdrantClient instance and collection management utilities.
@@ -11731,6 +10268,24 @@ let QdrantClientService = QdrantClientService_1 = class QdrantClientService {
      * @param size - Vector dimension size
      * @param distance - Distance metric (default: Cosine)
      */
+    /**
+     * Deletes and recreates a collection with new vector configuration.
+     * Use when vector dimensions change (e.g. switching embedding models).
+     */
+    async recreateCollection(name, size, distance = 'Cosine') {
+        const client = this.getClient();
+        try {
+            await client.deleteCollection(name);
+            this.logger.log({ message: 'Deleted Qdrant collection', name });
+        }
+        catch {
+            // Collection doesn't exist — that's fine
+        }
+        await client.createCollection(name, {
+            vectors: { size, distance },
+        });
+        this.logger.log({ message: 'Created Qdrant collection', name, size, distance });
+    }
     async ensureCollection(name, size, distance = 'Cosine') {
         const client = this.getClient();
         const collections = await client.getCollections();
@@ -11754,13 +10309,13 @@ exports.QdrantClientService = QdrantClientService = QdrantClientService_1 = tsli
 
 
 /***/ }),
-/* 122 */
+/* 111 */
 /***/ ((module) => {
 
 module.exports = require("@qdrant/js-client-rest");
 
 /***/ }),
-/* 123 */
+/* 112 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -11988,7 +10543,7 @@ exports.CitationInjectorService = CitationInjectorService = CitationInjectorServ
 
 
 /***/ }),
-/* 124 */
+/* 113 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -12000,9 +10555,9 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const cuid2_1 = __webpack_require__(32);
 const tenant_context_1 = __webpack_require__(9);
-const ai_gateway_service_1 = __webpack_require__(93);
-const concept_service_1 = __webpack_require__(114);
-const extraction_prompt_1 = __webpack_require__(125);
+const ai_gateway_service_1 = __webpack_require__(87);
+const concept_service_1 = __webpack_require__(103);
+const extraction_prompt_1 = __webpack_require__(114);
 /** Default maximum concepts per extraction call */
 const DEFAULT_MAX_NEW = 5;
 /**
@@ -12183,7 +10738,7 @@ exports.ConceptExtractionService = ConceptExtractionService = ConceptExtractionS
 
 
 /***/ }),
-/* 125 */
+/* 114 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -12294,7 +10849,2189 @@ function parseExtractionResponse(response) {
 
 
 /***/ }),
+/* 115 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+/**
+ * Brain Seeding Service (Story 3.2)
+ *
+ * Creates initial PENDING task Notes for a new user based on their department.
+ * Seeds the Business Brain tree with concepts the user should explore.
+ */
+var BrainSeedingService_1;
+var _a;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BrainSeedingService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const tenant_context_1 = __webpack_require__(9);
+const prisma_1 = __webpack_require__(34);
+const cuid2_1 = __webpack_require__(32);
+const department_categories_1 = __webpack_require__(116);
+let BrainSeedingService = BrainSeedingService_1 = class BrainSeedingService {
+    constructor(prisma) {
+        this.prisma = prisma;
+        this.logger = new common_1.Logger(BrainSeedingService_1.name);
+        /** Max concepts to seed per category for owner initial run */
+        this.OWNER_KEY_CONCEPTS_PER_CATEGORY = 4;
+        /** Max total seed tasks for owner */
+        this.OWNER_MAX_SEED_TOTAL = 40;
+        /** Max total seed tasks for department user */
+        this.DEPT_MAX_SEED_TOTAL = 30;
+    }
+    /**
+     * Seeds PENDING task Notes for a new user.
+     * Idempotent — skips if user already has pending tasks.
+     *
+     * For department users: seeds all concepts in visible categories.
+     * For PLATFORM_OWNER / TENANT_OWNER: seeds foundation fully + key concepts per category.
+     */
+    async seedPendingTasksForUser(userId, tenantId, department, role) {
+        // Idempotency guard: skip if user already has pending tasks
+        const existingCount = await this.prisma.note.count({
+            where: {
+                userId,
+                tenantId,
+                noteType: prisma_1.NoteType.TASK,
+                status: prisma_1.NoteStatus.PENDING,
+                conceptId: { not: null },
+            },
+        });
+        if (existingCount > 0) {
+            this.logger.log({
+                message: 'Skipping brain seeding — user already has pending tasks',
+                userId,
+                tenantId,
+                existingCount,
+            });
+            return { seeded: 0 };
+        }
+        const isOwner = role === 'PLATFORM_OWNER' || role === 'TENANT_OWNER' || !department;
+        let conceptsToSeed;
+        if (isOwner) {
+            conceptsToSeed = await this.getOwnerSeedConcepts();
+        }
+        else {
+            conceptsToSeed = await this.getDepartmentSeedConcepts(department, role);
+        }
+        if (conceptsToSeed.length === 0) {
+            this.logger.warn({
+                message: 'No concepts found for brain seeding',
+                userId,
+                tenantId,
+                department,
+            });
+            return { seeded: 0 };
+        }
+        // Batch create PENDING task Notes
+        const noteData = conceptsToSeed.map((concept) => ({
+            id: `note_${(0, cuid2_1.createId)()}`,
+            title: concept.name,
+            content: `Istraži koncept: ${concept.name}`,
+            source: prisma_1.NoteSource.ONBOARDING,
+            noteType: prisma_1.NoteType.TASK,
+            status: prisma_1.NoteStatus.PENDING,
+            conceptId: concept.id,
+            userId,
+            tenantId,
+        }));
+        await this.prisma.note.createMany({ data: noteData });
+        this.logger.log({
+            message: 'Brain seeding complete',
+            userId,
+            tenantId,
+            department,
+            role,
+            seeded: noteData.length,
+            categories: [...new Set(conceptsToSeed.map((c) => c.category))],
+        });
+        return { seeded: noteData.length };
+    }
+    /**
+     * Owner seed: foundation categories fully + key concepts per other category.
+     */
+    async getOwnerSeedConcepts() {
+        // Seed all foundation concepts
+        const foundationConcepts = await this.prisma.concept.findMany({
+            where: {
+                category: { in: [...department_categories_1.FOUNDATION_CATEGORIES] },
+            },
+            select: { id: true, name: true, category: true },
+            orderBy: { sortOrder: 'asc' },
+        });
+        // Seed key concepts from other categories (first N per category)
+        const otherCategories = department_categories_1.ALL_CATEGORIES.filter((c) => !department_categories_1.FOUNDATION_CATEGORIES.includes(c));
+        // Single query for all non-foundation concepts, then slice per category client-side
+        const allOtherConcepts = await this.prisma.concept.findMany({
+            where: { category: { in: [...otherCategories] } },
+            select: { id: true, name: true, category: true, sortOrder: true },
+            orderBy: { sortOrder: 'asc' },
+        });
+        const otherConcepts = [];
+        const seenPerCategory = new Map();
+        for (const concept of allOtherConcepts) {
+            const count = seenPerCategory.get(concept.category) ?? 0;
+            if (count < this.OWNER_KEY_CONCEPTS_PER_CATEGORY) {
+                otherConcepts.push({ id: concept.id, name: concept.name, category: concept.category });
+                seenPerCategory.set(concept.category, count + 1);
+            }
+        }
+        const combined = [...foundationConcepts, ...otherConcepts];
+        return combined.slice(0, this.OWNER_MAX_SEED_TOTAL);
+    }
+    /**
+     * Department seed: all concepts in visible categories (foundation + department).
+     */
+    async getDepartmentSeedConcepts(department, role) {
+        const visibleCategories = (0, department_categories_1.getVisibleCategories)(department, role);
+        if (!visibleCategories) {
+            // No filter = owner path (shouldn't reach here but fallback)
+            return this.getOwnerSeedConcepts();
+        }
+        const concepts = await this.prisma.concept.findMany({
+            where: { category: { in: visibleCategories } },
+            select: { id: true, name: true, category: true },
+            orderBy: { sortOrder: 'asc' },
+            take: this.DEPT_MAX_SEED_TOTAL,
+        });
+        return concepts;
+    }
+};
+exports.BrainSeedingService = BrainSeedingService;
+exports.BrainSeedingService = BrainSeedingService = BrainSeedingService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object])
+], BrainSeedingService);
+
+
+/***/ }),
+/* 116 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+/**
+ * Department → Obsidian Category Mapping (Story 3.2)
+ *
+ * Maps the Department enum to Serbian category names from the Obsidian vault.
+ * Foundation categories are always visible to all users.
+ * PLATFORM_OWNER / TENANT_OWNER (department = null) see all categories.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.DEPARTMENT_CATEGORY_MAP = exports.ALL_CATEGORIES = exports.FOUNDATION_CATEGORIES = void 0;
+exports.getVisibleCategories = getVisibleCategories;
+const prisma_1 = __webpack_require__(34);
+/** Foundation categories — always visible regardless of department */
+exports.FOUNDATION_CATEGORIES = [
+    'Uvod u Poslovanje',
+    'Vrednost',
+];
+/** All known categories from the Obsidian vault (excluding guide/skipped) */
+exports.ALL_CATEGORIES = [
+    'Uvod u Poslovanje',
+    'Marketing',
+    'Prodaja',
+    'Vrednost',
+    'Finansije',
+    'Operacije',
+    'Menadžment',
+    'Preduzetništvo',
+    'Digitalni Marketing',
+    'Odnosi sa Klijentima',
+    'Računovodstvo',
+    'Tehnologija',
+    'Inovacije',
+    'Liderstvo',
+    'Strategija',
+    'Poslovni Modeli',
+];
+/**
+ * Maps each Department enum value to its relevant Obsidian categories.
+ * Foundation categories are added automatically — do NOT include them here.
+ */
+exports.DEPARTMENT_CATEGORY_MAP = {
+    [prisma_1.Department.MARKETING]: ['Marketing', 'Digitalni Marketing'],
+    [prisma_1.Department.FINANCE]: ['Finansije', 'Računovodstvo'],
+    [prisma_1.Department.SALES]: ['Prodaja', 'Odnosi sa Klijentima'],
+    [prisma_1.Department.OPERATIONS]: ['Operacije', 'Preduzetništvo', 'Menadžment'],
+    [prisma_1.Department.TECHNOLOGY]: ['Tehnologija', 'Inovacije'],
+    [prisma_1.Department.STRATEGY]: ['Strategija', 'Poslovni Modeli', 'Liderstvo'],
+    [prisma_1.Department.LEGAL]: ['Menadžment'],
+    [prisma_1.Department.CREATIVE]: ['Marketing', 'Digitalni Marketing'],
+};
+/**
+ * Resolve visible categories for a user based on department and role.
+ *
+ * - PLATFORM_OWNER / TENANT_OWNER (department = null) → ALL categories
+ * - Department user → foundation + department-specific categories
+ */
+function getVisibleCategories(department, role) {
+    // Owner roles see everything — return null to signal "no filter"
+    if (role === 'PLATFORM_OWNER' || role === 'TENANT_OWNER' || !department) {
+        return null;
+    }
+    const deptCategories = exports.DEPARTMENT_CATEGORY_MAP[department] ?? [];
+    // Deduplicate (foundation might overlap with dept categories)
+    return [...new Set([...exports.FOUNDATION_CATEGORIES, ...deptCategories])];
+}
+
+
+/***/ }),
+/* 117 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+/**
+ * Business Context Service (Story 3.2)
+ *
+ * Aggregates ALL memories for a tenant (across all users and domains)
+ * into a structured context block for injection into LLM system prompts.
+ *
+ * This is the "shared brain" — every concept execution receives the full
+ * accumulated business knowledge, regardless of which user or department
+ * created it.
+ */
+var BusinessContextService_1;
+var _a;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BusinessContextService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const tenant_context_1 = __webpack_require__(9);
+/** Approximate characters per token for estimation */
+const CHARS_PER_TOKEN = 4;
+/** Max tokens for the business context section in the system prompt */
+const MAX_CONTEXT_TOKENS = 4000;
+let BusinessContextService = BusinessContextService_1 = class BusinessContextService {
+    constructor(prisma) {
+        this.prisma = prisma;
+        this.logger = new common_1.Logger(BusinessContextService_1.name);
+    }
+    /**
+     * Loads and formats all business memories for a tenant.
+     * Returns a structured text block ready for system prompt injection.
+     *
+     * Groups memories by type and includes attribution.
+     * Truncates to ~4000 tokens.
+     */
+    async getBusinessContext(tenantId) {
+        const memories = await this.prisma.memory.findMany({
+            where: {
+                tenantId,
+                isDeleted: false,
+            },
+            select: {
+                type: true,
+                content: true,
+                subject: true,
+                userId: true,
+                createdAt: true,
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 100, // Cap to prevent excessive load
+        });
+        if (memories.length === 0) {
+            return '';
+        }
+        // Group by type
+        const grouped = new Map();
+        for (const mem of memories) {
+            const key = mem.type;
+            if (!grouped.has(key))
+                grouped.set(key, []);
+            grouped.get(key).push(mem);
+        }
+        // Build formatted context
+        let context = '\n--- POSLOVNI KONTEKST (Business Brain Memorija) ---\n';
+        let tokenCount = this.estimateTokens(context);
+        const maxContentTokens = MAX_CONTEXT_TOKENS - 100;
+        const typeLabels = {
+            CLIENT_CONTEXT: 'Klijent',
+            PROJECT_CONTEXT: 'Poslovni uvid',
+            USER_PREFERENCE: 'Odluka',
+            FACTUAL_STATEMENT: 'Poslovna činjenica',
+        };
+        for (const [type, mems] of grouped) {
+            const label = typeLabels[type] || type;
+            const sectionHeader = `\n[${label}]\n`;
+            const headerTokens = this.estimateTokens(sectionHeader);
+            if (tokenCount + headerTokens > maxContentTokens)
+                break;
+            context += sectionHeader;
+            tokenCount += headerTokens;
+            for (const mem of mems) {
+                const subjectPart = mem.subject ? ` (${mem.subject})` : '';
+                const line = `- ${mem.content}${subjectPart}\n`;
+                const lineTokens = this.estimateTokens(line);
+                if (tokenCount + lineTokens > maxContentTokens)
+                    break;
+                context += line;
+                tokenCount += lineTokens;
+            }
+        }
+        context += '--- KRAJ POSLOVNOG KONTEKSTA ---\n\n';
+        context +=
+            'Koristi ovaj kontekst da daš odgovore prilagođene specifičnom poslovanju korisnika. ';
+        context +=
+            'Referiši se na prethodne analize i odluke kada je relevantno.\n';
+        this.logger.debug({
+            message: 'Business context built',
+            tenantId,
+            memoriesIncluded: memories.length,
+            estimatedTokens: this.estimateTokens(context),
+        });
+        return context;
+    }
+    estimateTokens(text) {
+        return Math.ceil(text.length / CHARS_PER_TOKEN);
+    }
+};
+exports.BusinessContextService = BusinessContextService;
+exports.BusinessContextService = BusinessContextService = BusinessContextService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object])
+], BusinessContextService);
+
+
+/***/ }),
+/* 118 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var DepartmentGuard_1;
+var _a;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.DepartmentGuard = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const tenant_context_1 = __webpack_require__(9);
+const department_categories_1 = __webpack_require__(116);
+/**
+ * Story 3.2: Department Fence Guard
+ *
+ * Validates that the requesting user has access to the resource based on
+ * their department-to-category mapping. PLATFORM_OWNER and TENANT_OWNER
+ * bypass all checks (getVisibleCategories returns null).
+ *
+ * Checks:
+ * - Query param `category`: validates it's in the user's visible categories
+ * - Route param `id` (conversation): looks up conversation's conceptId → concept.category
+ * - Body `taskIds`: looks up each task's conceptId → concept.category
+ */
+let DepartmentGuard = DepartmentGuard_1 = class DepartmentGuard {
+    constructor(prisma) {
+        this.prisma = prisma;
+        this.logger = new common_1.Logger(DepartmentGuard_1.name);
+    }
+    async canActivate(context) {
+        const request = context.switchToHttp().getRequest();
+        const user = request.user;
+        if (!user)
+            return true; // Let auth guards handle missing user
+        const visibleCategories = (0, department_categories_1.getVisibleCategories)(user.department, user.role);
+        if (visibleCategories === null)
+            return true; // Owner — no filter
+        const visibleSet = new Set(visibleCategories);
+        // Check query param `category` (e.g., yolo:start-domain)
+        const category = request.query?.category || request.body?.category;
+        if (category && typeof category === 'string') {
+            if (!visibleSet.has(category)) {
+                this.logger.warn({
+                    message: 'Department guard: category access denied',
+                    userId: user.userId,
+                    department: user.department,
+                    requestedCategory: category,
+                });
+                throw new common_1.ForbiddenException({
+                    type: 'department_access_denied',
+                    title: 'Access Denied',
+                    status: 403,
+                    detail: 'You do not have access to this domain.',
+                });
+            }
+        }
+        // Check route param `id` (conversation endpoints)
+        const conversationId = request.params?.id;
+        if (conversationId) {
+            const conversation = await this.prisma.conversation.findUnique({
+                where: { id: conversationId },
+                select: { conceptId: true },
+            });
+            if (conversation?.conceptId) {
+                const concept = await this.prisma.concept.findUnique({
+                    where: { id: conversation.conceptId },
+                    select: { category: true },
+                });
+                if (concept?.category && !visibleSet.has(concept.category)) {
+                    this.logger.warn({
+                        message: 'Department guard: conversation access denied',
+                        userId: user.userId,
+                        conversationId,
+                        conceptCategory: concept.category,
+                    });
+                    throw new common_1.ForbiddenException({
+                        type: 'department_access_denied',
+                        title: 'Access Denied',
+                        status: 403,
+                        detail: 'You do not have access to this conversation.',
+                    });
+                }
+            }
+        }
+        // Check body `taskIds` (workflow:run-agents)
+        const taskIds = request.body?.taskIds;
+        if (Array.isArray(taskIds) && taskIds.length > 0) {
+            const tasks = await this.prisma.note.findMany({
+                where: { id: { in: taskIds }, tenantId: user.tenantId },
+                select: { conceptId: true },
+            });
+            const conceptIds = tasks
+                .map((t) => t.conceptId)
+                .filter((id) => id !== null);
+            if (conceptIds.length > 0) {
+                const concepts = await this.prisma.concept.findMany({
+                    where: { id: { in: conceptIds } },
+                    select: { category: true },
+                });
+                const denied = concepts.find((c) => c.category && !visibleSet.has(c.category));
+                if (denied) {
+                    this.logger.warn({
+                        message: 'Department guard: task access denied',
+                        userId: user.userId,
+                        deniedCategory: denied.category,
+                    });
+                    throw new common_1.ForbiddenException({
+                        type: 'department_access_denied',
+                        title: 'Access Denied',
+                        status: 403,
+                        detail: 'One or more tasks are outside your department scope.',
+                    });
+                }
+            }
+        }
+        return true;
+    }
+};
+exports.DepartmentGuard = DepartmentGuard;
+exports.DepartmentGuard = DepartmentGuard = DepartmentGuard_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object])
+], DepartmentGuard);
+
+
+/***/ }),
+/* 119 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var _a, _b, _c, _d, _e, _f;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.InvitationController = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const invitation_service_1 = __webpack_require__(120);
+const create_invitation_dto_1 = __webpack_require__(121);
+const jwt_auth_guard_1 = __webpack_require__(45);
+const roles_guard_1 = __webpack_require__(54);
+const roles_decorator_1 = __webpack_require__(53);
+const current_user_decorator_1 = __webpack_require__(47);
+const jwt_strategy_1 = __webpack_require__(48);
+let InvitationController = class InvitationController {
+    constructor(invitationService) {
+        this.invitationService = invitationService;
+    }
+    async createInvitation(dto, user, correlationId) {
+        const result = await this.invitationService.createInvitation(dto, user.userId, user.tenantId);
+        return {
+            status: 'success',
+            message: 'Invitation sent successfully',
+            data: result,
+            ...(correlationId && { correlationId }),
+        };
+    }
+    async listInvitations(user, correlationId) {
+        const invitations = await this.invitationService.getInvitationsByTenant(user.tenantId);
+        return {
+            status: 'success',
+            data: invitations,
+            ...(correlationId && { correlationId }),
+        };
+    }
+    async validateToken(token, correlationId) {
+        const invitation = await this.invitationService.validateInviteToken(token);
+        return {
+            status: 'success',
+            data: {
+                id: invitation.id,
+                email: invitation.email,
+                department: invitation.department,
+                role: invitation.role,
+                tenantName: invitation.tenant.name,
+                expiresAt: invitation.expiresAt,
+            },
+            ...(correlationId && { correlationId }),
+        };
+    }
+    async acceptInvitation(token, user, correlationId) {
+        const result = await this.invitationService.acceptInvitation(token, user.userId, user.email);
+        return {
+            status: 'success',
+            message: 'Invitation accepted. Welcome to the team!',
+            data: result,
+            ...(correlationId && { correlationId }),
+        };
+    }
+    async revokeInvitation(invitationId, user, correlationId) {
+        await this.invitationService.revokeInvitation(invitationId, user.tenantId);
+        return {
+            status: 'success',
+            message: 'Invitation revoked',
+            ...(correlationId && { correlationId }),
+        };
+    }
+};
+exports.InvitationController = InvitationController;
+tslib_1.__decorate([
+    (0, common_1.Post)(),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
+    tslib_1.__param(0, (0, common_1.Body)()),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(2, (0, common_1.Headers)('x-correlation-id')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_b = typeof create_invitation_dto_1.CreateInvitationDto !== "undefined" && create_invitation_dto_1.CreateInvitationDto) === "function" ? _b : Object, typeof (_c = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _c : Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], InvitationController.prototype, "createInvitation", null);
+tslib_1.__decorate([
+    (0, common_1.Get)(),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('TENANT_OWNER', 'ADMIN'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Headers)('x-correlation-id')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_d = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _d : Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], InvitationController.prototype, "listInvitations", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('validate/:token'),
+    tslib_1.__param(0, (0, common_1.Param)('token')),
+    tslib_1.__param(1, (0, common_1.Headers)('x-correlation-id')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], InvitationController.prototype, "validateToken", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('accept/:token'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    tslib_1.__param(0, (0, common_1.Param)('token')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(2, (0, common_1.Headers)('x-correlation-id')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_e = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _e : Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], InvitationController.prototype, "acceptInvitation", null);
+tslib_1.__decorate([
+    (0, common_1.Post)(':id/revoke'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    tslib_1.__param(0, (0, common_1.Param)('id')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(2, (0, common_1.Headers)('x-correlation-id')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_f = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _f : Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], InvitationController.prototype, "revokeInvitation", null);
+exports.InvitationController = InvitationController = tslib_1.__decorate([
+    (0, common_1.Controller)('invitations'),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof invitation_service_1.InvitationService !== "undefined" && invitation_service_1.InvitationService) === "function" ? _a : Object])
+], InvitationController);
+
+
+/***/ }),
+/* 120 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var InvitationService_1;
+var _a, _b, _c, _d;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.InvitationService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const tenant_context_1 = __webpack_require__(9);
+const utils_1 = __webpack_require__(29);
+const prisma_1 = __webpack_require__(34);
+const email_1 = __webpack_require__(60);
+const brain_seeding_service_1 = __webpack_require__(115);
+let InvitationService = InvitationService_1 = class InvitationService {
+    constructor(prisma, emailService, configService, brainSeedingService) {
+        this.prisma = prisma;
+        this.emailService = emailService;
+        this.configService = configService;
+        this.brainSeedingService = brainSeedingService;
+        this.logger = new common_1.Logger(InvitationService_1.name);
+        this.maxTeamMembers = this.configService.get('MAX_TEAM_MEMBERS', 5);
+        this.appUrl = this.configService.get('FRONTEND_URL', 'http://localhost:4200');
+    }
+    async checkUserLimit(tenantId) {
+        const [activeUsers, pendingInvitations] = await Promise.all([
+            this.prisma.user.count({ where: { tenantId } }),
+            this.prisma.invitation.count({
+                where: {
+                    tenantId,
+                    status: prisma_1.InvitationStatus.PENDING,
+                    expiresAt: { gt: new Date() },
+                },
+            }),
+        ]);
+        const currentCount = activeUsers + pendingInvitations;
+        return {
+            allowed: currentCount < this.maxTeamMembers,
+            currentCount,
+            limit: this.maxTeamMembers,
+        };
+    }
+    async createInvitation(dto, inviterId, tenantId) {
+        const normalizedEmail = dto.email.toLowerCase();
+        // Check user limit
+        const limitCheck = await this.checkUserLimit(tenantId);
+        if (!limitCheck.allowed) {
+            throw new common_1.ForbiddenException({
+                type: 'user_limit_reached',
+                title: 'User Limit Reached',
+                status: 403,
+                detail: 'User limit reached. Upgrade your plan to add more team members.',
+                currentCount: limitCheck.currentCount,
+                limit: limitCheck.limit,
+            });
+        }
+        // Check for duplicate pending invitation
+        const existingInvitation = await this.prisma.invitation.findFirst({
+            where: {
+                email: normalizedEmail,
+                tenantId,
+                status: prisma_1.InvitationStatus.PENDING,
+                expiresAt: { gt: new Date() },
+            },
+        });
+        if (existingInvitation) {
+            throw new common_1.ConflictException({
+                type: 'duplicate_invitation',
+                title: 'Duplicate Invitation',
+                status: 409,
+                detail: 'A pending invitation already exists for this email address in your workspace.',
+            });
+        }
+        // Check if email is already a member of the tenant
+        const existingMember = await this.prisma.user.findFirst({
+            where: { email: normalizedEmail, tenantId },
+        });
+        if (existingMember) {
+            throw new common_1.ConflictException({
+                type: 'already_member',
+                title: 'Already a Member',
+                status: 409,
+                detail: 'This user is already a member of your workspace.',
+            });
+        }
+        const invitationId = (0, utils_1.generateInvitationId)();
+        const token = (0, utils_1.generateInviteToken)();
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 7);
+        const invitation = await this.prisma.invitation.create({
+            data: {
+                id: invitationId,
+                email: normalizedEmail,
+                department: dto.department,
+                status: prisma_1.InvitationStatus.PENDING,
+                token,
+                expiresAt,
+                tenantId,
+                invitedById: inviterId,
+            },
+        });
+        // Send invitation email
+        const inviter = await this.prisma.user.findUnique({
+            where: { id: inviterId },
+            select: { name: true, email: true },
+        });
+        const tenant = await this.prisma.tenant.findUnique({
+            where: { id: tenantId },
+            select: { name: true },
+        });
+        const inviteLink = `${this.appUrl}/invite/${token}`;
+        const emailResult = await this.emailService.sendInvitationEmail({
+            to: normalizedEmail,
+            inviterName: inviter?.name ?? inviter?.email ?? 'A team member',
+            tenantName: tenant?.name ?? 'Your workspace',
+            inviteLink,
+            department: dto.department,
+        });
+        if (!emailResult.success) {
+            this.logger.warn(`Failed to send invitation email to ${normalizedEmail} for tenant ${tenantId}`);
+        }
+        return {
+            id: invitation.id,
+            email: invitation.email,
+            department: invitation.department,
+            status: invitation.status,
+            token: invitation.token,
+            expiresAt: invitation.expiresAt,
+            tenantId: invitation.tenantId,
+            invitedById: invitation.invitedById,
+            createdAt: invitation.createdAt,
+        };
+    }
+    async getInvitationsByTenant(tenantId) {
+        return this.prisma.invitation.findMany({
+            where: { tenantId },
+            include: {
+                tenant: { select: { name: true } },
+                invitedBy: { select: { email: true, name: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+    }
+    async getPendingInvitations(tenantId) {
+        const now = new Date();
+        // Auto-expire stale invitations
+        await this.prisma.invitation.updateMany({
+            where: {
+                tenantId,
+                status: prisma_1.InvitationStatus.PENDING,
+                expiresAt: { lt: now },
+            },
+            data: { status: prisma_1.InvitationStatus.EXPIRED },
+        });
+        return this.prisma.invitation.findMany({
+            where: {
+                tenantId,
+                status: prisma_1.InvitationStatus.PENDING,
+                expiresAt: { gt: now },
+            },
+            include: {
+                tenant: { select: { name: true } },
+                invitedBy: { select: { email: true, name: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+    }
+    async validateInviteToken(token) {
+        const invitation = await this.prisma.invitation.findUnique({
+            where: { token },
+            include: {
+                tenant: { select: { name: true } },
+                invitedBy: { select: { email: true, name: true } },
+            },
+        });
+        if (!invitation) {
+            throw new common_1.NotFoundException({
+                type: 'invitation_not_found',
+                title: 'Invitation Not Found',
+                status: 404,
+                detail: 'This invitation link is invalid.',
+            });
+        }
+        if (invitation.status === prisma_1.InvitationStatus.REVOKED) {
+            throw new common_1.GoneException({
+                type: 'invitation_revoked',
+                title: 'Invitation Revoked',
+                status: 410,
+                detail: 'This invitation has been revoked. Please request a new invite.',
+            });
+        }
+        if (invitation.status === prisma_1.InvitationStatus.EXPIRED ||
+            invitation.expiresAt < new Date()) {
+            // Auto-update status if expired
+            if (invitation.status === prisma_1.InvitationStatus.PENDING) {
+                await this.prisma.invitation.update({
+                    where: { id: invitation.id },
+                    data: { status: prisma_1.InvitationStatus.EXPIRED },
+                });
+            }
+            throw new common_1.GoneException({
+                type: 'invitation_expired',
+                title: 'Invitation Expired',
+                status: 410,
+                detail: 'This invitation has expired. Please request a new invite.',
+            });
+        }
+        if (invitation.status === prisma_1.InvitationStatus.ACCEPTED) {
+            throw new common_1.ConflictException({
+                type: 'invitation_already_accepted',
+                title: 'Already Accepted',
+                status: 409,
+                detail: 'This invitation has already been accepted.',
+            });
+        }
+        return invitation;
+    }
+    async acceptInvitation(token, userId, userEmail) {
+        const invitation = await this.validateInviteToken(token);
+        // Use transaction for atomicity
+        const result = await this.prisma.$transaction(async (tx) => {
+            // Check if user already belongs to this tenant
+            const existingUser = await tx.user.findFirst({
+                where: { email: userEmail.toLowerCase(), tenantId: invitation.tenantId },
+            });
+            if (existingUser) {
+                // User already a member, just mark invitation accepted
+                await tx.invitation.update({
+                    where: { id: invitation.id },
+                    data: {
+                        status: prisma_1.InvitationStatus.ACCEPTED,
+                        acceptedByUserId: existingUser.id,
+                    },
+                });
+                return {
+                    tenantId: invitation.tenantId,
+                    role: existingUser.role,
+                    department: invitation.department,
+                    isNewMember: false,
+                };
+            }
+            // Add user to the invited tenant with department from invitation
+            await tx.user.update({
+                where: { id: userId },
+                data: {
+                    tenantId: invitation.tenantId,
+                    role: invitation.role,
+                    department: invitation.department,
+                },
+            });
+            await tx.invitation.update({
+                where: { id: invitation.id },
+                data: {
+                    status: prisma_1.InvitationStatus.ACCEPTED,
+                    acceptedByUserId: userId,
+                },
+            });
+            return {
+                tenantId: invitation.tenantId,
+                role: invitation.role,
+                department: invitation.department,
+                isNewMember: true,
+            };
+        });
+        // Story 3.2: Seed pending tasks for new team member (fire-and-forget)
+        if (result.isNewMember) {
+            this.brainSeedingService
+                .seedPendingTasksForUser(userId, result.tenantId, result.department, result.role)
+                .catch((err) => {
+                this.logger.warn({
+                    message: 'Brain seeding failed after invitation acceptance',
+                    userId,
+                    tenantId: result.tenantId,
+                    error: err?.message,
+                });
+            });
+        }
+        return {
+            tenantId: result.tenantId,
+            role: result.role,
+            department: result.department,
+        };
+    }
+    async revokeInvitation(invitationId, tenantId) {
+        const invitation = await this.prisma.invitation.findUnique({
+            where: { id: invitationId },
+        });
+        if (!invitation) {
+            throw new common_1.NotFoundException({
+                type: 'invitation_not_found',
+                title: 'Invitation Not Found',
+                status: 404,
+                detail: 'The specified invitation was not found.',
+            });
+        }
+        if (invitation.tenantId !== tenantId) {
+            throw new common_1.ForbiddenException({
+                type: 'invitation_access_denied',
+                title: 'Access Denied',
+                status: 403,
+                detail: 'You do not have permission to revoke this invitation.',
+            });
+        }
+        if (invitation.status !== prisma_1.InvitationStatus.PENDING) {
+            throw new common_1.ConflictException({
+                type: 'invitation_not_pending',
+                title: 'Cannot Revoke',
+                status: 409,
+                detail: `Cannot revoke invitation with status: ${invitation.status}`,
+            });
+        }
+        await this.prisma.invitation.update({
+            where: { id: invitationId },
+            data: { status: prisma_1.InvitationStatus.REVOKED },
+        });
+    }
+};
+exports.InvitationService = InvitationService;
+exports.InvitationService = InvitationService = InvitationService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof email_1.EmailService !== "undefined" && email_1.EmailService) === "function" ? _b : Object, typeof (_c = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _c : Object, typeof (_d = typeof brain_seeding_service_1.BrainSeedingService !== "undefined" && brain_seeding_service_1.BrainSeedingService) === "function" ? _d : Object])
+], InvitationService);
+
+
+/***/ }),
+/* 121 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var _a;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CreateInvitationDto = void 0;
+const tslib_1 = __webpack_require__(4);
+const class_validator_1 = __webpack_require__(37);
+const prisma_1 = __webpack_require__(34);
+class CreateInvitationDto {
+}
+exports.CreateInvitationDto = CreateInvitationDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsEmail)({}, { message: 'Please provide a valid email address' }),
+    tslib_1.__metadata("design:type", String)
+], CreateInvitationDto.prototype, "email", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsEnum)(prisma_1.Department, { message: 'Department must be one of: FINANCE, MARKETING, TECHNOLOGY, OPERATIONS, LEGAL, CREATIVE' }),
+    tslib_1.__metadata("design:type", typeof (_a = typeof prisma_1.Department !== "undefined" && prisma_1.Department) === "function" ? _a : Object)
+], CreateInvitationDto.prototype, "department", void 0);
+
+
+/***/ }),
+/* 122 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.TeamModule = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const email_1 = __webpack_require__(60);
+const tenant_context_1 = __webpack_require__(9);
+const auth_module_1 = __webpack_require__(40);
+const team_controller_1 = __webpack_require__(123);
+const team_service_1 = __webpack_require__(124);
+let TeamModule = class TeamModule {
+};
+exports.TeamModule = TeamModule;
+exports.TeamModule = TeamModule = tslib_1.__decorate([
+    (0, common_1.Module)({
+        imports: [config_1.ConfigModule, email_1.EmailModule, auth_module_1.AuthModule, tenant_context_1.TenantModule], // TenantModule provides PlatformPrismaService
+        controllers: [team_controller_1.TeamController],
+        providers: [team_service_1.TeamService],
+        exports: [team_service_1.TeamService],
+    })
+], TeamModule);
+
+
+/***/ }),
+/* 123 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.TeamController = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const team_service_1 = __webpack_require__(124);
+const remove_member_dto_1 = __webpack_require__(125);
+const designate_backup_owner_dto_1 = __webpack_require__(126);
+const jwt_auth_guard_1 = __webpack_require__(45);
+const roles_guard_1 = __webpack_require__(54);
+const mfa_required_guard_1 = __webpack_require__(58);
+const roles_decorator_1 = __webpack_require__(53);
+const current_user_decorator_1 = __webpack_require__(47);
+const jwt_strategy_1 = __webpack_require__(48);
+let TeamController = class TeamController {
+    constructor(teamService) {
+        this.teamService = teamService;
+    }
+    async getMembers(user, correlationId) {
+        const members = await this.teamService.getTeamMembers(user.tenantId);
+        return {
+            status: 'success',
+            data: members,
+            ...(correlationId && { correlationId }),
+        };
+    }
+    async removeMember(memberId, dto, user, correlationId) {
+        await this.teamService.removeMember(memberId, user.tenantId, user.userId, dto.strategy);
+        return {
+            status: 'success',
+            data: null,
+            message: 'Member removed',
+            ...(correlationId && { correlationId }),
+        };
+    }
+    async getBackupOwner(user, correlationId) {
+        const backupOwner = await this.teamService.getBackupOwner(user.tenantId);
+        return {
+            status: 'success',
+            data: backupOwner,
+            ...(correlationId && { correlationId }),
+        };
+    }
+    async getEligibleBackupOwners(user, correlationId) {
+        const eligible = await this.teamService.getEligibleBackupOwners(user.tenantId);
+        return {
+            status: 'success',
+            data: eligible,
+            ...(correlationId && { correlationId }),
+        };
+    }
+    async designateBackupOwner(dto, user, correlationId) {
+        const result = await this.teamService.designateBackupOwner(user.tenantId, dto.backupOwnerId, user.userId);
+        return {
+            status: 'success',
+            data: result,
+            message: 'Backup owner designated',
+            ...(correlationId && { correlationId }),
+        };
+    }
+    async removeBackupDesignation(user, correlationId) {
+        await this.teamService.removeBackupDesignation(user.tenantId);
+        return {
+            status: 'success',
+            data: null,
+            message: 'Backup owner removed',
+            ...(correlationId && { correlationId }),
+        };
+    }
+    async initiateRecovery(user, req, correlationId) {
+        const ipAddress = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+            req.ip ||
+            'unknown';
+        const result = await this.teamService.initiateRecovery(user.tenantId, user.userId, ipAddress);
+        return {
+            status: 'success',
+            data: { recoveredUserId: result.recoveredUserId },
+            message: result.message,
+            ...(correlationId && { correlationId }),
+        };
+    }
+    async getBackupOwnerStatus(user, correlationId) {
+        const status = await this.teamService.getBackupOwnerStatus(user.tenantId);
+        return {
+            status: 'success',
+            data: status,
+            ...(correlationId && { correlationId }),
+        };
+    }
+};
+exports.TeamController = TeamController;
+tslib_1.__decorate([
+    (0, common_1.Get)('members'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('TENANT_OWNER', 'ADMIN'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Headers)('x-correlation-id')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_b = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _b : Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], TeamController.prototype, "getMembers", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('members/:id/remove'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    tslib_1.__param(0, (0, common_1.Param)('id')),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__param(2, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(3, (0, common_1.Headers)('x-correlation-id')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_c = typeof remove_member_dto_1.RemoveMemberDto !== "undefined" && remove_member_dto_1.RemoveMemberDto) === "function" ? _c : Object, typeof (_d = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _d : Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], TeamController.prototype, "removeMember", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('backup-owner'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Headers)('x-correlation-id')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_e = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _e : Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], TeamController.prototype, "getBackupOwner", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('backup-owner/eligible'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Headers)('x-correlation-id')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_f = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _f : Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], TeamController.prototype, "getEligibleBackupOwners", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('backup-owner'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    tslib_1.__param(0, (0, common_1.Body)()),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(2, (0, common_1.Headers)('x-correlation-id')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_g = typeof designate_backup_owner_dto_1.DesignateBackupOwnerDto !== "undefined" && designate_backup_owner_dto_1.DesignateBackupOwnerDto) === "function" ? _g : Object, typeof (_h = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _h : Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], TeamController.prototype, "designateBackupOwner", null);
+tslib_1.__decorate([
+    (0, common_1.Delete)('backup-owner'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Headers)('x-correlation-id')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_j = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _j : Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], TeamController.prototype, "removeBackupDesignation", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('backup-owner/recovery'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, mfa_required_guard_1.MfaRequiredGuard),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Req)()),
+    tslib_1.__param(2, (0, common_1.Headers)('x-correlation-id')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_k = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _k : Object, Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], TeamController.prototype, "initiateRecovery", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('backup-owner/status'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('TENANT_OWNER', 'ADMIN'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Headers)('x-correlation-id')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_l = typeof jwt_strategy_1.CurrentUserPayload !== "undefined" && jwt_strategy_1.CurrentUserPayload) === "function" ? _l : Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], TeamController.prototype, "getBackupOwnerStatus", null);
+exports.TeamController = TeamController = tslib_1.__decorate([
+    (0, common_1.Controller)('team'),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof team_service_1.TeamService !== "undefined" && team_service_1.TeamService) === "function" ? _a : Object])
+], TeamController);
+
+
+/***/ }),
+/* 124 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var TeamService_1;
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.TeamService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const tenant_context_1 = __webpack_require__(9);
+const email_1 = __webpack_require__(60);
+let TeamService = TeamService_1 = class TeamService {
+    constructor(prisma, emailService) {
+        this.prisma = prisma;
+        this.emailService = emailService;
+        this.logger = new common_1.Logger(TeamService_1.name);
+    }
+    async getTeamMembers(tenantId) {
+        const users = await this.prisma.user.findMany({
+            where: { tenantId, isActive: true },
+            select: {
+                id: true,
+                email: true,
+                name: true,
+                role: true,
+                createdAt: true,
+                invitationAccepted: {
+                    select: { department: true },
+                },
+            },
+            orderBy: { createdAt: 'asc' },
+        });
+        return users.map((user) => ({
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            department: user.invitationAccepted?.department ?? null,
+            createdAt: user.createdAt,
+        }));
+    }
+    async getMemberById(memberId, tenantId) {
+        const user = await this.prisma.user.findFirst({
+            where: { id: memberId, tenantId, isActive: true },
+            select: {
+                id: true,
+                email: true,
+                name: true,
+                role: true,
+                createdAt: true,
+                invitationAccepted: {
+                    select: { department: true },
+                },
+            },
+        });
+        if (!user) {
+            throw new common_1.NotFoundException({
+                type: 'member_not_found',
+                title: 'Member Not Found',
+                status: 404,
+                detail: 'The specified team member was not found.',
+            });
+        }
+        return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            department: user.invitationAccepted?.department ?? null,
+            createdAt: user.createdAt,
+        };
+    }
+    async removeMember(memberId, tenantId, ownerId, strategy) {
+        // Verify member exists and belongs to tenant
+        const member = await this.prisma.user.findFirst({
+            where: { id: memberId, tenantId, isActive: true },
+            select: { id: true, email: true, name: true, role: true },
+        });
+        if (!member) {
+            throw new common_1.NotFoundException({
+                type: 'member_not_found',
+                title: 'Member Not Found',
+                status: 404,
+                detail: 'The specified team member was not found.',
+            });
+        }
+        // Self-removal prevention (AC4)
+        if (memberId === ownerId) {
+            // Check if this is the only owner
+            const ownerCount = await this.prisma.user.count({
+                where: {
+                    tenantId,
+                    role: 'TENANT_OWNER',
+                    isActive: true,
+                },
+            });
+            if (ownerCount <= 1) {
+                throw new common_1.ForbiddenException({
+                    type: 'self_removal_denied',
+                    title: 'Cannot Remove Yourself',
+                    status: 403,
+                    detail: 'You cannot remove yourself. Designate a backup Owner first.',
+                });
+            }
+        }
+        // Soft delete in a transaction
+        await this.prisma.$transaction(async (tx) => {
+            await tx.user.update({
+                where: { id: memberId },
+                data: {
+                    isActive: false,
+                    removedAt: new Date(),
+                    removedById: ownerId,
+                    removalReason: strategy,
+                },
+            });
+            // Future: reassign notes/conversations when those models exist
+        });
+        // Send removal notification email AFTER transaction commits (per dev notes)
+        const owner = await this.prisma.user.findUnique({
+            where: { id: ownerId },
+            select: { email: true },
+        });
+        const tenant = await this.prisma.tenant.findUnique({
+            where: { id: tenantId },
+            select: { name: true },
+        });
+        const emailResult = await this.emailService.sendRemovalNotificationEmail({
+            to: member.email,
+            memberName: member.name ?? '',
+            tenantName: tenant?.name ?? 'Your workspace',
+            strategy,
+            contactEmail: owner?.email,
+        });
+        if (!emailResult.success) {
+            this.logger.warn(`Failed to send removal notification to ${member.email} for tenant ${tenantId}`);
+        }
+        this.logger.log(`Member ${memberId} removed from tenant ${tenantId} by ${ownerId} with strategy ${strategy}`);
+        return { removedUserId: memberId, strategy };
+    }
+    async getBackupOwner(tenantId) {
+        const tenant = await this.prisma.tenant.findUnique({
+            where: { id: tenantId },
+            include: {
+                backupOwner: {
+                    select: {
+                        id: true,
+                        email: true,
+                        name: true,
+                        isActive: true,
+                    },
+                },
+            },
+        });
+        if (!tenant?.backupOwner ||
+            !tenant.backupOwner.isActive ||
+            !tenant.backupOwnerDesignatedAt) {
+            return null;
+        }
+        return {
+            id: tenant.backupOwner.id,
+            email: tenant.backupOwner.email,
+            name: tenant.backupOwner.name,
+            designatedAt: tenant.backupOwnerDesignatedAt.toISOString(),
+        };
+    }
+    async getEligibleBackupOwners(tenantId) {
+        const tenant = await this.prisma.tenant.findUnique({
+            where: { id: tenantId },
+            select: { backupOwnerId: true },
+        });
+        const users = await this.prisma.user.findMany({
+            where: {
+                tenantId,
+                isActive: true,
+                role: { not: 'TENANT_OWNER' },
+                ...(tenant?.backupOwnerId
+                    ? { id: { not: tenant.backupOwnerId } }
+                    : {}),
+            },
+            select: {
+                id: true,
+                email: true,
+                name: true,
+                role: true,
+                createdAt: true,
+                invitationAccepted: {
+                    select: { department: true },
+                },
+            },
+            orderBy: { name: 'asc' },
+        });
+        return users.map((user) => ({
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            department: user.invitationAccepted?.department ?? null,
+            createdAt: user.createdAt,
+        }));
+    }
+    async designateBackupOwner(tenantId, backupOwnerId, designatedById) {
+        const now = new Date();
+        // Validate and designate in a transaction to prevent TOCTOU race
+        const candidate = await this.prisma.$transaction(async (tx) => {
+            // Verify candidate exists, is active, belongs to tenant
+            const user = await tx.user.findFirst({
+                where: { id: backupOwnerId, tenantId, isActive: true },
+                select: { id: true, email: true, name: true, role: true },
+            });
+            if (!user) {
+                throw new common_1.NotFoundException({
+                    type: 'member_not_found',
+                    title: 'Member Not Found',
+                    status: 404,
+                    detail: 'The specified team member was not found or is inactive.',
+                });
+            }
+            // Prevent TENANT_OWNER from being backup owner
+            if (user.role === 'TENANT_OWNER') {
+                throw new common_1.BadRequestException({
+                    type: 'invalid_backup_candidate',
+                    title: 'Invalid Backup Owner Candidate',
+                    status: 400,
+                    detail: 'A Tenant Owner cannot be designated as backup owner. Choose an Admin or Member.',
+                });
+            }
+            // Update tenant with backup owner
+            await tx.tenant.update({
+                where: { id: tenantId },
+                data: {
+                    backupOwnerId: user.id,
+                    backupOwnerDesignatedAt: now,
+                },
+            });
+            return user;
+        });
+        // Send email notification AFTER transaction commits
+        const designator = await this.prisma.user.findUnique({
+            where: { id: designatedById },
+            select: { name: true, email: true },
+        });
+        const tenant = await this.prisma.tenant.findUnique({
+            where: { id: tenantId },
+            select: { name: true },
+        });
+        const emailResult = await this.emailService.sendBackupOwnerDesignationEmail({
+            to: candidate.email,
+            tenantName: tenant?.name ?? 'Your workspace',
+            designatedBy: designator?.name ?? designator?.email ?? 'Workspace Owner',
+            designatedName: candidate.name ?? '',
+        });
+        if (!emailResult.success) {
+            this.logger.warn(`Failed to send backup owner designation email to ${candidate.email} for tenant ${tenantId}`);
+        }
+        this.logger.log(`Backup owner designated: ${candidate.id} for tenant ${tenantId} by ${designatedById}`);
+        return {
+            id: candidate.id,
+            email: candidate.email,
+            name: candidate.name,
+            designatedAt: now.toISOString(),
+        };
+    }
+    async removeBackupDesignation(tenantId) {
+        await this.prisma.tenant.update({
+            where: { id: tenantId },
+            data: {
+                backupOwnerId: null,
+                backupOwnerDesignatedAt: null,
+            },
+        });
+        this.logger.log(`Backup owner designation removed for tenant ${tenantId}`);
+    }
+    async initiateRecovery(tenantId, backupOwnerId, ipAddress) {
+        // Verify caller IS the designated backup owner AND is still active
+        const tenant = await this.prisma.tenant.findUnique({
+            where: { id: tenantId },
+            select: {
+                backupOwnerId: true,
+                name: true,
+                backupOwner: {
+                    select: { isActive: true },
+                },
+            },
+        });
+        if (!tenant ||
+            tenant.backupOwnerId !== backupOwnerId ||
+            !tenant.backupOwner?.isActive) {
+            throw new common_1.ForbiddenException({
+                type: 'not_backup_owner',
+                title: 'Not Authorized',
+                status: 403,
+                detail: 'You are not the designated backup owner for this workspace.',
+            });
+        }
+        // Find the primary owner
+        const primaryOwner = await this.prisma.user.findFirst({
+            where: { tenantId, role: 'TENANT_OWNER', isActive: true },
+            select: { id: true, email: true, name: true },
+        });
+        if (!primaryOwner) {
+            throw new common_1.NotFoundException({
+                type: 'owner_not_found',
+                title: 'Owner Not Found',
+                status: 404,
+                detail: 'Could not find the primary owner for this workspace.',
+            });
+        }
+        // Reset primary owner's 2FA
+        await this.prisma.user.update({
+            where: { id: primaryOwner.id },
+            data: {
+                mfaEnabled: false,
+                mfaSecret: null,
+                failedLoginAttempts: 0,
+                lockoutUntil: null,
+            },
+        });
+        // Send recovery notification email AFTER DB update
+        const backupOwner = await this.prisma.user.findUnique({
+            where: { id: backupOwnerId },
+            select: { name: true },
+        });
+        const emailResult = await this.emailService.sendRecoveryNotificationEmail({
+            to: primaryOwner.email,
+            ownerName: primaryOwner.name ?? '',
+            tenantName: tenant.name ?? 'Your workspace',
+            backupOwnerName: backupOwner?.name ?? 'Backup Owner',
+            recoveryTimestamp: new Date(),
+            ipAddress,
+        });
+        if (!emailResult.success) {
+            this.logger.warn(`Failed to send recovery notification to ${primaryOwner.email} for tenant ${tenantId}`);
+        }
+        this.logger.log(`Recovery initiated for tenant ${tenantId} by backup owner ${backupOwnerId} from IP ${ipAddress}`);
+        return {
+            recoveredUserId: primaryOwner.id,
+            message: 'Recovery completed. Primary owner 2FA has been reset.',
+        };
+    }
+    async getBackupOwnerStatus(tenantId) {
+        const tenant = await this.prisma.tenant.findUnique({
+            where: { id: tenantId },
+            select: {
+                createdAt: true,
+                backupOwnerId: true,
+                backupOwner: {
+                    select: { isActive: true },
+                },
+            },
+        });
+        if (!tenant) {
+            throw new common_1.NotFoundException({
+                type: 'tenant_not_found',
+                title: 'Tenant Not Found',
+                status: 404,
+                detail: 'The specified tenant was not found.',
+            });
+        }
+        const hasBackupOwner = !!tenant.backupOwnerId && !!tenant.backupOwner?.isActive;
+        const tenantAgeDays = Math.floor((Date.now() - tenant.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+        const showWarning = !hasBackupOwner && tenantAgeDays >= 30;
+        return { hasBackupOwner, tenantAgeDays, showWarning };
+    }
+};
+exports.TeamService = TeamService;
+exports.TeamService = TeamService = TeamService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof email_1.EmailService !== "undefined" && email_1.EmailService) === "function" ? _b : Object])
+], TeamService);
+
+
+/***/ }),
+/* 125 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.RemoveMemberDto = void 0;
+const tslib_1 = __webpack_require__(4);
+const class_validator_1 = __webpack_require__(37);
+class RemoveMemberDto {
+}
+exports.RemoveMemberDto = RemoveMemberDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsIn)(['REASSIGN', 'ARCHIVE'], {
+        message: 'Strategy must be one of: REASSIGN, ARCHIVE',
+    }),
+    tslib_1.__metadata("design:type", String)
+], RemoveMemberDto.prototype, "strategy", void 0);
+
+
+/***/ }),
 /* 126 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.DesignateBackupOwnerDto = void 0;
+const tslib_1 = __webpack_require__(4);
+const class_validator_1 = __webpack_require__(37);
+class DesignateBackupOwnerDto {
+}
+exports.DesignateBackupOwnerDto = DesignateBackupOwnerDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)({ message: 'backupOwnerId must be a string' }),
+    (0, class_validator_1.IsNotEmpty)({ message: 'backupOwnerId is required' }),
+    tslib_1.__metadata("design:type", String)
+], DesignateBackupOwnerDto.prototype, "backupOwnerId", void 0);
+
+
+/***/ }),
+/* 127 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ConversationModule = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const tenant_context_1 = __webpack_require__(9);
+const auth_module_1 = __webpack_require__(40);
+const ai_gateway_module_1 = __webpack_require__(86);
+const notes_module_1 = __webpack_require__(128);
+const knowledge_module_1 = __webpack_require__(72);
+const memory_module_1 = __webpack_require__(131);
+const workflow_module_1 = __webpack_require__(139);
+const web_search_module_1 = __webpack_require__(140);
+const conversation_controller_1 = __webpack_require__(144);
+const conversation_service_1 = __webpack_require__(145);
+const conversation_gateway_1 = __webpack_require__(148);
+let ConversationModule = class ConversationModule {
+};
+exports.ConversationModule = ConversationModule;
+exports.ConversationModule = ConversationModule = tslib_1.__decorate([
+    (0, common_1.Module)({
+        imports: [config_1.ConfigModule, auth_module_1.AuthModule, ai_gateway_module_1.AiGatewayModule, tenant_context_1.TenantModule, notes_module_1.NotesModule, knowledge_module_1.KnowledgeModule, memory_module_1.MemoryModule, workflow_module_1.WorkflowModule, web_search_module_1.WebSearchModule],
+        controllers: [conversation_controller_1.ConversationController],
+        providers: [conversation_service_1.ConversationService, conversation_gateway_1.ConversationGateway],
+        exports: [conversation_service_1.ConversationService],
+    })
+], ConversationModule);
+
+
+/***/ }),
+/* 128 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.NotesModule = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const tenant_context_1 = __webpack_require__(9);
+const auth_module_1 = __webpack_require__(40);
+const ai_gateway_module_1 = __webpack_require__(86);
+const notes_service_1 = __webpack_require__(129);
+const notes_controller_1 = __webpack_require__(130);
+/**
+ * Module for managing user notes.
+ * Provides note creation, storage, and retrieval for AI-generated content.
+ */
+let NotesModule = class NotesModule {
+};
+exports.NotesModule = NotesModule;
+exports.NotesModule = NotesModule = tslib_1.__decorate([
+    (0, common_1.Module)({
+        imports: [
+            tenant_context_1.TenantModule, // Provides PlatformPrismaService
+            auth_module_1.AuthModule, // For JwtAuthGuard
+            ai_gateway_module_1.AiGatewayModule, // For AI scoring
+        ],
+        controllers: [notes_controller_1.NotesController],
+        providers: [notes_service_1.NotesService],
+        exports: [notes_service_1.NotesService],
+    })
+], NotesModule);
+
+
+/***/ }),
+/* 129 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var NotesService_1;
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.NotesService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const cuid2_1 = __webpack_require__(32);
+const tenant_context_1 = __webpack_require__(9);
+const prisma_1 = __webpack_require__(34);
+const ai_gateway_service_1 = __webpack_require__(87);
+/**
+ * Service for managing user notes.
+ * Provides CRUD operations for notes created from AI outputs and manual entry.
+ */
+let NotesService = NotesService_1 = class NotesService {
+    constructor(prisma, aiGateway) {
+        this.prisma = prisma;
+        this.aiGateway = aiGateway;
+        this.logger = new common_1.Logger(NotesService_1.name);
+    }
+    /**
+     * Creates a new note.
+     *
+     * @param dto - Note creation data
+     * @returns The created note with its ID
+     */
+    async createNote(dto) {
+        const id = `note_${(0, cuid2_1.createId)()}`;
+        this.logger.log({
+            message: 'Creating note',
+            noteId: id,
+            userId: dto.userId,
+            tenantId: dto.tenantId,
+            source: dto.source,
+            titleLength: dto.title.length,
+            contentLength: dto.content.length,
+        });
+        await this.prisma.note.create({
+            data: {
+                id,
+                title: dto.title,
+                content: dto.content,
+                source: dto.source,
+                noteType: dto.noteType ?? prisma_1.NoteType.NOTE,
+                status: dto.noteType === prisma_1.NoteType.TASK ? (dto.status ?? prisma_1.NoteStatus.PENDING) : null,
+                conversationId: dto.conversationId ?? null,
+                conceptId: dto.conceptId ?? null,
+                messageId: dto.messageId ?? null,
+                userId: dto.userId,
+                tenantId: dto.tenantId,
+                parentNoteId: dto.parentNoteId ?? null,
+                expectedOutcome: dto.expectedOutcome ?? null,
+                workflowStepNumber: dto.workflowStepNumber ?? null,
+            },
+        });
+        this.logger.log({
+            message: 'Note created successfully',
+            noteId: id,
+            userId: dto.userId,
+            tenantId: dto.tenantId,
+        });
+        return { id };
+    }
+    /**
+     * Gets a note by ID.
+     *
+     * @param noteId - The note ID to retrieve
+     * @param tenantId - The tenant ID for authorization
+     * @returns The note or null if not found
+     */
+    async getNoteById(noteId, tenantId) {
+        return this.prisma.note.findFirst({
+            where: {
+                id: noteId,
+                tenantId,
+            },
+        });
+    }
+    /**
+     * Gets all notes for a user.
+     *
+     * @param userId - The user ID
+     * @param tenantId - The tenant ID
+     * @returns Array of notes for the user
+     */
+    async getNotesByUser(userId, tenantId) {
+        return this.prisma.note.findMany({
+            where: {
+                userId,
+                tenantId,
+            },
+            orderBy: {
+                createdAt: 'desc',
+            },
+        });
+    }
+    /**
+     * Gets the most recent note for a user filtered by source.
+     */
+    async getLatestNoteBySource(userId, tenantId, source) {
+        return this.prisma.note.findFirst({
+            where: { userId, tenantId, source },
+            orderBy: { createdAt: 'desc' },
+        });
+    }
+    /**
+     * Gets top-level notes for a conversation, with children included.
+     */
+    async getByConversation(conversationId, userId, tenantId) {
+        const notes = await this.prisma.note.findMany({
+            where: { conversationId, userId, tenantId, parentNoteId: null },
+            include: {
+                children: { orderBy: { workflowStepNumber: 'asc' } },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+        return notes.map((n) => this.mapToNoteItemWithChildren(n));
+    }
+    /**
+     * Gets notes for a specific concept.
+     */
+    async getByConcept(conceptId, userId, tenantId) {
+        const notes = await this.prisma.note.findMany({
+            where: { conceptId, userId, tenantId, parentNoteId: null },
+            include: {
+                children: { orderBy: { workflowStepNumber: 'asc' } },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+        return notes.map((n) => this.mapToNoteItemWithChildren(n));
+    }
+    /**
+     * Gets distinct concept IDs from notes for a user/tenant.
+     * Used for concept tree growth — shows concepts discovered via tasks.
+     */
+    async getDiscoveredConceptIds(userId, tenantId) {
+        const notes = await this.prisma.note.findMany({
+            where: { userId, tenantId, conceptId: { not: null } },
+            select: { conceptId: true },
+            distinct: ['conceptId'],
+        });
+        return notes.map((n) => n.conceptId).filter(Boolean);
+    }
+    /**
+     * Links orphan notes (no conversationId) for given concepts to a conversation.
+     * Used after onboarding creates tasks per-concept, then creates the welcome conversation.
+     */
+    async linkNotesToConversation(conceptIds, conversationId, userId, tenantId) {
+        if (conceptIds.length === 0)
+            return 0;
+        const result = await this.prisma.note.updateMany({
+            where: {
+                conceptId: { in: conceptIds },
+                conversationId: null,
+                userId,
+                tenantId,
+            },
+            data: { conversationId },
+        });
+        return result.count;
+    }
+    /**
+     * Updates conceptId for all notes of a conversation that have no concept set.
+     * Used when a conversation is auto-classified to retroactively link its tasks.
+     */
+    async updateConceptIdForConversation(conversationId, conceptId, tenantId) {
+        await this.prisma.note.updateMany({
+            where: {
+                conversationId,
+                tenantId,
+                conceptId: null,
+            },
+            data: { conceptId },
+        });
+    }
+    /**
+     * Gets all pending tasks for a user/tenant.
+     * Used for auto-triggering workflow execution from chat.
+     */
+    async getPendingTasksByUser(userId, tenantId) {
+        return this.prisma.note.findMany({
+            where: { userId, tenantId, noteType: 'TASK', status: 'PENDING' },
+            orderBy: { createdAt: 'asc' },
+        });
+    }
+    /**
+     * Gets pending task concept IDs for the brain tree (Story 3.2).
+     * If userId is provided, returns only that user's pending tasks.
+     * If omitted, returns all pending tasks for the tenant (PLATFORM_OWNER view).
+     */
+    async getPendingTaskConceptIds(tenantId, userId) {
+        const where = {
+            tenantId,
+            noteType: prisma_1.NoteType.TASK,
+            status: prisma_1.NoteStatus.PENDING,
+            conceptId: { not: null },
+        };
+        if (userId)
+            where.userId = userId;
+        const notes = await this.prisma.note.findMany({
+            where,
+            select: { conceptId: true, userId: true, id: true },
+        });
+        return notes
+            .filter((n) => n.conceptId !== null)
+            .map((n) => ({ conceptId: n.conceptId, userId: n.userId, noteId: n.id }));
+    }
+    /**
+     * Updates the status of a note/task.
+     */
+    async updateStatus(noteId, status, tenantId) {
+        const note = await this.prisma.note.findFirst({
+            where: { id: noteId, tenantId },
+        });
+        if (!note) {
+            throw new common_1.NotFoundException(`Note ${noteId} not found`);
+        }
+        const updated = await this.prisma.note.update({
+            where: { id: noteId },
+            data: { status },
+        });
+        return this.mapToNoteItem(updated);
+    }
+    /**
+     * Updates a note's title and content.
+     */
+    async updateNote(noteId, title, content, tenantId) {
+        const note = await this.prisma.note.findFirst({
+            where: { id: noteId, tenantId },
+        });
+        if (!note) {
+            throw new common_1.NotFoundException(`Note ${noteId} not found`);
+        }
+        const data = {};
+        if (title !== undefined)
+            data.title = title;
+        if (content !== undefined)
+            data.content = content;
+        const updated = await this.prisma.note.update({
+            where: { id: noteId },
+            data,
+        });
+        return this.mapToNoteItem(updated);
+    }
+    /**
+     * Deletes a note.
+     */
+    async deleteNote(noteId, tenantId) {
+        const note = await this.prisma.note.findFirst({
+            where: { id: noteId, tenantId },
+        });
+        if (!note) {
+            throw new common_1.NotFoundException(`Note ${noteId} not found`);
+        }
+        await this.prisma.note.delete({ where: { id: noteId } });
+    }
+    /**
+     * Submits a user completion report for a note/task.
+     */
+    async submitReport(noteId, report, tenantId) {
+        const note = await this.prisma.note.findFirst({
+            where: { id: noteId, tenantId },
+        });
+        if (!note) {
+            throw new common_1.NotFoundException(`Note ${noteId} not found`);
+        }
+        const updated = await this.prisma.note.update({
+            where: { id: noteId },
+            data: { userReport: report },
+        });
+        return this.mapToNoteItem(updated);
+    }
+    /**
+     * AI-scores a user's completion report.
+     */
+    async scoreReport(noteId, userId, tenantId) {
+        const note = await this.prisma.note.findFirst({
+            where: { id: noteId, tenantId },
+        });
+        if (!note) {
+            throw new common_1.NotFoundException(`Note ${noteId} not found`);
+        }
+        if (!note.userReport) {
+            throw new common_1.NotFoundException(`Note ${noteId} has no report to score`);
+        }
+        const scoringPrompt = `Ti si AI mentor za poslovanje. Oceni izveštaj korisnika o završenom zadatku.
+
+ZADATAK:
+Naslov: ${note.title}
+Opis: ${note.content}
+${note.expectedOutcome ? `Očekivani ishod: ${note.expectedOutcome}` : ''}
+
+IZVEŠTAJ KORISNIKA:
+${note.userReport}
+
+Oceni na skali 0-100 na osnovu:
+- Kompletnost: Da li su svi aspekti zadatka pokriveni?
+- Specifičnost: Da li su navedeni konkretni detalji umesto opštih fraza?
+- Kvalitet analize: Da li je korisnik pokazao razumevanje?
+- Primenljivost: Da li se rezultati mogu primeniti u praksi?
+
+Odgovori ISKLJUČIVO u JSON formatu:
+{"score": <broj 0-100>, "feedback": "<2-3 rečenice na srpskom sa konkretnim savetima za poboljšanje>"}`;
+        let fullResponse = '';
+        await this.aiGateway.streamCompletionWithContext([{ role: 'user', content: scoringPrompt }], { tenantId, userId }, (chunk) => { fullResponse += chunk; });
+        let score = 50;
+        let feedback = 'Ocenjivanje nije uspelo. Pokušajte ponovo.';
+        try {
+            const jsonMatch = fullResponse.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                score = Math.max(0, Math.min(100, Number(parsed.score) || 50));
+                feedback = parsed.feedback || feedback;
+            }
+        }
+        catch {
+            this.logger.warn({
+                message: 'Failed to parse AI scoring response',
+                noteId,
+                response: fullResponse.substring(0, 200),
+            });
+        }
+        const updated = await this.prisma.note.update({
+            where: { id: noteId },
+            data: { aiScore: score, aiFeedback: feedback },
+        });
+        return this.mapToNoteItem(updated);
+    }
+    mapToNoteItem(note) {
+        return {
+            id: note.id,
+            title: note.title,
+            content: note.content,
+            source: note.source,
+            noteType: note.noteType,
+            status: note.status,
+            conversationId: note.conversationId,
+            conceptId: note.conceptId,
+            messageId: note.messageId,
+            createdAt: note.createdAt.toISOString(),
+            updatedAt: note.updatedAt.toISOString(),
+            parentNoteId: note.parentNoteId ?? null,
+            userReport: note.userReport ?? null,
+            aiScore: note.aiScore ?? null,
+            aiFeedback: note.aiFeedback ?? null,
+            expectedOutcome: note.expectedOutcome ?? null,
+            workflowStepNumber: note.workflowStepNumber ?? null,
+        };
+    }
+    mapToNoteItemWithChildren(note) {
+        const mapped = this.mapToNoteItem(note);
+        if (note.children && note.children.length > 0) {
+            mapped.children = note.children.map((c) => this.mapToNoteItem(c));
+        }
+        return mapped;
+    }
+};
+exports.NotesService = NotesService;
+exports.NotesService = NotesService = NotesService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object])
+], NotesService);
+
+
+/***/ }),
+/* 130 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var _a;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.NotesController = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const jwt_auth_guard_1 = __webpack_require__(45);
+const current_user_decorator_1 = __webpack_require__(47);
+const notes_service_1 = __webpack_require__(129);
+const prisma_1 = __webpack_require__(34);
+let NotesController = class NotesController {
+    constructor(notesService) {
+        this.notesService = notesService;
+    }
+    /**
+     * Create a new note (manual).
+     */
+    async createNote(user, body) {
+        const result = await this.notesService.createNote({
+            title: body.title,
+            content: body.content,
+            source: prisma_1.NoteSource.MANUAL,
+            noteType: body.noteType ?? prisma_1.NoteType.NOTE,
+            status: body.noteType === 'TASK' ? (body.status ?? prisma_1.NoteStatus.PENDING) : undefined,
+            conversationId: body.conversationId,
+            conceptId: body.conceptId,
+            userId: user.userId,
+            tenantId: user.tenantId,
+        });
+        return { data: result };
+    }
+    /**
+     * Get notes for a specific conversation.
+     */
+    async getByConversation(user, conversationId) {
+        const notes = await this.notesService.getByConversation(conversationId, user.userId, user.tenantId);
+        return { data: notes };
+    }
+    /**
+     * Get notes for a specific concept.
+     */
+    async getByConcept(user, conceptId) {
+        const notes = await this.notesService.getByConcept(conceptId, user.userId, user.tenantId);
+        return { data: notes };
+    }
+    /**
+     * Update a note's status (toggle task completion).
+     */
+    async updateStatus(user, id, body) {
+        const note = await this.notesService.updateStatus(id, body.status, user.tenantId);
+        return { data: note };
+    }
+    /**
+     * Update a note's title and/or content.
+     */
+    async updateNote(user, id, body) {
+        const note = await this.notesService.updateNote(id, body.title, body.content, user.tenantId);
+        return { data: note };
+    }
+    /**
+     * Submit a user completion report for a note/task.
+     */
+    async submitReport(user, id, body) {
+        const note = await this.notesService.submitReport(id, body.report, user.tenantId);
+        return { data: note };
+    }
+    /**
+     * AI-score a user's completion report.
+     */
+    async scoreReport(user, id) {
+        const note = await this.notesService.scoreReport(id, user.userId, user.tenantId);
+        return { data: note };
+    }
+    /**
+     * Delete a note.
+     */
+    async deleteNote(user, id) {
+        await this.notesService.deleteNote(id, user.tenantId);
+    }
+};
+exports.NotesController = NotesController;
+tslib_1.__decorate([
+    (0, common_1.Post)(),
+    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], NotesController.prototype, "createNote", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('conversation/:conversationId'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Param)('conversationId')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], NotesController.prototype, "getByConversation", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('concept/:conceptId'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Param)('conceptId')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], NotesController.prototype, "getByConcept", null);
+tslib_1.__decorate([
+    (0, common_1.Patch)(':id/status'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Param)('id')),
+    tslib_1.__param(2, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], NotesController.prototype, "updateStatus", null);
+tslib_1.__decorate([
+    (0, common_1.Patch)(':id'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Param)('id')),
+    tslib_1.__param(2, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], NotesController.prototype, "updateNote", null);
+tslib_1.__decorate([
+    (0, common_1.Post)(':id/report'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Param)('id')),
+    tslib_1.__param(2, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], NotesController.prototype, "submitReport", null);
+tslib_1.__decorate([
+    (0, common_1.Post)(':id/score'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Param)('id')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], NotesController.prototype, "scoreReport", null);
+tslib_1.__decorate([
+    (0, common_1.Delete)(':id'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Param)('id')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], NotesController.prototype, "deleteNote", null);
+exports.NotesController = NotesController = tslib_1.__decorate([
+    (0, common_1.Controller)('v1/notes'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _a : Object])
+], NotesController);
+
+
+/***/ }),
+/* 131 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -12305,12 +13042,12 @@ const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const tenant_context_1 = __webpack_require__(9);
 const auth_module_1 = __webpack_require__(40);
-const memory_controller_1 = __webpack_require__(127);
-const memory_service_1 = __webpack_require__(128);
-const memory_extraction_service_1 = __webpack_require__(131);
-const memory_embedding_service_1 = __webpack_require__(132);
-const memory_context_builder_service_1 = __webpack_require__(133);
-const llm_config_module_1 = __webpack_require__(80);
+const memory_controller_1 = __webpack_require__(132);
+const memory_service_1 = __webpack_require__(133);
+const memory_extraction_service_1 = __webpack_require__(136);
+const memory_embedding_service_1 = __webpack_require__(137);
+const memory_context_builder_service_1 = __webpack_require__(138);
+const llm_config_module_1 = __webpack_require__(73);
 /**
  * Module for persistent memory across conversations.
  * Provides services for creating, retrieving, and managing user memories.
@@ -12346,7 +13083,7 @@ exports.MemoryModule = MemoryModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 127 */
+/* 132 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -12359,9 +13096,9 @@ const common_1 = __webpack_require__(1);
 const class_validator_1 = __webpack_require__(37);
 const jwt_auth_guard_1 = __webpack_require__(45);
 const current_user_decorator_1 = __webpack_require__(47);
-const memory_service_1 = __webpack_require__(128);
-const create_memory_dto_1 = __webpack_require__(129);
-const update_memory_dto_1 = __webpack_require__(130);
+const memory_service_1 = __webpack_require__(133);
+const create_memory_dto_1 = __webpack_require__(134);
+const update_memory_dto_1 = __webpack_require__(135);
 /**
  * Request body for forgetting all memories.
  * Requires typing "FORGET" to confirm deletion.
@@ -12570,7 +13307,7 @@ exports.MemoryController = MemoryController = MemoryController_1 = tslib_1.__dec
 
 
 /***/ }),
-/* 128 */
+/* 133 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -12896,7 +13633,7 @@ exports.MemoryService = MemoryService = MemoryService_1 = tslib_1.__decorate([
 
 
 /***/ }),
-/* 129 */
+/* 134 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -12905,7 +13642,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CreateMemoryDto = void 0;
 const tslib_1 = __webpack_require__(4);
 const class_validator_1 = __webpack_require__(37);
-const types_1 = __webpack_require__(89);
+const types_1 = __webpack_require__(83);
 /**
  * DTO for creating a new memory entry.
  */
@@ -12944,7 +13681,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 130 */
+/* 135 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -12971,7 +13708,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 131 */
+/* 136 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -12982,9 +13719,9 @@ exports.MemoryExtractionService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const memory_service_1 = __webpack_require__(128);
-const memory_embedding_service_1 = __webpack_require__(132);
-const llm_config_service_1 = __webpack_require__(82);
+const memory_service_1 = __webpack_require__(133);
+const memory_embedding_service_1 = __webpack_require__(137);
+const llm_config_service_1 = __webpack_require__(75);
 /**
  * Service for extracting memorable facts from conversations.
  * Uses LLM to identify client mentions, preferences, and facts.
@@ -13286,7 +14023,7 @@ exports.MemoryExtractionService = MemoryExtractionService = MemoryExtractionServ
 
 
 /***/ }),
-/* 132 */
+/* 137 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -13297,16 +14034,18 @@ exports.MemoryEmbeddingService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const memory_service_1 = __webpack_require__(128);
-const qdrant_client_service_1 = __webpack_require__(121);
-const llm_config_service_1 = __webpack_require__(82);
-const types_1 = __webpack_require__(89);
+const memory_service_1 = __webpack_require__(133);
+const qdrant_client_service_1 = __webpack_require__(110);
+const llm_config_service_1 = __webpack_require__(75);
+const types_1 = __webpack_require__(83);
+/** Default LM Studio endpoint when not configured in DB */
+const DEFAULT_LM_STUDIO_ENDPOINT = 'http://127.0.0.1:1234';
 /**
  * Service for generating and managing memory embeddings.
  * Integrates with Qdrant Cloud for vector storage and semantic search.
  *
  * Collections are per-tenant: `memories_${tenantId}`
- * Dimensions: 1024 (BGE-M3 compatible)
+ * Dimensions: 768 (nomic-embed-text-v1.5)
  *
  * Story 2.7: Persistent Memory Across Conversations
  */
@@ -13319,10 +14058,10 @@ let MemoryEmbeddingService = MemoryEmbeddingService_1 = class MemoryEmbeddingSer
         this.logger = new common_1.Logger(MemoryEmbeddingService_1.name);
         /** Default similarity threshold for semantic search */
         this.DEFAULT_THRESHOLD = 0.7;
-        /** Embedding dimension (1024 for BGE-M3 compatibility) */
-        this.EMBEDDING_DIMENSION = 1024;
-        /** OpenAI model for embedding generation */
-        this.EMBEDDING_MODEL = 'text-embedding-3-small';
+        /** Embedding dimension (768 for nomic-embed-text-v1.5) */
+        this.EMBEDDING_DIMENSION = 768;
+        /** LM Studio model for embedding generation */
+        this.EMBEDDING_MODEL = 'text-embedding-nomic-embed-text-v1.5';
     }
     /**
      * Returns the Qdrant collection name for a tenant's memories.
@@ -13512,30 +14251,25 @@ let MemoryEmbeddingService = MemoryEmbeddingService_1 = class MemoryEmbeddingSer
         }
     }
     /**
-     * Generates an embedding vector using OpenAI text-embedding-3-small (1024-dim).
+     * Generates an embedding vector using LM Studio nomic-embed-text (768-dim).
      */
     async embedText(text) {
-        const apiKey = await this.llmConfigService.getDecryptedApiKey(types_1.LlmProviderType.OPENAI);
-        if (!apiKey) {
-            this.logger.error('OpenAI API key not configured — cannot generate embeddings');
-            return null;
-        }
+        const endpoint = (await this.llmConfigService.getProviderEndpoint(types_1.LlmProviderType.LM_STUDIO)) ??
+            DEFAULT_LM_STUDIO_ENDPOINT;
         try {
-            const response = await fetch('https://api.openai.com/v1/embeddings', {
+            const response = await fetch(`${endpoint}/v1/embeddings`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${apiKey}`,
                 },
                 body: JSON.stringify({
                     model: this.EMBEDDING_MODEL,
                     input: text,
-                    dimensions: this.EMBEDDING_DIMENSION,
                 }),
             });
             if (!response.ok) {
                 this.logger.error({
-                    message: 'OpenAI embedding API error',
+                    message: 'LM Studio embedding API error',
                     status: response.status,
                 });
                 return null;
@@ -13545,7 +14279,7 @@ let MemoryEmbeddingService = MemoryEmbeddingService_1 = class MemoryEmbeddingSer
         }
         catch (error) {
             this.logger.error({
-                message: 'Failed to generate embedding',
+                message: 'Failed to generate embedding via LM Studio',
                 error: error instanceof Error ? error.message : 'Unknown',
             });
             return null;
@@ -13573,7 +14307,7 @@ exports.MemoryEmbeddingService = MemoryEmbeddingService = MemoryEmbeddingService
 
 
 /***/ }),
-/* 133 */
+/* 138 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -13583,7 +14317,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.MemoryContextBuilderService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const memory_embedding_service_1 = __webpack_require__(132);
+const memory_embedding_service_1 = __webpack_require__(137);
 /**
  * Service for building memory context for AI prompts.
  * Formats relevant memories for RAG injection.
@@ -13756,7 +14490,7 @@ exports.MemoryContextBuilderService = MemoryContextBuilderService = MemoryContex
 
 
 /***/ }),
-/* 134 */
+/* 139 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -13765,12 +14499,12 @@ exports.WorkflowModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const knowledge_module_1 = __webpack_require__(112);
-const ai_gateway_module_1 = __webpack_require__(92);
-const notes_module_1 = __webpack_require__(109);
-const web_search_module_1 = __webpack_require__(135);
-const workflow_service_1 = __webpack_require__(137);
-const yolo_scheduler_service_1 = __webpack_require__(138);
+const knowledge_module_1 = __webpack_require__(72);
+const ai_gateway_module_1 = __webpack_require__(86);
+const notes_module_1 = __webpack_require__(128);
+const web_search_module_1 = __webpack_require__(140);
+const workflow_service_1 = __webpack_require__(142);
+const yolo_scheduler_service_1 = __webpack_require__(143);
 let WorkflowModule = class WorkflowModule {
 };
 exports.WorkflowModule = WorkflowModule;
@@ -13784,7 +14518,7 @@ exports.WorkflowModule = WorkflowModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 135 */
+/* 140 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -13793,7 +14527,7 @@ exports.WebSearchModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const web_search_service_1 = __webpack_require__(136);
+const web_search_service_1 = __webpack_require__(141);
 let WebSearchModule = class WebSearchModule {
 };
 exports.WebSearchModule = WebSearchModule;
@@ -13807,7 +14541,7 @@ exports.WebSearchModule = WebSearchModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 136 */
+/* 141 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -14032,12 +14766,12 @@ exports.WebSearchService = WebSearchService = WebSearchService_1 = tslib_1.__dec
 
 
 /***/ }),
-/* 137 */
+/* 142 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 var WorkflowService_1;
-var _a, _b, _c, _d, _e, _f, _g, _h;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.WorkflowService = void 0;
 const tslib_1 = __webpack_require__(4);
@@ -14045,14 +14779,16 @@ const common_1 = __webpack_require__(1);
 const cuid2_1 = __webpack_require__(32);
 const tenant_context_1 = __webpack_require__(9);
 const prisma_1 = __webpack_require__(34);
-const concept_service_1 = __webpack_require__(114);
-const concept_matching_service_1 = __webpack_require__(119);
-const citation_injector_service_1 = __webpack_require__(123);
-const citation_service_1 = __webpack_require__(116);
-const ai_gateway_service_1 = __webpack_require__(93);
-const notes_service_1 = __webpack_require__(110);
-const web_search_service_1 = __webpack_require__(136);
-const persona_prompts_1 = __webpack_require__(96);
+const concept_service_1 = __webpack_require__(103);
+const concept_matching_service_1 = __webpack_require__(108);
+const citation_injector_service_1 = __webpack_require__(112);
+const citation_service_1 = __webpack_require__(105);
+const ai_gateway_service_1 = __webpack_require__(87);
+const notes_service_1 = __webpack_require__(129);
+const web_search_service_1 = __webpack_require__(141);
+const business_context_service_1 = __webpack_require__(117);
+const persona_prompts_1 = __webpack_require__(90);
+const department_categories_1 = __webpack_require__(116);
 const MAX_RECURSION_DEPTH = 10;
 const WORKFLOW_GENERATION_SYSTEM_PROMPT = `Ti si dizajner poslovnih radnih tokova. Kreiraj strukturirane, sekvencijalne radne tokove gde svaki korak PROIZVODI konkretan poslovni dokument.
 
@@ -14074,7 +14810,7 @@ Primer LOŠ promptTemplate: "Objasnite šta je SWOT analiza i kako je primeniti 
 VAŽNO: Sav tekst MORA biti na SRPSKOM JEZIKU.
 Vrati SAMO validan JSON niz bez markdown formatiranja.`;
 let WorkflowService = WorkflowService_1 = class WorkflowService {
-    constructor(prisma, conceptService, conceptMatchingService, citationInjectorService, citationService, aiGatewayService, notesService, webSearchService) {
+    constructor(prisma, conceptService, conceptMatchingService, citationInjectorService, citationService, aiGatewayService, notesService, webSearchService, businessContextService) {
         this.prisma = prisma;
         this.conceptService = conceptService;
         this.conceptMatchingService = conceptMatchingService;
@@ -14083,6 +14819,7 @@ let WorkflowService = WorkflowService_1 = class WorkflowService {
         this.aiGatewayService = aiGatewayService;
         this.notesService = notesService;
         this.webSearchService = webSearchService;
+        this.businessContextService = businessContextService;
         this.logger = new common_1.Logger(WorkflowService_1.name);
         /** In-memory store for active execution plans */
         this.activePlans = new Map();
@@ -14259,7 +14996,7 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
      * Builds an execution plan from selected task IDs.
      * Loads linked concepts, generates workflows, orders by prerequisites.
      */
-    async buildExecutionPlan(taskIds, userId, tenantId, conversationId) {
+    async buildExecutionPlan(taskIds, userId, tenantId, _conversationId) {
         // Load pending tasks
         const tasks = await this.prisma.note.findMany({
             where: {
@@ -14488,6 +15225,22 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
                 });
             }
         }
+        // Story 3.2: Discover related concepts and create new pending tasks
+        const completedConceptIds = [
+            ...new Set(plan.steps
+                .filter((s) => s.status === 'completed')
+                .map((s) => s.conceptId)),
+        ];
+        if (completedConceptIds.length > 0) {
+            this.discoverAndCreatePendingTasks(completedConceptIds, userId, tenantId)
+                .catch((err) => {
+                this.logger.warn({
+                    message: 'Post-execution discovery failed',
+                    planId,
+                    error: err instanceof Error ? err.message : 'Unknown',
+                });
+            });
+        }
         plan.status = 'completed';
         callbacks.onComplete('completed', completedCount, plan.steps.length);
         this.scheduledCleanup(planId);
@@ -14559,6 +15312,18 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
                 businessInfo += `\nDescription: ${tenant.description}`;
             businessInfo += '\n--- END BUSINESS CONTEXT ---';
         }
+        // 3.2 Story 3.2: Load tenant-wide Business Brain context (all memories)
+        let brainContext = '';
+        try {
+            brainContext = await this.businessContextService.getBusinessContext(tenantId);
+        }
+        catch (err) {
+            this.logger.warn({
+                message: 'Business context load failed (non-blocking)',
+                tenantId,
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+        }
         // 3.5. Web search: enrich with real-time data (always when available)
         let webSearchContext = '';
         if (this.webSearchService.isAvailable()) {
@@ -14618,7 +15383,7 @@ PRIMER LOŠEG ODGOVORA (ZABRANJENO):
 Da biste je primenili na vaše poslovanje, trebalo bi da:
 1. Identifikujete vaše ključne snage..."
 ---
-Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}${businessInfo}${webSearchContext}`;
+Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}${businessInfo}${brainContext}${webSearchContext}`;
         if (step.departmentTag) {
             const personaPrompt = (0, persona_prompts_1.generateSystemPrompt)(step.departmentTag);
             if (personaPrompt) {
@@ -14748,6 +15513,93 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}$
     formatWebContext(results) {
         return this.webSearchService.formatSourcesAsObsidian(results);
     }
+    /**
+     * Story 3.2: Post-execution discovery hook.
+     * Traverses relationship edges from completed concepts and creates new PENDING tasks
+     * for the user, scoped to their visible categories.
+     * Capped at 10 new tasks per execution to prevent explosion.
+     */
+    async discoverAndCreatePendingTasks(completedConceptIds, userId, tenantId) {
+        const MAX_NEW_TASKS = 10;
+        // Get user's department to scope discoveries
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { department: true, role: true },
+        });
+        const visibleCategories = (0, department_categories_1.getVisibleCategories)(user?.department ?? null, user?.role ?? 'MEMBER');
+        // Load all outgoing relationships from completed concepts
+        const relationships = await this.prisma.conceptRelationship.findMany({
+            where: {
+                sourceConceptId: { in: completedConceptIds },
+            },
+            include: {
+                targetConcept: { select: { id: true, name: true, category: true } },
+            },
+        });
+        if (relationships.length === 0)
+            return 0;
+        // Get target concept IDs
+        const targetConceptIds = relationships.map((r) => r.targetConcept.id);
+        // Check which targets already have a conversation or pending task for this user
+        const [existingConversations, existingTasks] = await Promise.all([
+            this.prisma.note.findMany({
+                where: {
+                    userId,
+                    tenantId,
+                    conceptId: { in: targetConceptIds },
+                    noteType: prisma_1.NoteType.TASK,
+                },
+                select: { conceptId: true },
+            }),
+            // Also check if there are already completed conversations via notes
+            this.prisma.note.findMany({
+                where: {
+                    userId,
+                    tenantId,
+                    conceptId: { in: targetConceptIds },
+                    noteType: prisma_1.NoteType.TASK,
+                    status: prisma_1.NoteStatus.COMPLETED,
+                },
+                select: { conceptId: true },
+            }),
+        ]);
+        const existingConceptIds = new Set([
+            ...existingConversations.map((n) => n.conceptId),
+            ...existingTasks.map((n) => n.conceptId),
+        ]);
+        // Filter to only new concepts within user's visible categories
+        const newConcepts = relationships
+            .map((r) => r.targetConcept)
+            .filter((c) => !existingConceptIds.has(c.id))
+            .filter((c) => !visibleCategories || visibleCategories.includes(c.category));
+        // Deduplicate
+        const uniqueNew = [...new Map(newConcepts.map((c) => [c.id, c])).values()];
+        const toSeed = uniqueNew.slice(0, MAX_NEW_TASKS);
+        if (toSeed.length === 0)
+            return 0;
+        // Create PENDING task Notes
+        const noteData = toSeed.map((concept) => ({
+            id: `note_${(0, cuid2_1.createId)()}`,
+            title: concept.name,
+            content: `Istraži koncept: ${concept.name}`,
+            source: prisma_1.NoteSource.CONVERSATION,
+            noteType: prisma_1.NoteType.TASK,
+            status: prisma_1.NoteStatus.PENDING,
+            conceptId: concept.id,
+            userId,
+            tenantId,
+        }));
+        await this.prisma.note.createMany({ data: noteData });
+        this.logger.log({
+            message: 'Post-execution discovery: new pending tasks created',
+            userId,
+            tenantId,
+            completedConceptIds,
+            newTaskCount: noteData.length,
+            newConceptNames: toSeed.map((c) => c.name),
+        });
+        return noteData.length;
+    }
     scheduledCleanup(planId) {
         setTimeout(() => {
             this.activePlans.delete(planId);
@@ -14759,12 +15611,12 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}$
 exports.WorkflowService = WorkflowService;
 exports.WorkflowService = WorkflowService = WorkflowService_1 = tslib_1.__decorate([
     (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _b : Object, typeof (_c = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _c : Object, typeof (_d = typeof citation_injector_service_1.CitationInjectorService !== "undefined" && citation_injector_service_1.CitationInjectorService) === "function" ? _d : Object, typeof (_e = typeof citation_service_1.CitationService !== "undefined" && citation_service_1.CitationService) === "function" ? _e : Object, typeof (_f = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _f : Object, typeof (_g = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _g : Object, typeof (_h = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _h : Object])
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _b : Object, typeof (_c = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _c : Object, typeof (_d = typeof citation_injector_service_1.CitationInjectorService !== "undefined" && citation_injector_service_1.CitationInjectorService) === "function" ? _d : Object, typeof (_e = typeof citation_service_1.CitationService !== "undefined" && citation_service_1.CitationService) === "function" ? _e : Object, typeof (_f = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _f : Object, typeof (_g = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _g : Object, typeof (_h = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _h : Object, typeof (_j = typeof business_context_service_1.BusinessContextService !== "undefined" && business_context_service_1.BusinessContextService) === "function" ? _j : Object])
 ], WorkflowService);
 
 
 /***/ }),
-/* 138 */
+/* 143 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -14777,12 +15629,13 @@ const common_1 = __webpack_require__(1);
 const cuid2_1 = __webpack_require__(32);
 const tenant_context_1 = __webpack_require__(9);
 const prisma_1 = __webpack_require__(34);
-const workflow_service_1 = __webpack_require__(137);
-const notes_service_1 = __webpack_require__(110);
-const concept_service_1 = __webpack_require__(114);
-const concept_matching_service_1 = __webpack_require__(119);
-const curriculum_service_1 = __webpack_require__(117);
-const concept_extraction_service_1 = __webpack_require__(124);
+const workflow_service_1 = __webpack_require__(142);
+const notes_service_1 = __webpack_require__(129);
+const concept_service_1 = __webpack_require__(103);
+const concept_matching_service_1 = __webpack_require__(108);
+const curriculum_service_1 = __webpack_require__(106);
+const concept_extraction_service_1 = __webpack_require__(113);
+const department_categories_1 = __webpack_require__(116);
 const MAX_LOG_BUFFER = 100;
 const SUMMARY_TRUNCATE_LENGTH = 300;
 const RETRY_BASE_DELAY_MS = 5_000; // 5s base, exponential: 5s, 15s, 45s
@@ -14804,12 +15657,52 @@ let YoloSchedulerService = YoloSchedulerService_1 = class YoloSchedulerService {
      * Starts YOLO autonomous execution for all pending tasks of a tenant.
      * Returns the planId for tracking.
      */
-    async startYoloExecution(tenantId, userId, conversationId, config, callbacks, conceptConversations) {
+    async startYoloExecution(tenantId, userId, conversationId, config, callbacks, conceptConversations, category) {
         const planId = `yolo_${(0, cuid2_1.createId)()}`;
-        // Load all pending TASK notes for this tenant
-        const taskNotes = await this.prisma.note.findMany({
-            where: { tenantId, noteType: 'TASK', status: 'PENDING' },
+        // Load pending TASK notes for this tenant
+        let taskNotes = await this.prisma.note.findMany({
+            where: { tenantId, noteType: 'TASK', status: 'PENDING', conceptId: { not: null } },
         });
+        // Story 3.2: Per-domain or foundation-weighted selection
+        if (taskNotes.length > 0) {
+            const conceptIds = [...new Set(taskNotes.map((n) => n.conceptId))];
+            const concepts = await this.prisma.concept.findMany({
+                where: { id: { in: conceptIds } },
+                select: { id: true, category: true },
+            });
+            const conceptCategoryMap = new Map(concepts.map((c) => [c.id, c.category]));
+            if (category) {
+                // Per-domain: only concepts in the specified category
+                taskNotes = taskNotes.filter((n) => n.conceptId && conceptCategoryMap.get(n.conceptId) === category);
+            }
+            else {
+                // Foundation run: proportional weighting across tiers
+                // Tier 1 (indices 0-5): up to 60 concepts
+                // Tier 2 (indices 6-9): up to 25 concepts
+                // Tier 3 (indices 10+): up to 15 concepts
+                const tier1Cats = new Set(department_categories_1.ALL_CATEGORIES.slice(0, 6));
+                const tier2Cats = new Set(department_categories_1.ALL_CATEGORIES.slice(6, 10));
+                const tier1 = [];
+                const tier2 = [];
+                const tier3 = [];
+                for (const note of taskNotes) {
+                    const cat = note.conceptId ? conceptCategoryMap.get(note.conceptId) : null;
+                    if (!cat)
+                        continue;
+                    if (tier1Cats.has(cat))
+                        tier1.push(note);
+                    else if (tier2Cats.has(cat))
+                        tier2.push(note);
+                    else
+                        tier3.push(note);
+                }
+                taskNotes = [
+                    ...tier1.slice(0, 60),
+                    ...tier2.slice(0, 25),
+                    ...tier3.slice(0, 15),
+                ];
+            }
+        }
         if (taskNotes.length === 0) {
             callbacks.onError('No pending tasks found');
             return planId;
@@ -15081,9 +15974,7 @@ let YoloSchedulerService = YoloSchedulerService_1 = class YoloSchedulerService {
             });
             callbacks.onProgress(this.buildProgressPayload(state));
             // Execute the step using WorkflowService's shared logic
-            let fullContent = '';
-            const result = await this.workflowService.executeStepAutonomous(step, conversationId, userId, tenantId, (chunk) => { fullContent += chunk; }, // Collect chunks silently — no per-step streaming in YOLO
-            completedSummaries);
+            const result = await this.workflowService.executeStepAutonomous(step, conversationId, userId, tenantId, () => { }, completedSummaries);
             // Emit step-complete progress (Story 2.16)
             state.workerStepInfo.set(task.taskId, {
                 stepIndex: stepIdx,
@@ -15362,7 +16253,7 @@ exports.YoloSchedulerService = YoloSchedulerService = YoloSchedulerService_1 = t
 
 
 /***/ }),
-/* 139 */
+/* 144 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -15372,12 +16263,13 @@ exports.ConversationController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const jwt_auth_guard_1 = __webpack_require__(45);
+const department_guard_1 = __webpack_require__(118);
 const current_user_decorator_1 = __webpack_require__(47);
-const conversation_service_1 = __webpack_require__(140);
-const create_conversation_dto_1 = __webpack_require__(141);
-const update_persona_dto_1 = __webpack_require__(142);
-const curriculum_service_1 = __webpack_require__(117);
-const concept_service_1 = __webpack_require__(114);
+const conversation_service_1 = __webpack_require__(145);
+const create_conversation_dto_1 = __webpack_require__(146);
+const update_persona_dto_1 = __webpack_require__(147);
+const curriculum_service_1 = __webpack_require__(106);
+const concept_service_1 = __webpack_require__(103);
 /**
  * Controller for chat conversation management.
  * All endpoints require JWT authentication.
@@ -15425,8 +16317,16 @@ let ConversationController = class ConversationController {
         return { data: tree };
     }
     /**
+     * Business Brain tree — active + pending concepts grouped by category (Story 3.2).
+     * Filtered by the user's department → visible categories.
+     */
+    async getBrainTree(user) {
+        const tree = await this.conversationService.getBrainTree(user.tenantId, user.userId, user.department, user.role);
+        return { data: tree };
+    }
+    /**
      * Get a single conversation with all its messages.
-     * Validates ownership before returning.
+     * Validates ownership and department scope before returning.
      */
     async getConversation(user, conversationId) {
         const conversation = await this.conversationService.getConversation(user.tenantId, conversationId, user.userId);
@@ -15477,7 +16377,16 @@ tslib_1.__decorate([
     tslib_1.__metadata("design:returntype", Promise)
 ], ConversationController.prototype, "listGroupedConversations", null);
 tslib_1.__decorate([
+    (0, common_1.Get)('brain-tree'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ConversationController.prototype, "getBrainTree", null);
+tslib_1.__decorate([
     (0, common_1.Get)(':id'),
+    (0, common_1.UseGuards)(department_guard_1.DepartmentGuard),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
     tslib_1.__param(1, (0, common_1.Param)('id')),
@@ -15512,7 +16421,7 @@ exports.ConversationController = ConversationController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 140 */
+/* 145 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -15525,10 +16434,11 @@ const common_1 = __webpack_require__(1);
 const cuid2_1 = __webpack_require__(32);
 const tenant_context_1 = __webpack_require__(9);
 const client_1 = __webpack_require__(11);
-const concept_service_1 = __webpack_require__(114);
-const curriculum_service_1 = __webpack_require__(117);
-const citation_service_1 = __webpack_require__(116);
-const notes_service_1 = __webpack_require__(110);
+const concept_service_1 = __webpack_require__(103);
+const curriculum_service_1 = __webpack_require__(106);
+const citation_service_1 = __webpack_require__(105);
+const notes_service_1 = __webpack_require__(129);
+const department_categories_1 = __webpack_require__(116);
 /**
  * Service for managing chat conversations.
  * All operations are tenant-scoped through the TenantPrismaService.
@@ -15823,6 +16733,93 @@ let ConversationService = ConversationService_1 = class ConversationService {
             .map(buildNode);
     }
     /**
+     * Builds the Business Brain tree (Story 3.2).
+     * Shows only concepts with conversations (completed) or pending tasks.
+     * Filtered by user's department → visible categories.
+     */
+    async getBrainTree(tenantId, userId, department, role) {
+        const prisma = await this.tenantPrisma.getClient(tenantId);
+        // 1. Get all conversations with concepts (all users in tenant)
+        const convRows = await prisma.conversation.findMany({
+            where: { conceptId: { not: null } },
+            select: { conceptId: true, userId: true, id: true },
+            orderBy: { updatedAt: 'desc' },
+        });
+        // 2. Get pending task notes
+        const isOwner = role === 'PLATFORM_OWNER' || role === 'TENANT_OWNER' || !department;
+        const pendingTasks = await this.notesService.getPendingTaskConceptIds(tenantId, isOwner ? undefined : userId);
+        // 3. Collect unique concept IDs and build lookup maps
+        const allConceptIds = new Set();
+        const completedMap = new Map();
+        const pendingMap = new Map();
+        for (const conv of convRows) {
+            if (conv.conceptId) {
+                allConceptIds.add(conv.conceptId);
+                if (!completedMap.has(conv.conceptId)) {
+                    completedMap.set(conv.conceptId, {
+                        userId: conv.userId,
+                        conversationId: conv.id,
+                    });
+                }
+            }
+        }
+        for (const task of pendingTasks) {
+            allConceptIds.add(task.conceptId);
+            if (!pendingMap.has(task.conceptId)) {
+                pendingMap.set(task.conceptId, {
+                    userId: task.userId,
+                    noteId: task.noteId,
+                });
+            }
+        }
+        if (allConceptIds.size === 0) {
+            return { categories: [] };
+        }
+        // 4. Load concept details
+        const conceptMap = await this.conceptService.findByIds([
+            ...allConceptIds,
+        ]);
+        // 5. Get visible categories for this user
+        const visibleCategories = (0, department_categories_1.getVisibleCategories)(department, role);
+        // 6. Group by category
+        const categoryGroups = new Map();
+        for (const [conceptId, info] of conceptMap) {
+            // Filter by visible categories (null = no filter, owner sees all)
+            if (visibleCategories && !visibleCategories.includes(info.category)) {
+                continue;
+            }
+            const completed = completedMap.get(conceptId);
+            const pending = pendingMap.get(conceptId);
+            const status = completed ? 'completed' : 'pending';
+            const concept = {
+                id: conceptId,
+                name: info.name,
+                slug: info.slug,
+                status,
+            };
+            if (completed) {
+                concept.completedByUserId = completed.userId;
+                concept.conversationId = completed.conversationId;
+            }
+            if (pending) {
+                concept.pendingNoteId = pending.noteId;
+            }
+            if (!categoryGroups.has(info.category)) {
+                categoryGroups.set(info.category, []);
+            }
+            categoryGroups.get(info.category).push(concept);
+        }
+        // 7. Build sorted category list (ordered by ALL_CATEGORIES index)
+        const categories = [...categoryGroups.entries()]
+            .map(([name, concepts]) => ({ name, concepts }))
+            .sort((a, b) => {
+            const orderA = department_categories_1.ALL_CATEGORIES.indexOf(a.name);
+            const orderB = department_categories_1.ALL_CATEGORIES.indexOf(b.name);
+            return (orderA === -1 ? 999 : orderA) - (orderB === -1 ? 999 : orderB);
+        });
+        return { categories };
+    }
+    /**
      * Updates the concept ID for a conversation.
      */
     async updateConceptId(tenantId, conversationId, userId, conceptId) {
@@ -16031,7 +17028,7 @@ exports.ConversationService = ConversationService = ConversationService_1 = tsli
 
 
 /***/ }),
-/* 141 */
+/* 146 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -16040,7 +17037,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CreateConversationDto = void 0;
 const tslib_1 = __webpack_require__(4);
 const class_validator_1 = __webpack_require__(37);
-const types_1 = __webpack_require__(89);
+const types_1 = __webpack_require__(83);
 /**
  * Valid persona type values for validation.
  * Derived from shared PersonaType enum to avoid duplication.
@@ -16079,7 +17076,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 142 */
+/* 147 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -16088,7 +17085,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.UpdatePersonaDto = void 0;
 const tslib_1 = __webpack_require__(4);
 const class_validator_1 = __webpack_require__(37);
-const types_1 = __webpack_require__(89);
+const types_1 = __webpack_require__(83);
 /**
  * Valid persona type values for validation.
  * Derived from shared PersonaType enum to avoid duplication.
@@ -16111,44 +17108,46 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 143 */
+/* 148 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 var ConversationGateway_1;
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ConversationGateway = void 0;
 const tslib_1 = __webpack_require__(4);
-const websockets_1 = __webpack_require__(144);
-const socket_io_1 = __webpack_require__(145);
+const websockets_1 = __webpack_require__(149);
+const socket_io_1 = __webpack_require__(150);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const jsonwebtoken_1 = __webpack_require__(57);
-const jwks_rsa_1 = tslib_1.__importDefault(__webpack_require__(146));
-const conversation_service_1 = __webpack_require__(140);
-const ai_gateway_service_1 = __webpack_require__(93);
-const notes_service_1 = __webpack_require__(110);
-const concept_matching_service_1 = __webpack_require__(119);
-const concept_service_1 = __webpack_require__(114);
-const citation_injector_service_1 = __webpack_require__(123);
-const citation_service_1 = __webpack_require__(116);
-const memory_context_builder_service_1 = __webpack_require__(133);
-const memory_extraction_service_1 = __webpack_require__(131);
-const concept_extraction_service_1 = __webpack_require__(124);
-const workflow_service_1 = __webpack_require__(137);
-const yolo_scheduler_service_1 = __webpack_require__(138);
-const web_search_service_1 = __webpack_require__(136);
+const jwks_rsa_1 = tslib_1.__importDefault(__webpack_require__(151));
+const conversation_service_1 = __webpack_require__(145);
+const ai_gateway_service_1 = __webpack_require__(87);
+const notes_service_1 = __webpack_require__(129);
+const concept_matching_service_1 = __webpack_require__(108);
+const concept_service_1 = __webpack_require__(103);
+const citation_injector_service_1 = __webpack_require__(112);
+const citation_service_1 = __webpack_require__(105);
+const memory_context_builder_service_1 = __webpack_require__(138);
+const memory_extraction_service_1 = __webpack_require__(136);
+const memory_service_1 = __webpack_require__(133);
+const concept_extraction_service_1 = __webpack_require__(113);
+const workflow_service_1 = __webpack_require__(142);
+const yolo_scheduler_service_1 = __webpack_require__(143);
+const web_search_service_1 = __webpack_require__(141);
 const tenant_context_1 = __webpack_require__(9);
 const prisma_1 = __webpack_require__(34);
-const types_1 = __webpack_require__(89);
+const types_1 = __webpack_require__(83);
+const types_2 = __webpack_require__(83);
 /**
  * WebSocket gateway for real-time chat streaming.
  * Handles client connections, message sending, and AI response streaming.
  * Note: CORS origin is configured dynamically in afterInit using ConfigService.
  */
 let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
-    constructor(conversationService, aiGatewayService, configService, prisma, notesService, conceptMatchingService, citationInjectorService, citationService, memoryContextBuilder, memoryExtractionService, workflowService, conceptService, conceptExtractionService, yoloScheduler, webSearchService) {
+    constructor(conversationService, aiGatewayService, configService, prisma, notesService, conceptMatchingService, citationInjectorService, citationService, memoryContextBuilder, memoryExtractionService, memoryService, workflowService, conceptService, conceptExtractionService, yoloScheduler, webSearchService) {
         this.conversationService = conversationService;
         this.aiGatewayService = aiGatewayService;
         this.configService = configService;
@@ -16159,6 +17158,7 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
         this.citationService = citationService;
         this.memoryContextBuilder = memoryContextBuilder;
         this.memoryExtractionService = memoryExtractionService;
+        this.memoryService = memoryService;
         this.workflowService = workflowService;
         this.conceptService = conceptService;
         this.conceptExtractionService = conceptExtractionService;
@@ -16295,7 +17295,7 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
             // Verify user owns the conversation
             await this.conversationService.getConversation(authenticatedClient.tenantId, conversationId, authenticatedClient.userId);
             // Save user message
-            const userMessage = await this.conversationService.addMessage(authenticatedClient.tenantId, conversationId, types_1.MessageRole.USER, content);
+            const userMessage = await this.conversationService.addMessage(authenticatedClient.tenantId, conversationId, types_2.MessageRole.USER, content);
             // Emit confirmation of user message received
             client.emit('chat:message-received', {
                 messageId: userMessage.id,
@@ -16384,7 +17384,7 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
                 ? this.memoryContextBuilder.parseAttributionsFromResponse(fullContent, memoryContext.attributions)
                 : [];
             // Save AI message with citations in content (Story 2.5 + 2.6)
-            const aiMessage = await this.conversationService.addMessage(authenticatedClient.tenantId, conversationId, types_1.MessageRole.ASSISTANT, contentWithCitations, confidence?.score ?? null, confidence?.factors ?? null);
+            const aiMessage = await this.conversationService.addMessage(authenticatedClient.tenantId, conversationId, types_2.MessageRole.ASSISTANT, contentWithCitations, confidence?.score ?? null, confidence?.factors ?? null);
             // Store citations in DB (fire-and-forget)
             if (citations.length > 0) {
                 this.citationService.storeCitations(aiMessage.id, citations).catch((err) => {
@@ -16452,8 +17452,8 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
             });
             // Fire-and-forget: extract memories from this exchange
             this.memoryExtractionService.extractMemories(conversation.messages.concat([
-                { id: userMessage.id, conversationId, role: types_1.MessageRole.USER, content, confidenceScore: null, confidenceFactors: null, createdAt: new Date().toISOString() },
-                { id: aiMessage.id, conversationId, role: types_1.MessageRole.ASSISTANT, content: fullContent, confidenceScore: null, confidenceFactors: null, createdAt: new Date().toISOString() },
+                { id: userMessage.id, conversationId, role: types_2.MessageRole.USER, content, confidenceScore: null, confidenceFactors: null, createdAt: new Date().toISOString() },
+                { id: aiMessage.id, conversationId, role: types_2.MessageRole.ASSISTANT, content: fullContent, confidenceScore: null, confidenceFactors: null, createdAt: new Date().toISOString() },
             ]), authenticatedClient.userId, authenticatedClient.tenantId).catch((err) => {
                 this.logger.warn({
                     message: 'Memory extraction failed (non-blocking)',
@@ -16927,7 +17927,7 @@ Ako nema zadataka, odgovori sa: []`;
                 const targetConvId = conceptId && conceptConversations.has(conceptId)
                     ? conceptConversations.get(conceptId)
                     : payload.conversationId;
-                const msg = await this.conversationService.addMessage(authenticatedClient.tenantId, targetConvId, types_1.MessageRole.ASSISTANT, content);
+                const msg = await this.conversationService.addMessage(authenticatedClient.tenantId, targetConvId, types_2.MessageRole.ASSISTANT, content);
                 return msg.id;
             },
         }).catch((err) => {
@@ -16961,11 +17961,27 @@ Ako nema zadataka, odgovori sa: []`;
      * Optionally passes user input to inject as context for the next step.
      */
     handleStepContinue(client, payload) {
+        const authenticatedClient = client;
         this.logger.log({
             message: 'User confirmed next workflow step',
             planId: payload.planId,
             hasUserInput: !!payload.userInput,
         });
+        // Story 3.2: Store user input as Business Brain memory (fire-and-forget)
+        if (payload.userInput && payload.userInput.trim().length > 10) {
+            this.memoryService.createMemory(authenticatedClient.tenantId, authenticatedClient.userId, {
+                type: types_1.MemoryType.FACTUAL_STATEMENT,
+                source: types_1.MemorySource.USER_STATED,
+                content: payload.userInput.trim(),
+                subject: 'workflow-input',
+                confidence: 1.0,
+            }).catch((err) => {
+                this.logger.warn({
+                    message: 'Failed to store workflow user input as memory',
+                    error: err instanceof Error ? err.message : 'Unknown',
+                });
+            });
+        }
         this.workflowService.continueStep(payload.planId, payload.userInput);
     }
     /**
@@ -17050,7 +18066,7 @@ Ako nema zadataka, odgovori sa: []`;
                     const targetConvId = conceptId && conceptConversations.has(conceptId)
                         ? conceptConversations.get(conceptId)
                         : payload.conversationId;
-                    const msg = await this.conversationService.addMessage(authenticatedClient.tenantId, targetConvId, types_1.MessageRole.ASSISTANT, content);
+                    const msg = await this.conversationService.addMessage(authenticatedClient.tenantId, targetConvId, types_2.MessageRole.ASSISTANT, content);
                     return msg.id;
                 },
                 createConversationForConcept: async (conceptId, conceptName) => {
@@ -17100,6 +18116,100 @@ Ako nema zadataka, odgovori sa: []`;
             });
             client.emit('workflow:error', {
                 message: error instanceof Error ? error.message : 'Failed to start YOLO',
+                conversationId: payload.conversationId,
+            });
+        }
+    }
+    /**
+     * Story 3.2: Handles per-domain YOLO execution start.
+     * Scopes YOLO to a single category (domain).
+     */
+    async handleStartDomainYolo(client, payload) {
+        const authenticatedClient = client;
+        try {
+            this.logger.log({
+                message: 'Per-domain YOLO requested',
+                userId: authenticatedClient.userId,
+                category: payload.category,
+                conversationId: payload.conversationId,
+            });
+            // Create per-concept conversations for discovered tasks
+            const conceptConversations = new Map();
+            // Start YOLO with category scoping
+            const config = { maxConcurrency: 3, maxConceptsHardStop: 100, retryAttempts: 3 };
+            this.yoloScheduler
+                .startYoloExecution(authenticatedClient.tenantId, authenticatedClient.userId, payload.conversationId, config, {
+                onProgress: (progress) => {
+                    client.emit('workflow:yolo-progress', progress);
+                },
+                onComplete: (result) => {
+                    client.emit('workflow:yolo-complete', result);
+                    client.emit('chat:notes-updated', {
+                        conversationId: payload.conversationId,
+                        count: 0,
+                    });
+                },
+                onError: (error) => {
+                    client.emit('workflow:error', {
+                        message: error,
+                        conversationId: payload.conversationId,
+                    });
+                },
+                saveMessage: async (_role, content, conceptId) => {
+                    const targetConvId = conceptId && conceptConversations.has(conceptId)
+                        ? conceptConversations.get(conceptId)
+                        : payload.conversationId;
+                    const msg = await this.conversationService.addMessage(authenticatedClient.tenantId, targetConvId, types_2.MessageRole.ASSISTANT, content);
+                    return msg.id;
+                },
+                createConversationForConcept: async (conceptId, conceptName) => {
+                    try {
+                        const conv = await this.conversationService.createConversation(authenticatedClient.tenantId, authenticatedClient.userId, conceptName, undefined, conceptId);
+                        conceptConversations.set(conceptId, conv.id);
+                        client.emit('workflow:conversations-created', {
+                            planId: 'yolo-domain',
+                            conversations: [{ conceptId, conceptName, conversationId: conv.id }],
+                            originalConversationId: payload.conversationId,
+                        });
+                        return conv.id;
+                    }
+                    catch (err) {
+                        this.logger.warn({
+                            message: 'Failed to create conversation for domain YOLO concept',
+                            conceptId,
+                            error: err instanceof Error ? err.message : 'Unknown',
+                        });
+                        return null;
+                    }
+                },
+                onConceptDiscovered: (conceptId, conceptName, discoveredConversationId) => {
+                    client.emit('chat:concept-detected', {
+                        conversationId: payload.conversationId,
+                        conceptId,
+                        conceptName,
+                        discoveredConversationId,
+                    });
+                },
+            }, conceptConversations, payload.category)
+                .catch((err) => {
+                this.logger.error({
+                    message: 'Domain YOLO execution failed',
+                    category: payload.category,
+                    error: err instanceof Error ? err.message : 'Unknown error',
+                });
+                client.emit('workflow:error', {
+                    message: err instanceof Error ? err.message : 'Domain YOLO failed',
+                    conversationId: payload.conversationId,
+                });
+            });
+        }
+        catch (error) {
+            this.logger.error({
+                message: 'Failed to start domain YOLO',
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
+            client.emit('workflow:error', {
+                message: error instanceof Error ? error.message : 'Failed to start domain YOLO',
                 conversationId: payload.conversationId,
             });
         }
@@ -17242,7 +18352,7 @@ Ako nema zadataka, odgovori sa: []`;
                 const targetConvId = conceptId && conceptConversations.has(conceptId)
                     ? conceptConversations.get(conceptId)
                     : conversationId;
-                const msg = await this.conversationService.addMessage(authenticatedClient.tenantId, targetConvId, types_1.MessageRole.ASSISTANT, content);
+                const msg = await this.conversationService.addMessage(authenticatedClient.tenantId, targetConvId, types_2.MessageRole.ASSISTANT, content);
                 return msg.id;
             },
         }).catch((err) => {
@@ -17421,14 +18531,14 @@ ${businessContext}${webContext}`;
 exports.ConversationGateway = ConversationGateway;
 tslib_1.__decorate([
     (0, websockets_1.WebSocketServer)(),
-    tslib_1.__metadata("design:type", typeof (_r = typeof socket_io_1.Server !== "undefined" && socket_io_1.Server) === "function" ? _r : Object)
+    tslib_1.__metadata("design:type", typeof (_s = typeof socket_io_1.Server !== "undefined" && socket_io_1.Server) === "function" ? _s : Object)
 ], ConversationGateway.prototype, "server", void 0);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('chat:message-send'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_s = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _s : Object, Object]),
+    tslib_1.__metadata("design:paramtypes", [typeof (_t = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _t : Object, Object]),
     tslib_1.__metadata("design:returntype", Promise)
 ], ConversationGateway.prototype, "handleMessage", null);
 tslib_1.__decorate([
@@ -17436,23 +18546,23 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_t = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _t : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_u = typeof Promise !== "undefined" && Promise) === "function" ? _u : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_u = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _u : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_v = typeof Promise !== "undefined" && Promise) === "function" ? _v : Object)
 ], ConversationGateway.prototype, "handleRunAgents", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('workflow:approve'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_v = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _v : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_w = typeof Promise !== "undefined" && Promise) === "function" ? _w : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_w = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _w : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_x = typeof Promise !== "undefined" && Promise) === "function" ? _x : Object)
 ], ConversationGateway.prototype, "handleWorkflowApproval", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('workflow:cancel'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_x = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _x : Object, Object]),
+    tslib_1.__metadata("design:paramtypes", [typeof (_y = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _y : Object, Object]),
     tslib_1.__metadata("design:returntype", void 0)
 ], ConversationGateway.prototype, "handleWorkflowCancel", null);
 tslib_1.__decorate([
@@ -17460,7 +18570,7 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_y = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _y : Object, Object]),
+    tslib_1.__metadata("design:paramtypes", [typeof (_z = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _z : Object, Object]),
     tslib_1.__metadata("design:returntype", void 0)
 ], ConversationGateway.prototype, "handleStepContinue", null);
 tslib_1.__decorate([
@@ -17468,16 +18578,24 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_z = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _z : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_0 = typeof Promise !== "undefined" && Promise) === "function" ? _0 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_0 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _0 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_1 = typeof Promise !== "undefined" && Promise) === "function" ? _1 : Object)
 ], ConversationGateway.prototype, "handleStartYolo", null);
+tslib_1.__decorate([
+    (0, websockets_1.SubscribeMessage)('yolo:start-domain'),
+    tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
+    tslib_1.__param(1, (0, websockets_1.MessageBody)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_2 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _2 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_3 = typeof Promise !== "undefined" && Promise) === "function" ? _3 : Object)
+], ConversationGateway.prototype, "handleStartDomainYolo", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('discovery:send-message'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_1 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _1 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_2 = typeof Promise !== "undefined" && Promise) === "function" ? _2 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_4 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _4 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_5 = typeof Promise !== "undefined" && Promise) === "function" ? _5 : Object)
 ], ConversationGateway.prototype, "handleDiscoveryMessage", null);
 exports.ConversationGateway = ConversationGateway = ConversationGateway_1 = tslib_1.__decorate([
     (0, websockets_1.WebSocketGateway)({
@@ -17487,30 +18605,30 @@ exports.ConversationGateway = ConversationGateway = ConversationGateway_1 = tsli
             credentials: true,
         },
     }),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _c : Object, typeof (_d = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _d : Object, typeof (_e = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _e : Object, typeof (_f = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _f : Object, typeof (_g = typeof citation_injector_service_1.CitationInjectorService !== "undefined" && citation_injector_service_1.CitationInjectorService) === "function" ? _g : Object, typeof (_h = typeof citation_service_1.CitationService !== "undefined" && citation_service_1.CitationService) === "function" ? _h : Object, typeof (_j = typeof memory_context_builder_service_1.MemoryContextBuilderService !== "undefined" && memory_context_builder_service_1.MemoryContextBuilderService) === "function" ? _j : Object, typeof (_k = typeof memory_extraction_service_1.MemoryExtractionService !== "undefined" && memory_extraction_service_1.MemoryExtractionService) === "function" ? _k : Object, typeof (_l = typeof workflow_service_1.WorkflowService !== "undefined" && workflow_service_1.WorkflowService) === "function" ? _l : Object, typeof (_m = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _m : Object, typeof (_o = typeof concept_extraction_service_1.ConceptExtractionService !== "undefined" && concept_extraction_service_1.ConceptExtractionService) === "function" ? _o : Object, typeof (_p = typeof yolo_scheduler_service_1.YoloSchedulerService !== "undefined" && yolo_scheduler_service_1.YoloSchedulerService) === "function" ? _p : Object, typeof (_q = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _q : Object])
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _c : Object, typeof (_d = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _d : Object, typeof (_e = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _e : Object, typeof (_f = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _f : Object, typeof (_g = typeof citation_injector_service_1.CitationInjectorService !== "undefined" && citation_injector_service_1.CitationInjectorService) === "function" ? _g : Object, typeof (_h = typeof citation_service_1.CitationService !== "undefined" && citation_service_1.CitationService) === "function" ? _h : Object, typeof (_j = typeof memory_context_builder_service_1.MemoryContextBuilderService !== "undefined" && memory_context_builder_service_1.MemoryContextBuilderService) === "function" ? _j : Object, typeof (_k = typeof memory_extraction_service_1.MemoryExtractionService !== "undefined" && memory_extraction_service_1.MemoryExtractionService) === "function" ? _k : Object, typeof (_l = typeof memory_service_1.MemoryService !== "undefined" && memory_service_1.MemoryService) === "function" ? _l : Object, typeof (_m = typeof workflow_service_1.WorkflowService !== "undefined" && workflow_service_1.WorkflowService) === "function" ? _m : Object, typeof (_o = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _o : Object, typeof (_p = typeof concept_extraction_service_1.ConceptExtractionService !== "undefined" && concept_extraction_service_1.ConceptExtractionService) === "function" ? _p : Object, typeof (_q = typeof yolo_scheduler_service_1.YoloSchedulerService !== "undefined" && yolo_scheduler_service_1.YoloSchedulerService) === "function" ? _q : Object, typeof (_r = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _r : Object])
 ], ConversationGateway);
 
 
 /***/ }),
-/* 144 */
+/* 149 */
 /***/ ((module) => {
 
 module.exports = require("@nestjs/websockets");
 
 /***/ }),
-/* 145 */
+/* 150 */
 /***/ ((module) => {
 
 module.exports = require("socket.io");
 
 /***/ }),
-/* 146 */
+/* 151 */
 /***/ ((module) => {
 
 module.exports = require("jwks-rsa");
 
 /***/ }),
-/* 147 */
+/* 152 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -17520,15 +18638,15 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
 const auth_module_1 = __webpack_require__(40);
-const ai_gateway_module_1 = __webpack_require__(92);
-const notes_module_1 = __webpack_require__(109);
-const knowledge_module_1 = __webpack_require__(112);
-const conversation_module_1 = __webpack_require__(108);
-const web_search_module_1 = __webpack_require__(135);
+const ai_gateway_module_1 = __webpack_require__(86);
+const notes_module_1 = __webpack_require__(128);
+const knowledge_module_1 = __webpack_require__(72);
+const conversation_module_1 = __webpack_require__(127);
+const web_search_module_1 = __webpack_require__(140);
 const file_upload_module_1 = __webpack_require__(39);
-const onboarding_controller_1 = __webpack_require__(148);
-const onboarding_service_1 = __webpack_require__(149);
-const onboarding_metric_service_1 = __webpack_require__(150);
+const onboarding_controller_1 = __webpack_require__(153);
+const onboarding_service_1 = __webpack_require__(154);
+const onboarding_metric_service_1 = __webpack_require__(155);
 /**
  * Module for the onboarding quick win flow.
  * Provides sub-5-minute first value experience for new users.
@@ -17556,19 +18674,19 @@ exports.OnboardingModule = OnboardingModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 148 */
+/* 153 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 var OnboardingController_1;
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.OnboardingController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const platform_express_1 = __webpack_require__(27);
-const onboarding_service_1 = __webpack_require__(149);
-const quick_win_dto_1 = __webpack_require__(153);
+const onboarding_service_1 = __webpack_require__(154);
+const quick_win_dto_1 = __webpack_require__(158);
 const jwt_auth_guard_1 = __webpack_require__(45);
 const mfa_required_guard_1 = __webpack_require__(58);
 const skip_mfa_decorator_1 = __webpack_require__(50);
@@ -17742,6 +18860,14 @@ let OnboardingController = OnboardingController_1 = class OnboardingController {
         };
     }
     /**
+     * PATCH /api/onboarding/set-department
+     * Saves the user's department/role selection (Story 3.2).
+     */
+    async setDepartment(dto, user) {
+        await this.onboardingService.setDepartment(user.userId, dto.department ?? null);
+        return { data: { success: true } };
+    }
+    /**
      * POST /api/onboarding/complete
      * Completes onboarding, saves the note, and transitions tenant to ACTIVE.
      */
@@ -17836,14 +18962,23 @@ tslib_1.__decorate([
     tslib_1.__metadata("design:returntype", typeof (_l = typeof Promise !== "undefined" && Promise) === "function" ? _l : Object)
 ], OnboardingController.prototype, "executeQuickWin", null);
 tslib_1.__decorate([
+    (0, common_1.Patch)('set-department'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    tslib_1.__param(0, (0, common_1.Body)()),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_m = typeof quick_win_dto_1.SetDepartmentDto !== "undefined" && quick_win_dto_1.SetDepartmentDto) === "function" ? _m : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_o = typeof Promise !== "undefined" && Promise) === "function" ? _o : Object)
+], OnboardingController.prototype, "setDepartment", null);
+tslib_1.__decorate([
     (0, common_1.Post)('complete'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     tslib_1.__param(0, (0, common_1.Body)()),
     tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
     tslib_1.__param(2, (0, common_1.Headers)('x-correlation-id')),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_m = typeof quick_win_dto_1.OnboardingCompleteDto !== "undefined" && quick_win_dto_1.OnboardingCompleteDto) === "function" ? _m : Object, Object, String]),
-    tslib_1.__metadata("design:returntype", typeof (_o = typeof Promise !== "undefined" && Promise) === "function" ? _o : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_p = typeof quick_win_dto_1.OnboardingCompleteDto !== "undefined" && quick_win_dto_1.OnboardingCompleteDto) === "function" ? _p : Object, Object, String]),
+    tslib_1.__metadata("design:returntype", typeof (_q = typeof Promise !== "undefined" && Promise) === "function" ? _q : Object)
 ], OnboardingController.prototype, "completeOnboarding", null);
 exports.OnboardingController = OnboardingController = OnboardingController_1 = tslib_1.__decorate([
     (0, common_1.Controller)('onboarding'),
@@ -17854,32 +18989,33 @@ exports.OnboardingController = OnboardingController = OnboardingController_1 = t
 
 
 /***/ }),
-/* 149 */
+/* 154 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 var OnboardingService_1;
-var _a, _b, _c, _d, _e, _f, _g, _h;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.OnboardingService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
 const prisma_1 = __webpack_require__(34);
-const ai_gateway_service_1 = __webpack_require__(93);
-const notes_service_1 = __webpack_require__(110);
-const concept_service_1 = __webpack_require__(114);
-const concept_matching_service_1 = __webpack_require__(119);
-const conversation_service_1 = __webpack_require__(140);
-const web_search_service_1 = __webpack_require__(136);
-const onboarding_metric_service_1 = __webpack_require__(150);
-const quick_task_templates_1 = __webpack_require__(151);
+const ai_gateway_service_1 = __webpack_require__(87);
+const notes_service_1 = __webpack_require__(129);
+const concept_service_1 = __webpack_require__(103);
+const concept_matching_service_1 = __webpack_require__(108);
+const conversation_service_1 = __webpack_require__(145);
+const web_search_service_1 = __webpack_require__(141);
+const brain_seeding_service_1 = __webpack_require__(115);
+const onboarding_metric_service_1 = __webpack_require__(155);
+const quick_task_templates_1 = __webpack_require__(156);
 /**
  * Service for managing the onboarding quick win flow.
  * Enables users to experience AI value within 5 minutes of registration.
  */
 let OnboardingService = OnboardingService_1 = class OnboardingService {
-    constructor(prisma, aiGateway, notesService, metricService, conceptService, conceptMatchingService, conversationService, webSearchService) {
+    constructor(prisma, aiGateway, notesService, metricService, conceptService, conceptMatchingService, conversationService, webSearchService, brainSeedingService) {
         this.prisma = prisma;
         this.aiGateway = aiGateway;
         this.notesService = notesService;
@@ -17888,6 +19024,7 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
         this.conceptMatchingService = conceptMatchingService;
         this.conversationService = conversationService;
         this.webSearchService = webSearchService;
+        this.brainSeedingService = brainSeedingService;
         this.logger = new common_1.Logger(OnboardingService_1.name);
     }
     /**
@@ -17906,7 +19043,7 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
         }
         let text;
         try {
-            const { PDFParse } = await Promise.resolve().then(() => tslib_1.__importStar(__webpack_require__(152)));
+            const { PDFParse } = await Promise.resolve().then(() => tslib_1.__importStar(__webpack_require__(157)));
             const parser = new PDFParse({ data: pdfBuffer });
             const result = await parser.getText();
             text = result.text?.trim() ?? '';
@@ -18023,6 +19160,16 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
         });
     }
     /**
+     * Sets the user's department during onboarding (Story 3.2).
+     * null = owner/CEO (sees all categories).
+     */
+    async setDepartment(userId, department) {
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: { department: department ?? null },
+        });
+    }
+    /**
      * Gets the current onboarding status for a user.
      */
     async getStatus(tenantId, userId) {
@@ -18043,6 +19190,32 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
             return {
                 currentStep: 1,
                 tenantStatus: 'DRAFT',
+                selectedIndustry: undefined,
+                selectedTaskId: undefined,
+                startedAt: undefined,
+            };
+        }
+        // If user already has conversations, they've used the system — skip onboarding
+        const conversationCount = await this.prisma.conversation.count({
+            where: { userId },
+        });
+        if (conversationCount > 0) {
+            // Auto-upgrade tenant to ACTIVE if still in DRAFT/ONBOARDING
+            if (tenant.status === 'DRAFT' || tenant.status === 'ONBOARDING') {
+                await this.prisma.tenant.update({
+                    where: { id: tenantId },
+                    data: { status: 'ACTIVE' },
+                });
+                this.logger.log({
+                    message: 'Auto-upgraded tenant to ACTIVE (user has existing conversations)',
+                    tenantId,
+                    userId,
+                    conversationCount,
+                });
+            }
+            return {
+                currentStep: 'complete',
+                tenantStatus: 'ACTIVE',
                 selectedIndustry: undefined,
                 selectedTaskId: undefined,
                 startedAt: undefined,
@@ -18140,30 +19313,33 @@ Please provide a comprehensive business analysis.`;
         const companyName = tenant?.name ?? 'Unknown Company';
         const industry = tenant?.industry ?? 'General';
         const companyDescription = tenant?.description ?? '';
-        // Fetch relevant concepts from the knowledge base
-        const conceptsResult = await this.conceptService.findAll({ limit: 50 });
-        const conceptNames = conceptsResult.data.map((c) => `${c.name} (${c.category}): ${c.definition}`);
-        const systemPrompt = `You are a business strategist creating a personalized action plan. Based on the business profile and available business concepts, generate 5-8 actionable focus areas and tasks.
+        // Fetch relevant concepts to ground the business brain in domain knowledge
+        const conceptsResult = await this.conceptService.findAll({ limit: 30 });
+        const conceptSummaries = conceptsResult.data
+            .map((c) => `- ${c.name} (${c.category}): ${c.definition}`)
+            .join('\n');
+        const systemPrompt = `You are a senior business strategist and management consultant with 20+ years of experience. Your task is to create a personalized "Business Brain" — a set of actionable, prioritized tasks that will drive measurable business improvement.
 
 For each task, provide:
-- **Title**: A clear, action-oriented title
-- **Description**: 2-3 sentences explaining what to do and why
-- **Category**: Which department/function it belongs to
-- **Priority**: High, Medium, or Low
+1. **Title** — Clear, action-oriented title
+2. **Description** — 2-3 sentences explaining what to do and WHY it matters for this specific business
+3. **Priority** — High / Medium / Low
+4. **Department** — Which department owns this task
+5. **Related Concept** — Which business concept from the provided list this task applies
 
-Format your response as a clear numbered list. Make tasks specific to their business, not generic. Reference relevant business concepts where applicable.`;
+Generate 8-10 tasks. Be specific to the company's industry, current state, and departments. Avoid generic advice.`;
         const userPrompt = `Company: ${companyName}
 Industry: ${industry}
 ${companyDescription ? `Description: ${companyDescription}` : ''}
 
 Current Business State: ${businessState}
 
-Active Departments/Functions: ${departments.join(', ')}
+Active Departments: ${departments.join(', ')}
 
 Available Business Concepts:
-${conceptNames.slice(0, 30).join('\n')}
+${conceptSummaries}
 
-Generate personalized tasks and focus areas for this business.`;
+Generate a personalized Business Brain with 8-10 prioritized tasks.`;
         const startTime = Date.now();
         let fullOutput = '';
         const result = await this.aiGateway.streamCompletionWithContext([
@@ -18318,6 +19494,22 @@ Generate personalized tasks and focus areas for this business.`;
                 error: err instanceof Error ? err.message : 'Unknown',
             });
         }
+        // Story 3.2: Seed Brain pending tasks based on user's department (fire-and-forget)
+        // Loads user's department from DB and seeds concept tasks accordingly
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { department: true, role: true },
+        });
+        this.brainSeedingService
+            .seedPendingTasksForUser(userId, tenantId, user?.department ?? null, user?.role ?? 'TENANT_OWNER')
+            .catch((err) => {
+            this.logger.warn({
+                message: 'Brain seeding failed after onboarding (non-blocking)',
+                userId,
+                tenantId,
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+        });
         this.logger.log({
             message: 'Onboarding completed successfully',
             tenantId,
@@ -18528,12 +19720,12 @@ Napiši personalizovanu dobrodošlicu.`;
 exports.OnboardingService = OnboardingService;
 exports.OnboardingService = OnboardingService = OnboardingService_1 = tslib_1.__decorate([
     (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _c : Object, typeof (_d = typeof onboarding_metric_service_1.OnboardingMetricService !== "undefined" && onboarding_metric_service_1.OnboardingMetricService) === "function" ? _d : Object, typeof (_e = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _e : Object, typeof (_f = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _f : Object, typeof (_g = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _g : Object, typeof (_h = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _h : Object])
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _c : Object, typeof (_d = typeof onboarding_metric_service_1.OnboardingMetricService !== "undefined" && onboarding_metric_service_1.OnboardingMetricService) === "function" ? _d : Object, typeof (_e = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _e : Object, typeof (_f = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _f : Object, typeof (_g = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _g : Object, typeof (_h = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _h : Object, typeof (_j = typeof brain_seeding_service_1.BrainSeedingService !== "undefined" && brain_seeding_service_1.BrainSeedingService) === "function" ? _j : Object])
 ], OnboardingService);
 
 
 /***/ }),
-/* 150 */
+/* 155 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -18682,7 +19874,7 @@ exports.OnboardingMetricService = OnboardingMetricService = OnboardingMetricServ
 
 
 /***/ }),
-/* 151 */
+/* 156 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -18692,10 +19884,12 @@ exports.getTasksByIndustry = getTasksByIndustry;
 exports.getTaskById = getTaskById;
 exports.generateSystemPrompt = generateSystemPrompt;
 exports.generateUserPrompt = generateUserPrompt;
-const types_1 = __webpack_require__(89);
+const types_1 = __webpack_require__(83);
 /**
- * Pre-defined quick tasks for the onboarding flow.
- * Each task is optimized for fast, high-quality AI output.
+ * @deprecated Story 3.2 — Quick-task templates are superseded by the
+ * Autonomous Business Brain concept seeding (BrainSeedingService).
+ * Kept for backward compatibility with legacy onboarding flows.
+ * New onboarding uses brain seeding via department-based concept categories.
  */
 exports.QUICK_TASK_TEMPLATES = [
     // Finance tasks
@@ -18870,18 +20064,18 @@ Please generate a professional, ready-to-use output that demonstrates immediate 
 
 
 /***/ }),
-/* 152 */
+/* 157 */
 /***/ ((module) => {
 
 module.exports = require("pdf-parse");
 
 /***/ }),
-/* 153 */
+/* 158 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.OnboardingCompleteDto = exports.QuickWinDto = exports.BusinessContextDto = exports.SetupCompanyDto = void 0;
+exports.OnboardingCompleteDto = exports.SetDepartmentDto = exports.QuickWinDto = exports.BusinessContextDto = exports.SetupCompanyDto = void 0;
 const tslib_1 = __webpack_require__(4);
 const class_validator_1 = __webpack_require__(37);
 /**
@@ -18961,6 +20155,17 @@ tslib_1.__decorate([
     tslib_1.__metadata("design:type", String)
 ], QuickWinDto.prototype, "industry", void 0);
 /**
+ * DTO for setting the user's department/role during onboarding (Story 3.2).
+ */
+class SetDepartmentDto {
+}
+exports.SetDepartmentDto = SetDepartmentDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)(['MARKETING', 'FINANCE', 'SALES', 'OPERATIONS', 'TECHNOLOGY', 'STRATEGY', 'LEGAL', 'CREATIVE', null], { message: 'department must be a valid Department enum value or null' }),
+    tslib_1.__metadata("design:type", Object)
+], SetDepartmentDto.prototype, "department", void 0);
+/**
  * DTO for completing onboarding and saving the first note.
  */
 class OnboardingCompleteDto {
@@ -18984,7 +20189,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 154 */
+/* 159 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -18993,8 +20198,8 @@ exports.PersonasModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const auth_module_1 = __webpack_require__(40);
-const personas_service_1 = __webpack_require__(155);
-const personas_controller_1 = __webpack_require__(156);
+const personas_service_1 = __webpack_require__(160);
+const personas_controller_1 = __webpack_require__(161);
 /**
  * Module for department persona management.
  * Provides persona definitions and API endpoints for persona selection.
@@ -19013,7 +20218,7 @@ exports.PersonasModule = PersonasModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 155 */
+/* 160 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -19022,7 +20227,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.PersonasService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const types_1 = __webpack_require__(89);
+const types_1 = __webpack_require__(83);
 /**
  * Static persona definitions with prs_ prefix IDs.
  * These are predefined personas representing C-suite and department leads.
@@ -19154,7 +20359,7 @@ exports.PersonasService = PersonasService = PersonasService_1 = tslib_1.__decora
 
 
 /***/ }),
-/* 156 */
+/* 161 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -19165,7 +20370,7 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const jwt_auth_guard_1 = __webpack_require__(45);
 const mfa_required_guard_1 = __webpack_require__(58);
-const personas_service_1 = __webpack_require__(155);
+const personas_service_1 = __webpack_require__(160);
 /**
  * Controller for persona-related API endpoints.
  * All endpoints require authentication and MFA verification.
@@ -19217,7 +20422,7 @@ exports.PersonasController = PersonasController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 157 */
+/* 162 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -19226,7 +20431,7 @@ exports.QdrantModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const qdrant_client_service_1 = __webpack_require__(121);
+const qdrant_client_service_1 = __webpack_require__(110);
 /**
  * Global module for Qdrant vector database client.
  * Marked @Global so all modules can inject QdrantClientService
@@ -19246,7 +20451,7 @@ exports.QdrantModule = QdrantModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 158 */
+/* 163 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -19255,8 +20460,8 @@ exports.AdminModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const data_integrity_controller_1 = __webpack_require__(159);
-const data_integrity_service_1 = __webpack_require__(160);
+const data_integrity_controller_1 = __webpack_require__(164);
+const data_integrity_service_1 = __webpack_require__(165);
 let AdminModule = class AdminModule {
 };
 exports.AdminModule = AdminModule;
@@ -19270,7 +20475,7 @@ exports.AdminModule = AdminModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 159 */
+/* 164 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -19279,7 +20484,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DataIntegrityController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const data_integrity_service_1 = __webpack_require__(160);
+const data_integrity_service_1 = __webpack_require__(165);
 let DataIntegrityController = class DataIntegrityController {
     constructor(integrityService) {
         this.integrityService = integrityService;
@@ -19302,7 +20507,7 @@ exports.DataIntegrityController = DataIntegrityController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 160 */
+/* 165 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -19313,7 +20518,7 @@ exports.DataIntegrityService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const qdrant_client_service_1 = __webpack_require__(121);
+const qdrant_client_service_1 = __webpack_require__(110);
 let DataIntegrityService = DataIntegrityService_1 = class DataIntegrityService {
     constructor(prisma, qdrantClient) {
         this.prisma = prisma;
@@ -19424,7 +20629,7 @@ exports.DataIntegrityService = DataIntegrityService = DataIntegrityService_1 = t
 
 
 /***/ }),
-/* 161 */
+/* 166 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -19620,7 +20825,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 const common_1 = __webpack_require__(1);
 const core_1 = __webpack_require__(2);
 const app_module_1 = __webpack_require__(3);
-const all_exceptions_filter_1 = __webpack_require__(161);
+const all_exceptions_filter_1 = __webpack_require__(166);
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
     const globalPrefix = 'api';

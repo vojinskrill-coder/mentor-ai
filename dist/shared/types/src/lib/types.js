@@ -153,6 +153,7 @@ var LlmProviderType;
     LlmProviderType["LOCAL_LLAMA"] = "LOCAL_LLAMA";
     LlmProviderType["OPENAI"] = "OPENAI";
     LlmProviderType["ANTHROPIC"] = "ANTHROPIC";
+    LlmProviderType["LM_STUDIO"] = "LM_STUDIO";
 })(LlmProviderType || (LlmProviderType = {}));
 var MessageRole;
 (function(MessageRole) {
