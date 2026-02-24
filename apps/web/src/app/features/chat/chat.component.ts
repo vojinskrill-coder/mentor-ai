@@ -1576,7 +1576,11 @@ interface WorkflowStatusEntry {
                       >
                         <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
                       </svg>
-                      Generišem plan izvršavanja...
+                      @if (isOnboardingAutostart$()) {
+                        Pokrećem inicijalni radni tok — pripremam plan za vaše poslovanje...
+                      } @else {
+                        Generišem plan izvršavanja...
+                      }
                     </div>
                   }
 
@@ -2135,6 +2139,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   readonly showYoloActivityLog$ = signal(false);
   private yoloPending = false;
   private manualAutostartPending = false;
+  readonly isOnboardingAutostart$ = signal(false);
 
   // Workflow status bar: tracks all active/recent workflow executions
   readonly workflowHistory$ = signal<WorkflowStatusEntry[]>([]);
@@ -2214,6 +2219,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         }
         if (queryParams['autostart'] === 'true') {
           this.manualAutostartPending = true;
+          // Show busy status immediately so user sees activity right away
+          this.isGeneratingPlan$.set(true);
+          this.isOnboardingAutostart$.set(true);
         }
 
         // Now load conversation — yoloPending is already set
@@ -2629,9 +2637,15 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         .map((n) => n.id);
       if (pendingTaskIds.length > 0) {
         this.onRunAgents(pendingTaskIds);
+      } else {
+        // No pending tasks found — clear the busy state
+        this.isGeneratingPlan$.set(false);
+        this.isOnboardingAutostart$.set(false);
       }
     } catch {
-      // Non-blocking — user can still start manually
+      // Clear busy state on error — user can still start manually
+      this.isGeneratingPlan$.set(false);
+      this.isOnboardingAutostart$.set(false);
     }
   }
 
@@ -2785,6 +2799,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     this.nextStepInfo$.set(null);
     this.userStepInput$.set('');
     this.isGeneratingPlan$.set(false);
+    this.isOnboardingAutostart$.set(false);
     this.allowWorkflowInput$.set(false);
     this.currentWorkflowStepInput$.set(null);
     this.previousConversationId$.set(null);
@@ -3020,6 +3035,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     this.chatWsService.onPlanReady((payload) => {
       if (payload.conversationId !== this.activeConversationId$()) return;
       this.isGeneratingPlan$.set(false);
+      this.isOnboardingAutostart$.set(false);
       this.executingTaskId$.set(null);
       this.currentPlan$.set(payload.plan);
       this.activePlanId$.set(payload.plan.planId);

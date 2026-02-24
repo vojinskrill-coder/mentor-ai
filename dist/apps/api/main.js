@@ -20992,6 +20992,7 @@ const web_search_service_1 = __webpack_require__(144);
 const brain_seeding_service_1 = __webpack_require__(116);
 const onboarding_metric_service_1 = __webpack_require__(158);
 const quick_task_templates_1 = __webpack_require__(159);
+const department_categories_1 = __webpack_require__(117);
 /**
  * Service for managing the onboarding quick win flow.
  * Enables users to experience AI value within 5 minutes of registration.
@@ -21543,20 +21544,39 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
                 }
             }
         }
-        // Diversify: max 5 per category, sorted by score
+        // Always include foundation concepts ("Uvod u Poslovanje") first
+        const foundationConcepts = await this.prisma.concept.findMany({
+            where: { category: { in: [...department_categories_1.FOUNDATION_CATEGORIES] } },
+            select: { id: true, name: true, category: true, definition: true },
+            orderBy: { sortOrder: 'asc' },
+        });
+        // Build foundation matches (not from embeddings — guaranteed inclusion)
+        const foundationMatches = foundationConcepts.map((c) => ({
+            conceptId: c.id,
+            conceptName: c.name,
+            category: (c.category ?? 'Uvod u Poslovanje'),
+            definition: c.definition ?? '',
+            score: 1.0, // Max score to ensure they come first
+        }));
+        // Diversify embedding matches: max 5 per category, sorted by score
         const byCategory = new Map();
+        const foundationIds = new Set(foundationConcepts.map((c) => c.id));
         for (const m of allMatches.values()) {
+            if (foundationIds.has(m.conceptId))
+                continue; // Skip — already in foundation
             const cat = m.category ?? 'General';
             if (!byCategory.has(cat))
                 byCategory.set(cat, []);
             byCategory.get(cat).push(m);
         }
-        const diversified = [];
+        const embeddingMatches = [];
         for (const [, concepts] of byCategory) {
             concepts.sort((a, b) => b.score - a.score);
-            diversified.push(...concepts.slice(0, 5));
+            embeddingMatches.push(...concepts.slice(0, 5));
         }
-        diversified.sort((a, b) => b.score - a.score);
+        embeddingMatches.sort((a, b) => b.score - a.score);
+        // Foundation first, then embedding-matched concepts
+        const diversified = [...foundationMatches, ...embeddingMatches];
         if (diversified.length === 0) {
             this.logger.warn({ message: 'No concepts found for initial plan', tenantId });
             return null;
