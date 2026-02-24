@@ -6190,7 +6190,8 @@ let AiGatewayService = AiGatewayService_1 = class AiGatewayService {
             const maxSystemChars = Math.floor(MAX_INPUT_TOKENS * 0.6 * 4);
             truncatedSystem = {
                 role: 'system',
-                content: systemMessage.content.substring(0, maxSystemChars) + '\n[...context trimmed to fit model limits]',
+                content: systemMessage.content.substring(0, maxSystemChars) +
+                    '\n[...context trimmed to fit model limits]',
             };
             systemTokens = estimateTokens(truncatedSystem.content);
             this.logger.warn({
@@ -9291,7 +9292,15 @@ let ConceptService = ConceptService_1 = class ConceptService {
             return new Map();
         const concepts = await this.prisma.concept.findMany({
             where: { id: { in: ids } },
-            select: { id: true, name: true, slug: true, category: true, categorySortOrder: true, sortOrder: true, curriculumId: true },
+            select: {
+                id: true,
+                name: true,
+                slug: true,
+                category: true,
+                categorySortOrder: true,
+                sortOrder: true,
+                curriculumId: true,
+            },
         });
         return new Map(concepts.map((c) => [c.id, c]));
     }
@@ -9341,14 +9350,16 @@ let ConceptService = ConceptService_1 = class ConceptService {
                 take: 20,
             });
             if (candidates.length === 0) {
-                this.logger.debug({ message: 'No candidate concepts for relationship creation', conceptName: resolvedName, category: resolvedCategory });
+                this.logger.debug({
+                    message: 'No candidate concepts for relationship creation',
+                    conceptName: resolvedName,
+                    category: resolvedCategory,
+                });
                 return result;
             }
             // 3. Build LLM prompt and call AI for classification
             const prompt = (0, relationship_prompt_1.buildRelationshipClassificationPrompt)(resolvedName, resolvedCategory, concept.definition, candidates);
-            const messages = [
-                { role: 'user', content: prompt },
-            ];
+            const messages = [{ role: 'user', content: prompt }];
             let fullResponse = '';
             await this.aiGateway.streamCompletion(messages, (chunk) => {
                 fullResponse += chunk;
@@ -9356,7 +9367,10 @@ let ConceptService = ConceptService_1 = class ConceptService {
             // 4. Parse LLM response into relationship suggestions
             const suggestions = this.parseRelationshipSuggestions(fullResponse, candidates);
             if (suggestions.length === 0) {
-                this.logger.debug({ message: 'No relationships suggested by AI', conceptName: resolvedName });
+                this.logger.debug({
+                    message: 'No relationships suggested by AI',
+                    conceptName: resolvedName,
+                });
                 return result;
             }
             // 5. Map slugs to concept IDs and batch-create relationships
@@ -9424,7 +9438,10 @@ let ConceptService = ConceptService_1 = class ConceptService {
             }));
         }
         catch {
-            this.logger.warn({ message: 'Failed to parse relationship suggestions from LLM', responseLength: response.length });
+            this.logger.warn({
+                message: 'Failed to parse relationship suggestions from LLM',
+                responseLength: response.length,
+            });
             return [];
         }
     }
@@ -11686,22 +11703,22 @@ const RELATIONSHIP_SCORES = {
  * Keywords in tenant industry string matched against category relevance.
  */
 const INDUSTRY_CATEGORY_RELEVANCE = {
-    'digital': ['Digitalni Marketing', 'Tehnologija', 'Inovacije', 'Marketing'],
-    'tech': ['Tehnologija', 'Inovacije', 'Digitalni Marketing', 'Sistemi'],
-    'software': ['Tehnologija', 'Inovacije', 'Digitalni Marketing', 'Sistemi'],
-    'retail': ['Prodaja', 'Marketing', 'Odnosi sa Klijentima', 'Operacije'],
-    'ecommerce': ['Digitalni Marketing', 'Prodaja', 'Marketing', 'Tehnologija'],
-    'finance': ['Finansije', 'Računovodstvo', 'Strategija'],
-    'consulting': ['Strategija', 'Menadžment', 'Liderstvo', 'Odnosi sa Klijentima'],
-    'manufacturing': ['Operacije i Proizvodnja', 'Sistemi', 'Menadžment'],
-    'healthcare': ['Operacije', 'Menadžment', 'Ljudski Resursi'],
-    'education': ['Menadžment', 'Ljudski Resursi', 'Liderstvo'],
-    'marketing': ['Marketing', 'Digitalni Marketing', 'Prodaja'],
-    'services': ['Odnosi sa Klijentima', 'Prodaja', 'Marketing', 'Operacije'],
-    'startup': ['Preduzetništvo', 'Startup', 'Inovacije', 'Poslovni Modeli'],
-    'food': ['Operacije', 'Prodaja', 'Marketing', 'Finansije'],
+    digital: ['Digitalni Marketing', 'Tehnologija', 'Inovacije', 'Marketing'],
+    tech: ['Tehnologija', 'Inovacije', 'Digitalni Marketing', 'Sistemi'],
+    software: ['Tehnologija', 'Inovacije', 'Digitalni Marketing', 'Sistemi'],
+    retail: ['Prodaja', 'Marketing', 'Odnosi sa Klijentima', 'Operacije'],
+    ecommerce: ['Digitalni Marketing', 'Prodaja', 'Marketing', 'Tehnologija'],
+    finance: ['Finansije', 'Računovodstvo', 'Strategija'],
+    consulting: ['Strategija', 'Menadžment', 'Liderstvo', 'Odnosi sa Klijentima'],
+    manufacturing: ['Operacije i Proizvodnja', 'Sistemi', 'Menadžment'],
+    healthcare: ['Operacije', 'Menadžment', 'Ljudski Resursi'],
+    education: ['Menadžment', 'Ljudski Resursi', 'Liderstvo'],
+    marketing: ['Marketing', 'Digitalni Marketing', 'Prodaja'],
+    services: ['Odnosi sa Klijentima', 'Prodaja', 'Marketing', 'Operacije'],
+    startup: ['Preduzetništvo', 'Startup', 'Inovacije', 'Poslovni Modeli'],
+    food: ['Operacije', 'Prodaja', 'Marketing', 'Finansije'],
     'real estate': ['Finansije', 'Prodaja', 'Strategija'],
-    'media': ['Marketing', 'Digitalni Marketing', 'Inovacije'],
+    media: ['Marketing', 'Digitalni Marketing', 'Inovacije'],
 };
 let ConceptRelevanceService = ConceptRelevanceService_1 = class ConceptRelevanceService {
     constructor() {
@@ -11718,7 +11735,7 @@ let ConceptRelevanceService = ConceptRelevanceService_1 = class ConceptRelevance
      * Foundation categories always return 1.0.
      */
     scoreRelevance(input) {
-        const { conceptCategory, tenantIndustry, completedConceptIds, department, role: _role, relationshipType } = input;
+        const { conceptCategory, tenantIndustry, completedConceptIds, department, role: _role, relationshipType, } = input;
         // Foundation categories always pass
         if (department_categories_1.FOUNDATION_CATEGORIES.includes(conceptCategory)) {
             return 1.0;
@@ -11746,7 +11763,8 @@ let ConceptRelevanceService = ConceptRelevanceService_1 = class ConceptRelevance
         // If completedCategories provided, check if user has explored this specific category
         // Falls back to global check if category data unavailable
         const hasDomainActivity = input.completedCategories
-            ? input.completedCategories.has(strippedCategory) || input.completedCategories.has(conceptCategory)
+            ? input.completedCategories.has(strippedCategory) ||
+                input.completedCategories.has(conceptCategory)
             : completedConceptIds.size > 0;
         score += (hasDomainActivity ? 0.8 : 0.3) * WEIGHTS.PRIOR_ACTIVITY;
         return Math.min(score, 1.0);
@@ -11777,8 +11795,13 @@ let ConceptRelevanceService = ConceptRelevanceService_1 = class ConceptRelevance
         }
         // Universal categories that apply to any business
         const universalCategories = [
-            'Menadžment', 'Finansije', 'Prodaja', 'Marketing',
-            'Strategija', 'Liderstvo', 'Poslovni Modeli',
+            'Menadžment',
+            'Finansije',
+            'Prodaja',
+            'Marketing',
+            'Strategija',
+            'Liderstvo',
+            'Poslovni Modeli',
         ];
         if (universalCategories.includes(category)) {
             return 0.6; // Broadly relevant
@@ -14917,7 +14940,7 @@ Extracted memories (JSON array only, no other text):`;
                 const errorText = await response.text();
                 throw new Error(`LLM API returned ${response.status}: ${errorText}`);
             }
-            const data = await response.json();
+            const data = (await response.json());
             const content = data.choices?.[0]?.message?.content;
             if (!content) {
                 return [];
@@ -14988,7 +15011,9 @@ Extracted memories (JSON array only, no other text):`;
         }
         try {
             // Get existing memories for comparison
-            const { data: existing } = await this.memoryService.findMemories(tenantId, userId, { limit: 100 });
+            const { data: existing } = await this.memoryService.findMemories(tenantId, userId, {
+                limit: 100,
+            });
             if (existing.length === 0) {
                 return newMemories;
             }
@@ -15605,7 +15630,9 @@ let WebSearchService = WebSearchService_1 = class WebSearchService {
                 timeout: SEARCH_TIMEOUT_MS,
             });
             const organic = response.data?.organic ?? [];
-            const results = organic.slice(0, numResults).map((item) => ({
+            const results = organic
+                .slice(0, numResults)
+                .map((item) => ({
                 title: item.title ?? '',
                 link: item.link ?? '',
                 snippet: item.snippet ?? '',
@@ -15747,9 +15774,11 @@ let WebSearchService = WebSearchService_1 = class WebSearchService {
             }
         }
         context += '\n--- KRAJ WEB ISTRAŽIVANJA ---';
-        context += '\n\nKADA KORISTIŠ informacije iz web istraživanja, OBAVEZNO citiraj izvor INLINE odmah posle rečenice koja koristi tu informaciju.';
+        context +=
+            '\n\nKADA KORISTIŠ informacije iz web istraživanja, OBAVEZNO citiraj izvor INLINE odmah posle rečenice koja koristi tu informaciju.';
         context += '\nFormat citiranja: ([Naziv izvora](URL)) — stavi odmah posle relevantne rečenice.';
-        context += '\nPrimer: "Tržište digitalnog marketinga raste 15% godišnje ([Digital Marketing Report 2026](https://example.com/report))."';
+        context +=
+            '\nPrimer: "Tržište digitalnog marketinga raste 15% godišnje ([Digital Marketing Report 2026](https://example.com/report))."';
         context += '\nAko ne koristiš informaciju iz izvora, NE citiraj ga.';
         return context;
     }
@@ -16611,7 +16640,10 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}$
         const existingConceptIds = new Set(existingNotes.map((n) => n.conceptId).filter(Boolean));
         // Filter to only new concepts within user's visible categories
         const newConcepts = relationships
-            .map((r) => ({ concept: r.targetConcept, relationshipType: r.relationshipType }))
+            .map((r) => ({
+            concept: r.targetConcept,
+            relationshipType: r.relationshipType,
+        }))
             .filter((r) => !existingConceptIds.has(r.concept.id))
             .filter((r) => !visibleCategories || visibleCategories.includes(r.concept.category));
         // Story 3.3 AC5: Relevance scoring — filter by business relevance
@@ -17255,7 +17287,10 @@ let YoloSchedulerService = YoloSchedulerService_1 = class YoloSchedulerService {
                 error: err instanceof Error ? err.message : 'Unknown',
             }));
             // Create PENDING task note (with dedup — Story 3.4 AC3 review fix)
-            const existingTask = await this.notesService.findExistingTask(state.tenantId, { conceptId, title: conceptName });
+            const existingTask = await this.notesService.findExistingTask(state.tenantId, {
+                conceptId,
+                title: conceptName,
+            });
             if (existingTask) {
                 this.logger.debug({
                     message: 'Skipping duplicate YOLO discovery task',
@@ -18769,7 +18804,9 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
                 suggestedActions.push({ type: 'create_tasks', label: 'Kreiraj zadatke', icon: 'tasks' }, { type: 'deep_dive', label: 'Istraži dublje', icon: 'explore' });
                 if (relevantConcepts.length > 1) {
                     suggestedActions.push({
-                        type: 'next_domain', label: 'Sledeći koncept →', icon: 'arrow',
+                        type: 'next_domain',
+                        label: 'Sledeći koncept →',
+                        icon: 'arrow',
                         payload: { conceptId: relevantConcepts[1]?.conceptId },
                     });
                 }
@@ -18796,7 +18833,7 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
                     citations,
                     memoryAttributions,
                     webSearchSources: webSearchResults.length > 0
-                        ? webSearchResults.map(r => ({ title: r.title, link: r.link }))
+                        ? webSearchResults.map((r) => ({ title: r.title, link: r.link }))
                         : undefined,
                     suggestedActions: suggestedActions.length > 0 ? suggestedActions : undefined,
                 },
@@ -18843,8 +18880,8 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
             });
             // Fire-and-forget: extract memories from this exchange (Story 3.3: concept-tagging)
             const conceptName = conversation.conceptId
-                ? relevantConcepts.find((c) => c.conceptId === conversation.conceptId)?.conceptName
-                    ?? (await this.conceptService.findById(conversation.conceptId).catch(() => null))?.name
+                ? (relevantConcepts.find((c) => c.conceptId === conversation.conceptId)?.conceptName ??
+                    (await this.conceptService.findById(conversation.conceptId).catch(() => null))?.name)
                 : undefined;
             this.memoryExtractionService
                 .extractMemories(conversation.messages.concat([
@@ -19035,7 +19072,12 @@ If there are no meaningful tasks, respond with an empty array: []`;
                     title: task.title,
                 });
                 if (existingId) {
-                    this.logger.debug({ message: 'Skipping duplicate auto-task', title: task.title, existingId, tenantId });
+                    this.logger.debug({
+                        message: 'Skipping duplicate auto-task',
+                        title: task.title,
+                        existingId,
+                        tenantId,
+                    });
                     continue;
                 }
                 await this.notesService.createNote({
@@ -19177,7 +19219,12 @@ Ako nema zadataka, odgovori sa: []`;
                     title: task.title,
                 });
                 if (existingId) {
-                    this.logger.debug({ message: 'Skipping duplicate explicit task', title: task.title, existingId, tenantId });
+                    this.logger.debug({
+                        message: 'Skipping duplicate explicit task',
+                        title: task.title,
+                        existingId,
+                        tenantId,
+                    });
                     continue;
                 }
                 const result = await this.notesService.createNote({
@@ -19527,11 +19574,11 @@ Ako nema zadataka, odgovori sa: []`;
                 try {
                     const conv = await this.conversationService.getConversation(authenticatedClient.tenantId, convId, authenticatedClient.userId);
                     const recentMessages = conv.messages.slice(-6);
-                    conversationContext = recentMessages
-                        .map(m => `${m.role}: ${m.content}`)
-                        .join('\n\n');
+                    conversationContext = recentMessages.map((m) => `${m.role}: ${m.content}`).join('\n\n');
                 }
-                catch { /* no context available */ }
+                catch {
+                    /* no context available */
+                }
             }
             // 3. Build business context
             const businessContext = await this.buildBusinessContext(authenticatedClient.tenantId, authenticatedClient.userId);
@@ -19629,11 +19676,17 @@ Odgovaraj na srpskom jeziku. Daj kompletan, spreman za upotrebu rezultat.`;
                 where: { id: payload.taskId },
             });
             if (!task || task.tenantId !== authenticatedClient.tenantId) {
-                client.emit('task:result-error', { taskId: payload.taskId, message: 'Zadatak nije pronađen' });
+                client.emit('task:result-error', {
+                    taskId: payload.taskId,
+                    message: 'Zadatak nije pronađen',
+                });
                 return;
             }
             if (task.status !== 'COMPLETED' || !task.userReport) {
-                client.emit('task:result-error', { taskId: payload.taskId, message: 'Zadatak nema izveštaj za ocenjivanje' });
+                client.emit('task:result-error', {
+                    taskId: payload.taskId,
+                    message: 'Zadatak nema izveštaj za ocenjivanje',
+                });
                 return;
             }
             // 2. Emit start acknowledgment
@@ -19785,7 +19838,12 @@ Odgovaraj na srpskom jeziku.`;
             client.emit('workflow:conversations-created', conversationsPayload);
             // Start YOLO scheduler
             const executionBudget = parseInt(process.env['YOLO_EXECUTION_BUDGET'] ?? '50', 10);
-            const config = { maxConcurrency: 3, maxConceptsHardStop: 1000, retryAttempts: 3, maxExecutionBudget: executionBudget };
+            const config = {
+                maxConcurrency: 3,
+                maxConceptsHardStop: 1000,
+                retryAttempts: 3,
+                maxExecutionBudget: executionBudget,
+            };
             this.yoloScheduler
                 .startYoloExecution(authenticatedClient.tenantId, authenticatedClient.userId, payload.conversationId, config, {
                 onProgress: (progress) => {
@@ -19879,7 +19937,12 @@ Odgovaraj na srpskom jeziku.`;
             const conceptConversations = new Map();
             // Start YOLO with category scoping
             const executionBudget = parseInt(process.env['YOLO_EXECUTION_BUDGET'] ?? '50', 10);
-            const config = { maxConcurrency: 3, maxConceptsHardStop: 100, retryAttempts: 3, maxExecutionBudget: executionBudget };
+            const config = {
+                maxConcurrency: 3,
+                maxConceptsHardStop: 100,
+                retryAttempts: 3,
+                maxExecutionBudget: executionBudget,
+            };
             this.yoloScheduler
                 .startYoloExecution(authenticatedClient.tenantId, authenticatedClient.userId, payload.conversationId, config, {
                 onProgress: (progress) => {
