@@ -1,7 +1,7 @@
-import { Injectable, inject, signal, computed } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Observable, of, tap, catchError } from 'rxjs';
+import { Observable, tap, catchError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
 export interface GoogleUser {
@@ -44,12 +44,8 @@ export class AuthService {
   // Auth state signals
   private readonly _isAuthenticated = signal(this.hasStoredToken());
   private readonly _isLoading = signal(false);
-  private readonly _currentUser = signal<AuthCallbackResponse['user'] | null>(
-    this.getStoredUser()
-  );
-  private readonly _googleUser = signal<GoogleUser | null>(
-    this.getStoredGoogleUser()
-  );
+  private readonly _currentUser = signal<AuthCallbackResponse['user'] | null>(this.getStoredUser());
+  private readonly _googleUser = signal<GoogleUser | null>(this.getStoredGoogleUser());
 
   // MFA state
   private readonly _mfaRequired = signal(false);
@@ -76,9 +72,10 @@ export class AuthService {
     localStorage.setItem(STORAGE_KEYS.CODE_VERIFIER, codeVerifier);
 
     this.generateCodeChallenge(codeVerifier).then((codeChallenge) => {
+      const redirectUri = environment.google.redirectUri || `${window.location.origin}/callback`;
       const params = new URLSearchParams({
         client_id: environment.google.clientId,
-        redirect_uri: environment.google.redirectUri,
+        redirect_uri: redirectUri,
         response_type: 'code',
         scope: 'openid email profile',
         access_type: 'offline',
@@ -96,13 +93,14 @@ export class AuthService {
    */
   handleCallback(code: string): Observable<AuthCallbackResponse> {
     this._isLoading.set(true);
-    const codeVerifier =
-      localStorage.getItem(STORAGE_KEYS.CODE_VERIFIER) || '';
+    const codeVerifier = localStorage.getItem(STORAGE_KEYS.CODE_VERIFIER) || '';
+
+    const redirectUri = environment.google.redirectUri || `${window.location.origin}/callback`;
 
     return this.http
       .post<AuthCallbackResponse>('/api/auth/google/callback', {
         code,
-        redirectUri: environment.google.redirectUri,
+        redirectUri,
         codeVerifier,
       })
       .pipe(
@@ -115,10 +113,7 @@ export class AuthService {
             localStorage.setItem(STORAGE_KEYS.TOKEN, response.token);
           }
           if (response.user) {
-            localStorage.setItem(
-              STORAGE_KEYS.USER,
-              JSON.stringify(response.user)
-            );
+            localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(response.user));
             this._currentUser.set(response.user);
           }
 
@@ -188,9 +183,7 @@ export class AuthService {
   /**
    * Verify TOTP code and complete MFA enrollment
    */
-  verifyMfaEnrollment(
-    code: string
-  ): Observable<{ status: string; message: string }> {
+  verifyMfaEnrollment(code: string): Observable<{ status: string; message: string }> {
     return this.http
       .post<{ status: string; message: string }>('/api/auth/2fa/verify', {
         code,
@@ -206,25 +199,19 @@ export class AuthService {
   /**
    * Verify TOTP code during login
    */
-  verifyLoginTotp(
-    code: string
-  ): Observable<{ status: string; message: string }> {
-    return this.http.post<{ status: string; message: string }>(
-      '/api/auth/2fa/verify-login',
-      { code }
-    );
+  verifyLoginTotp(code: string): Observable<{ status: string; message: string }> {
+    return this.http.post<{ status: string; message: string }>('/api/auth/2fa/verify-login', {
+      code,
+    });
   }
 
   /**
    * Verify recovery code
    */
-  verifyRecoveryCode(
-    recoveryCode: string
-  ): Observable<{ status: string; message: string }> {
-    return this.http.post<{ status: string; message: string }>(
-      '/api/auth/2fa/recovery',
-      { recoveryCode }
-    );
+  verifyRecoveryCode(recoveryCode: string): Observable<{ status: string; message: string }> {
+    return this.http.post<{ status: string; message: string }>('/api/auth/2fa/recovery', {
+      recoveryCode,
+    });
   }
 
   /**
