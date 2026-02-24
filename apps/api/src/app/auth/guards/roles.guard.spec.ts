@@ -64,6 +64,7 @@ describe('RolesGuard', () => {
       role: 'ADMIN',
       email: 'admin@example.com',
       auth0Id: 'google-oauth2|123',
+      department: null,
     };
     const context = mockExecutionContext(user);
 
@@ -80,6 +81,7 @@ describe('RolesGuard', () => {
       role: 'MEMBER',
       email: 'member@example.com',
       auth0Id: 'google-oauth2|123',
+      department: null,
     };
     const context = mockExecutionContext(user);
 
@@ -100,6 +102,7 @@ describe('RolesGuard', () => {
       role: 'TENANT_OWNER',
       email: 'owner@example.com',
       auth0Id: 'google-oauth2|123',
+      department: null,
     };
     const context = mockExecutionContext(user);
 
@@ -116,6 +119,7 @@ describe('RolesGuard', () => {
       role: 'MEMBER',
       email: 'member@example.com',
       auth0Id: 'google-oauth2|123',
+      department: null,
     };
     const context = mockExecutionContext(user);
 

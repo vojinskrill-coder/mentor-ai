@@ -260,6 +260,7 @@ export enum LlmProviderType {
   OPENAI = 'OPENAI',
   ANTHROPIC = 'ANTHROPIC',
   LM_STUDIO = 'LM_STUDIO',
+  DEEPSEEK = 'DEEPSEEK',
 }
 
 /** Single LLM provider configuration */
@@ -380,7 +381,17 @@ export interface Message {
   citations?: ConceptCitation[];
   /** Memory attributions for context references (Story 2.7) */
   memoryAttributions?: MemoryAttribution[];
+  /** Web search source URLs used for this AI response (Story 3.11) */
+  webSearchSources?: WebSearchSource[];
+  /** Suggested next actions after this AI response (D1) */
+  suggestedActions?: SuggestedAction[];
   createdAt: string;
+}
+
+/** Web search source reference displayed under AI messages (Story 3.11) */
+export interface WebSearchSource {
+  title: string;
+  link: string;
 }
 
 /** Conversation with messages included */
@@ -411,6 +422,14 @@ export interface ConceptHierarchyNode {
   children: ConceptHierarchyNode[];
   conversationCount: number; // Total conversations in this subtree
   conversations: Conversation[]; // Direct conversations (only on leaf concepts)
+  /** Brain tree status: 'completed' | 'pending' (from task note status) */
+  status?: 'completed' | 'pending';
+  /** User who completed this concept's task */
+  completedByUserId?: string;
+  /** Note ID for pending task (for "Istraži" action) */
+  pendingNoteId?: string;
+  /** Conversation ID linked to this concept (for "Pogledaj" navigation) */
+  linkedConversationId?: string;
 }
 
 /** Full concept tree structure for sidebar */
@@ -465,6 +484,23 @@ export interface ChatComplete {
   messageId: string;
   fullContent: string;
   metadata?: Record<string, unknown>;
+}
+
+/** Suggested action after AI response (D1) */
+export interface SuggestedAction {
+  type:
+    | 'create_tasks'
+    | 'run_workflow'
+    | 'explore_concept'
+    | 'deep_dive'
+    | 'next_domain'
+    | 'score_task'
+    | 'view_tasks'
+    | 'save_note'
+    | 'web_search';
+  label: string;
+  icon: 'tasks' | 'workflow' | 'explore' | 'search' | 'arrow' | 'score' | 'note' | 'web';
+  payload?: Record<string, unknown>;
 }
 
 // ── AI Gateway Types (Story 2.2) ──
@@ -1293,6 +1329,7 @@ export enum NoteType {
   TASK = 'TASK',
   NOTE = 'NOTE',
   SUMMARY = 'SUMMARY',
+  COMMENT = 'COMMENT',
 }
 
 /** Task completion status */
@@ -1348,6 +1385,31 @@ export interface UpdateNoteStatusRequest {
 /** Response containing notes list */
 export interface NotesListResponse {
   data: NoteItem[];
+}
+
+/** A single comment on a task or workflow step */
+export interface CommentItem {
+  id: string;
+  content: string;
+  userId: string;
+  userName: string;
+  userRole: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Paginated comment list response */
+export interface CommentListResponse {
+  comments: CommentItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+/** Chat error data sent via WebSocket chat:error event */
+export interface ChatErrorData {
+  type: string;
+  message: string;
 }
 
 // ── Workflow & Agent Execution ──
@@ -1489,6 +1551,8 @@ export interface YoloConfig {
   retryAttempts: number;
   retryBaseDelayMs?: number; // Exponential backoff base (default 5000ms)
   circuitBreakerCooldownMs?: number; // Pause after consecutive failures (default 30000ms)
+  /** Max concepts to fully execute workflows for (default 50). Remainder created as PENDING only. */
+  maxExecutionBudget?: number;
 }
 
 export interface YoloProgressPayload {
@@ -1499,6 +1563,14 @@ export interface YoloProgressPayload {
   failed: number;
   total: number;
   discoveredCount: number;
+  /** Max concepts that will be fully executed (Story 3.10) */
+  executionBudget?: number;
+  /** Concepts fully executed so far (completed + running) */
+  executedSoFar?: number;
+  /** Concepts created as PENDING tasks but not executed this run */
+  createdOnlyCount?: number;
+  /** Total candidates considered before top-N selection */
+  totalConsidered?: number;
   currentTasks: Array<{
     conceptName: string;
     status: string;
@@ -1538,4 +1610,10 @@ export interface YoloCompletePayload {
   conversationId: string;
   /** Final log entries from the YOLO execution */
   logs?: string[];
+  /** Concepts created as PENDING tasks but not executed this run */
+  createdOnlyCount?: number;
+  /** Total candidates considered before top-N selection */
+  totalConsidered?: number;
+  /** Execution budget that was applied */
+  executionBudget?: number;
 }

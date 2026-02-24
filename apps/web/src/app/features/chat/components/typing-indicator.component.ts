@@ -10,45 +10,94 @@ import type { PersonaType } from '@mentor-ai/shared/types';
   selector: 'app-typing-indicator',
   standalone: true,
   imports: [CommonModule],
+  styles: [
+    `
+      .typing-card {
+        background: #1a1a1a;
+        border-radius: 8px;
+        border: 1px solid #2a2a2a;
+        overflow: hidden;
+      }
+      .typing-header {
+        padding: 12px 16px;
+        border-bottom: 1px solid #2a2a2a;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .typing-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .typing-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .typing-name {
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .typing-status {
+        font-size: 11px;
+        color: #8b8b8b;
+      }
+      .typing-content {
+        padding: 16px;
+      }
+      .typing-dots {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .typing-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        animation: bounce 1s ease-in-out infinite;
+      }
+      .typing-dot:nth-child(2) {
+        animation-delay: 150ms;
+      }
+      .typing-dot:nth-child(3) {
+        animation-delay: 300ms;
+      }
+      @keyframes bounce {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-4px);
+        }
+      }
+    `,
+  ],
   template: `
-    <div class="ai-response-card overflow-hidden animate-in">
-      <!-- Card Header -->
-      <div class="ai-response-header">
-        <div class="flex items-center gap-3">
-          <!-- Persona Avatar -->
-          <div
-            class="w-8 h-8 rounded-full flex items-center justify-center text-white text-[13px] font-semibold"
-            [style.backgroundColor]="getPersonaColor()"
-          >
-            {{ getPersonaInitial() }}
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="text-[13px] font-medium" [style.color]="getPersonaColor()">
-              {{ getPersonaLabel() }}
-            </span>
-            <span class="text-[11px] text-[var(--color-text-muted)]">is thinking...</span>
-          </div>
+    <div class="typing-card">
+      <div class="typing-header">
+        <div class="typing-avatar" [style.backgroundColor]="getPersonaColor()">
+          {{ getPersonaInitial() }}
+        </div>
+        <div class="typing-label">
+          <span class="typing-name" [style.color]="getPersonaColor()">
+            {{ getPersonaLabel() }}
+          </span>
+          <span class="typing-status">razmišlja...</span>
         </div>
       </div>
-
-      <!-- Card Content with Typing Dots -->
-      <div class="ai-response-content">
-        <div class="flex items-center gap-1.5">
-          <span
-            class="w-2 h-2 rounded-full animate-bounce"
-            [style.backgroundColor]="getPersonaColor()"
-            style="animation-delay: 0ms; animation-duration: 1s;"
-          ></span>
-          <span
-            class="w-2 h-2 rounded-full animate-bounce"
-            [style.backgroundColor]="getPersonaColor()"
-            style="animation-delay: 150ms; animation-duration: 1s;"
-          ></span>
-          <span
-            class="w-2 h-2 rounded-full animate-bounce"
-            [style.backgroundColor]="getPersonaColor()"
-            style="animation-delay: 300ms; animation-duration: 1s;"
-          ></span>
+      <div class="typing-content">
+        <div class="typing-dots">
+          <span class="typing-dot" [style.backgroundColor]="getPersonaColor()"></span>
+          <span class="typing-dot" [style.backgroundColor]="getPersonaColor()"></span>
+          <span class="typing-dot" [style.backgroundColor]="getPersonaColor()"></span>
         </div>
       </div>
     </div>

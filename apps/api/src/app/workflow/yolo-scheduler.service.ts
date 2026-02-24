@@ -14,7 +14,7 @@ import { ConceptService } from '../knowledge/services/concept.service';
 import { ConceptMatchingService } from '../knowledge/services/concept-matching.service';
 import { CurriculumService } from '../knowledge/services/curriculum.service';
 import { ConceptExtractionService } from '../knowledge/services/concept-extraction.service';
-import { ALL_CATEGORIES } from '../knowledge/config/department-categories';
+import { ConceptRelevanceService } from '../knowledge/services/concept-relevance.service';
 
 // ─── Internal Types ─────────────────────────────────────────────
 
@@ -61,6 +61,12 @@ interface YoloRunState {
   consecutiveFailures: number;
   /** Per-worker step tracking for real-time progress (Story 2.16) */
   workerStepInfo: Map<string, { stepIndex: number; totalSteps: number; stepTitle: string }>;
+  /** Story 3.10: Concepts created as PENDING tasks but not executed this run */
+  createdOnlyCount: number;
+  /** Story 3.10: Total candidates considered before top-N selection */
+  totalConsidered: number;
+  /** Story 3.10: Execution budget for this run */
+  executionBudget: number;
 }
 
 const MAX_LOG_BUFFER = 100;
@@ -81,7 +87,8 @@ export class YoloSchedulerService {
     private readonly conceptService: ConceptService,
     private readonly conceptMatchingService: ConceptMatchingService,
     private readonly curriculumService: CurriculumService,
-    private readonly conceptExtractionService: ConceptExtractionService
+    private readonly conceptExtractionService: ConceptExtractionService,
+    private readonly conceptRelevanceService: ConceptRelevanceService
   ) {}
 
   /**
@@ -104,7 +111,11 @@ export class YoloSchedulerService {
       where: { tenantId, noteType: 'TASK', status: 'PENDING', conceptId: { not: null } },
     });
 
-    // Story 3.2: Per-domain or foundation-weighted selection
+    // Story 3.10: Relevance-ranked concept selection with execution budget
+    const executionBudget = config.maxExecutionBudget ?? 50;
+    const totalConsidered = taskNotes.length;
+    let createdOnlyCount = 0;
+
     if (taskNotes.length > 0) {
       const conceptIds = [...new Set(taskNotes.map((n) => n.conceptId!))];
       const concepts = await this.prisma.concept.findMany({
@@ -118,25 +129,94 @@ export class YoloSchedulerService {
         taskNotes = taskNotes.filter(
           (n) => n.conceptId && conceptCategoryMap.get(n.conceptId) === category
         );
-      } else {
-        // Foundation run: proportional weighting across tiers
-        // Tier 1 (indices 0-5): up to 60 concepts
-        // Tier 2 (indices 6-9): up to 25 concepts
-        // Tier 3 (indices 10+): up to 15 concepts
-        const tier1Cats = new Set(ALL_CATEGORIES.slice(0, 6));
-        const tier2Cats = new Set(ALL_CATEGORIES.slice(6, 10));
-        const tier1: typeof taskNotes = [];
-        const tier2: typeof taskNotes = [];
-        const tier3: typeof taskNotes = [];
-        for (const note of taskNotes) {
-          const cat = note.conceptId ? conceptCategoryMap.get(note.conceptId) : null;
-          if (!cat) continue;
-          if (tier1Cats.has(cat as (typeof ALL_CATEGORIES)[number])) tier1.push(note);
-          else if (tier2Cats.has(cat as (typeof ALL_CATEGORIES)[number])) tier2.push(note);
-          else tier3.push(note);
-        }
-        taskNotes = [...tier1.slice(0, 60), ...tier2.slice(0, 25), ...tier3.slice(0, 15)];
       }
+
+      // Load tenant + user info for relevance scoring
+      const tenant = await this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { industry: true },
+      });
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { department: true, role: true },
+      });
+
+      // Load completed concepts for prior activity scoring (Review fix: HIGH #7 — completedCategories was empty)
+      const completedNotes = await this.prisma.note.findMany({
+        where: { tenantId, noteType: 'TASK', status: 'COMPLETED', conceptId: { not: null } },
+        select: { conceptId: true },
+      });
+      const completedConceptIds = new Set(completedNotes.map((n) => n.conceptId!));
+      const completedConceptData =
+        completedConceptIds.size > 0
+          ? await this.prisma.concept.findMany({
+              where: { id: { in: [...completedConceptIds] } },
+              select: { category: true },
+            })
+          : [];
+      const completedCategories = new Set(
+        completedConceptData.map((c) => c.category.replace(/^\d+\.\s*/, '').trim())
+      );
+
+      // Load strongest relationship type per concept (Review fix: HIGH #1 — relationshipType was missing)
+      const conceptRelationships = await this.prisma.conceptRelationship.findMany({
+        where: { targetConceptId: { in: conceptIds } },
+        select: { targetConceptId: true, relationshipType: true },
+      });
+      const relPriority: Record<string, number> = { PREREQUISITE: 3, RELATED: 2, ADVANCED: 1 };
+      const conceptRelTypes = new Map<string, 'PREREQUISITE' | 'RELATED' | 'ADVANCED'>();
+      for (const rel of conceptRelationships) {
+        const existing = conceptRelTypes.get(rel.targetConceptId);
+        if (!existing || (relPriority[rel.relationshipType] ?? 0) > (relPriority[existing] ?? 0)) {
+          conceptRelTypes.set(
+            rel.targetConceptId,
+            rel.relationshipType as 'PREREQUISITE' | 'RELATED' | 'ADVANCED'
+          );
+        }
+      }
+
+      // Score every candidate concept by relevance (Review fix: HIGH #3 — wrapped in try/catch)
+      let scoredCandidates: Array<{ note: (typeof taskNotes)[number]; score: number }>;
+      try {
+        scoredCandidates = taskNotes.map((note) => ({
+          note,
+          score: this.conceptRelevanceService.scoreRelevance({
+            conceptCategory: conceptCategoryMap.get(note.conceptId!) ?? '',
+            tenantIndustry: tenant?.industry ?? '',
+            completedConceptIds,
+            completedCategories,
+            department: user?.department ?? null,
+            role: user?.role ?? 'MEMBER',
+            relationshipType: conceptRelTypes.get(note.conceptId!),
+          }),
+        }));
+      } catch (err) {
+        this.logger.error({
+          message: 'Relevance scoring failed, executing all candidates without ranking',
+          error: err instanceof Error ? err.message : 'Unknown',
+        });
+        scoredCandidates = taskNotes.map((note) => ({ note, score: 0.5 }));
+      }
+
+      // Sort descending by relevance score
+      scoredCandidates.sort((a, b) => b.score - a.score);
+
+      // Split: top N execute, rest are create-only (already PENDING in DB)
+      const toExecute = scoredCandidates.slice(0, executionBudget);
+      const toCreateOnly = scoredCandidates.slice(executionBudget);
+      createdOnlyCount = toCreateOnly.length;
+
+      if (toExecute.length > 0 && toCreateOnly.length > 0) {
+        const cutoffScore = toExecute[toExecute.length - 1]!.score;
+        this.logger.log({
+          message: `YOLO concept selection: ${toExecute.length} to execute, ${toCreateOnly.length} deferred`,
+          cutoffScore: cutoffScore.toFixed(3),
+          totalConsidered,
+          executionBudget,
+        });
+      }
+
+      taskNotes = toExecute.map((c) => c.note);
     }
 
     if (taskNotes.length === 0) {
@@ -211,13 +291,16 @@ export class YoloSchedulerService {
       locks: new Map(),
       consecutiveFailures: 0,
       workerStepInfo: new Map(),
+      createdOnlyCount,
+      totalConsidered,
+      executionBudget,
     };
 
     this.activeRuns.set(planId, state);
 
     this.addLog(
       state,
-      `YOLO started: ${tasks.size} tasks, maxConcurrency=${config.maxConcurrency}`
+      `YOLO started: ${tasks.size} executing (of ${totalConsidered} considered), budget=${executionBudget}, deferred=${createdOnlyCount}, maxConcurrency=${config.maxConcurrency}`
     );
 
     // Emit initial progress
@@ -280,6 +363,9 @@ export class YoloSchedulerService {
         const taskId = state.readyQueue.shift()!;
         const task = tasks.get(taskId);
         if (!task || task.status === 'completed' || task.status === 'failed') continue;
+
+        // Story 3.10: Per-dispatch relevance re-check removed — all tasks are pre-scored
+        // during startYoloExecution() and only top-N enter the task map.
 
         // Try to acquire concept lock
         if (!this.tryAcquireLock(state, task.conceptId, taskId)) {
@@ -416,6 +502,9 @@ export class YoloSchedulerService {
       durationMs,
       conversationId: state.conversationId,
       logs: [...state.logBuffer],
+      createdOnlyCount: state.createdOnlyCount,
+      totalConsidered: state.totalConsidered,
+      executionBudget: state.executionBudget,
     });
 
     // Scheduled cleanup
@@ -496,21 +585,36 @@ export class YoloSchedulerService {
       // Save AI message to concept conversation
       await callbacks.saveMessage('assistant', result.content, task.conceptId);
 
-      // Create sub-task note
-      await this.notesService.createNote({
-        title: step.title,
-        content: result.content,
-        source: NoteSource.CONVERSATION,
-        noteType: NoteType.TASK,
-        status: NoteStatus.READY_FOR_REVIEW,
-        userId,
+      // Create sub-task note (with dedup — Story 3.4 AC3 review fix)
+      const existingSubTask = await this.notesService.findExistingSubTask(
         tenantId,
-        conversationId,
-        conceptId: task.conceptId,
-        parentNoteId: task.taskId,
-        expectedOutcome: step.description?.substring(0, 500),
-        workflowStepNumber: step.workflowStepNumber,
-      });
+        task.taskId,
+        step.workflowStepNumber ?? 0
+      );
+      if (existingSubTask) {
+        this.logger.debug({
+          message: 'Skipping duplicate YOLO sub-task',
+          stepTitle: step.title,
+          existingSubTaskId: existingSubTask,
+          parentNoteId: task.taskId,
+          workflowStepNumber: step.workflowStepNumber,
+        });
+      } else {
+        await this.notesService.createNote({
+          title: step.title,
+          content: result.content,
+          source: NoteSource.CONVERSATION,
+          noteType: NoteType.TASK,
+          status: NoteStatus.READY_FOR_REVIEW,
+          userId,
+          tenantId,
+          conversationId,
+          conceptId: task.conceptId,
+          parentNoteId: task.taskId,
+          expectedOutcome: step.description?.substring(0, 500),
+          workflowStepNumber: step.workflowStepNumber,
+        });
+      }
 
       // Memory discipline: only keep truncated summary
       completedSummaries.push({
@@ -642,7 +746,20 @@ export class YoloSchedulerService {
           })
         );
 
-      // Create PENDING task note
+      // Create PENDING task note (with dedup — Story 3.4 AC3 review fix)
+      const existingTask = await this.notesService.findExistingTask(state.tenantId, {
+        conceptId,
+        title: conceptName,
+      });
+      if (existingTask) {
+        this.logger.debug({
+          message: 'Skipping duplicate YOLO discovery task',
+          conceptName,
+          existingTaskId: existingTask,
+          tenantId: state.tenantId,
+        });
+        return;
+      }
       const taskNote = await this.notesService.createNote({
         title: conceptName,
         content: `Primenite ${conceptName} na vaše poslovanje`,
@@ -664,20 +781,28 @@ export class YoloSchedulerService {
         }
       }
 
-      // Add to task map + ready queue
-      state.tasks.set(taskNote.id, {
-        taskId: taskNote.id,
-        conceptId,
-        conceptName,
-        dependencies: [],
-        status: 'ready',
-        retries: 0,
-      });
-      state.readyQueue.push(taskNote.id);
-
       // Emit tree update to frontend
       if (callbacks.onConceptDiscovered && conversationId) {
         callbacks.onConceptDiscovered(conceptId, conceptName, conversationId);
+      }
+
+      // Story 3.10: Only add to execution queue if budget not exhausted
+      // Review fix HIGH #2: Use tasks.size (total admitted slots) instead of partial sum.
+      // Node.js single-thread guarantees this check + modify is atomic (no race condition).
+      if (state.tasks.size < state.executionBudget) {
+        state.tasks.set(taskNote.id, {
+          taskId: taskNote.id,
+          conceptId,
+          conceptName,
+          dependencies: [],
+          status: 'ready',
+          retries: 0,
+        });
+        state.readyQueue.push(taskNote.id);
+      } else {
+        // Budget exhausted — task created as PENDING in DB, available for next YOLO run
+        state.createdOnlyCount++;
+        this.addLog(state, `Budget exhausted, deferred: ${conceptName} (created as PENDING)`);
       }
     } catch (itemErr) {
       // Roll back so it can be retried from another worker's discovery
@@ -803,6 +928,10 @@ export class YoloSchedulerService {
       failed: state.failedCount,
       total: state.tasks.size,
       discoveredCount: state.discoveredCount,
+      executionBudget: state.executionBudget,
+      executedSoFar: state.completedCount + state.runningTasks.size,
+      createdOnlyCount: state.createdOnlyCount,
+      totalConsidered: state.totalConsidered,
       currentTasks,
       recentLogs,
       conversationId: state.conversationId,

@@ -18,6 +18,7 @@ import { AiGatewayService } from '../ai-gateway/ai-gateway.service';
 import { NotesService } from '../notes/notes.service';
 import { WebSearchService } from '../web-search/web-search.service';
 import { BusinessContextService } from '../knowledge/services/business-context.service';
+import { ConceptRelevanceService } from '../knowledge/services/concept-relevance.service';
 import { generateSystemPrompt } from '../personas/templates/persona-prompts';
 import { getVisibleCategories } from '../knowledge/config/department-categories';
 
@@ -58,6 +59,8 @@ export interface ExecutionCallbacks {
     completedSteps: number,
     totalSteps: number
   ) => void;
+  /** Called when post-execution discovery creates new pending tasks (Story 3.2 AC6) */
+  onTasksDiscovered?: (newConceptIds: string[]) => void;
   saveMessage: (
     role: 'system' | 'user' | 'assistant',
     content: string,
@@ -85,7 +88,8 @@ export class WorkflowService {
     private readonly aiGatewayService: AiGatewayService,
     private readonly notesService: NotesService,
     private readonly webSearchService: WebSearchService,
-    private readonly businessContextService: BusinessContextService
+    private readonly businessContextService: BusinessContextService,
+    private readonly conceptRelevanceService: ConceptRelevanceService
   ) {}
 
   // ─── Workflow Generation ──────────────────────────────────────
@@ -533,11 +537,27 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
         });
         callbacks.onStepComplete(step.stepId, result.content, result.citations);
 
-        // Create sub-task note linked to parent task
+        // Create sub-task note linked to parent task (with dedup by parentNoteId + stepNumber, Story 3.4 AC3)
         for (const taskId of plan.taskIds) {
           try {
             const parentNote = await this.notesService.getNoteById(taskId, tenantId);
             if (parentNote && parentNote.conceptId === step.conceptId) {
+              // Check if sub-task already exists for this step
+              const existingSubTask = await this.notesService.findExistingSubTask(
+                tenantId,
+                taskId,
+                step.workflowStepNumber ?? 0
+              );
+              if (existingSubTask) {
+                this.logger.debug({
+                  message: 'Skipping duplicate sub-task',
+                  stepId: step.stepId,
+                  existingSubTaskId: existingSubTask,
+                  parentNoteId: taskId,
+                  workflowStepNumber: step.workflowStepNumber,
+                });
+                break;
+              }
               await this.notesService.createNote({
                 title: step.title,
                 content: result.content,
@@ -591,13 +611,19 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
       ...new Set(plan.steps.filter((s) => s.status === 'completed').map((s) => s.conceptId)),
     ];
     if (completedConceptIds.length > 0) {
-      this.discoverAndCreatePendingTasks(completedConceptIds, userId, tenantId).catch((err) => {
-        this.logger.warn({
-          message: 'Post-execution discovery failed',
-          planId,
-          error: err instanceof Error ? err.message : 'Unknown',
+      this.discoverAndCreatePendingTasks(completedConceptIds, userId, tenantId)
+        .then((newConceptIds) => {
+          if (newConceptIds.length > 0 && callbacks.onTasksDiscovered) {
+            callbacks.onTasksDiscovered(newConceptIds);
+          }
+        })
+        .catch((err) => {
+          this.logger.warn({
+            message: 'Post-execution discovery failed',
+            planId,
+            error: err instanceof Error ? err.message : 'Unknown',
+          });
         });
-      });
     }
 
     plan.status = 'completed';
@@ -939,7 +965,7 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}$
     completedConceptIds: string[],
     userId: string,
     tenantId: string
-  ): Promise<number> {
+  ): Promise<string[]> {
     const MAX_NEW_TASKS = 10;
 
     // Get user's department to scope discoveries
@@ -962,51 +988,84 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}$
       },
     });
 
-    if (relationships.length === 0) return 0;
+    if (relationships.length === 0) return [];
 
     // Get target concept IDs
     const targetConceptIds = relationships.map((r) => r.targetConcept.id);
 
-    // Check which targets already have a conversation or pending task for this user
-    const [existingConversations, existingTasks] = await Promise.all([
-      this.prisma.note.findMany({
-        where: {
-          userId,
-          tenantId,
-          conceptId: { in: targetConceptIds },
-          noteType: NoteType.TASK,
-        },
-        select: { conceptId: true },
-      }),
-      // Also check if there are already completed conversations via notes
-      this.prisma.note.findMany({
-        where: {
-          userId,
-          tenantId,
-          conceptId: { in: targetConceptIds },
-          noteType: NoteType.TASK,
-          status: NoteStatus.COMPLETED,
-        },
-        select: { conceptId: true },
-      }),
-    ]);
+    // Story 3.3 AC6: Single batch query for duplicate prevention
+    // Covers both PENDING and COMPLETED task notes for this user
+    const existingNotes = await this.prisma.note.findMany({
+      where: {
+        userId,
+        tenantId,
+        conceptId: { in: targetConceptIds },
+        noteType: NoteType.TASK,
+      },
+      select: { conceptId: true },
+    });
 
-    const existingConceptIds = new Set([
-      ...existingConversations.map((n) => n.conceptId),
-      ...existingTasks.map((n) => n.conceptId),
-    ]);
+    const existingConceptIds = new Set(
+      existingNotes.map((n) => n.conceptId).filter(Boolean) as string[]
+    );
 
     // Filter to only new concepts within user's visible categories
     const newConcepts = relationships
-      .map((r) => r.targetConcept)
-      .filter((c) => !existingConceptIds.has(c.id))
-      .filter((c) => !visibleCategories || visibleCategories.includes(c.category));
+      .map((r) => ({
+        concept: r.targetConcept,
+        relationshipType: r.relationshipType as 'PREREQUISITE' | 'RELATED' | 'ADVANCED',
+      }))
+      .filter((r) => !existingConceptIds.has(r.concept.id))
+      .filter((r) => !visibleCategories || visibleCategories.includes(r.concept.category));
+
+    // Story 3.3 AC5: Relevance scoring — filter by business relevance
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { industry: true },
+    });
+    const tenantIndustry = tenant?.industry ?? '';
+    const completedSet = new Set(completedConceptIds);
+    const relevanceThreshold = this.conceptRelevanceService.getThreshold(user?.role ?? 'MEMBER');
+
+    // Get categories of completed concepts for domain-specific prior activity scoring
+    const completedConceptData = await this.prisma.concept.findMany({
+      where: { id: { in: completedConceptIds } },
+      select: { category: true },
+    });
+    const completedCategories = new Set(
+      completedConceptData.map((c) => c.category.replace(/^\d+\.\s*/, '').trim())
+    );
+
+    const relevantConcepts = newConcepts.filter((r) => {
+      const score = this.conceptRelevanceService.scoreRelevance({
+        conceptCategory: r.concept.category,
+        tenantIndustry,
+        completedConceptIds: completedSet,
+        completedCategories,
+        department: user?.department ?? null,
+        role: user?.role ?? 'MEMBER',
+        relationshipType: r.relationshipType,
+      });
+
+      if (score < relevanceThreshold) {
+        this.logger.log({
+          message: 'Concept skipped — low relevance',
+          conceptId: r.concept.id,
+          conceptName: r.concept.name,
+          score: score.toFixed(2),
+          threshold: relevanceThreshold,
+          category: r.concept.category,
+        });
+        return false;
+      }
+      return true;
+    });
 
     // Deduplicate
-    const uniqueNew = [...new Map(newConcepts.map((c) => [c.id, c])).values()];
+    const uniqueNew = [...new Map(relevantConcepts.map((r) => [r.concept.id, r.concept])).values()];
     const toSeed = uniqueNew.slice(0, MAX_NEW_TASKS);
 
-    if (toSeed.length === 0) return 0;
+    if (toSeed.length === 0) return [];
 
     // Create PENDING task Notes
     const noteData = toSeed.map((concept) => ({
@@ -1023,6 +1082,8 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}$
 
     await this.prisma.note.createMany({ data: noteData });
 
+    const newConceptIds = toSeed.map((c) => c.id);
+
     this.logger.log({
       message: 'Post-execution discovery: new pending tasks created',
       userId,
@@ -1032,7 +1093,7 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}$
       newConceptNames: toSeed.map((c) => c.name),
     });
 
-    return noteData.length;
+    return newConceptIds;
   }
 
   private scheduledCleanup(planId: string): void {

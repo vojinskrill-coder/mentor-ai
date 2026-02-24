@@ -19,6 +19,7 @@ const mockUser: CurrentUserPayload = {
   role: 'TENANT_OWNER',
   email: 'owner@test.com',
   auth0Id: 'auth0|123',
+  department: null,
 };
 
 describe('InvitationController', () => {
@@ -145,10 +146,7 @@ describe('InvitationController', () => {
 
       expect(result.status).toBe('success');
       expect(result.message).toBe('Invitation revoked');
-      expect(mockInvitationService.revokeInvitation).toHaveBeenCalledWith(
-        'inv_123',
-        'tnt_123'
-      );
+      expect(mockInvitationService.revokeInvitation).toHaveBeenCalledWith('inv_123', 'tnt_123');
     });
   });
 });

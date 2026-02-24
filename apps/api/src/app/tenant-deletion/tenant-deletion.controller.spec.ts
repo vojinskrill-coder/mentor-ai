@@ -24,6 +24,7 @@ const mockUser: CurrentUserPayload = {
   tenantId: 'tnt_test1',
   role: 'TENANT_OWNER',
   auth0Id: 'auth0|test123',
+  department: null,
 };
 
 describe('TenantDeletionController', () => {
@@ -31,11 +32,7 @@ describe('TenantDeletionController', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      imports: [
-        ThrottlerModule.forRoot([
-          { name: 'deletion-daily', ttl: 86400000, limit: 3 },
-        ]),
-      ],
+      imports: [ThrottlerModule.forRoot([{ name: 'deletion-daily', ttl: 86400000, limit: 3 }])],
       controllers: [TenantDeletionController],
       providers: [
         { provide: TenantDeletionService, useValue: mockTenantDeletionService },
@@ -109,9 +106,7 @@ describe('TenantDeletionController', () => {
 
       const result = await controller.getDeletionStatus(mockUser);
 
-      expect(mockTenantDeletionService.getDeletionStatus).toHaveBeenCalledWith(
-        mockUser.tenantId
-      );
+      expect(mockTenantDeletionService.getDeletionStatus).toHaveBeenCalledWith(mockUser.tenantId);
       expect(result.data).toEqual(deletionStatus);
     });
 

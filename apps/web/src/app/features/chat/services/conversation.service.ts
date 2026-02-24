@@ -6,7 +6,6 @@ import type {
   Conversation,
   ConversationWithMessages,
   ConceptTreeData,
-  ApiResponse,
   PersonaType,
 } from '@mentor-ai/shared/types';
 
@@ -67,15 +66,11 @@ export class ConversationService {
    * @param personaType - New persona type
    * @returns Updated conversation
    */
-  async updatePersona(
-    conversationId: string,
-    personaType: PersonaType
-  ): Promise<Conversation> {
+  async updatePersona(conversationId: string, personaType: PersonaType): Promise<Conversation> {
     const response = await firstValueFrom(
-      this.http.patch<CreateConversationResponse>(
-        `${this.baseUrl}/${conversationId}/persona`,
-        { personaType }
-      )
+      this.http.patch<CreateConversationResponse>(`${this.baseUrl}/${conversationId}/persona`, {
+        personaType,
+      })
     );
     return response.data;
   }
@@ -85,9 +80,7 @@ export class ConversationService {
    * @returns Array of conversations (without messages)
    */
   async getConversations(): Promise<Conversation[]> {
-    const response = await firstValueFrom(
-      this.http.get<ConversationsResponse>(this.baseUrl)
-    );
+    const response = await firstValueFrom(this.http.get<ConversationsResponse>(this.baseUrl));
     return response.data;
   }
 
@@ -108,9 +101,7 @@ export class ConversationService {
    * @param conversationId - Conversation ID to delete
    */
   async deleteConversation(conversationId: string): Promise<void> {
-    await firstValueFrom(
-      this.http.delete<void>(`${this.baseUrl}/${conversationId}`)
-    );
+    await firstValueFrom(this.http.delete<void>(`${this.baseUrl}/${conversationId}`));
   }
 
   /**
@@ -119,6 +110,17 @@ export class ConversationService {
   async getGroupedConversations(): Promise<ConceptTreeData> {
     const response = await firstValueFrom(
       this.http.get<{ data: ConceptTreeData }>(`${this.baseUrl}/grouped`)
+    );
+    return response.data;
+  }
+
+  /**
+   * Gets the Business Brain tree — N-level hierarchy matching the Obsidian vault.
+   * Filtered by user's department. Backend returns ConceptTreeData directly.
+   */
+  async getBrainTree(): Promise<ConceptTreeData> {
+    const response = await firstValueFrom(
+      this.http.get<{ data: ConceptTreeData }>(`${this.baseUrl}/brain-tree`)
     );
     return response.data;
   }

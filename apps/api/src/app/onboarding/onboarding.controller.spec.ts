@@ -24,6 +24,7 @@ describe('OnboardingController', () => {
     role: 'MEMBER',
     email: 'test@example.com',
     auth0Id: 'auth0|123',
+    department: null,
   };
 
   beforeEach(async () => {
@@ -31,10 +32,7 @@ describe('OnboardingController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [OnboardingController],
-      providers: [
-        { provide: OnboardingService, useValue: mockOnboardingService },
-        Reflector,
-      ],
+      providers: [{ provide: OnboardingService, useValue: mockOnboardingService }, Reflector],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
@@ -61,10 +59,7 @@ describe('OnboardingController', () => {
 
       expect(result.data).toEqual(mockStatus);
       expect(result.correlationId).toBe('corr_123');
-      expect(mockOnboardingService.getStatus).toHaveBeenCalledWith(
-        'tnt_123',
-        'usr_456'
-      );
+      expect(mockOnboardingService.getStatus).toHaveBeenCalledWith('tnt_123', 'usr_456');
     });
   });
 
@@ -106,9 +101,7 @@ describe('OnboardingController', () => {
       const result = controller.getTasksByIndustry('FINANCE', 'corr_123');
 
       expect(result.data).toEqual(mockTasks);
-      expect(mockOnboardingService.getTasksForIndustry).toHaveBeenCalledWith(
-        'FINANCE'
-      );
+      expect(mockOnboardingService.getTasksForIndustry).toHaveBeenCalledWith('FINANCE');
     });
   });
 

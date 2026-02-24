@@ -17,7 +17,7 @@ import { ConceptService } from '../knowledge/services/concept.service';
 import { CurriculumService } from '../knowledge/services/curriculum.service';
 import { CitationService } from '../knowledge/services/citation.service';
 import { NotesService } from '../notes/notes.service';
-import { getVisibleCategories, ALL_CATEGORIES } from '../knowledge/config/department-categories';
+import { getVisibleCategories } from '../knowledge/config/department-categories';
 
 /**
  * Service for managing chat conversations.
@@ -373,145 +373,224 @@ export class ConversationService {
   }
 
   /**
-   * Builds the Business Brain tree (Story 3.2).
-   * Shows only concepts with conversations (completed) or pending tasks.
-   * Filtered by user's department → visible categories.
+   * Builds the Business Brain tree (Story 3.2, rewritten Story 3.4).
+   * Returns an N-level hierarchy matching the Obsidian vault structure.
+   * Shows only concepts with conversations or pending/completed tasks (sparse tree).
+   * All ancestor folders are preserved to maintain context.
+   * Filtered by user's department → visible top-level categories.
    */
   async getBrainTree(
     tenantId: string,
     userId: string,
     department: string | null,
     role: string
-  ): Promise<{
-    categories: Array<{
-      name: string;
-      concepts: Array<{
-        id: string;
-        name: string;
-        slug: string;
-        status: 'completed' | 'pending';
-        completedByUserId?: string;
-        conversationId?: string;
-        pendingNoteId?: string;
-      }>;
-    }>;
-  }> {
+  ): Promise<ConceptTreeData> {
     const prisma = await this.tenantPrisma.getClient(tenantId);
 
-    // 1. Get all conversations with concepts (all users in tenant)
+    // 1. Get conversations for linking (to enable "Pogledaj" navigation)
     const convRows = await prisma.conversation.findMany({
       where: { conceptId: { not: null } },
-      select: { conceptId: true, userId: true, id: true },
+      select: { conceptId: true, userId: true, id: true, title: true, updatedAt: true },
       orderBy: { updatedAt: 'desc' },
     });
 
-    // 2. Get pending task notes
+    // 2. Get task notes by status
     const isOwner = role === 'PLATFORM_OWNER' || role === 'TENANT_OWNER' || !department;
-    const pendingTasks = await this.notesService.getPendingTaskConceptIds(
-      tenantId,
-      isOwner ? undefined : userId
-    );
+    const [pendingTasks, completedTasks] = await Promise.all([
+      this.notesService.getPendingTaskConceptIds(tenantId, isOwner ? undefined : userId),
+      this.notesService.getCompletedTaskConceptIds(tenantId, isOwner ? undefined : userId),
+    ]);
 
     // 3. Collect unique concept IDs and build lookup maps
     const allConceptIds = new Set<string>();
-    const completedMap = new Map<string, { userId: string; conversationId: string }>();
+    const convMap = new Map<
+      string,
+      { userId: string; conversationId: string; title: string | null; updatedAt: Date }
+    >();
+    const convsByConceptId = new Map<string, Conversation[]>();
+    const completedMap = new Map<string, { userId: string; noteId: string }>();
     const pendingMap = new Map<string, { userId: string; noteId: string }>();
 
     for (const conv of convRows) {
       if (conv.conceptId) {
         allConceptIds.add(conv.conceptId);
-        if (!completedMap.has(conv.conceptId)) {
-          completedMap.set(conv.conceptId, {
+        if (!convMap.has(conv.conceptId)) {
+          convMap.set(conv.conceptId, {
             userId: conv.userId,
             conversationId: conv.id,
+            title: conv.title,
+            updatedAt: conv.updatedAt,
           });
         }
+        // Group all conversations by concept for the tree
+        if (!convsByConceptId.has(conv.conceptId)) {
+          convsByConceptId.set(conv.conceptId, []);
+        }
+        convsByConceptId.get(conv.conceptId)!.push({
+          id: conv.id,
+          title: conv.title ?? 'Untitled',
+          updatedAt: conv.updatedAt.toISOString(),
+        } as Conversation);
+      }
+    }
+
+    for (const task of completedTasks) {
+      allConceptIds.add(task.conceptId);
+      if (!completedMap.has(task.conceptId)) {
+        completedMap.set(task.conceptId, { userId: task.userId, noteId: task.noteId });
       }
     }
 
     for (const task of pendingTasks) {
       allConceptIds.add(task.conceptId);
       if (!pendingMap.has(task.conceptId)) {
-        pendingMap.set(task.conceptId, {
-          userId: task.userId,
-          noteId: task.noteId,
-        });
+        pendingMap.set(task.conceptId, { userId: task.userId, noteId: task.noteId });
       }
     }
 
     if (allConceptIds.size === 0) {
-      return { categories: [] };
+      return { tree: [], uncategorized: [] };
     }
 
-    // 4. Load concept details
+    // 4. Load concept details (includes slug = curriculumId)
     const conceptMap = await this.conceptService.findByIds([...allConceptIds]);
 
-    // 5. Get visible categories for this user
+    // 5. Get visible categories for department filtering
     const visibleCategories = getVisibleCategories(department, role);
 
-    // 6. Group by category
-    const categoryGroups = new Map<
-      string,
-      Array<{
-        id: string;
-        name: string;
-        slug: string;
-        status: 'completed' | 'pending';
-        completedByUserId?: string;
-        conversationId?: string;
-        pendingNoteId?: string;
-      }>
-    >();
+    // 6. Collect all curriculum IDs that need to appear in the tree
+    //    For each active concept, include it + all its ancestors
+    const neededCurriculumIds = new Set<string>();
+    const conceptToCurriculum = new Map<string, string>(); // conceptId → curriculumId
 
     for (const [conceptId, info] of conceptMap) {
-      // Filter by visible categories (null = no filter, owner sees all)
+      // Filter by visible categories
       if (visibleCategories && !visibleCategories.includes(info.category)) {
         continue;
       }
 
-      const completed = completedMap.get(conceptId);
-      const pending = pendingMap.get(conceptId);
-      const status = completed ? 'completed' : 'pending';
+      const curriculumId = info.curriculumId ?? info.slug;
+      conceptToCurriculum.set(conceptId, curriculumId);
 
-      const concept: {
-        id: string;
-        name: string;
-        slug: string;
-        status: 'completed' | 'pending';
-        completedByUserId?: string;
-        conversationId?: string;
-        pendingNoteId?: string;
-      } = {
-        id: conceptId,
-        name: info.name,
-        slug: info.slug,
-        status,
-      };
-
-      if (completed) {
-        concept.completedByUserId = completed.userId;
-        concept.conversationId = completed.conversationId;
+      // Add this node and all its ancestors to the needed set
+      const chain = this.curriculumService.getAncestorChain(curriculumId);
+      for (const ancestor of chain) {
+        neededCurriculumIds.add(ancestor.id);
       }
-      if (pending) {
-        concept.pendingNoteId = pending.noteId;
-      }
-
-      if (!categoryGroups.has(info.category)) {
-        categoryGroups.set(info.category, []);
-      }
-      categoryGroups.get(info.category)!.push(concept);
     }
 
-    // 7. Build sorted category list (ordered by ALL_CATEGORIES index)
-    const categories = [...categoryGroups.entries()]
-      .map(([name, concepts]) => ({ name, concepts }))
-      .sort((a, b) => {
-        const orderA = (ALL_CATEGORIES as readonly string[]).indexOf(a.name);
-        const orderB = (ALL_CATEGORIES as readonly string[]).indexOf(b.name);
-        return (orderA === -1 ? 999 : orderA) - (orderB === -1 ? 999 : orderB);
-      });
+    // 7. Build sparse tree from curriculum nodes
+    const allCurriculumNodes = this.curriculumService.getFullTree();
+    const curriculumNodeMap = new Map(allCurriculumNodes.map((n) => [n.id, n]));
 
-    return { categories };
+    // Build a map of curriculumId → ConceptHierarchyNode
+    const treeNodeMap = new Map<string, ConceptHierarchyNode>();
+
+    for (const currId of neededCurriculumIds) {
+      const currNode = curriculumNodeMap.get(currId);
+      if (!currNode) continue;
+
+      // Find if there's an active concept at this curriculum position
+      let conceptId: string | undefined;
+      let status: 'completed' | 'pending' | undefined;
+      let completedByUserId: string | undefined;
+      let pendingNoteId: string | undefined;
+      let linkedConversationId: string | undefined;
+      const conversations: Conversation[] = [];
+
+      // Search for a concept mapped to this curriculum node
+      for (const [cId, cSlug] of conceptToCurriculum) {
+        if (cSlug === currId) {
+          conceptId = cId;
+          const completed = completedMap.get(cId);
+          const pending = pendingMap.get(cId);
+          const conv = convMap.get(cId);
+          status = completed ? 'completed' : 'pending';
+          completedByUserId = completed?.userId;
+          pendingNoteId = pending?.noteId;
+          linkedConversationId = conv?.conversationId;
+          conversations.push(...(convsByConceptId.get(cId) ?? []));
+          break;
+        }
+      }
+
+      treeNodeMap.set(currId, {
+        curriculumId: currId,
+        label: currNode.label,
+        conceptId,
+        children: [],
+        conversationCount: 0,
+        conversations,
+        status,
+        completedByUserId,
+        pendingNoteId,
+        linkedConversationId,
+      });
+    }
+
+    // 8. Wire up parent-child relationships
+    const rootNodes: ConceptHierarchyNode[] = [];
+
+    for (const [currId, treeNode] of treeNodeMap) {
+      const currNode = curriculumNodeMap.get(currId);
+      if (!currNode?.parentId || !treeNodeMap.has(currNode.parentId)) {
+        // This is a root node (or its parent isn't in the sparse tree)
+        rootNodes.push(treeNode);
+      } else {
+        const parent = treeNodeMap.get(currNode.parentId)!;
+        parent.children.push(treeNode);
+      }
+    }
+
+    // 9. Sort children at every level by the curriculum sortOrder
+    const sortChildren = (nodes: ConceptHierarchyNode[]): void => {
+      nodes.sort((a, b) => {
+        const aSort = curriculumNodeMap.get(a.curriculumId)?.sortOrder ?? 999;
+        const bSort = curriculumNodeMap.get(b.curriculumId)?.sortOrder ?? 999;
+        return aSort - bSort;
+      });
+      for (const node of nodes) {
+        sortChildren(node.children);
+      }
+    };
+    sortChildren(rootNodes);
+    rootNodes.sort((a, b) => {
+      const aSort = curriculumNodeMap.get(a.curriculumId)?.sortOrder ?? 999;
+      const bSort = curriculumNodeMap.get(b.curriculumId)?.sortOrder ?? 999;
+      return aSort - bSort;
+    });
+
+    // 10. Bubble up conversationCount from leaves to ancestors
+    const bubbleUpCounts = (node: ConceptHierarchyNode): number => {
+      let count = node.conversations.length;
+      for (const child of node.children) {
+        count += bubbleUpCounts(child);
+      }
+      node.conversationCount = count;
+      return count;
+    };
+    for (const root of rootNodes) {
+      bubbleUpCounts(root);
+    }
+
+    // 11. Get uncategorized conversations (no conceptId)
+    const uncategorizedConvs = await prisma.conversation.findMany({
+      where: { conceptId: null, userId },
+      select: { id: true, title: true, updatedAt: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 50,
+    });
+
+    const uncategorized: Conversation[] = uncategorizedConvs.map(
+      (c) =>
+        ({
+          id: c.id,
+          title: c.title ?? 'Untitled',
+          updatedAt: c.updatedAt.toISOString(),
+        }) as Conversation
+    );
+
+    return { tree: rootNodes, uncategorized };
   }
 
   /**

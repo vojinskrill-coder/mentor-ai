@@ -7,6 +7,7 @@ import { ConceptMatchingService } from '../knowledge/services/concept-matching.s
 import { CurriculumService } from '../knowledge/services/curriculum.service';
 import { ConceptExtractionService } from '../knowledge/services/concept-extraction.service';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
+import { ConceptRelevanceService } from '../knowledge/services/concept-relevance.service';
 import type { YoloConfig, YoloProgressPayload, YoloCompletePayload } from '@mentor-ai/shared/types';
 
 // ─── Mocks ───────────────────────────────────────────────────
@@ -16,13 +17,25 @@ function createMockCallbacks() {
   let completePayload: YoloCompletePayload | null = null;
   let errorMessage: string | null = null;
   return {
-    onProgress: jest.fn((p: YoloProgressPayload) => { progressHistory.push(p); }),
-    onComplete: jest.fn((p: YoloCompletePayload) => { completePayload = p; }),
-    onError: jest.fn((e: string) => { errorMessage = e; }),
+    onProgress: jest.fn((p: YoloProgressPayload) => {
+      progressHistory.push(p);
+    }),
+    onComplete: jest.fn((p: YoloCompletePayload) => {
+      completePayload = p;
+    }),
+    onError: jest.fn((e: string) => {
+      errorMessage = e;
+    }),
     saveMessage: jest.fn().mockResolvedValue('msg-id'),
-    get progressHistory() { return progressHistory; },
-    get completePayload() { return completePayload; },
-    get errorMessage() { return errorMessage; },
+    get progressHistory() {
+      return progressHistory;
+    },
+    get completePayload() {
+      return completePayload;
+    },
+    get errorMessage() {
+      return errorMessage;
+    },
   };
 }
 
@@ -40,7 +53,7 @@ function makeFakeNote(id: string, conceptId: string, conceptName: string) {
 /** Poll for onComplete instead of fixed setTimeout — prevents flaky tests */
 async function waitForComplete(
   callbacks: ReturnType<typeof createMockCallbacks>,
-  timeoutMs = 5000,
+  timeoutMs = 5000
 ): Promise<void> {
   const start = Date.now();
   while (!callbacks.completePayload && Date.now() - start < timeoutMs) {
@@ -70,6 +83,20 @@ describe('YoloSchedulerService', () => {
       note: {
         findMany: jest.fn().mockResolvedValue([]),
       },
+      concept: {
+        findMany: jest.fn().mockImplementation(async (args: any) => {
+          // Return concept stubs with category for any requested IDs
+          const ids: string[] = args?.where?.id?.in ?? [];
+          return ids.map((id: string) => ({ id, category: 'Uvod u Poslovanje' }));
+        }),
+        findUnique: jest.fn().mockResolvedValue({ category: 'Uvod u Poslovanje' }),
+      },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ department: null, role: 'PLATFORM_OWNER' }),
+      },
+      tenant: {
+        findUnique: jest.fn().mockResolvedValue({ industry: 'digital' }),
+      },
     };
 
     mockWorkflowService = {
@@ -91,7 +118,10 @@ describe('YoloSchedulerService', () => {
         relatedConcepts: [],
       }),
       createDynamicRelationships: jest.fn().mockResolvedValue({
-        conceptId: 'cpt_x', conceptName: 'Test', relationshipsCreated: 0, errors: [],
+        conceptId: 'cpt_x',
+        conceptName: 'Test',
+        relationshipsCreated: 0,
+        errors: [],
       }),
     };
 
@@ -113,7 +143,21 @@ describe('YoloSchedulerService', () => {
         { provide: ConceptService, useValue: mockConceptService },
         { provide: ConceptMatchingService, useValue: mockConceptMatchingService },
         { provide: CurriculumService, useValue: mockCurriculumService },
-        { provide: ConceptExtractionService, useValue: { extractAndCreateConcepts: jest.fn().mockResolvedValue({ created: [], skippedDuplicates: [], errors: [] }) } },
+        {
+          provide: ConceptExtractionService,
+          useValue: {
+            extractAndCreateConcepts: jest
+              .fn()
+              .mockResolvedValue({ created: [], skippedDuplicates: [], errors: [] }),
+          },
+        },
+        {
+          provide: ConceptRelevanceService,
+          useValue: {
+            scoreRelevance: jest.fn().mockReturnValue(0.8),
+            getThreshold: jest.fn().mockReturnValue(0.3),
+          },
+        },
       ],
     }).compile();
 
@@ -135,11 +179,13 @@ describe('YoloSchedulerService', () => {
     mockConceptService.findById.mockImplementation(async (id: string) => {
       if (id === 'concept-B') {
         return {
-          relatedConcepts: [{
-            relationshipType: 'PREREQUISITE',
-            direction: 'outgoing',
-            concept: { id: 'concept-A' },
-          }],
+          relatedConcepts: [
+            {
+              relationshipType: 'PREREQUISITE',
+              direction: 'outgoing',
+              concept: { id: 'concept-A' },
+            },
+          ],
         };
       }
       return { relatedConcepts: [] };
@@ -147,7 +193,15 @@ describe('YoloSchedulerService', () => {
 
     // Each task has 1 workflow step
     mockWorkflowService.getOrGenerateWorkflow.mockResolvedValue({
-      steps: [{ stepNumber: 1, title: 'Step 1', description: 'Do something', estimatedMinutes: 1, departmentTag: 'general' }],
+      steps: [
+        {
+          stepNumber: 1,
+          title: 'Step 1',
+          description: 'Do something',
+          estimatedMinutes: 1,
+          departmentTag: 'general',
+        },
+      ],
     });
 
     const callbacks = createMockCallbacks();
@@ -158,7 +212,12 @@ describe('YoloSchedulerService', () => {
     ]);
 
     const planId = await service.startYoloExecution(
-      'tenant-1', 'user-1', 'conv-main', defaultConfig, callbacks, conceptConvs,
+      'tenant-1',
+      'user-1',
+      'conv-main',
+      defaultConfig,
+      callbacks,
+      conceptConvs
     );
 
     // Wait for the dispatch loop to complete
@@ -186,7 +245,15 @@ describe('YoloSchedulerService', () => {
     let concurrentRunning = 0;
     let maxConcurrent = 0;
     mockWorkflowService.getOrGenerateWorkflow.mockResolvedValue({
-      steps: [{ stepNumber: 1, title: 'Step', description: 'Do', estimatedMinutes: 1, departmentTag: 'gen' }],
+      steps: [
+        {
+          stepNumber: 1,
+          title: 'Step',
+          description: 'Do',
+          estimatedMinutes: 1,
+          departmentTag: 'gen',
+        },
+      ],
     });
     mockWorkflowService.executeStepAutonomous.mockImplementation(async () => {
       concurrentRunning++;
@@ -200,7 +267,12 @@ describe('YoloSchedulerService', () => {
     const conceptConvs = new Map([['concept-X', 'conv-X']]);
 
     await service.startYoloExecution(
-      'tenant-1', 'user-1', 'conv-main', defaultConfig, callbacks, conceptConvs,
+      'tenant-1',
+      'user-1',
+      'conv-main',
+      defaultConfig,
+      callbacks,
+      conceptConvs
     );
 
     await waitForComplete(callbacks);
@@ -217,14 +289,27 @@ describe('YoloSchedulerService', () => {
     mockPrisma.note.findMany.mockResolvedValue(notes);
 
     mockWorkflowService.getOrGenerateWorkflow.mockResolvedValue({
-      steps: [{ stepNumber: 1, title: 'Step 1', description: 'Auto', estimatedMinutes: 1, departmentTag: 'gen' }],
+      steps: [
+        {
+          stepNumber: 1,
+          title: 'Step 1',
+          description: 'Auto',
+          estimatedMinutes: 1,
+          departmentTag: 'gen',
+        },
+      ],
     });
 
     const callbacks = createMockCallbacks();
     const conceptConvs = new Map([['concept-A', 'conv-A']]);
 
     await service.startYoloExecution(
-      'tenant-1', 'user-1', 'conv-main', defaultConfig, callbacks, conceptConvs,
+      'tenant-1',
+      'user-1',
+      'conv-main',
+      defaultConfig,
+      callbacks,
+      conceptConvs
     );
 
     await waitForComplete(callbacks);
@@ -240,20 +325,39 @@ describe('YoloSchedulerService', () => {
   it('should stop execution when reaching maxConceptsHardStop', async () => {
     // Create 5 tasks but set hard stop at 3
     const notes = Array.from({ length: 5 }, (_, i) =>
-      makeFakeNote(`task-${i}`, `concept-${i}`, `Task ${i}`),
+      makeFakeNote(`task-${i}`, `concept-${i}`, `Task ${i}`)
     );
     mockPrisma.note.findMany.mockResolvedValue(notes);
 
     mockWorkflowService.getOrGenerateWorkflow.mockResolvedValue({
-      steps: [{ stepNumber: 1, title: 'Step', description: 'Do', estimatedMinutes: 1, departmentTag: 'gen' }],
+      steps: [
+        {
+          stepNumber: 1,
+          title: 'Step',
+          description: 'Do',
+          estimatedMinutes: 1,
+          departmentTag: 'gen',
+        },
+      ],
     });
 
-    const hardStopConfig: YoloConfig = { maxConcurrency: 1, maxConceptsHardStop: 3, retryAttempts: 1 };
+    const hardStopConfig: YoloConfig = {
+      maxConcurrency: 1,
+      maxConceptsHardStop: 3,
+      retryAttempts: 1,
+    };
     const callbacks = createMockCallbacks();
-    const conceptConvs = new Map(notes.map((n) => [n.conceptId, `conv-${n.conceptId}`] as [string, string]));
+    const conceptConvs = new Map(
+      notes.map((n) => [n.conceptId, `conv-${n.conceptId}`] as [string, string])
+    );
 
     await service.startYoloExecution(
-      'tenant-1', 'user-1', 'conv-main', hardStopConfig, callbacks, conceptConvs,
+      'tenant-1',
+      'user-1',
+      'conv-main',
+      hardStopConfig,
+      callbacks,
+      conceptConvs
     );
 
     await waitForComplete(callbacks);
@@ -279,20 +383,29 @@ describe('YoloSchedulerService', () => {
     mockConceptService.findById.mockImplementation(async (id: string) => {
       if (id === 'concept-B') {
         return {
-          relatedConcepts: [{
-            relationshipType: 'PREREQUISITE',
-            direction: 'outgoing',
-            concept: { id: 'concept-A' },
-          }],
+          relatedConcepts: [
+            {
+              relationshipType: 'PREREQUISITE',
+              direction: 'outgoing',
+              concept: { id: 'concept-A' },
+            },
+          ],
         };
       }
       return { relatedConcepts: [] };
     });
 
     // Make task-A's workflow fail
-    let callCount = 0;
     mockWorkflowService.getOrGenerateWorkflow.mockResolvedValue({
-      steps: [{ stepNumber: 1, title: 'Step', description: 'Do', estimatedMinutes: 1, departmentTag: 'gen' }],
+      steps: [
+        {
+          stepNumber: 1,
+          title: 'Step',
+          description: 'Do',
+          estimatedMinutes: 1,
+          departmentTag: 'gen',
+        },
+      ],
     });
     mockWorkflowService.executeStepAutonomous.mockImplementation(async (step: any) => {
       if (step.conceptId === 'concept-A') {
@@ -309,10 +422,19 @@ describe('YoloSchedulerService', () => {
     ]);
 
     // Use retryAttempts: 0 to fail immediately
-    const noRetryConfig: YoloConfig = { maxConcurrency: 3, maxConceptsHardStop: 1000, retryAttempts: 0 };
+    const noRetryConfig: YoloConfig = {
+      maxConcurrency: 3,
+      maxConceptsHardStop: 1000,
+      retryAttempts: 0,
+    };
 
     await service.startYoloExecution(
-      'tenant-1', 'user-1', 'conv-main', noRetryConfig, callbacks, conceptConvs,
+      'tenant-1',
+      'user-1',
+      'conv-main',
+      noRetryConfig,
+      callbacks,
+      conceptConvs
     );
 
     await waitForComplete(callbacks);
@@ -332,7 +454,15 @@ describe('YoloSchedulerService', () => {
 
     let attemptCount = 0;
     mockWorkflowService.getOrGenerateWorkflow.mockResolvedValue({
-      steps: [{ stepNumber: 1, title: 'Step', description: 'Do', estimatedMinutes: 1, departmentTag: 'gen' }],
+      steps: [
+        {
+          stepNumber: 1,
+          title: 'Step',
+          description: 'Do',
+          estimatedMinutes: 1,
+          departmentTag: 'gen',
+        },
+      ],
     });
     mockWorkflowService.executeStepAutonomous.mockImplementation(async () => {
       attemptCount++;
@@ -346,7 +476,12 @@ describe('YoloSchedulerService', () => {
     const conceptConvs = new Map([['concept-A', 'conv-A']]);
 
     await service.startYoloExecution(
-      'tenant-1', 'user-1', 'conv-main', defaultConfig, callbacks, conceptConvs,
+      'tenant-1',
+      'user-1',
+      'conv-main',
+      defaultConfig,
+      callbacks,
+      conceptConvs
     );
 
     await waitForComplete(callbacks);
@@ -366,7 +501,12 @@ describe('YoloSchedulerService', () => {
     const conceptConvs = new Map<string, string>();
 
     await service.startYoloExecution(
-      'tenant-1', 'user-1', 'conv-main', defaultConfig, callbacks, conceptConvs,
+      'tenant-1',
+      'user-1',
+      'conv-main',
+      defaultConfig,
+      callbacks,
+      conceptConvs
     );
 
     expect(callbacks.onError).toHaveBeenCalledWith('No pending tasks found');
@@ -379,13 +519,29 @@ describe('YoloSchedulerService', () => {
     mockPrisma.note.findMany.mockResolvedValue(notes);
 
     mockWorkflowService.getOrGenerateWorkflow.mockResolvedValue({
-      steps: [{ stepNumber: 1, title: 'Step 1', description: 'Analyze', estimatedMinutes: 1, departmentTag: 'gen' }],
+      steps: [
+        {
+          stepNumber: 1,
+          title: 'Step 1',
+          description: 'Analyze',
+          estimatedMinutes: 1,
+          departmentTag: 'gen',
+        },
+      ],
     });
-    mockWorkflowService.executeStepAutonomous.mockResolvedValue({ content: 'AI output about pricing strategy' });
+    mockWorkflowService.executeStepAutonomous.mockResolvedValue({
+      content: 'AI output about pricing strategy',
+    });
 
     // After concept-A completes, discovery finds concept-B
     mockConceptMatchingService.findRelevantConcepts.mockResolvedValue([
-      { conceptId: 'concept-B', conceptName: 'Pricing Strategy', category: 'Finance', definition: 'How to price', score: 0.85 },
+      {
+        conceptId: 'concept-B',
+        conceptName: 'Pricing Strategy',
+        category: 'Finance',
+        definition: 'How to price',
+        score: 0.85,
+      },
     ]);
 
     const callbacks = createMockCallbacks();
@@ -395,7 +551,12 @@ describe('YoloSchedulerService', () => {
     const conceptConvs = new Map([['concept-A', 'conv-A']]);
 
     await service.startYoloExecution(
-      'tenant-1', 'user-1', 'conv-main', defaultConfig, callbacks, conceptConvs,
+      'tenant-1',
+      'user-1',
+      'conv-main',
+      defaultConfig,
+      callbacks,
+      conceptConvs
     );
 
     await waitForComplete(callbacks);
@@ -406,10 +567,16 @@ describe('YoloSchedulerService', () => {
     expect(result.completed).toBe(2);
     expect(result.total).toBe(2);
     expect(mockConceptMatchingService.findRelevantConcepts).toHaveBeenCalled();
-    expect((callbacks as any).createConversationForConcept).toHaveBeenCalledWith('concept-B', 'Pricing Strategy');
+    expect((callbacks as any).createConversationForConcept).toHaveBeenCalledWith(
+      'concept-B',
+      'Pricing Strategy'
+    );
 
     // Story 2.13: Verify dynamic relationship creation is triggered for discovered concepts
-    expect(mockConceptService.createDynamicRelationships).toHaveBeenCalledWith('concept-B', 'Pricing Strategy');
+    expect(mockConceptService.createDynamicRelationships).toHaveBeenCalledWith(
+      'concept-B',
+      'Pricing Strategy'
+    );
   });
 
   // ─── Test 9: Discovery Respects Hard Stop ──────────────────
@@ -419,7 +586,15 @@ describe('YoloSchedulerService', () => {
     mockPrisma.note.findMany.mockResolvedValue(notes);
 
     mockWorkflowService.getOrGenerateWorkflow.mockResolvedValue({
-      steps: [{ stepNumber: 1, title: 'Step', description: 'Do', estimatedMinutes: 1, departmentTag: 'gen' }],
+      steps: [
+        {
+          stepNumber: 1,
+          title: 'Step',
+          description: 'Do',
+          estimatedMinutes: 1,
+          departmentTag: 'gen',
+        },
+      ],
     });
     mockWorkflowService.executeStepAutonomous.mockResolvedValue({ content: 'output' });
 
@@ -431,7 +606,11 @@ describe('YoloSchedulerService', () => {
       { conceptId: 'c-4', conceptName: 'C4', category: 'F', definition: 'd', score: 0.75 },
       { conceptId: 'c-5', conceptName: 'C5', category: 'F', definition: 'd', score: 0.7 },
     ]);
-    const hardStopConfig: YoloConfig = { maxConcurrency: 1, maxConceptsHardStop: 3, retryAttempts: 1 };
+    const hardStopConfig: YoloConfig = {
+      maxConcurrency: 1,
+      maxConceptsHardStop: 3,
+      retryAttempts: 1,
+    };
     const callbacks = createMockCallbacks();
     (callbacks as any).createConversationForConcept = jest.fn().mockResolvedValue('conv-new');
     (callbacks as any).onConceptDiscovered = jest.fn();
@@ -439,7 +618,12 @@ describe('YoloSchedulerService', () => {
     const conceptConvs = new Map([['concept-A', 'conv-A']]);
 
     await service.startYoloExecution(
-      'tenant-1', 'user-1', 'conv-main', hardStopConfig, callbacks, conceptConvs,
+      'tenant-1',
+      'user-1',
+      'conv-main',
+      hardStopConfig,
+      callbacks,
+      conceptConvs
     );
 
     await waitForComplete(callbacks);
@@ -460,7 +644,15 @@ describe('YoloSchedulerService', () => {
     mockPrisma.note.findMany.mockResolvedValue(notes);
 
     mockWorkflowService.getOrGenerateWorkflow.mockResolvedValue({
-      steps: [{ stepNumber: 1, title: 'Step', description: 'Do', estimatedMinutes: 1, departmentTag: 'gen' }],
+      steps: [
+        {
+          stepNumber: 1,
+          title: 'Step',
+          description: 'Do',
+          estimatedMinutes: 1,
+          departmentTag: 'gen',
+        },
+      ],
     });
     mockWorkflowService.executeStepAutonomous.mockResolvedValue({ content: 'output' });
 
@@ -473,10 +665,18 @@ describe('YoloSchedulerService', () => {
     (callbacks as any).createConversationForConcept = jest.fn();
     (callbacks as any).onConceptDiscovered = jest.fn();
 
-    const conceptConvs = new Map([['concept-A', 'conv-A'], ['concept-B', 'conv-B']]);
+    const conceptConvs = new Map([
+      ['concept-A', 'conv-A'],
+      ['concept-B', 'conv-B'],
+    ]);
 
     await service.startYoloExecution(
-      'tenant-1', 'user-1', 'conv-main', defaultConfig, callbacks, conceptConvs,
+      'tenant-1',
+      'user-1',
+      'conv-main',
+      defaultConfig,
+      callbacks,
+      conceptConvs
     );
 
     await waitForComplete(callbacks);
@@ -493,7 +693,15 @@ describe('YoloSchedulerService', () => {
     mockPrisma.note.findMany.mockResolvedValue(notes);
 
     mockWorkflowService.getOrGenerateWorkflow.mockResolvedValue({
-      steps: [{ stepNumber: 1, title: 'Step 1', description: 'Do', estimatedMinutes: 1, departmentTag: 'gen' }],
+      steps: [
+        {
+          stepNumber: 1,
+          title: 'Step 1',
+          description: 'Do',
+          estimatedMinutes: 1,
+          departmentTag: 'gen',
+        },
+      ],
     });
     mockWorkflowService.executeStepAutonomous.mockResolvedValue({ content: 'AI output' });
 
@@ -501,13 +709,20 @@ describe('YoloSchedulerService', () => {
     const conceptConvs = new Map([['concept-A', 'conv-A']]);
 
     await service.startYoloExecution(
-      'tenant-1', 'user-1', 'conv-main', defaultConfig, callbacks, conceptConvs,
+      'tenant-1',
+      'user-1',
+      'conv-main',
+      defaultConfig,
+      callbacks,
+      conceptConvs
     );
 
     await waitForComplete(callbacks);
 
     // At least one progress payload should contain recentLogs
-    const hasRecentLogs = callbacks.progressHistory.some((p) => Array.isArray(p.recentLogs) && p.recentLogs.length > 0);
+    const hasRecentLogs = callbacks.progressHistory.some(
+      (p) => Array.isArray(p.recentLogs) && p.recentLogs.length > 0
+    );
     expect(hasRecentLogs).toBe(true);
   });
 
@@ -517,8 +732,20 @@ describe('YoloSchedulerService', () => {
 
     mockWorkflowService.getOrGenerateWorkflow.mockResolvedValue({
       steps: [
-        { stepNumber: 1, title: 'Market Analysis', description: 'Analyze', estimatedMinutes: 1, departmentTag: 'gen' },
-        { stepNumber: 2, title: 'Competitor Review', description: 'Review', estimatedMinutes: 1, departmentTag: 'gen' },
+        {
+          stepNumber: 1,
+          title: 'Market Analysis',
+          description: 'Analyze',
+          estimatedMinutes: 1,
+          departmentTag: 'gen',
+        },
+        {
+          stepNumber: 2,
+          title: 'Competitor Review',
+          description: 'Review',
+          estimatedMinutes: 1,
+          departmentTag: 'gen',
+        },
       ],
     });
     mockWorkflowService.executeStepAutonomous.mockResolvedValue({ content: 'Done' });
@@ -527,14 +754,19 @@ describe('YoloSchedulerService', () => {
     const conceptConvs = new Map([['concept-A', 'conv-A']]);
 
     await service.startYoloExecution(
-      'tenant-1', 'user-1', 'conv-main', defaultConfig, callbacks, conceptConvs,
+      'tenant-1',
+      'user-1',
+      'conv-main',
+      defaultConfig,
+      callbacks,
+      conceptConvs
     );
 
     await waitForComplete(callbacks);
 
     // Find a progress payload with step detail
     const withStepDetail = callbacks.progressHistory.find((p) =>
-      p.currentTasks.some((t) => t.currentStep !== undefined && t.totalSteps !== undefined),
+      p.currentTasks.some((t) => t.currentStep !== undefined && t.totalSteps !== undefined)
     );
     expect(withStepDetail).toBeDefined();
     const task = withStepDetail!.currentTasks.find((t) => t.currentStep !== undefined)!;
@@ -548,9 +780,27 @@ describe('YoloSchedulerService', () => {
 
     mockWorkflowService.getOrGenerateWorkflow.mockResolvedValue({
       steps: [
-        { stepNumber: 1, title: 'S1', description: 'D1', estimatedMinutes: 1, departmentTag: 'gen' },
-        { stepNumber: 2, title: 'S2', description: 'D2', estimatedMinutes: 1, departmentTag: 'gen' },
-        { stepNumber: 3, title: 'S3', description: 'D3', estimatedMinutes: 1, departmentTag: 'gen' },
+        {
+          stepNumber: 1,
+          title: 'S1',
+          description: 'D1',
+          estimatedMinutes: 1,
+          departmentTag: 'gen',
+        },
+        {
+          stepNumber: 2,
+          title: 'S2',
+          description: 'D2',
+          estimatedMinutes: 1,
+          departmentTag: 'gen',
+        },
+        {
+          stepNumber: 3,
+          title: 'S3',
+          description: 'D3',
+          estimatedMinutes: 1,
+          departmentTag: 'gen',
+        },
       ],
     });
     mockWorkflowService.executeStepAutonomous.mockResolvedValue({ content: 'Done' });
@@ -559,7 +809,12 @@ describe('YoloSchedulerService', () => {
     const conceptConvs = new Map([['concept-A', 'conv-A']]);
 
     await service.startYoloExecution(
-      'tenant-1', 'user-1', 'conv-main', defaultConfig, callbacks, conceptConvs,
+      'tenant-1',
+      'user-1',
+      'conv-main',
+      defaultConfig,
+      callbacks,
+      conceptConvs
     );
 
     await waitForComplete(callbacks);
@@ -574,7 +829,15 @@ describe('YoloSchedulerService', () => {
     mockPrisma.note.findMany.mockResolvedValue(notes);
 
     mockWorkflowService.getOrGenerateWorkflow.mockResolvedValue({
-      steps: [{ stepNumber: 1, title: 'Step', description: 'Do', estimatedMinutes: 1, departmentTag: 'gen' }],
+      steps: [
+        {
+          stepNumber: 1,
+          title: 'Step',
+          description: 'Do',
+          estimatedMinutes: 1,
+          departmentTag: 'gen',
+        },
+      ],
     });
     mockWorkflowService.executeStepAutonomous.mockResolvedValue({ content: 'Done' });
 
@@ -582,7 +845,12 @@ describe('YoloSchedulerService', () => {
     const conceptConvs = new Map([['concept-A', 'conv-A']]);
 
     await service.startYoloExecution(
-      'tenant-1', 'user-1', 'conv-main', defaultConfig, callbacks, conceptConvs,
+      'tenant-1',
+      'user-1',
+      'conv-main',
+      defaultConfig,
+      callbacks,
+      conceptConvs
     );
 
     await waitForComplete(callbacks);
@@ -598,7 +866,15 @@ describe('YoloSchedulerService', () => {
     mockPrisma.note.findMany.mockResolvedValue(notes);
 
     mockWorkflowService.getOrGenerateWorkflow.mockResolvedValue({
-      steps: [{ stepNumber: 1, title: 'Step', description: 'Do', estimatedMinutes: 1, departmentTag: 'gen' }],
+      steps: [
+        {
+          stepNumber: 1,
+          title: 'Step',
+          description: 'Do',
+          estimatedMinutes: 1,
+          departmentTag: 'gen',
+        },
+      ],
     });
     mockWorkflowService.executeStepAutonomous.mockResolvedValue({ content: 'Done' });
 
@@ -606,7 +882,12 @@ describe('YoloSchedulerService', () => {
     const conceptConvs = new Map([['concept-A', 'conv-A']]);
 
     await service.startYoloExecution(
-      'tenant-1', 'user-1', 'conv-main', defaultConfig, callbacks, conceptConvs,
+      'tenant-1',
+      'user-1',
+      'conv-main',
+      defaultConfig,
+      callbacks,
+      conceptConvs
     );
 
     await waitForComplete(callbacks);

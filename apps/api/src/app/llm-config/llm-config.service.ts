@@ -18,6 +18,7 @@ import { OpenRouterProvider } from './providers/openrouter.provider';
 import { LocalLlamaProvider } from './providers/local-llama.provider';
 import { OpenAIProvider } from './providers/openai.provider';
 import { LmStudioProvider } from './providers/lm-studio.provider';
+import { DeepSeekProvider } from './providers/deepseek.provider';
 
 const ENCRYPTION_ALGORITHM = 'aes-256-gcm';
 const API_KEY_MASK = '***masked***';
@@ -278,7 +279,18 @@ export class LlmConfigService {
         return new OpenAIProvider({ apiKey });
 
       case 'LM_STUDIO':
-        return new LmStudioProvider({ endpoint: endpoint ?? 'http://localhost:1234' });
+        return new LmStudioProvider({ endpoint: endpoint ?? 'http://localhost:1234', apiKey });
+
+      case 'DEEPSEEK':
+        if (!apiKey) {
+          throw new BadRequestException({
+            type: 'api_key_required',
+            title: 'API Key Required',
+            status: 400,
+            detail: 'DeepSeek requires an API key',
+          });
+        }
+        return new DeepSeekProvider({ apiKey });
 
       case 'ANTHROPIC':
         throw new BadRequestException({

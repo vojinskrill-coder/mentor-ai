@@ -1,13 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TeamController } from './team.controller';
 import { TeamService } from './team.service';
-import {
-  BadRequestException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { MfaRequiredGuard } from '../auth/guards/mfa-required.guard';
 import { AuthService } from '../auth/auth.service';
 import type { CurrentUserPayload } from '../auth/strategies/jwt.strategy';
 
@@ -33,6 +28,7 @@ const mockOwner: CurrentUserPayload = {
   role: 'TENANT_OWNER',
   email: 'owner@test.com',
   auth0Id: 'auth0|123',
+  department: null,
 };
 
 describe('TeamController', () => {
@@ -147,17 +143,12 @@ describe('TeamController', () => {
           type: 'self_removal_denied',
           title: 'Cannot Remove Yourself',
           status: 403,
-          detail:
-            'You cannot remove yourself. Designate a backup Owner first.',
+          detail: 'You cannot remove yourself. Designate a backup Owner first.',
         })
       );
 
       await expect(
-        controller.removeMember(
-          'usr_owner1',
-          { strategy: 'REASSIGN' },
-          mockOwner
-        )
+        controller.removeMember('usr_owner1', { strategy: 'REASSIGN' }, mockOwner)
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -172,11 +163,7 @@ describe('TeamController', () => {
       );
 
       await expect(
-        controller.removeMember(
-          'usr_nonexistent',
-          { strategy: 'REASSIGN' },
-          mockOwner
-        )
+        controller.removeMember('usr_nonexistent', { strategy: 'REASSIGN' }, mockOwner)
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -281,10 +268,7 @@ describe('TeamController', () => {
       );
 
       await expect(
-        controller.designateBackupOwner(
-          { backupOwnerId: 'usr_owner1' },
-          mockOwner
-        )
+        controller.designateBackupOwner({ backupOwnerId: 'usr_owner1' }, mockOwner)
       ).rejects.toThrow(BadRequestException);
     });
   });
@@ -308,6 +292,7 @@ describe('TeamController', () => {
       role: 'ADMIN',
       email: 'backup@test.com',
       auth0Id: 'auth0|456',
+      department: null,
     };
 
     const mockRequest = {
@@ -321,10 +306,7 @@ describe('TeamController', () => {
         message: 'Recovery completed. Primary owner 2FA has been reset.',
       });
 
-      const result = await controller.initiateRecovery(
-        mockBackupOwner,
-        mockRequest
-      );
+      const result = await controller.initiateRecovery(mockBackupOwner, mockRequest);
 
       expect(result.status).toBe('success');
       expect(result.data.recoveredUserId).toBe('usr_owner1');
@@ -361,14 +343,13 @@ describe('TeamController', () => {
           type: 'not_backup_owner',
           title: 'Not Authorized',
           status: 403,
-          detail:
-            'You are not the designated backup owner for this workspace.',
+          detail: 'You are not the designated backup owner for this workspace.',
         })
       );
 
-      await expect(
-        controller.initiateRecovery(mockBackupOwner, mockRequest)
-      ).rejects.toThrow(ForbiddenException);
+      await expect(controller.initiateRecovery(mockBackupOwner, mockRequest)).rejects.toThrow(
+        ForbiddenException
+      );
     });
   });
 
@@ -394,10 +375,7 @@ describe('TeamController', () => {
         showWarning: false,
       });
 
-      const result = await controller.getBackupOwnerStatus(
-        mockOwner,
-        'corr_789'
-      );
+      const result = await controller.getBackupOwnerStatus(mockOwner, 'corr_789');
 
       expect(result.correlationId).toBe('corr_789');
     });

@@ -9,6 +9,7 @@ import {
 import { InvitationService } from './invitation.service';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { EmailService } from '@mentor-ai/shared/email';
+import { BrainSeedingService } from '../knowledge/services/brain-seeding.service';
 import { InvitationStatus, Department } from '@mentor-ai/shared/prisma';
 
 const mockPrisma = {
@@ -40,6 +41,10 @@ const mockConfigService = {
   }),
 };
 
+const mockBrainSeedingService = {
+  seedPendingTasksForUser: jest.fn().mockResolvedValue([]),
+};
+
 describe('InvitationService', () => {
   let service: InvitationService;
 
@@ -50,6 +55,7 @@ describe('InvitationService', () => {
         { provide: PlatformPrismaService, useValue: mockPrisma },
         { provide: EmailService, useValue: mockEmailService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: BrainSeedingService, useValue: mockBrainSeedingService },
       ],
     }).compile();
 
@@ -99,11 +105,13 @@ describe('InvitationService', () => {
       mockPrisma.user.findFirst.mockResolvedValue(null);
       mockPrisma.user.findUnique.mockResolvedValue({ name: 'Owner', email: 'owner@test.com' });
       mockPrisma.tenant.findUnique.mockResolvedValue({ name: 'Test Corp' });
-      mockPrisma.invitation.create.mockImplementation(({ data }) => Promise.resolve({
-        ...data,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
+      mockPrisma.invitation.create.mockImplementation(({ data }) =>
+        Promise.resolve({
+          ...data,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+      );
       mockEmailService.sendInvitationEmail.mockResolvedValue({ success: true });
     });
 
@@ -140,25 +148,25 @@ describe('InvitationService', () => {
       mockPrisma.user.count.mockResolvedValue(4);
       mockPrisma.invitation.count.mockResolvedValue(1);
 
-      await expect(
-        service.createInvitation(dto, inviterId, tenantId)
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.createInvitation(dto, inviterId, tenantId)).rejects.toThrow(
+        ForbiddenException
+      );
     });
 
     it('should throw ConflictException for duplicate pending invitation', async () => {
       mockPrisma.invitation.findFirst.mockResolvedValue({ id: 'inv_existing' });
 
-      await expect(
-        service.createInvitation(dto, inviterId, tenantId)
-      ).rejects.toThrow(ConflictException);
+      await expect(service.createInvitation(dto, inviterId, tenantId)).rejects.toThrow(
+        ConflictException
+      );
     });
 
     it('should throw ConflictException when email is already a member', async () => {
       mockPrisma.user.findFirst.mockResolvedValue({ id: 'usr_existing' });
 
-      await expect(
-        service.createInvitation(dto, inviterId, tenantId)
-      ).rejects.toThrow(ConflictException);
+      await expect(service.createInvitation(dto, inviterId, tenantId)).rejects.toThrow(
+        ConflictException
+      );
     });
   });
 
@@ -192,9 +200,7 @@ describe('InvitationService', () => {
     it('should throw NotFoundException for unknown token', async () => {
       mockPrisma.invitation.findUnique.mockResolvedValue(null);
 
-      await expect(service.validateInviteToken('bad-token')).rejects.toThrow(
-        NotFoundException
-      );
+      await expect(service.validateInviteToken('bad-token')).rejects.toThrow(NotFoundException);
     });
 
     it('should throw GoneException for revoked invitation', async () => {
@@ -203,9 +209,7 @@ describe('InvitationService', () => {
         status: InvitationStatus.REVOKED,
       });
 
-      await expect(service.validateInviteToken('revoked-token')).rejects.toThrow(
-        GoneException
-      );
+      await expect(service.validateInviteToken('revoked-token')).rejects.toThrow(GoneException);
     });
 
     it('should throw GoneException for expired invitation', async () => {
@@ -216,9 +220,7 @@ describe('InvitationService', () => {
       });
       mockPrisma.invitation.update.mockResolvedValue({});
 
-      await expect(service.validateInviteToken('expired-token')).rejects.toThrow(
-        GoneException
-      );
+      await expect(service.validateInviteToken('expired-token')).rejects.toThrow(GoneException);
     });
 
     it('should throw ConflictException for already accepted invitation', async () => {
@@ -260,7 +262,9 @@ describe('InvitationService', () => {
         },
         invitation: { update: jest.fn().mockResolvedValue({}) },
       };
-      mockPrisma.$transaction.mockImplementation(async (fn: (tx: typeof txMock) => Promise<unknown>) => fn(txMock));
+      mockPrisma.$transaction.mockImplementation(
+        async (fn: (tx: typeof txMock) => Promise<unknown>) => fn(txMock)
+      );
 
       const result = await service.acceptInvitation('token123', 'usr_new', 'invitee@test.com');
 
@@ -271,6 +275,7 @@ describe('InvitationService', () => {
         data: {
           tenantId: 'tnt_123',
           role: 'MEMBER',
+          department: Department.OPERATIONS,
         },
       });
       expect(txMock.invitation.update).toHaveBeenCalledWith(
@@ -304,9 +309,9 @@ describe('InvitationService', () => {
     it('should throw NotFoundException for unknown invitation', async () => {
       mockPrisma.invitation.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.revokeInvitation('inv_unknown', 'tnt_123')
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.revokeInvitation('inv_unknown', 'tnt_123')).rejects.toThrow(
+        NotFoundException
+      );
     });
 
     it('should throw ForbiddenException for wrong tenant', async () => {
@@ -316,9 +321,9 @@ describe('InvitationService', () => {
         status: InvitationStatus.PENDING,
       });
 
-      await expect(
-        service.revokeInvitation('inv_123', 'tnt_123')
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.revokeInvitation('inv_123', 'tnt_123')).rejects.toThrow(
+        ForbiddenException
+      );
     });
 
     it('should throw ConflictException for non-pending invitation', async () => {
@@ -328,9 +333,9 @@ describe('InvitationService', () => {
         status: InvitationStatus.ACCEPTED,
       });
 
-      await expect(
-        service.revokeInvitation('inv_123', 'tnt_123')
-      ).rejects.toThrow(ConflictException);
+      await expect(service.revokeInvitation('inv_123', 'tnt_123')).rejects.toThrow(
+        ConflictException
+      );
     });
   });
 

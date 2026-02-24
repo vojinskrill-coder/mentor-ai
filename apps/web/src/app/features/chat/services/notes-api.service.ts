@@ -1,8 +1,14 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../../environments/environment';
-import type { NoteItem, NoteType, NoteStatus } from '@mentor-ai/shared/types';
+import type {
+  NoteItem,
+  NoteType,
+  NoteStatus,
+  CommentItem,
+  CommentListResponse,
+} from '@mentor-ai/shared/types';
 
 interface NotesResponse {
   data: NoteItem[];
@@ -16,6 +22,9 @@ interface NoteResponse {
 export class NotesApiService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = `${environment.apiUrl}/api/v1/notes`;
+
+  /** Last error message for UI display */
+  readonly lastError$ = signal<string | null>(null);
 
   async getByConversation(conversationId: string): Promise<NoteItem[]> {
     const response = await firstValueFrom(
@@ -32,16 +41,36 @@ export class NotesApiService {
   }
 
   async getByConceptIds(conceptIds: string[]): Promise<NoteItem[]> {
+    let failCount = 0;
     const results = await Promise.all(
-      conceptIds.map(id => this.getByConcept(id).catch(() => []))
+      conceptIds.map((id) =>
+        this.getByConcept(id).catch(() => {
+          failCount++;
+          return [];
+        })
+      )
     );
+    if (failCount > 0) {
+      this.lastError$.set(`Greška pri učitavanju beleški (${failCount} od ${conceptIds.length})`);
+    }
     return results.flat();
   }
 
   async getByConversationIds(conversationIds: string[]): Promise<NoteItem[]> {
+    let failCount = 0;
     const results = await Promise.all(
-      conversationIds.map(id => this.getByConversation(id).catch(() => []))
+      conversationIds.map((id) =>
+        this.getByConversation(id).catch(() => {
+          failCount++;
+          return [];
+        })
+      )
     );
+    if (failCount > 0) {
+      this.lastError$.set(
+        `Greška pri učitavanju beleški (${failCount} od ${conversationIds.length})`
+      );
+    }
     return results.flat();
   }
 
@@ -52,9 +81,7 @@ export class NotesApiService {
     conversationId?: string;
     conceptId?: string;
   }): Promise<NoteItem> {
-    const response = await firstValueFrom(
-      this.http.post<NoteResponse>(this.baseUrl, data)
-    );
+    const response = await firstValueFrom(this.http.post<NoteResponse>(this.baseUrl, data));
     return response.data;
   }
 
@@ -79,6 +106,13 @@ export class NotesApiService {
     return response.data;
   }
 
+  async generateReport(noteId: string): Promise<string> {
+    const response = await firstValueFrom(
+      this.http.post<{ data: { report: string } }>(`${this.baseUrl}/${noteId}/generate-report`, {})
+    );
+    return response.data.report;
+  }
+
   async scoreReport(noteId: string): Promise<NoteItem> {
     const response = await firstValueFrom(
       this.http.post<NoteResponse>(`${this.baseUrl}/${noteId}/score`, {})
@@ -87,8 +121,35 @@ export class NotesApiService {
   }
 
   async deleteNote(noteId: string): Promise<void> {
-    await firstValueFrom(
-      this.http.delete<void>(`${this.baseUrl}/${noteId}`)
+    await firstValueFrom(this.http.delete<void>(`${this.baseUrl}/${noteId}`));
+  }
+
+  // ── Comment endpoints ──
+
+  async getComments(taskId: string, page = 1, limit = 50): Promise<CommentListResponse> {
+    const response = await firstValueFrom(
+      this.http.get<{ data: CommentListResponse }>(
+        `${this.baseUrl}/${taskId}/comments?page=${page}&limit=${limit}`
+      )
     );
+    return response.data;
+  }
+
+  async createComment(taskId: string, content: string): Promise<CommentItem> {
+    const response = await firstValueFrom(
+      this.http.post<{ data: CommentItem }>(`${this.baseUrl}/${taskId}/comments`, { content })
+    );
+    return response.data;
+  }
+
+  async updateComment(commentId: string, content: string): Promise<CommentItem> {
+    const response = await firstValueFrom(
+      this.http.patch<{ data: CommentItem }>(`${this.baseUrl}/${commentId}/comment`, { content })
+    );
+    return response.data;
+  }
+
+  async deleteComment(commentId: string): Promise<void> {
+    await firstValueFrom(this.http.delete<void>(`${this.baseUrl}/${commentId}/comment`));
   }
 }

@@ -65,24 +65,26 @@ import { CommonModule } from '@angular/common';
       </div>
     }
   `,
-  styles: [`
-    :host {
-      display: contents;
-    }
-
-    .animate-in {
-      animation: fadeIn 150ms ease-out;
-    }
-
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
+  styles: [
+    `
+      :host {
+        display: contents;
       }
-      to {
-        opacity: 1;
+
+      .animate-in {
+        animation: fadeIn 150ms ease-out;
       }
-    }
-  `],
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+    `,
+  ],
 })
 export class DialogComponent implements AfterViewInit, OnDestroy {
   private static idCounter = 0;
@@ -173,13 +175,13 @@ export class DialogComponent implements AfterViewInit, OnDestroy {
     document.body.style.overflow = '';
   }
 
-  handleBackdropClick(event: MouseEvent): void {
+  handleBackdropClick(_event: MouseEvent): void {
     if (this.closeOnBackdropClick()) {
       this.close();
     }
   }
 
-  handleEscape(event: KeyboardEvent): void {
+  handleEscape(event: Event): void {
     if (this.closeOnEscape()) {
       event.preventDefault();
       this.close();

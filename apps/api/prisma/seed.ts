@@ -45,7 +45,7 @@ async function main(): Promise<void> {
         industry: 'Technology',
         description: 'Local development workspace',
         status: 'ACTIVE',
-        tokenQuota: 1000000,
+        tokenQuota: 10000000,
       },
     });
     console.log('Created dev tenant: Dev Workspace');

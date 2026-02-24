@@ -1,4 +1,10 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
@@ -231,6 +237,76 @@ export class NotesService {
   }
 
   /**
+   * Checks if a task already exists tenant-wide by conceptId and/or title (Story 3.4 AC3).
+   * Used for tenant-wide task deduplication across all generation paths.
+   *
+   * @returns The existing task ID if found, null otherwise
+   */
+  async findExistingTask(
+    tenantId: string,
+    options: { conceptId?: string; title?: string }
+  ): Promise<string | null> {
+    const { conceptId, title } = options;
+
+    // Must provide at least one search criterion
+    if (!conceptId && !title) return null;
+
+    // Strategy: if conceptId is provided, check by conceptId first (stronger dedup)
+    if (conceptId) {
+      const existing = await this.prisma.note.findFirst({
+        where: {
+          tenantId,
+          conceptId,
+          noteType: NoteType.TASK,
+          status: { in: [NoteStatus.PENDING, NoteStatus.COMPLETED, NoteStatus.READY_FOR_REVIEW] },
+        },
+        select: { id: true },
+      });
+      if (existing) return existing.id;
+    }
+
+    // Fallback: check by title (case-insensitive, for non-concept-linked tasks)
+    if (title) {
+      const normalizedTitle = title.toLowerCase().trim();
+      const candidates = await this.prisma.note.findMany({
+        where: {
+          tenantId,
+          noteType: NoteType.TASK,
+          status: { in: [NoteStatus.PENDING, NoteStatus.COMPLETED, NoteStatus.READY_FOR_REVIEW] },
+        },
+        select: { id: true, title: true },
+        take: 200,
+      });
+      const match = candidates.find((c) => c.title.toLowerCase().trim() === normalizedTitle);
+      if (match) return match.id;
+    }
+
+    return null;
+  }
+
+  /**
+   * Checks if a sub-task already exists for a specific workflow step (Story 3.4 AC3).
+   *
+   * @returns The existing sub-task ID if found, null otherwise
+   */
+  async findExistingSubTask(
+    tenantId: string,
+    parentNoteId: string,
+    workflowStepNumber: number
+  ): Promise<string | null> {
+    const existing = await this.prisma.note.findFirst({
+      where: {
+        tenantId,
+        parentNoteId,
+        workflowStepNumber,
+        noteType: NoteType.TASK,
+      },
+      select: { id: true },
+    });
+    return existing?.id ?? null;
+  }
+
+  /**
    * Gets all pending tasks for a user/tenant.
    * Used for auto-triggering workflow execution from chat.
    */
@@ -254,6 +330,31 @@ export class NotesService {
       tenantId,
       noteType: NoteType.TASK,
       status: NoteStatus.PENDING,
+      conceptId: { not: null },
+    };
+    if (userId) where.userId = userId;
+
+    const notes = await this.prisma.note.findMany({
+      where,
+      select: { conceptId: true, userId: true, id: true },
+    });
+    return notes
+      .filter((n): n is typeof n & { conceptId: string } => n.conceptId !== null)
+      .map((n) => ({ conceptId: n.conceptId, userId: n.userId, noteId: n.id }));
+  }
+
+  /**
+   * Gets completed task concept IDs for the brain tree.
+   * A concept is "completed" when its TASK note has status COMPLETED.
+   */
+  async getCompletedTaskConceptIds(
+    tenantId: string,
+    userId?: string
+  ): Promise<Array<{ conceptId: string; userId: string; noteId: string }>> {
+    const where: Record<string, unknown> = {
+      tenantId,
+      noteType: NoteType.TASK,
+      status: NoteStatus.COMPLETED,
       conceptId: { not: null },
     };
     if (userId) where.userId = userId;
@@ -341,6 +442,61 @@ export class NotesService {
   }
 
   /**
+   * AI-generates a completion report for a task.
+   * Returns the generated text for user review before submission.
+   */
+  async generateReport(noteId: string, userId: string, tenantId: string): Promise<string> {
+    const note = await this.prisma.note.findFirst({
+      where: { id: noteId, tenantId },
+    });
+    if (!note) {
+      throw new NotFoundException(`Note ${noteId} not found`);
+    }
+
+    // Fetch child notes (workflow steps) for context
+    const children = await this.prisma.note.findMany({
+      where: { parentNoteId: noteId, tenantId },
+      orderBy: { workflowStepNumber: 'asc' },
+    });
+
+    let childContext = '';
+    if (children.length > 0) {
+      childContext = '\n\nREZULTATI WORKFLOW KORAKA:\n';
+      for (const child of children) {
+        childContext += `- Korak ${child.workflowStepNumber ?? '?'}: ${child.title}`;
+        if (child.status === 'COMPLETED') childContext += ' (završen)';
+        if (child.content) childContext += `\n  Rezultat: ${child.content.substring(0, 500)}`;
+        childContext += '\n';
+      }
+    }
+
+    const prompt = `Ti si AI asistent za poslovanje. Generiši izveštaj o završenom zadatku na srpskom jeziku.
+
+ZADATAK:
+Naslov: ${note.title}
+Opis: ${note.content ?? 'Nema opisa'}
+${note.expectedOutcome ? `Očekivani ishod: ${note.expectedOutcome}` : ''}${childContext}
+
+Na osnovu konteksta zadatka i rezultata, napiši koncizan izveštaj (3-5 rečenica) koji:
+- Opisuje šta je urađeno
+- Navodi ključne rezultate i zaključke
+- Predlaže sledeće korake ako je relevantno
+
+Piši kao da si korisnik koji izveštava o svom radu. Koristi srpski jezik. Odgovori SAMO tekstom izveštaja, bez naslova ili formatiranja.`;
+
+    let fullResponse = '';
+    await this.aiGateway.streamCompletionWithContext(
+      [{ role: 'user', content: prompt }],
+      { tenantId, userId },
+      (chunk) => {
+        fullResponse += chunk;
+      }
+    );
+
+    return fullResponse.trim() || 'Generisanje izveštaja nije uspelo. Pokušajte ponovo.';
+  }
+
+  /**
    * AI-scores a user's completion report.
    */
   async scoreReport(noteId: string, userId: string, tenantId: string): Promise<NoteItem> {
@@ -404,6 +560,205 @@ Odgovori ISKLJUČIVO u JSON formatu:
       data: { aiScore: score, aiFeedback: feedback },
     });
     return this.mapToNoteItem(updated);
+  }
+
+  // ─── Comment methods (Story 3.4 AC4) ─────────────────────
+
+  /**
+   * Creates a comment on a task or workflow step note.
+   *
+   * @param taskId - The parent note ID (task or workflow step)
+   * @param content - Comment text
+   * @param userId - The commenting user's ID
+   * @param tenantId - Tenant for isolation
+   * @returns Created comment with user info
+   */
+  async createComment(
+    taskId: string,
+    content: string,
+    userId: string,
+    tenantId: string
+  ): Promise<{ id: string; content: string; userId: string; createdAt: string }> {
+    // Verify parent task exists and is a TASK type
+    const parent = await this.prisma.note.findFirst({
+      where: { id: taskId, tenantId },
+      select: { id: true, noteType: true },
+    });
+    if (!parent) {
+      throw new NotFoundException(`Task ${taskId} not found`);
+    }
+    if (parent.noteType !== NoteType.TASK) {
+      throw new BadRequestException('Comments can only be added to tasks or workflow steps');
+    }
+
+    const id = `note_${createId()}`;
+    const comment = await this.prisma.note.create({
+      data: {
+        id,
+        title: 'Comment',
+        content,
+        source: NoteSource.MANUAL,
+        noteType: NoteType.COMMENT,
+        parentNoteId: taskId,
+        userId,
+        tenantId,
+      },
+    });
+
+    return {
+      id: comment.id,
+      content: comment.content,
+      userId: comment.userId,
+      createdAt: comment.createdAt.toISOString(),
+    };
+  }
+
+  /**
+   * Gets all comments for a task/workflow step, ordered oldest first.
+   * Includes user info (name, role) from the User model.
+   *
+   * @param taskId - The parent note ID
+   * @param tenantId - Tenant for isolation
+   * @param page - Page number (1-based, default 1)
+   * @param limit - Items per page (default 50)
+   */
+  async getCommentsByTask(
+    taskId: string,
+    tenantId: string,
+    page = 1,
+    limit = 50
+  ): Promise<{
+    comments: Array<{
+      id: string;
+      content: string;
+      userId: string;
+      userName: string;
+      userRole: string;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    // Enforce pagination bounds
+    page = Math.max(1, page || 1);
+    limit = Math.min(100, Math.max(1, limit || 50));
+    const skip = (page - 1) * limit;
+
+    const [comments, total] = await Promise.all([
+      this.prisma.note.findMany({
+        where: {
+          parentNoteId: taskId,
+          tenantId,
+          noteType: NoteType.COMMENT,
+        },
+        orderBy: { createdAt: 'asc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.note.count({
+        where: {
+          parentNoteId: taskId,
+          tenantId,
+          noteType: NoteType.COMMENT,
+        },
+      }),
+    ]);
+
+    // Resolve user info
+    const userIds = [...new Set(comments.map((c) => c.userId))];
+    const users =
+      userIds.length > 0
+        ? await this.prisma.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, name: true, role: true },
+          })
+        : [];
+    const userMap = new Map(users.map((u) => [u.id, u]));
+
+    return {
+      comments: comments.map((c) => {
+        const user = userMap.get(c.userId);
+        return {
+          id: c.id,
+          content: c.content,
+          userId: c.userId,
+          userName: user?.name ?? c.userId,
+          userRole: user?.role ?? 'MEMBER',
+          createdAt: c.createdAt.toISOString(),
+          updatedAt: c.updatedAt.toISOString(),
+        };
+      }),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  /**
+   * Updates a comment's content. Only the comment author can edit.
+   *
+   * @param commentId - The comment note ID
+   * @param content - New comment content
+   * @param userId - The requesting user (must be author)
+   * @param tenantId - Tenant for isolation
+   */
+  async updateComment(
+    commentId: string,
+    content: string,
+    userId: string,
+    tenantId: string
+  ): Promise<{ id: string; content: string; updatedAt: string }> {
+    const comment = await this.prisma.note.findFirst({
+      where: { id: commentId, tenantId, noteType: NoteType.COMMENT },
+    });
+    if (!comment) {
+      throw new NotFoundException(`Comment ${commentId} not found`);
+    }
+    if (comment.userId !== userId) {
+      throw new ForbiddenException('Only the comment author can edit');
+    }
+
+    const updated = await this.prisma.note.update({
+      where: { id: commentId },
+      data: { content },
+    });
+
+    return {
+      id: updated.id,
+      content: updated.content,
+      updatedAt: updated.updatedAt.toISOString(),
+    };
+  }
+
+  /**
+   * Deletes a comment. Only the author or TENANT_OWNER/PLATFORM_OWNER can delete.
+   *
+   * @param commentId - The comment note ID
+   * @param userId - The requesting user
+   * @param role - The requesting user's role
+   * @param tenantId - Tenant for isolation
+   */
+  async deleteComment(
+    commentId: string,
+    userId: string,
+    role: string,
+    tenantId: string
+  ): Promise<void> {
+    const comment = await this.prisma.note.findFirst({
+      where: { id: commentId, tenantId, noteType: NoteType.COMMENT },
+    });
+    if (!comment) {
+      throw new NotFoundException(`Comment ${commentId} not found`);
+    }
+
+    const isOwner = role === 'PLATFORM_OWNER' || role === 'TENANT_OWNER';
+    if (comment.userId !== userId && !isOwner) {
+      throw new ForbiddenException('Only the comment author or an owner can delete');
+    }
+
+    await this.prisma.note.delete({ where: { id: commentId } });
   }
 
   private mapToNoteItem(note: {

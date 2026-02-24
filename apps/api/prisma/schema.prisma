@@ -107,8 +107,8 @@ model Tenant {
   status      TenantStatus @default(DRAFT)
 
   // Token quota for AI usage (Story 2.2)
-  // Default: 1,000,000 tokens per month
-  tokenQuota  Int          @default(1000000) @map("token_quota")
+  // Default: 10,000,000 tokens per month
+  tokenQuota  Int          @default(10000000) @map("token_quota")
 
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
@@ -242,6 +242,7 @@ enum LlmProviderType {
   OPENAI
   ANTHROPIC
   LM_STUDIO
+  DEEPSEEK
 }
 
 // LLM Provider Configuration (platform-level, not per-tenant)
@@ -372,6 +373,7 @@ enum NoteType {
   TASK       // Actionable item
   NOTE       // Free-form note
   SUMMARY    // AI-generated conversation summary
+  COMMENT    // Per-user comment on a task/workflow step (Story 3.4)
 }
 
 enum NoteStatus {
@@ -452,9 +454,10 @@ model Concept {
   version             Int      @default(1)
 
   // Curriculum hierarchy fields
-  parentId     String?  @map("parent_id")      // Self-referencing for hierarchy
-  sortOrder    Int      @default(0) @map("sort_order")  // Display order among siblings
-  curriculumId String?  @unique @map("curriculum_id")    // Links to curriculum.json id
+  parentId          String?  @map("parent_id")      // Self-referencing for hierarchy
+  sortOrder         Int      @default(0) @map("sort_order")  // Display order among siblings (within category)
+  categorySortOrder Int      @default(0) @map("category_sort_order") // Category display order (Story 3.3)
+  curriculumId      String?  @unique @map("curriculum_id")    // Links to curriculum.json id
 
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")

@@ -14,6 +14,9 @@ import { WorkflowService } from '../workflow/workflow.service';
 import { YoloSchedulerService } from '../workflow/yolo-scheduler.service';
 import { ConceptService } from '../knowledge/services/concept.service';
 import { ConceptExtractionService } from '../knowledge/services/concept-extraction.service';
+import { MemoryService } from '../memory/services/memory.service';
+import { WebSearchService } from '../web-search/web-search.service';
+import { BusinessContextService } from '../knowledge/services/business-context.service';
 
 describe('ConversationGateway', () => {
   let gateway: ConversationGateway;
@@ -55,17 +58,74 @@ describe('ConversationGateway', () => {
         { provide: ConversationService, useValue: mockConversationService },
         { provide: AiGatewayService, useValue: mockAiGatewayService },
         { provide: ConfigService, useValue: mockConfigService },
-        { provide: PlatformPrismaService, useValue: { note: { findMany: jest.fn().mockResolvedValue([]) }, user: { findUnique: jest.fn().mockResolvedValue(null) }, tenant: { findUnique: jest.fn().mockResolvedValue(null) } } },
-        { provide: NotesService, useValue: { getNotesForConversation: jest.fn().mockResolvedValue([]), getPendingTasksByUser: jest.fn().mockResolvedValue([]), getLatestNoteBySource: jest.fn().mockResolvedValue(null) } },
-        { provide: ConceptMatchingService, useValue: { findRelevantConcepts: jest.fn().mockResolvedValue([]) } },
-        { provide: CitationInjectorService, useValue: { injectCitations: jest.fn().mockImplementation((_c, text) => text) } },
-        { provide: CitationService, useValue: { createCitationsForMessage: jest.fn().mockResolvedValue([]) } },
-        { provide: MemoryContextBuilderService, useValue: { buildContext: jest.fn().mockResolvedValue({ contextText: '', attributions: [] }) } },
-        { provide: MemoryExtractionService, useValue: { extractMemories: jest.fn().mockResolvedValue([]) } },
+        {
+          provide: PlatformPrismaService,
+          useValue: {
+            note: { findMany: jest.fn().mockResolvedValue([]) },
+            user: { findUnique: jest.fn().mockResolvedValue(null) },
+            tenant: { findUnique: jest.fn().mockResolvedValue(null) },
+          },
+        },
+        {
+          provide: NotesService,
+          useValue: {
+            getNotesForConversation: jest.fn().mockResolvedValue([]),
+            getPendingTasksByUser: jest.fn().mockResolvedValue([]),
+            getLatestNoteBySource: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: ConceptMatchingService,
+          useValue: { findRelevantConcepts: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: CitationInjectorService,
+          useValue: { injectCitations: jest.fn().mockImplementation((_c, text) => text) },
+        },
+        {
+          provide: CitationService,
+          useValue: { createCitationsForMessage: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: MemoryContextBuilderService,
+          useValue: {
+            buildContext: jest.fn().mockResolvedValue({ contextText: '', attributions: [] }),
+          },
+        },
+        {
+          provide: MemoryExtractionService,
+          useValue: { extractMemories: jest.fn().mockResolvedValue([]) },
+        },
         { provide: WorkflowService, useValue: {} },
-        { provide: YoloSchedulerService, useValue: { startYoloExecution: jest.fn(), cancelRun: jest.fn(), getRunState: jest.fn() } },
+        {
+          provide: YoloSchedulerService,
+          useValue: { startYoloExecution: jest.fn(), cancelRun: jest.fn(), getRunState: jest.fn() },
+        },
         { provide: ConceptService, useValue: { findById: jest.fn().mockResolvedValue(null) } },
-        { provide: ConceptExtractionService, useValue: { extractAndCreateConcepts: jest.fn().mockResolvedValue({ created: [], skippedDuplicates: [], errors: [] }) } },
+        {
+          provide: ConceptExtractionService,
+          useValue: {
+            extractAndCreateConcepts: jest
+              .fn()
+              .mockResolvedValue({ created: [], skippedDuplicates: [], errors: [] }),
+          },
+        },
+        {
+          provide: MemoryService,
+          useValue: { findMemories: jest.fn().mockResolvedValue({ data: [] }) },
+        },
+        {
+          provide: WebSearchService,
+          useValue: {
+            isAvailable: jest.fn().mockReturnValue(false),
+            searchAndExtract: jest.fn().mockResolvedValue([]),
+            formatSourcesAsObsidian: jest.fn().mockReturnValue(''),
+          },
+        },
+        {
+          provide: BusinessContextService,
+          useValue: { getBusinessContext: jest.fn().mockResolvedValue('') },
+        },
       ],
     }).compile();
 
@@ -96,10 +156,8 @@ describe('ConversationGateway', () => {
     beforeEach(() => {
       mockClient.emit.mockClear();
       // Attach user info to mock client
-      (mockClient as { userId?: string; tenantId?: string }).userId =
-        'usr_test123';
-      (mockClient as { userId?: string; tenantId?: string }).tenantId =
-        'tnt_test123';
+      (mockClient as { userId?: string; tenantId?: string }).userId = 'usr_test123';
+      (mockClient as { userId?: string; tenantId?: string }).tenantId = 'tnt_test123';
     });
 
     it('should emit error for invalid payload', async () => {
@@ -124,9 +182,7 @@ describe('ConversationGateway', () => {
         messages: [],
       };
 
-      mockConversationService.getConversation.mockResolvedValue(
-        mockConversation
-      );
+      mockConversationService.getConversation.mockResolvedValue(mockConversation);
       mockConversationService.addMessage
         .mockResolvedValueOnce({
           id: 'msg_user1',
@@ -156,9 +212,7 @@ describe('ConversationGateway', () => {
             confidence: {
               score: 0.75,
               level: 'MEDIUM',
-              factors: [
-                { name: 'hedging_language', score: 0.8, weight: 0.35 },
-              ],
+              factors: [{ name: 'hedging_language', score: 0.8, weight: 0.35 }],
             },
           };
         }
@@ -209,9 +263,7 @@ describe('ConversationGateway', () => {
           confidence: {
             score: 0.75,
             level: 'MEDIUM',
-            factors: [
-              { name: 'hedging_language', score: 0.8, weight: 0.35 },
-            ],
+            factors: [{ name: 'hedging_language', score: 0.8, weight: 0.35 }],
           },
           citations: [],
           memoryAttributions: [],
@@ -220,9 +272,7 @@ describe('ConversationGateway', () => {
     });
 
     it('should emit error when conversation access denied', async () => {
-      mockConversationService.getConversation.mockRejectedValue(
-        new Error('Access denied')
-      );
+      mockConversationService.getConversation.mockRejectedValue(new Error('Access denied'));
 
       await gateway.handleMessage(mockClient as never, {
         conversationId: 'sess_1',
@@ -266,9 +316,7 @@ describe('ConversationGateway', () => {
       const mockClient = { id: 'socket_123' };
 
       // Just verify it doesn't throw
-      expect(() =>
-        gateway.handleDisconnect(mockClient as never)
-      ).not.toThrow();
+      expect(() => gateway.handleDisconnect(mockClient as never)).not.toThrow();
     });
   });
 });

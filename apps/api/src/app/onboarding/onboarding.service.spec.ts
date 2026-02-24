@@ -9,6 +9,7 @@ import { ConceptService } from '../knowledge/services/concept.service';
 import { ConceptMatchingService } from '../knowledge/services/concept-matching.service';
 import { ConversationService } from '../conversation/conversation.service';
 import { WebSearchService } from '../web-search/web-search.service';
+import { BrainSeedingService } from '../knowledge/services/brain-seeding.service';
 import { TenantStatus, NoteSource } from '@mentor-ai/shared/prisma';
 
 describe('OnboardingService', () => {
@@ -18,6 +19,12 @@ describe('OnboardingService', () => {
     tenant: {
       findUnique: jest.fn(),
       update: jest.fn(),
+    },
+    conversation: {
+      count: jest.fn().mockResolvedValue(0),
+    },
+    user: {
+      findUnique: jest.fn().mockResolvedValue({ department: null, role: 'MEMBER' }),
     },
   };
 
@@ -71,6 +78,10 @@ describe('OnboardingService', () => {
         { provide: ConceptMatchingService, useValue: mockConceptMatchingService },
         { provide: ConversationService, useValue: mockConversationService },
         { provide: WebSearchService, useValue: mockWebSearchService },
+        {
+          provide: BrainSeedingService,
+          useValue: { seedPendingTasksForUser: jest.fn().mockResolvedValue([]) },
+        },
       ],
     }).compile();
 
@@ -174,13 +185,7 @@ describe('OnboardingService', () => {
 
     it('should throw BadRequestException for invalid task', async () => {
       await expect(
-        service.executeQuickWin(
-          'tnt_123',
-          'usr_456',
-          'invalid-task',
-          'Context',
-          'FINANCE'
-        )
+        service.executeQuickWin('tnt_123', 'usr_456', 'invalid-task', 'Context', 'FINANCE')
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -193,13 +198,7 @@ describe('OnboardingService', () => {
         }
       );
 
-      await service.executeQuickWin(
-        'tnt_123',
-        'usr_456',
-        'finance-email',
-        'Context',
-        'FINANCE'
-      );
+      await service.executeQuickWin('tnt_123', 'usr_456', 'finance-email', 'Context', 'FINANCE');
 
       expect(mockMetricService.startOnboarding).not.toHaveBeenCalled();
     });
@@ -288,8 +287,20 @@ describe('OnboardingService', () => {
 
       // generateInitialPlan internals
       mockConceptMatchingService.findRelevantConcepts.mockResolvedValue([
-        { conceptId: 'cpt_1', conceptName: 'Cash Flow', score: 0.9, definition: 'Cash flow analysis', category: 'Finance' },
-        { conceptId: 'cpt_2', conceptName: 'Budget Forecasting', score: 0.8, definition: 'Budget prediction', category: 'Finance' },
+        {
+          conceptId: 'cpt_1',
+          conceptName: 'Cash Flow',
+          score: 0.9,
+          definition: 'Cash flow analysis',
+          category: 'Finance',
+        },
+        {
+          conceptId: 'cpt_2',
+          conceptName: 'Budget Forecasting',
+          score: 0.8,
+          definition: 'Budget prediction',
+          category: 'Finance',
+        },
       ]);
 
       mockConversationService.createConversation.mockResolvedValue({
@@ -330,7 +341,7 @@ describe('OnboardingService', () => {
         'usr_456',
         'Dobrodošli u Mentor AI',
         undefined,
-        'cpt_1', // first matched concept
+        'cpt_1' // first matched concept
       );
 
       // Verify task notes were created for each matched concept
@@ -341,7 +352,7 @@ describe('OnboardingService', () => {
         ['cpt_1', 'cpt_2'],
         'sess_welcome_1',
         'usr_456',
-        'tnt_123',
+        'tnt_123'
       );
     });
 

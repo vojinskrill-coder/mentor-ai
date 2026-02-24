@@ -28,7 +28,7 @@ describe('JwtStrategy', () => {
       } as unknown as ConfigService;
 
       expect(() => new JwtStrategy(configWithoutSecret)).toThrow(
-        'JWT_SECRET environment variable is not set',
+        'JWT_SECRET environment variable is not set'
       );
     });
   });
@@ -47,12 +47,8 @@ describe('JwtStrategy', () => {
     it('should throw UnauthorizedException when subject is missing', () => {
       const payloadWithoutSub = { ...basePayload, sub: '' };
 
-      expect(() => strategy.validate(payloadWithoutSub)).toThrow(
-        UnauthorizedException,
-      );
-      expect(() => strategy.validate(payloadWithoutSub)).toThrow(
-        'Invalid token: missing subject',
-      );
+      expect(() => strategy.validate(payloadWithoutSub)).toThrow(UnauthorizedException);
+      expect(() => strategy.validate(payloadWithoutSub)).toThrow('Invalid token: missing subject');
     });
 
     it('should return user payload with direct claims', () => {
@@ -71,6 +67,7 @@ describe('JwtStrategy', () => {
         role: 'ADMIN',
         email: 'test@example.com',
         auth0Id: 'google-oauth2|123456',
+        department: null,
       });
     });
 
@@ -83,6 +80,7 @@ describe('JwtStrategy', () => {
         role: 'MEMBER',
         email: 'test@example.com',
         auth0Id: 'google-oauth2|123456',
+        department: null,
       });
     });
 

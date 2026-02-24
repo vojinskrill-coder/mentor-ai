@@ -6,3 +6,4 @@ export * from './lib/input';
 export * from './lib/card';
 export * from './lib/dialog';
 export * from './lib/skeleton';
+export * from './lib/pipes';

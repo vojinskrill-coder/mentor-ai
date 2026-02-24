@@ -95,9 +95,7 @@ describe('ChatComponent', () => {
         createdAt: '2026-02-06T00:00:00.000Z',
         updatedAt: '2026-02-06T00:00:00.000Z',
       };
-      mockConversationService.createConversation.mockResolvedValue(
-        mockConversation
-      );
+      mockConversationService.createConversation.mockResolvedValue(mockConversation);
       mockConversationService.getConversation.mockResolvedValue({
         ...mockConversation,
         messages: [],
@@ -127,10 +125,7 @@ describe('ChatComponent', () => {
       fixture.detectChanges();
       await component.sendMessage('Hello');
 
-      expect(mockChatWsService.sendMessage).toHaveBeenCalledWith(
-        'sess_1',
-        'Hello'
-      );
+      expect(mockChatWsService.sendMessage).toHaveBeenCalledWith('sess_1', 'Hello');
       expect(component.isLoading$()).toBe(true);
     });
 
@@ -156,35 +151,6 @@ describe('ChatComponent', () => {
       await component.sendMessage('Hello');
 
       expect(mockChatWsService.sendMessage).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('formatDate', () => {
-    it('should format recent dates as relative time', () => {
-      const now = new Date();
-      const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
-
-      const result = component.formatDate(fiveMinutesAgo.toISOString());
-
-      expect(result).toBe('5m ago');
-    });
-
-    it('should format dates from today as hours ago', () => {
-      const now = new Date();
-      const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
-
-      const result = component.formatDate(twoHoursAgo.toISOString());
-
-      expect(result).toBe('2h ago');
-    });
-
-    it('should format just now for very recent', () => {
-      const now = new Date();
-      const thirtySecondsAgo = new Date(now.getTime() - 30 * 1000);
-
-      const result = component.formatDate(thirtySecondsAgo.toISOString());
-
-      expect(result).toBe('Just now');
     });
   });
 });

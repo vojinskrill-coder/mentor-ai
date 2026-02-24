@@ -20,6 +20,7 @@ const mockUser: CurrentUserPayload = {
   role: 'MEMBER',
   email: 'member@test.com',
   auth0Id: 'auth0|test1',
+  department: null,
 };
 
 describe('DataExportController', () => {
@@ -28,10 +29,7 @@ describe('DataExportController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [DataExportController],
-      providers: [
-        { provide: DataExportService, useValue: mockDataExportService },
-        Reflector,
-      ],
+      providers: [{ provide: DataExportService, useValue: mockDataExportService }, Reflector],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
@@ -114,10 +112,7 @@ describe('DataExportController', () => {
       const result = await controller.getExportStatus(mockUser);
 
       expect(result.data).toEqual(exports);
-      expect(mockDataExportService.getUserExports).toHaveBeenCalledWith(
-        'usr_test1',
-        'tnt_test1'
-      );
+      expect(mockDataExportService.getUserExports).toHaveBeenCalledWith('usr_test1', 'tnt_test1');
     });
 
     it('should return empty array when no exports exist', async () => {
@@ -142,20 +137,12 @@ describe('DataExportController', () => {
         set: jest.fn(),
       } as any;
 
-      const result = await controller.downloadExport(
-        'exp_1',
-        mockUser,
-        mockRes
-      );
+      const result = await controller.downloadExport('exp_1', mockUser, mockRes);
 
-      expect(mockDataExportService.downloadExport).toHaveBeenCalledWith(
-        'exp_1',
-        'usr_test1'
-      );
+      expect(mockDataExportService.downloadExport).toHaveBeenCalledWith('exp_1', 'usr_test1');
       expect(mockRes.set).toHaveBeenCalledWith({
         'Content-Type': 'application/json',
-        'Content-Disposition':
-          'attachment; filename="mentor-ai-export-exp_1.json"',
+        'Content-Disposition': 'attachment; filename="mentor-ai-export-exp_1.json"',
       });
       expect(result).toBeInstanceOf(StreamableFile);
     });

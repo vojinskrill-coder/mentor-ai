@@ -105,8 +105,8 @@ export interface CompletionResult {
 @Injectable()
 export class AiGatewayService {
   private readonly logger = new Logger(AiGatewayService.name);
-  /** Request timeout in milliseconds */
-  private readonly requestTimeoutMs = 120 * 1000;
+  /** Request timeout in milliseconds (1 hour — large models like 72B can be slow) */
+  private readonly requestTimeoutMs = 3600 * 1000;
 
   constructor(
     private readonly llmConfigService: LlmConfigService,
@@ -177,6 +177,9 @@ export class AiGatewayService {
     if (systemPrompt) {
       messagesWithPersona = [{ role: 'system', content: systemPrompt }, ...messages];
     }
+
+    // Truncate messages to fit within model context window
+    messagesWithPersona = this.truncateMessagesToFit(messagesWithPersona, correlationId);
 
     // Check rate limits
     let rateLimit: RateLimitInfo | undefined;
@@ -504,6 +507,9 @@ export class AiGatewayService {
             onChunk
           );
           break;
+        case 'DEEPSEEK':
+          await this.streamFromDeepSeek(messages, modelId, onChunk);
+          break;
         case 'ANTHROPIC':
           throw new InternalServerErrorException({
             type: 'provider_not_implemented',
@@ -592,6 +598,9 @@ export class AiGatewayService {
             controller.signal
           );
           break;
+        case 'DEEPSEEK':
+          await this.streamFromDeepSeek(messages, modelId, onChunk, controller.signal);
+          break;
         case 'ANTHROPIC':
           throw new InternalServerErrorException({
             type: 'provider_not_implemented',
@@ -675,6 +684,14 @@ export class AiGatewayService {
             messages,
             fallbackProvider.modelId,
             fallbackProvider.endpoint ?? '',
+            onChunk,
+            controller.signal
+          );
+          break;
+        case 'DEEPSEEK':
+          await this.streamFromDeepSeek(
+            messages,
+            fallbackProvider.modelId,
             onChunk,
             controller.signal
           );
@@ -876,6 +893,91 @@ export class AiGatewayService {
     }
   }
 
+  private async streamFromDeepSeek(
+    messages: ChatMessage[],
+    modelId: string,
+    onChunk: (chunk: string) => void,
+    signal?: AbortSignal
+  ): Promise<void> {
+    const apiKey = await this.llmConfigService.getDecryptedApiKey(LlmProviderType.DEEPSEEK);
+
+    if (!apiKey) {
+      throw new InternalServerErrorException({
+        type: 'api_key_not_found',
+        title: 'API Key Not Found',
+        status: 500,
+        detail: 'DeepSeek API key is not configured',
+      });
+    }
+
+    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: modelId,
+        messages,
+        stream: true,
+      }),
+      signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new InternalServerErrorException({
+        type: 'deepseek_error',
+        title: 'DeepSeek API Error',
+        status: 500,
+        detail: `DeepSeek returned ${response.status}: ${errorText}`,
+      });
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new InternalServerErrorException({
+        type: 'stream_error',
+        title: 'Stream Error',
+        status: 500,
+        detail: 'Failed to get response stream from DeepSeek',
+      });
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') continue;
+
+            try {
+              const parsed = JSON.parse(data) as OpenRouterResponse;
+              const content = parsed.choices[0]?.delta?.content;
+              if (content) {
+                onChunk(content);
+              }
+            } catch {
+              // Skip malformed JSON lines
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
   private async streamFromLocalLlama(
     messages: ChatMessage[],
     modelId: string,
@@ -983,6 +1085,9 @@ export class AiGatewayService {
           onChunk
         );
         break;
+      case 'DEEPSEEK':
+        await this.streamFromDeepSeek(messages, fallbackProvider.modelId, onChunk);
+        break;
       default:
         throw new InternalServerErrorException({
           type: 'fallback_not_supported',
@@ -1004,24 +1109,28 @@ export class AiGatewayService {
     const url = `${baseUrl}/v1/chat/completions`;
 
     this.logger.log({
-      message: 'LM Studio request starting (non-streaming)',
+      message: 'LM Studio request starting (SSE streaming)',
       url,
       modelId,
       messageCount: messages.length,
     });
 
-    // Use non-streaming mode — SSE streaming via Node.js native fetch in webpack
-    // has compatibility issues on Windows. Non-streaming works reliably.
+    // Build headers — include API key if configured (needed for RunPod, vLLM, etc.)
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    const apiKey = await this.llmConfigService.getDecryptedApiKey(LlmProviderType.LM_STUDIO);
+    if (apiKey) {
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
+
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         model: modelId,
         messages,
-        stream: false,
-        max_tokens: 1024,
+        stream: true,
       }),
       signal,
     });
@@ -1041,17 +1150,151 @@ export class AiGatewayService {
       });
     }
 
-    const data = (await response.json()) as OpenRouterResponse;
-    const content = data.choices[0]?.message?.content ?? data.choices[0]?.delta?.content ?? '';
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new InternalServerErrorException({
+        type: 'stream_error',
+        title: 'Stream Error',
+        status: 500,
+        detail: 'Failed to get response stream from LM Studio / vLLM',
+      });
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') continue;
+
+            try {
+              const parsed = JSON.parse(data) as OpenRouterResponse;
+              const content = parsed.choices[0]?.delta?.content;
+              if (content) {
+                onChunk(content);
+              }
+            } catch {
+              // Skip malformed JSON lines
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
 
     this.logger.log({
-      message: 'LM Studio response received',
-      contentLength: content.length,
-      finishReason: data.choices[0]?.finish_reason,
+      message: 'LM Studio streaming completed',
+      modelId,
+    });
+  }
+
+  /**
+   * Truncates conversation messages to fit within the model's context window.
+   * Preserves the system message and the latest user message, dropping oldest
+   * conversation history first. Uses rough token estimation (1 token ≈ 4 chars).
+   *
+   * Budget: 8192 max - 1500 reserved for output = 6692 input tokens.
+   */
+  private truncateMessagesToFit(messages: ChatMessage[], correlationId: string): ChatMessage[] {
+    const MAX_CONTEXT_TOKENS = 8192;
+    const RESERVED_FOR_OUTPUT = 1500;
+    const MAX_INPUT_TOKENS = MAX_CONTEXT_TOKENS - RESERVED_FOR_OUTPUT;
+
+    const estimateTokens = (text: string): number => Math.ceil(text.length / 4);
+
+    const totalTokens = messages.reduce((acc, m) => acc + estimateTokens(m.content), 0);
+
+    if (totalTokens <= MAX_INPUT_TOKENS) {
+      return messages;
+    }
+
+    this.logger.warn({
+      message: 'Messages exceed context window, truncating',
+      correlationId,
+      totalTokens,
+      maxInputTokens: MAX_INPUT_TOKENS,
+      messageCount: messages.length,
     });
 
-    if (content) {
-      onChunk(content);
+    // Separate system message from conversation
+    const systemMessage = messages[0]?.role === 'system' ? messages[0] : null;
+    const conversationMessages = systemMessage ? messages.slice(1) : [...messages];
+
+    // If system message alone exceeds budget, truncate its content
+    let systemTokens = systemMessage ? estimateTokens(systemMessage.content) : 0;
+    let truncatedSystem = systemMessage;
+
+    if (systemTokens > MAX_INPUT_TOKENS * 0.6) {
+      // Cap system message at 60% of budget
+      const maxSystemChars = Math.floor(MAX_INPUT_TOKENS * 0.6 * 4);
+      truncatedSystem = {
+        role: 'system' as const,
+        content:
+          systemMessage!.content.substring(0, maxSystemChars) +
+          '\n[...context trimmed to fit model limits]',
+      };
+      systemTokens = estimateTokens(truncatedSystem.content);
+      this.logger.warn({
+        message: 'System prompt truncated to fit context window',
+        correlationId,
+        originalTokens: estimateTokens(systemMessage!.content),
+        truncatedTokens: systemTokens,
+      });
     }
+
+    const remainingBudget = MAX_INPUT_TOKENS - systemTokens;
+
+    // Always keep the latest message (the user's current question)
+    // Build from newest to oldest until budget is exhausted
+    const result: ChatMessage[] = [];
+    let usedTokens = 0;
+
+    for (let i = conversationMessages.length - 1; i >= 0; i--) {
+      const msg = conversationMessages[i]!;
+      const msgTokens = estimateTokens(msg.content);
+      if (usedTokens + msgTokens > remainingBudget) {
+        break;
+      }
+      result.unshift(msg);
+      usedTokens += msgTokens;
+    }
+
+    // Ensure at least the latest message is included even if it's large
+    if (result.length === 0 && conversationMessages.length > 0) {
+      const lastMsg = conversationMessages[conversationMessages.length - 1]!;
+      const maxChars = remainingBudget * 4;
+      const truncatedMsg: ChatMessage = {
+        role: lastMsg.role,
+        content: lastMsg.content.substring(0, maxChars),
+      };
+      result.push(truncatedMsg);
+      usedTokens = estimateTokens(truncatedMsg.content);
+    }
+
+    const finalMessages = truncatedSystem ? [truncatedSystem, ...result] : result;
+    const droppedCount = messages.length - finalMessages.length;
+
+    this.logger.log({
+      message: 'Messages truncated to fit context window',
+      correlationId,
+      originalMessages: messages.length,
+      keptMessages: finalMessages.length,
+      droppedMessages: droppedCount,
+      estimatedInputTokens: systemTokens + usedTokens,
+      maxInputTokens: MAX_INPUT_TOKENS,
+    });
+
+    return finalMessages;
   }
 }

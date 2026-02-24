@@ -14,7 +14,14 @@
     "prisma:migrate": "cd apps/api && npx prisma migrate dev",
     "prisma:seed": "cd apps/api && npx ts-node prisma/seed.ts",
     "prisma:studio": "cd apps/api && npx prisma studio",
-    "db:reset": "cd apps/api && npx prisma migrate reset --force"
+    "db:reset": "cd apps/api && npx prisma migrate reset --force",
+    "test": "nx run-many -t test",
+    "test:affected": "nx affected -t test",
+    "test:coverage": "nx run-many -t test -- --coverage",
+    "test:api": "nx test api",
+    "test:web": "nx test web",
+    "e2e": "npx playwright test",
+    "e2e:ui": "npx playwright test --ui"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [
@@ -63,6 +70,7 @@
     "bullmq": "^5.66.5",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
+    "dompurify": "^3.3.1",
     "json2md": "^2.0.3",
     "jsonwebtoken": "^9.0.3",
     "jwks-rsa": "^3.2.2",
@@ -118,6 +126,7 @@
     "@swc/jest": "~0.2.38",
     "@types/archiver": "^7.0.0",
     "@types/bcrypt": "^6.0.0",
+    "@types/dompurify": "^3.2.0",
     "@types/jest": "^30.0.0",
     "@types/json2md": "^1.5.4",
     "@types/jsonwebtoken": "^9.0.10",

@@ -19,6 +19,7 @@ describe('LlmConfigController', () => {
     email: 'admin@example.com',
     role: 'PLATFORM_OWNER',
     auth0Id: 'auth0|123',
+    department: null,
   };
 
   beforeEach(async () => {
@@ -133,7 +134,7 @@ describe('LlmConfigController', () => {
         fallbackProvider: { ...updateDto.fallbackProvider, id: 'cfg_2' },
       });
 
-      const result = await controller.updateConfig(mockUser, updateDto);
+      const _result = await controller.updateConfig(mockUser, updateDto);
 
       expect(mockLlmConfigService.updateConfig).toHaveBeenCalledWith(
         mockUser.userId,
@@ -177,9 +178,7 @@ describe('LlmConfigController', () => {
 
       const validationResult = {
         valid: true,
-        models: [
-          { id: 'llama3.1:8b', name: 'Llama 3.1 8B', costPer1kTokens: null },
-        ],
+        models: [{ id: 'llama3.1:8b', name: 'Llama 3.1 8B', costPer1kTokens: null }],
         resourceInfo: {
           gpuRequired: true,
           gpuMemoryGb: 8,

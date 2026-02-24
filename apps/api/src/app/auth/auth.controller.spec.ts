@@ -1,8 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  BadRequestException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -15,7 +12,7 @@ jest.mock('@paralleldrive/cuid2', () => ({
 
 describe('AuthController', () => {
   let controller: AuthController;
-  let authService: jest.Mocked<AuthService>;
+  let _authService: jest.Mocked<AuthService>;
 
   const mockAuthService = {
     findUserByEmail: jest.fn(),
@@ -40,6 +37,7 @@ describe('AuthController', () => {
     auth0Id: 'google-oauth2|123456',
     tenantId: 'tnt_test456',
     role: 'TENANT_OWNER',
+    department: null,
   };
 
   const correlationId = 'corr_test789';
@@ -56,7 +54,7 @@ describe('AuthController', () => {
     }).compile();
 
     controller = module.get<AuthController>(AuthController);
-    authService = module.get(AuthService);
+    _authService = module.get(AuthService);
   });
 
   describe('handleCallback', () => {
@@ -72,9 +70,9 @@ describe('AuthController', () => {
     it('should throw UnauthorizedException when user not found', async () => {
       mockAuthService.findUserByEmail.mockResolvedValue(null);
 
-      await expect(
-        controller.handleCallback(mockUser, correlationId)
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(controller.handleCallback(mockUser, correlationId)).rejects.toThrow(
+        UnauthorizedException
+      );
     });
 
     it('should link Auth0 identity for first-time login', async () => {
@@ -179,9 +177,9 @@ describe('AuthController', () => {
     it('should throw BadRequestException when MFA already enabled', async () => {
       mockAuthService.getMfaStatus.mockResolvedValue({ enabled: true });
 
-      await expect(
-        controller.enrollMfa(mockUser, correlationId)
-      ).rejects.toThrow(BadRequestException);
+      await expect(controller.enrollMfa(mockUser, correlationId)).rejects.toThrow(
+        BadRequestException
+      );
     });
 
     it('should generate secret, recovery codes, and store them', async () => {

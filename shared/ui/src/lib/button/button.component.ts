@@ -46,11 +46,13 @@ export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
       <ng-content />
     </button>
   `,
-  styles: [`
-    :host {
-      display: inline-block;
-    }
-  `],
+  styles: [
+    `
+      :host {
+        display: inline-block;
+      }
+    `,
+  ],
 })
 export class ButtonComponent {
   // Inputs using Angular Signals
@@ -90,7 +92,8 @@ export class ButtonComponent {
       secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
       ghost: 'hover:bg-secondary hover:text-secondary-foreground',
       destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
-      outline: 'border border-border bg-transparent hover:bg-secondary hover:text-secondary-foreground',
+      outline:
+        'border border-border bg-transparent hover:bg-secondary hover:text-secondary-foreground',
       link: 'text-primary underline-offset-4 hover:underline',
     };
 
@@ -110,7 +113,7 @@ export class ButtonComponent {
     }
   }
 
-  handleKeydown(event: KeyboardEvent): void {
+  handleKeydown(event: Event): void {
     // Button element handles Enter/Space natively, but ensure it works when disabled
     if (this.disabled() || this.loading()) {
       event.preventDefault();

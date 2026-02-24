@@ -51,17 +51,17 @@ export class WebSearchService {
             'Content-Type': 'application/json',
           },
           timeout: SEARCH_TIMEOUT_MS,
-        },
+        }
       );
 
       const organic = response.data?.organic ?? [];
-      const results: SearchResult[] = organic.slice(0, numResults).map(
-        (item: { title?: string; link?: string; snippet?: string }) => ({
+      const results: SearchResult[] = organic
+        .slice(0, numResults)
+        .map((item: { title?: string; link?: string; snippet?: string }) => ({
           title: item.title ?? '',
           link: item.link ?? '',
           snippet: item.snippet ?? '',
-        }),
-      );
+        }));
 
       this.logger.log({
         message: 'Web search completed',
@@ -142,7 +142,7 @@ export class WebSearchService {
         // Phase 2: Deep fetch top 3 results in parallel
         const topResults = searchResults.slice(0, 3);
         const fetchResults = await Promise.allSettled(
-          topResults.map((r) => this.fetchWebpage(r.link)),
+          topResults.map((r) => this.fetchWebpage(r.link))
         );
 
         // Build enriched results with page content
@@ -215,8 +215,12 @@ export class WebSearchService {
       }
     }
     context += '\n--- KRAJ WEB ISTRAŽIVANJA ---';
-    context += '\n\nKada koristiš informacije iz web istraživanja, citiraj izvor koristeći Obsidian format linkova.';
-    context += '\nNa kraju odgovora dodaj sekciju:\n\n### Izvori / Sources\n- [Naziv izvora](URL)';
+    context +=
+      '\n\nKADA KORISTIŠ informacije iz web istraživanja, OBAVEZNO citiraj izvor INLINE odmah posle rečenice koja koristi tu informaciju.';
+    context += '\nFormat citiranja: ([Naziv izvora](URL)) — stavi odmah posle relevantne rečenice.';
+    context +=
+      '\nPrimer: "Tržište digitalnog marketinga raste 15% godišnje ([Digital Marketing Report 2026](https://example.com/report))."';
+    context += '\nAko ne koristiš informaciju iz izvora, NE citiraj ga.';
     return context;
   }
 

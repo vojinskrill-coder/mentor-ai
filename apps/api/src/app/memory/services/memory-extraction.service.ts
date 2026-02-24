@@ -1,10 +1,8 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createId } from '@paralleldrive/cuid2';
 import { MemoryService } from './memory.service';
 import { MemoryEmbeddingService } from './memory-embedding.service';
 import type { Message, MemoryType, MemorySource } from '@mentor-ai/shared/types';
-import { AiGatewayService } from '../../ai-gateway/ai-gateway.service';
 import { LlmConfigService } from '../../llm-config/llm-config.service';
 import { LlmProviderType } from '@mentor-ai/shared/types';
 
@@ -75,7 +73,8 @@ Extracted memories (JSON array only, no other text):`;
   async extractMemories(
     messages: Message[],
     userId: string,
-    tenantId: string
+    tenantId: string,
+    options?: { conceptName?: string }
   ): Promise<ExtractedMemory[]> {
     if (messages.length < 2) {
       this.logger.debug({
@@ -90,7 +89,12 @@ Extracted memories (JSON array only, no other text):`;
     try {
       // Format messages for the prompt
       const formattedMessages = this.formatMessages(messages);
-      const prompt = this.EXTRACTION_PROMPT.replace('{messages}', formattedMessages);
+      let prompt = this.EXTRACTION_PROMPT.replace('{messages}', formattedMessages);
+
+      // Story 3.3: Add concept context for better tagging
+      if (options?.conceptName) {
+        prompt += `\n\nContext: This conversation is about the business concept "${options.conceptName}". Use this as the subject for extracted memories when relevant.`;
+      }
 
       // Call LLM for extraction
       const extractedRaw = await this.callLlmForExtraction(prompt, tenantId, userId);
@@ -105,21 +109,20 @@ Extracted memories (JSON array only, no other text):`;
       }
 
       // Deduplicate against existing memories
-      const deduplicated = await this.deduplicateMemories(
-        extractedRaw,
-        userId,
-        tenantId
-      );
+      const deduplicated = await this.deduplicateMemories(extractedRaw, userId, tenantId);
 
       // Save new memories and generate embeddings
       const savedMemories: ExtractedMemory[] = [];
       for (const memory of deduplicated) {
         try {
+          // Story 3.3: Default subject to concept name for concept-tagged memories
+          const effectiveSubject = memory.subject || options?.conceptName || undefined;
+
           const saved = await this.memoryService.createMemory(tenantId, userId, {
             type: memory.type as MemoryType,
             source: 'AI_EXTRACTED' as MemorySource,
             content: memory.content,
-            subject: memory.subject,
+            subject: effectiveSubject,
             confidence: memory.confidence,
             sourceMessageId: messages[messages.length - 1]?.id,
           });
@@ -175,8 +178,8 @@ Extracted memories (JSON array only, no other text):`;
    */
   private async callLlmForExtraction(
     prompt: string,
-    tenantId: string,
-    userId: string
+    _tenantId: string,
+    _userId: string
   ): Promise<ExtractedMemory[]> {
     try {
       const config = await this.llmConfigService.getConfig();
@@ -199,42 +202,38 @@ Extracted memories (JSON array only, no other text):`;
       }
 
       // Use non-streaming completion for extraction
-      const response = await fetch(
-        'https://openrouter.ai/api/v1/chat/completions',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
-            'HTTP-Referer':
-              this.configService.get<string>('APP_URL') ?? 'http://localhost:4200',
-            'X-Title': 'Mentor AI - Memory Extraction',
-          },
-          body: JSON.stringify({
-            model: config.primaryProvider.modelId,
-            messages: [
-              {
-                role: 'system',
-                content:
-                  'You are a memory extraction assistant. Extract factual information from conversations and return JSON only.',
-              },
-              {
-                role: 'user',
-                content: prompt,
-              },
-            ],
-            temperature: 0.1, // Low temperature for consistent extraction
-            max_tokens: 1000,
-          }),
-        }
-      );
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+          'HTTP-Referer': this.configService.get<string>('APP_URL') ?? 'http://localhost:4200',
+          'X-Title': 'Mentor AI - Memory Extraction',
+        },
+        body: JSON.stringify({
+          model: config.primaryProvider.modelId,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are a memory extraction assistant. Extract factual information from conversations and return JSON only.',
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          temperature: 0.1, // Low temperature for consistent extraction
+          max_tokens: 1000,
+        }),
+      });
 
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`LLM API returned ${response.status}: ${errorText}`);
       }
 
-      const data = await response.json() as {
+      const data = (await response.json()) as {
         choices?: Array<{ message?: { content?: string } }>;
       };
 
@@ -323,11 +322,9 @@ Extracted memories (JSON array only, no other text):`;
 
     try {
       // Get existing memories for comparison
-      const { data: existing } = await this.memoryService.findMemories(
-        tenantId,
-        userId,
-        { limit: 100 }
-      );
+      const { data: existing } = await this.memoryService.findMemories(tenantId, userId, {
+        limit: 100,
+      });
 
       if (existing.length === 0) {
         return newMemories;

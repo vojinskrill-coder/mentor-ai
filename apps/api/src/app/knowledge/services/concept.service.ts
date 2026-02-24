@@ -41,7 +41,7 @@ export class ConceptService {
 
   constructor(
     private readonly prisma: PlatformPrismaService,
-    private readonly aiGateway: AiGatewayService,
+    private readonly aiGateway: AiGatewayService
   ) {}
 
   /**
@@ -243,9 +243,7 @@ export class ConceptService {
    * @param id - Concept ID
    * @returns List of related concepts with relationship type and direction
    */
-  async findRelated(
-    id: string
-  ): Promise<
+  async findRelated(id: string): Promise<
     Array<{
       concept: ConceptSummary;
       relationshipType: RelationshipType;
@@ -310,12 +308,33 @@ export class ConceptService {
    */
   async findByIds(
     ids: string[]
-  ): Promise<Map<string, { id: string; name: string; slug: string; category: string }>> {
+  ): Promise<
+    Map<
+      string,
+      {
+        id: string;
+        name: string;
+        slug: string;
+        category: string;
+        categorySortOrder: number;
+        sortOrder: number;
+        curriculumId: string | null;
+      }
+    >
+  > {
     if (ids.length === 0) return new Map();
 
     const concepts = await this.prisma.concept.findMany({
       where: { id: { in: ids } },
-      select: { id: true, name: true, slug: true, category: true },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        category: true,
+        categorySortOrder: true,
+        sortOrder: true,
+        curriculumId: true,
+      },
     });
 
     return new Map(concepts.map((c) => [c.id, c]));
@@ -331,7 +350,7 @@ export class ConceptService {
   async createDynamicRelationships(
     conceptId: string,
     conceptName?: string,
-    category?: string,
+    category?: string
   ): Promise<DynamicRelationshipResult> {
     const result: DynamicRelationshipResult = {
       conceptId,
@@ -376,7 +395,11 @@ export class ConceptService {
       });
 
       if (candidates.length === 0) {
-        this.logger.debug({ message: 'No candidate concepts for relationship creation', conceptName: resolvedName, category: resolvedCategory });
+        this.logger.debug({
+          message: 'No candidate concepts for relationship creation',
+          conceptName: resolvedName,
+          category: resolvedCategory,
+        });
         return result;
       }
 
@@ -385,12 +408,10 @@ export class ConceptService {
         resolvedName,
         resolvedCategory,
         concept.definition,
-        candidates,
+        candidates
       );
 
-      const messages: ChatMessage[] = [
-        { role: 'user', content: prompt },
-      ];
+      const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
 
       let fullResponse = '';
       await this.aiGateway.streamCompletion(messages, (chunk) => {
@@ -401,7 +422,10 @@ export class ConceptService {
       const suggestions = this.parseRelationshipSuggestions(fullResponse, candidates);
 
       if (suggestions.length === 0) {
-        this.logger.debug({ message: 'No relationships suggested by AI', conceptName: resolvedName });
+        this.logger.debug({
+          message: 'No relationships suggested by AI',
+          conceptName: resolvedName,
+        });
         return result;
       }
 
@@ -450,7 +474,7 @@ export class ConceptService {
    */
   private parseRelationshipSuggestions(
     response: string,
-    candidates: Array<{ slug: string }>,
+    candidates: Array<{ slug: string }>
   ): RelationshipSuggestion[] {
     try {
       // Extract first JSON array from response (non-greedy to avoid spanning multiple arrays)
@@ -464,13 +488,14 @@ export class ConceptService {
       const validSlugs = new Set(candidates.map((c) => c.slug));
 
       return parsed
-        .filter((item): item is { slug: string; type: string } =>
-          typeof item === 'object' &&
-          item !== null &&
-          'slug' in item &&
-          'type' in item &&
-          typeof (item as Record<string, unknown>).slug === 'string' &&
-          typeof (item as Record<string, unknown>).type === 'string',
+        .filter(
+          (item): item is { slug: string; type: string } =>
+            typeof item === 'object' &&
+            item !== null &&
+            'slug' in item &&
+            'type' in item &&
+            typeof (item as Record<string, unknown>).slug === 'string' &&
+            typeof (item as Record<string, unknown>).type === 'string'
         )
         .filter((item) => validSlugs.has(item.slug) && validTypes.has(item.type))
         .map((item) => ({
@@ -478,7 +503,10 @@ export class ConceptService {
           type: item.type as 'PREREQUISITE' | 'RELATED' | 'ADVANCED',
         }));
     } catch {
-      this.logger.warn({ message: 'Failed to parse relationship suggestions from LLM', responseLength: response.length });
+      this.logger.warn({
+        message: 'Failed to parse relationship suggestions from LLM',
+        responseLength: response.length,
+      });
       return [];
     }
   }

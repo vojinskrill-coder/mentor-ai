@@ -26,6 +26,7 @@ describe('MfaRequiredGuard', () => {
     role: 'MEMBER',
     email: 'test@example.com',
     auth0Id: 'google-oauth2|123',
+    department: null,
   };
 
   beforeEach(() => {

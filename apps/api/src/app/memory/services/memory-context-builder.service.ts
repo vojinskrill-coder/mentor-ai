@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { MemoryEmbeddingService } from './memory-embedding.service';
-import type { Memory, MemoryType, MemoryAttribution } from '@mentor-ai/shared/types';
+import type { MemoryType, MemoryAttribution } from '@mentor-ai/shared/types';
 
 /**
  * Result of building memory context for a prompt.
@@ -24,8 +24,9 @@ export interface MemoryContext {
 export class MemoryContextBuilderService {
   private readonly logger = new Logger(MemoryContextBuilderService.name);
 
-  /** Maximum tokens for memory context to preserve response quality */
-  private readonly MAX_MEMORY_TOKENS = 2000;
+  /** Maximum tokens for memory context to preserve response quality.
+   *  Reduced from 2000 to 800 to fit within 8K context window models. */
+  private readonly MAX_MEMORY_TOKENS = 800;
 
   /** Approximate characters per token */
   private readonly CHARS_PER_TOKEN = 4;
@@ -41,11 +42,7 @@ export class MemoryContextBuilderService {
    * @param tenantId - Tenant ID for isolation
    * @returns Formatted context with attributions
    */
-  async buildContext(
-    query: string,
-    userId: string,
-    tenantId: string
-  ): Promise<MemoryContext> {
+  async buildContext(query: string, userId: string, tenantId: string): Promise<MemoryContext> {
     this.logger.debug({
       message: 'Building memory context',
       userId,
@@ -193,10 +190,10 @@ export class MemoryContextBuilderService {
 
     // Look for "Based on our previous discussion about [subject]" patterns
     const patterns = [
-      /Based on our previous discussion about ([^,\.]+)/gi,
-      /As we discussed regarding ([^,\.]+)/gi,
-      /From our earlier conversation about ([^,\.]+)/gi,
-      /You mentioned that ([^,\.]+)/gi,
+      /Based on our previous discussion about ([^,.]+)/gi,
+      /As we discussed regarding ([^,.]+)/gi,
+      /From our earlier conversation about ([^,.]+)/gi,
+      /You mentioned that ([^,.]+)/gi,
     ];
 
     for (const pattern of patterns) {
@@ -210,9 +207,10 @@ export class MemoryContextBuilderService {
         }
 
         // Find matching attribution
-        const found = providedAttributions.find((attr) =>
-          attr.subject.toLowerCase().includes(mentionedSubject) ||
-          mentionedSubject.includes(attr.subject.toLowerCase())
+        const found = providedAttributions.find(
+          (attr) =>
+            attr.subject.toLowerCase().includes(mentionedSubject) ||
+            mentionedSubject.includes(attr.subject.toLowerCase())
         );
 
         if (found && !matched.some((m) => m.memoryId === found.memoryId)) {

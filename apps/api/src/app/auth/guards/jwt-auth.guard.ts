@@ -46,26 +46,78 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       const authHeader = request.headers?.authorization as string | undefined;
 
       // If a real Bearer token is present (not the dev-mode-token placeholder),
-      // try to validate it so each user gets their own identity
+      // validate it AND verify the user still exists in DB
       if (authHeader?.startsWith('Bearer ') && !authHeader.includes('dev-mode-token')) {
         try {
           const result = await (super.canActivate(context) as Promise<boolean>);
           if (result && request.user) {
-            this.logger.debug(`Dev mode: authenticated real user ${request.user.email}`);
-            return true;
+            // Verify user still exists in DB (may have been deleted after cleanup)
+            const userExists = await this.verifyUserExists(request.user.userId);
+            if (userExists) {
+              this.logger.debug(`Dev mode: authenticated real user ${request.user.email}`);
+              return true;
+            }
+            // User deleted from DB — reject so frontend clears stale token
+            this.logger.warn({
+              message: 'JWT valid but user not found in DB — rejecting stale token',
+              userId: request.user.userId,
+            });
+            throw new UnauthorizedException({
+              type: 'user_not_found',
+              title: 'Session Expired',
+              status: 401,
+              detail: 'Your session is no longer valid. Please log in again.',
+            });
           }
-        } catch {
+        } catch (err) {
+          if (err instanceof UnauthorizedException) throw err;
           // Token invalid or expired - fall back to dev user
           this.logger.debug('Dev mode: JWT validation failed, using dev user fallback');
         }
       }
 
-      // Resolve real tenant/user from DB (cached after first lookup)
+      // No token or validation failed — resolve dev user from DB
       request.user = await this.getDevUser();
       return true;
     }
 
-    return super.canActivate(context) as Promise<boolean>;
+    // Production mode: validate JWT and verify user exists
+    const result = await (super.canActivate(context) as Promise<boolean>);
+    if (result) {
+      const request = context.switchToHttp().getRequest();
+      if (request.user?.userId) {
+        const userExists = await this.verifyUserExists(request.user.userId);
+        if (!userExists) {
+          throw new UnauthorizedException({
+            type: 'user_not_found',
+            title: 'Session Expired',
+            status: 401,
+            detail: 'Your session is no longer valid. Please log in again.',
+          });
+        }
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Verifies that a user exists in the DB. Returns false if deleted.
+   * Uses a short-lived PrismaClient to avoid DI dependency issues.
+   */
+  private async verifyUserExists(userId: string): Promise<boolean> {
+    const prisma = new PrismaClient();
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true },
+      });
+      return user !== null;
+    } catch {
+      // DB error — allow through to avoid blocking on transient failures
+      return true;
+    } finally {
+      await prisma.$disconnect();
+    }
   }
 
   /**

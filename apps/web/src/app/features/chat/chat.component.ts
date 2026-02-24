@@ -5,6 +5,7 @@ import {
   computed,
   OnInit,
   OnDestroy,
+  AfterViewInit,
   DestroyRef,
   ViewChild,
   ElementRef,
@@ -13,7 +14,7 @@ import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { firstValueFrom } from 'rxjs';
+import { combineLatest, firstValueFrom, take } from 'rxjs';
 import { ConversationService } from './services/conversation.service';
 import { ChatWebsocketService } from './services/chat-websocket.service';
 import { NotesApiService } from './services/notes-api.service';
@@ -28,6 +29,8 @@ import {
   type PersonaType,
   type ConfidenceFactor,
   type ConceptCitation,
+  type MemoryAttribution,
+  type WebSearchSource,
   type ExecutionPlan,
   type ExecutionPlanStep,
   type WorkflowConversationsCreatedPayload,
@@ -36,6 +39,7 @@ import {
   type WorkflowStepMessagePayload,
   type WorkflowNavigatePayload,
   type YoloProgressPayload,
+  type SuggestedAction,
 } from '@mentor-ai/shared/types';
 import { PersonaSelectorComponent } from '../personas/persona-selector.component';
 import { PersonaBadgeComponent } from '../personas/persona-badge.component';
@@ -44,6 +48,15 @@ import { ConceptTreeComponent } from './components/concept-tree.component';
 import { ConversationNotesComponent } from './components/conversation-notes.component';
 import { TopicPickerComponent } from './components/topic-picker.component';
 import type { CurriculumNode } from '@mentor-ai/shared/types';
+
+interface WorkflowStatusEntry {
+  planId: string;
+  title: string;
+  totalSteps: number;
+  completedSteps: number;
+  currentStepTitle: string | null;
+  status: 'executing' | 'completed' | 'failed' | 'cancelled';
+}
 
 /**
  * Main chat page component.
@@ -136,7 +149,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
         align-items: center;
         gap: 8px;
         font-size: 13px;
-        color: #6b6b6b;
+        color: #8b8b8b;
         text-decoration: none;
         padding: 6px 4px;
         border-radius: 4px;
@@ -172,7 +185,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
       .switch-btn {
         background: none;
         border: none;
-        color: #6b6b6b;
+        color: #8b8b8b;
         font-size: 13px;
         cursor: pointer;
         display: flex;
@@ -187,6 +200,70 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
         align-items: center;
         gap: 12px;
       }
+
+      /* Connection indicator */
+      .connection-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .connection-dot.connected {
+        background: #22c55e;
+      }
+      .connection-dot.disconnected {
+        background: #ef4444;
+      }
+      .connection-dot.reconnecting {
+        background: #f59e0b;
+        animation: pulse-dot 1s ease-in-out infinite;
+      }
+      @keyframes pulse-dot {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.3;
+        }
+      }
+
+      /* Disconnect toast */
+      .disconnect-toast {
+        padding: 8px 16px;
+        background: #1a1a1a;
+        border-bottom: 1px solid #2a2a2a;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        flex-shrink: 0;
+      }
+      .disconnect-toast.error {
+        border-left: 3px solid #ef4444;
+        color: #fca5a5;
+      }
+      .disconnect-toast.warning {
+        border-left: 3px solid #f59e0b;
+        color: #fde68a;
+      }
+      .disconnect-toast.success {
+        border-left: 3px solid #22c55e;
+        color: #86efac;
+      }
+      .disconnect-toast-close {
+        background: none;
+        border: none;
+        color: #707070;
+        cursor: pointer;
+        margin-left: auto;
+        font-size: 14px;
+        padding: 0 4px;
+      }
+      .disconnect-toast-close:hover {
+        color: #fafafa;
+      }
+
       .chat-messages {
         flex: 1;
         overflow-y: auto;
@@ -249,14 +326,30 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
         flex-wrap: wrap;
         justify-content: center;
         gap: 8px;
-        margin-top: 32px;
+        margin-top: 24px;
       }
-      .persona-pill {
-        padding: 6px 12px;
+      .domain-pill {
+        padding: 8px 16px;
         background: #1a1a1a;
+        border: 1px solid #2a2a2a;
         border-radius: 20px;
-        font-size: 11px;
+        font-size: 13px;
         font-weight: 500;
+        color: #a1a1a1;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all 0.15s;
+      }
+      .domain-pill:hover {
+        background: #242424;
+        border-color: #3b82f6;
+        color: #fafafa;
+      }
+      .empty-or {
+        font-size: 12px;
+        color: #707070;
+        margin-top: 16px;
+        margin-bottom: 0;
       }
       .persona-selector-panel {
         padding: 12px 16px;
@@ -272,7 +365,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
         position: fixed;
         top: 16px;
         right: 16px;
-        z-index: 50;
+        z-index: 9999;
         background: #1a1a1a;
         border: 1px solid #ef4444;
         padding: 12px 16px;
@@ -296,7 +389,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
         border-bottom: 1px solid #2a2a2a;
         font-size: 11px;
         font-weight: 600;
-        color: #6b6b6b;
+        color: #8b8b8b;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         flex-shrink: 0;
@@ -311,7 +404,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
         background: none;
         border: none;
         border-bottom: 2px solid transparent;
-        color: #6b6b6b;
+        color: #8b8b8b;
         font-size: 13px;
         cursor: pointer;
       }
@@ -328,6 +421,121 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
         flex-direction: column;
         overflow: hidden;
       }
+      /* Brain status bar (D6) */
+      .brain-status-bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 16px;
+        background: #1a1a1a;
+        border-bottom: 1px solid #2a2a2a;
+        font-size: 11px;
+        flex-shrink: 0;
+      }
+      .brain-status-label {
+        color: #707070;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .brain-progress-bar {
+        flex: 1;
+        height: 4px;
+        background: #242424;
+        border-radius: 2px;
+        overflow: hidden;
+        min-width: 60px;
+      }
+      .brain-progress-fill {
+        height: 100%;
+        background: #3b82f6;
+        border-radius: 2px;
+        transition: width 0.5s;
+      }
+      .brain-stat {
+        color: #8b8b8b;
+        white-space: nowrap;
+      }
+      .brain-stat strong {
+        color: #fafafa;
+      }
+
+      /* Next-step suggestion banner (D4) */
+      .next-step-banner {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 16px;
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(59, 130, 246, 0.03));
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        border-radius: 8px;
+        margin: 8px 16px;
+        font-size: 13px;
+        animation: fadeSlideIn 0.3s ease;
+      }
+      .next-step-icon {
+        width: 20px;
+        height: 20px;
+        color: #3b82f6;
+        flex-shrink: 0;
+      }
+      .next-step-text {
+        flex: 1;
+        color: #bfbfbf;
+      }
+      .next-step-actions {
+        display: flex;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+      .next-step-btn {
+        padding: 4px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        border: none;
+        transition: all 0.15s ease;
+      }
+      .next-step-btn.primary {
+        background: #3b82f6;
+        color: white;
+      }
+      .next-step-btn.primary:hover {
+        background: #2563eb;
+      }
+      .next-step-btn.secondary {
+        background: transparent;
+        color: #8b8b8b;
+        border: 1px solid #2a2a2a;
+      }
+      .next-step-btn.secondary:hover {
+        color: #fafafa;
+        border-color: #525252;
+      }
+      .next-step-close {
+        background: none;
+        border: none;
+        color: #525252;
+        font-size: 16px;
+        cursor: pointer;
+        padding: 0 4px;
+        line-height: 1;
+      }
+      .next-step-close:hover {
+        color: #fafafa;
+      }
+      @keyframes fadeSlideIn {
+        from {
+          opacity: 0;
+          transform: translateY(-8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
       .domain-dashboard {
         padding: 20px 24px;
         border-bottom: 1px solid #2a2a2a;
@@ -346,7 +554,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
       }
       .stat-label {
         font-size: 11px;
-        color: #6b6b6b;
+        color: #8b8b8b;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         margin-bottom: 4px;
@@ -402,37 +610,65 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
       .add-investigation-btn:hover {
         background: #2a2a2a;
       }
-
-      .plan-backdrop {
-        position: fixed;
-        inset: 0;
-        z-index: 100;
-        background: rgba(0, 0, 0, 0.7);
-        display: flex;
+      .yolo-btn {
+        display: inline-flex;
         align-items: center;
         justify-content: center;
-      }
-      .plan-modal {
-        background: #1a1a1a;
+        padding: 8px 10px;
+        border-radius: 8px;
         border: 1px solid #2a2a2a;
-        border-radius: 12px;
-        width: 560px;
-        max-height: 80vh;
+        background: none;
+        color: #8b8b8b;
+        cursor: pointer;
+      }
+      .yolo-btn:hover {
+        color: #eab308;
+        border-color: #eab308;
+      }
+      .yolo-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .plan-inline-panel {
+        background: #1a1a1a;
+        border-bottom: 1px solid #2a2a2a;
         display: flex;
         flex-direction: column;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        flex-shrink: 0;
+      }
+      .plan-inline-panel.collapsed .plan-steps {
+        display: none;
+      }
+      .plan-inline-panel.collapsed .plan-footer {
+        display: none;
       }
       .plan-header {
-        padding: 16px 20px;
+        padding: 10px 16px;
         border-bottom: 1px solid #2a2a2a;
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        gap: 12px;
+        cursor: pointer;
+      }
+      .plan-header:hover {
+        background: #242424;
       }
       .plan-header h3 {
-        font-size: 16px;
+        font-size: 14px;
         font-weight: 600;
         color: #fafafa;
+        flex: 1;
+      }
+      .plan-collapse-icon {
+        width: 16px;
+        height: 16px;
+        color: #8b8b8b;
+        transition: transform 0.2s;
+        flex-shrink: 0;
+      }
+      .plan-collapse-icon.expanded {
+        transform: rotate(180deg);
       }
       .plan-meta {
         display: flex;
@@ -440,10 +676,15 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
         font-size: 12px;
         color: #a1a1a1;
       }
+      .plan-summary {
+        font-size: 12px;
+        color: #a1a1a1;
+        padding: 8px 0 0;
+      }
       .plan-steps {
-        flex: 1;
+        max-height: 40vh;
         overflow-y: auto;
-        padding: 12px 20px;
+        padding: 8px 16px;
       }
       .plan-step {
         display: flex;
@@ -467,7 +708,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
       }
       .step-pending {
         background: #242424;
-        color: #6b6b6b;
+        color: #8b8b8b;
       }
       .step-in-progress {
         background: #1e3a5f;
@@ -504,23 +745,18 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
         padding: 1px 6px;
         border-radius: 4px;
         background: #242424;
-        color: #6b6b6b;
-      }
-      .plan-footer {
-        padding: 12px 20px;
-        border-top: 1px solid #2a2a2a;
-        display: flex;
-        gap: 8px;
-        justify-content: flex-end;
+        color: #8b8b8b;
       }
       .plan-btn-cancel {
         background: none;
         border: 1px solid #2a2a2a;
         color: #a1a1a1;
         border-radius: 6px;
-        padding: 8px 20px;
-        font-size: 13px;
+        padding: 4px 12px;
+        font-size: 12px;
         cursor: pointer;
+        font-family: inherit;
+        flex-shrink: 0;
       }
       .plan-btn-cancel:hover {
         color: #fafafa;
@@ -531,13 +767,115 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
         color: #fafafa;
         border: none;
         border-radius: 6px;
-        padding: 8px 20px;
-        font-size: 13px;
+        padding: 4px 12px;
+        font-size: 12px;
         font-weight: 500;
+        font-family: inherit;
+        flex-shrink: 0;
         cursor: pointer;
       }
       .plan-btn-approve:hover {
         background: #2563eb;
+      }
+
+      /* Workflow Status Bar (top banner) */
+      .workflow-status-bar {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 10px 16px;
+        background: #1a1a1a;
+        border-bottom: 1px solid #2a2a2a;
+        flex-shrink: 0;
+      }
+      .workflow-status-entry {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        padding: 8px 12px;
+        border-radius: 6px;
+        background: #0d0d0d;
+      }
+      .ws-detail-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        min-width: 0;
+      }
+      .wse-executing {
+        border-left: 3px solid #3b82f6;
+      }
+      .wse-completed {
+        border-left: 3px solid #22c55e;
+        animation: fadeOutEntry 1.5s ease 3s forwards;
+      }
+      .wse-failed {
+        border-left: 3px solid #ef4444;
+        animation: fadeOutEntry 1.5s ease 3s forwards;
+      }
+      .wse-cancelled {
+        border-left: 3px solid #f59e0b;
+        animation: fadeOutEntry 1.5s ease 3s forwards;
+      }
+      @keyframes fadeOutEntry {
+        from {
+          opacity: 1;
+          max-height: 60px;
+        }
+        to {
+          opacity: 0;
+          max-height: 0;
+          padding: 0;
+          margin: 0;
+          overflow: hidden;
+        }
+      }
+      .ws-title {
+        color: #fafafa;
+        font-weight: 600;
+        font-size: 13px;
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        width: 100%;
+      }
+      .ws-progress-bar {
+        flex: 1;
+        height: 4px;
+        background: #242424;
+        border-radius: 2px;
+        overflow: hidden;
+        min-width: 60px;
+      }
+      .ws-progress-fill {
+        height: 100%;
+        background: #3b82f6;
+        border-radius: 2px;
+        transition: width 0.3s;
+      }
+      .ws-count {
+        color: #8b8b8b;
+        flex-shrink: 0;
+      }
+      .ws-current {
+        color: #60a5fa;
+        font-size: 11px;
+        width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .ws-badge-done {
+        color: #22c55e;
+        font-weight: 600;
+      }
+      .ws-badge-fail {
+        color: #ef4444;
+        font-weight: 600;
       }
 
       @keyframes spin {
@@ -552,230 +890,6 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
         animation: spin 1s linear infinite;
       }
 
-      .execution-progress {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
-        border-radius: 10px;
-        padding: 14px 18px;
-        margin: 12px 0;
-        max-width: 768px;
-      }
-      .progress-header {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 10px;
-      }
-      .progress-spinner {
-        width: 18px;
-        height: 18px;
-        animation: spin 1s linear infinite;
-        color: #3b82f6;
-        flex-shrink: 0;
-      }
-      .progress-label {
-        font-size: 13px;
-        font-weight: 500;
-        color: #fafafa;
-      }
-      .progress-step-name {
-        font-size: 12px;
-        color: #a1a1a1;
-        margin-bottom: 8px;
-      }
-      .progress-bar-container {
-        width: 100%;
-        height: 4px;
-        background: #242424;
-        border-radius: 2px;
-        overflow: hidden;
-      }
-      .progress-bar-fill {
-        height: 100%;
-        background: #3b82f6;
-        border-radius: 2px;
-        transition: width 0.5s ease-in-out;
-      }
-      .progress-counter {
-        font-size: 11px;
-        color: #6b6b6b;
-        margin-top: 6px;
-        text-align: right;
-      }
-      .progress-steps-list {
-        margin-top: 10px;
-        border-top: 1px solid #242424;
-        padding-top: 8px;
-      }
-      .progress-step-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 3px 0;
-        font-size: 11px;
-        color: #6b6b6b;
-      }
-      .progress-step-item.active {
-        color: #60a5fa;
-      }
-      .progress-step-item.completed {
-        color: #86efac;
-      }
-      .progress-step-item.failed {
-        color: #fca5a5;
-      }
-      .progress-step-icon {
-        width: 14px;
-        height: 14px;
-        flex-shrink: 0;
-      }
-      .progress-step-num {
-        width: 14px;
-        height: 14px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 9px;
-        font-weight: 600;
-        color: #4a4a4a;
-        flex-shrink: 0;
-      }
-      .progress-step-text {
-        flex: 1;
-      }
-      .progress-step-concept {
-        font-size: 10px;
-        color: #4a4a4a;
-        flex-shrink: 0;
-      }
-
-      .yolo-progress {
-        padding: 16px;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
-        border-radius: 10px;
-        margin: 12px 0;
-        max-width: 768px;
-      }
-      .yolo-progress-title {
-        font-size: 15px;
-        font-weight: 600;
-        margin-bottom: 8px;
-        color: #fafafa;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .yolo-spinner {
-        width: 16px;
-        height: 16px;
-        border: 2px solid #2a2a2a;
-        border-top-color: #3b82f6;
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-        display: inline-block;
-      }
-      .yolo-progress-stats {
-        font-size: 14px;
-        color: #a0a0a0;
-        text-align: center;
-      }
-      .yolo-progress-stats span {
-        color: #3b82f6;
-        font-weight: 600;
-      }
-      .yolo-progress-stats .yolo-failed {
-        color: #ef4444;
-      }
-      .yolo-progress-stats .yolo-discovered {
-        color: #10b981;
-        font-weight: 600;
-      }
-      .yolo-progress-bar {
-        height: 4px;
-        background: #2a2a2a;
-        border-radius: 2px;
-        margin-top: 12px;
-        overflow: hidden;
-      }
-      .yolo-progress-fill {
-        height: 100%;
-        background: #3b82f6;
-        border-radius: 2px;
-        transition: width 0.3s;
-      }
-
-      .yolo-workers {
-        margin-top: 10px;
-        border-top: 1px solid #242424;
-        padding-top: 8px;
-      }
-      .yolo-worker-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 4px 0;
-        font-size: 12px;
-        color: #a1a1a1;
-      }
-      .yolo-worker-spinner {
-        width: 12px;
-        height: 12px;
-        border: 2px solid #2a2a2a;
-        border-top-color: #60a5fa;
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-        flex-shrink: 0;
-      }
-      .yolo-worker-concept {
-        color: #fafafa;
-        font-weight: 500;
-      }
-      .yolo-worker-step {
-        color: #6b6b6b;
-        font-size: 11px;
-      }
-
-      .yolo-activity-toggle {
-        background: none;
-        border: none;
-        color: #6b6b6b;
-        cursor: pointer;
-        font-size: 11px;
-        padding: 4px 0;
-        margin-top: 8px;
-        display: flex;
-        align-items: center;
-        gap: 4px;
-      }
-      .yolo-activity-toggle:hover {
-        color: #a1a1a1;
-      }
-      .yolo-toggle-icon {
-        width: 12px;
-        height: 12px;
-        transition: transform 0.2s;
-      }
-      .yolo-toggle-icon.expanded {
-        transform: rotate(90deg);
-      }
-      .yolo-activity-log {
-        margin-top: 6px;
-        max-height: 160px;
-        overflow-y: auto;
-        background: #0d0d0d;
-        border-radius: 6px;
-        padding: 8px;
-      }
-      .yolo-log-entry {
-        font-size: 10px;
-        color: #6b6b6b;
-        padding: 2px 0;
-        font-family: 'Courier New', monospace;
-        white-space: pre-wrap;
-        word-break: break-all;
-      }
-
       .step-status-msg {
         display: flex;
         align-items: center;
@@ -783,37 +897,13 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
         padding: 8px 14px;
         margin: 8px 0;
         max-width: 768px;
-        background: #111;
+        background: #1a1a1a;
         border-left: 3px solid #3b82f6;
         border-radius: 0 6px 6px 0;
         font-size: 12px;
         color: #a1a1a1;
       }
       .step-status-msg .step-icon {
-        width: 14px;
-        height: 14px;
-        flex-shrink: 0;
-      }
-
-      @keyframes pulse-bg {
-        0%,
-        100% {
-          opacity: 1;
-        }
-        50% {
-          opacity: 0.6;
-        }
-      }
-      .progress-preparing {
-        font-size: 12px;
-        color: #60a5fa;
-        margin-top: 8px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        animation: pulse-bg 1.5s ease-in-out infinite;
-      }
-      .progress-preparing svg {
         width: 14px;
         height: 14px;
         flex-shrink: 0;
@@ -987,8 +1077,8 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
         <span style="font-size: 13px; color: #FAFAFA;">{{ errorMessage$() }}</span>
         <button
           (click)="dismissError()"
-          style="background: none; border: none; color: #6B6B6B; cursor: pointer; margin-left: auto;"
-          aria-label="Dismiss"
+          style="background: none; border: none; color: #8B8B8B; cursor: pointer; margin-left: auto;"
+          aria-label="Zatvori"
         >
           <svg style="width: 16px; height: 16px;" fill="currentColor" viewBox="0 0 20 20">
             <path
@@ -1009,88 +1099,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
       />
     }
 
-    <!-- Plan Overlay -->
-    @if (showPlanOverlay$() && currentPlan$()) {
-      <div
-        class="plan-backdrop"
-        (click)="
-          $event.target === $event.currentTarget && !isExecutingWorkflow$() ? rejectPlan() : null
-        "
-      >
-        <div class="plan-modal">
-          <div class="plan-header">
-            <h3>{{ isExecutingWorkflow$() ? 'Executing Plan...' : 'Execution Plan' }}</h3>
-            <div class="plan-meta">
-              <span>{{ currentPlan$()!.steps.length }} steps</span>
-              <span>~{{ currentPlan$()!.totalEstimatedMinutes }} min</span>
-              <span>{{ currentPlan$()!.conceptOrder.length }} concepts</span>
-            </div>
-          </div>
-          <div class="plan-steps">
-            @for (step of currentPlan$()!.steps; track step.stepId) {
-              <div class="plan-step">
-                <div
-                  class="step-indicator"
-                  [class.step-pending]="getStepStatus(step.stepId) === 'pending'"
-                  [class.step-in-progress]="getStepStatus(step.stepId) === 'in_progress'"
-                  [class.step-completed]="getStepStatus(step.stepId) === 'completed'"
-                  [class.step-failed]="getStepStatus(step.stepId) === 'failed'"
-                >
-                  @if (getStepStatus(step.stepId) === 'in_progress') {
-                    <svg
-                      class="spinner"
-                      style="width:16px;height:16px;"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
-                    </svg>
-                  } @else if (getStepStatus(step.stepId) === 'completed') {
-                    <svg style="width:14px;height:14px;" fill="currentColor" viewBox="0 0 20 20">
-                      <path
-                        fill-rule="evenodd"
-                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                        clip-rule="evenodd"
-                      />
-                    </svg>
-                  } @else if (getStepStatus(step.stepId) === 'failed') {
-                    <svg style="width:14px;height:14px;" fill="currentColor" viewBox="0 0 20 20">
-                      <path
-                        fill-rule="evenodd"
-                        d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                        clip-rule="evenodd"
-                      />
-                    </svg>
-                  } @else {
-                    {{ step.workflowStepNumber }}
-                  }
-                </div>
-                <div class="step-info">
-                  <div class="step-title">{{ step.title }}</div>
-                  <div class="step-desc">{{ step.description }}</div>
-                  <div class="step-tags">
-                    <span class="step-tag">{{ step.conceptName }}</span>
-                    @if (step.departmentTag) {
-                      <span class="step-tag">{{ step.departmentTag }}</span>
-                    }
-                    <span class="step-tag">~{{ step.estimatedMinutes }}m</span>
-                  </div>
-                </div>
-              </div>
-            }
-          </div>
-          <div class="plan-footer">
-            @if (isExecutingWorkflow$()) {
-              <button class="plan-btn-cancel" (click)="cancelExecution()">Cancel Execution</button>
-            } @else {
-              <button class="plan-btn-cancel" (click)="rejectPlan()">Cancel</button>
-              <button class="plan-btn-approve" (click)="approvePlan()">Approve & Execute</button>
-            }
-          </div>
-        </div>
-      </div>
-    }
+    <!-- Plan Panel (inline, non-blocking) — rendered inside chat-main below -->
 
     <!-- Three-Panel Layout -->
     <div class="layout">
@@ -1115,7 +1124,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
                 d="M12 4v16m8-8H4"
               />
             </svg>
-            New Conversation
+            Nova konverzacija
           </button>
         </div>
 
@@ -1150,7 +1159,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
                 d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
               />
             </svg>
-            AI Configuration
+            AI konfiguracija
           </a>
           <a routerLink="/dashboard">
             <svg
@@ -1166,7 +1175,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
                 d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
               />
             </svg>
-            Dashboard
+            Kontrolna tabla
           </a>
         </div>
       </aside>
@@ -1177,6 +1186,20 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
           <!-- Chat Header -->
           <header class="chat-header">
             <div class="chat-header-left">
+              <span
+                class="connection-dot"
+                [class.connected]="connectionState$() === 'connected'"
+                [class.disconnected]="connectionState$() === 'disconnected'"
+                [class.reconnecting]="connectionState$() === 'reconnecting'"
+                [title]="
+                  connectionState$() === 'connected'
+                    ? 'Povezano'
+                    : connectionState$() === 'reconnecting'
+                      ? 'Ponovno povezivanje...'
+                      : 'Veza prekinuta'
+                "
+              >
+              </span>
               @if (folderName$() && !activeConversation$()) {
                 <svg
                   style="width: 18px; height: 18px; color: #3B82F6;"
@@ -1193,7 +1216,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
                 </svg>
                 <h2>{{ folderName$() }}</h2>
               } @else {
-                <h2>{{ activeConversation$()?.title || 'New Conversation' }}</h2>
+                <h2>{{ activeConversation$()?.title || 'Nova konverzacija' }}</h2>
                 @if (currentPersonaType$()) {
                   <app-persona-badge [personaType]="currentPersonaType$()" />
                 }
@@ -1201,20 +1224,29 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
             </div>
             @if (activeConversation$()) {
               <div class="header-actions">
-                <div class="tab-bar" style="border-bottom: none;">
+                <div
+                  class="tab-bar"
+                  style="border-bottom: none;"
+                  role="tablist"
+                  aria-label="Prikaz konverzacije"
+                >
                   <button
                     class="tab"
                     [class.active]="activeTab$() === 'chat'"
                     (click)="activeTab$.set('chat')"
+                    role="tab"
+                    [attr.aria-selected]="activeTab$() === 'chat'"
                   >
-                    Chat
+                    Poruke
                   </button>
                   <button
                     class="tab"
                     [class.active]="activeTab$() === 'notes'"
                     (click)="activeTab$.set('notes')"
+                    role="tab"
+                    [attr.aria-selected]="activeTab$() === 'notes'"
                   >
-                    Tasks
+                    Zadaci
                   </button>
                 </div>
                 <button class="switch-btn" (click)="togglePersonaSelector()">
@@ -1231,11 +1263,26 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
                       d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
                     />
                   </svg>
-                  {{ showPersonaSelector$() ? 'Hide Personas' : 'Switch Persona' }}
+                  {{ showPersonaSelector$() ? 'Sakrij persone' : 'Promeni personu' }}
                 </button>
               </div>
             }
           </header>
+
+          <!-- Disconnect Toast -->
+          @if (disconnectToast$()) {
+            <div
+              class="disconnect-toast"
+              [class.error]="connectionState$() === 'disconnected'"
+              [class.warning]="connectionState$() === 'reconnecting'"
+              [class.success]="connectionState$() === 'connected'"
+            >
+              {{ disconnectToast$() }}
+              <button class="disconnect-toast-close" (click)="disconnectToast$.set(null)">
+                &times;
+              </button>
+            </div>
+          }
 
           @if (activeConversation$()) {
             @if (activeTab$() === 'chat') {
@@ -1243,13 +1290,212 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
               @if (showPersonaSelector$()) {
                 <div class="persona-selector-panel">
                   <p class="persona-selector-label">
-                    Select a department persona for specialized AI responses:
+                    Izaberite personu odeljenja za specijalizovane AI odgovore:
                   </p>
                   <app-persona-selector
                     [selectedType]="currentPersonaType$()"
                     [allowNone]="false"
                     (personaSelected)="onPersonaSelected($event)"
                   />
+                </div>
+              }
+
+              <!-- Inline Plan Panel -->
+              @if (showPlanOverlay$() && currentPlan$()) {
+                <div class="plan-inline-panel" [class.collapsed]="planCollapsed$()">
+                  <div class="plan-header" (click)="togglePlanCollapse()">
+                    <svg
+                      class="plan-collapse-icon"
+                      [class.expanded]="!planCollapsed$()"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                    <h3>
+                      {{ isExecutingWorkflow$() ? 'Izvršavanje plana...' : 'Plan izvršavanja' }}
+                    </h3>
+                    <div class="plan-meta">
+                      <span>{{ currentPlan$()!.steps.length }} koraka</span>
+                      <span>~{{ currentPlan$()!.totalEstimatedMinutes }} min</span>
+                    </div>
+                    @if (!planCollapsed$()) {
+                      @if (isExecutingWorkflow$()) {
+                        <button
+                          class="plan-btn-cancel"
+                          (click)="cancelExecution(); $event.stopPropagation()"
+                        >
+                          Prekini
+                        </button>
+                      } @else {
+                        <button
+                          class="plan-btn-cancel"
+                          (click)="rejectPlan(); $event.stopPropagation()"
+                        >
+                          Otkaži
+                        </button>
+                        <button
+                          class="plan-btn-approve"
+                          (click)="approvePlan(); $event.stopPropagation()"
+                        >
+                          Pokreni
+                        </button>
+                      }
+                    }
+                  </div>
+                  <div class="plan-steps">
+                    @for (step of currentPlan$()!.steps; track step.stepId) {
+                      <div class="plan-step">
+                        <div
+                          class="step-indicator"
+                          [class.step-pending]="getStepStatus(step.stepId) === 'pending'"
+                          [class.step-in-progress]="getStepStatus(step.stepId) === 'in_progress'"
+                          [class.step-completed]="getStepStatus(step.stepId) === 'completed'"
+                          [class.step-failed]="getStepStatus(step.stepId) === 'failed'"
+                        >
+                          @if (getStepStatus(step.stepId) === 'in_progress') {
+                            <svg
+                              class="spinner"
+                              style="width:16px;height:16px;"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
+                            </svg>
+                          } @else if (getStepStatus(step.stepId) === 'completed') {
+                            <svg
+                              style="width:14px;height:14px;"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path
+                                fill-rule="evenodd"
+                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                clip-rule="evenodd"
+                              />
+                            </svg>
+                          } @else if (getStepStatus(step.stepId) === 'failed') {
+                            <svg
+                              style="width:14px;height:14px;"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path
+                                fill-rule="evenodd"
+                                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                                clip-rule="evenodd"
+                              />
+                            </svg>
+                          } @else {
+                            {{ step.workflowStepNumber }}
+                          }
+                        </div>
+                        <div class="step-info">
+                          <div class="step-title">{{ step.title }}</div>
+                          <div class="step-desc">{{ step.description }}</div>
+                          <div class="step-tags">
+                            <span class="step-tag">{{ step.conceptName }}</span>
+                            @if (step.departmentTag) {
+                              <span class="step-tag">{{ step.departmentTag }}</span>
+                            }
+                            <span class="step-tag">~{{ step.estimatedMinutes }}m</span>
+                          </div>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+
+              <!-- Workflow Status Bar (top of chat area) -->
+              @if (workflowHistory$().length > 0 || (isYoloMode$() && yoloProgress$())) {
+                <div class="workflow-status-bar">
+                  @if (isYoloMode$() && yoloProgress$()) {
+                    <div
+                      class="workflow-status-entry wse-executing"
+                      style="border-left-color: #F59E0B;"
+                    >
+                      <span class="ws-title">YOLO</span>
+                      <div class="ws-progress-bar">
+                        <div
+                          class="ws-progress-fill"
+                          style="background: #F59E0B;"
+                          [style.width.%]="
+                            (yoloProgress$()!.executionBudget ?? yoloProgress$()!.total) > 0
+                              ? (yoloProgress$()!.completed /
+                                  (yoloProgress$()!.executionBudget ?? yoloProgress$()!.total)) *
+                                100
+                              : 0
+                          "
+                        ></div>
+                      </div>
+                      <span class="ws-count"
+                        >{{ yoloProgress$()!.completed }}/{{
+                          yoloProgress$()!.executionBudget ?? yoloProgress$()!.total
+                        }}</span
+                      >
+                      @if (yoloProgress$()!.currentTasks.length > 0) {
+                        <span class="ws-current"
+                          >{{ yoloProgress$()!.currentTasks.length }} aktivn{{
+                            yoloProgress$()!.currentTasks.length > 1 ? 'a' : 'o'
+                          }}</span
+                        >
+                      }
+                      @if (yoloProgress$()!.failed > 0) {
+                        <span class="ws-badge-fail">{{ yoloProgress$()!.failed }} neuspešno</span>
+                      }
+                      @if (yoloProgress$()!.discoveredCount > 0) {
+                        <span style="color: #10B981; font-size: 11px; font-weight: 600;"
+                          >+{{ yoloProgress$()!.discoveredCount }}</span
+                        >
+                      }
+                    </div>
+                  }
+                  @for (entry of workflowHistory$(); track entry.planId) {
+                    <div
+                      class="workflow-status-entry"
+                      [class.wse-executing]="entry.status === 'executing'"
+                      [class.wse-completed]="entry.status === 'completed'"
+                      [class.wse-failed]="entry.status === 'failed'"
+                      [class.wse-cancelled]="entry.status === 'cancelled'"
+                    >
+                      <span class="ws-title">{{ entry.title }}</span>
+                      <div class="ws-detail-row">
+                        <div class="ws-progress-bar">
+                          <div
+                            class="ws-progress-fill"
+                            [style.width.%]="
+                              entry.totalSteps > 0
+                                ? (entry.completedSteps / entry.totalSteps) * 100
+                                : 0
+                            "
+                          ></div>
+                        </div>
+                        <span class="ws-count"
+                          >{{ entry.completedSteps }}/{{ entry.totalSteps }}</span
+                        >
+                      </div>
+                      @if (entry.status === 'executing' && entry.currentStepTitle) {
+                        <span class="ws-current">{{ entry.currentStepTitle }}</span>
+                      }
+                      @if (entry.status === 'completed') {
+                        <span class="ws-badge-done">Završeno</span>
+                      }
+                      @if (entry.status === 'failed') {
+                        <span class="ws-badge-fail">Greška</span>
+                      }
+                      @if (entry.status === 'cancelled') {
+                        <span class="ws-badge-fail">Otkazano</span>
+                      }
+                    </div>
+                  }
                 </div>
               }
 
@@ -1261,195 +1507,51 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
                       [message]="message"
                       [personaType]="message.role === 'ASSISTANT' ? currentPersonaType$() : null"
                       (citationClick)="onCitationClick($event)"
+                      (actionClick)="onSuggestedAction($event)"
                       style="display: block; margin-bottom: 16px;"
                     />
                   }
-                  @if (isExecutingWorkflow$()) {
-                    <div class="execution-progress">
-                      <div class="progress-header">
-                        <svg
-                          class="progress-spinner"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
-                        </svg>
-                        <span class="progress-label">Izvršavam zadatke...</span>
-                      </div>
+                  @if (isExecutingWorkflow$() && !showPlanOverlay$()) {
+                    <div class="step-status-msg">
+                      <svg
+                        class="step-icon spinner"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
+                      </svg>
                       @if (currentStepTitle$()) {
-                        <div class="progress-step-name">
-                          Korak {{ currentStepIndex$() + 1 }}/{{ totalStepsCount$() }}:
-                          {{ currentStepTitle$() }}
-                        </div>
+                        Korak {{ currentStepIndex$() + 1 }}/{{ totalStepsCount$() }}:
+                        {{ currentStepTitle$() }}
                       } @else {
-                        <div class="progress-preparing">
-                          <svg
-                            class="spinner"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
-                          </svg>
-                          Pripremam plan izvršavanja...
-                        </div>
-                      }
-                      <div class="progress-bar-container">
-                        <div class="progress-bar-fill" [style.width.%]="progressPercent$()"></div>
-                      </div>
-                      <div class="progress-counter">
-                        {{ completedStepsCount$() }} / {{ totalStepsCount$() }} koraka zavrseno
-                      </div>
-                      @if (currentPlan$()) {
-                        <div class="progress-steps-list">
-                          @for (step of currentPlan$()!.steps; track step.stepId) {
-                            <div
-                              class="progress-step-item"
-                              [class.active]="getStepStatus(step.stepId) === 'in_progress'"
-                              [class.completed]="getStepStatus(step.stepId) === 'completed'"
-                              [class.failed]="getStepStatus(step.stepId) === 'failed'"
-                            >
-                              @if (getStepStatus(step.stepId) === 'completed') {
-                                <svg
-                                  class="progress-step-icon"
-                                  fill="currentColor"
-                                  viewBox="0 0 20 20"
-                                  style="color: #22C55E;"
-                                >
-                                  <path
-                                    fill-rule="evenodd"
-                                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                    clip-rule="evenodd"
-                                  />
-                                </svg>
-                              } @else if (getStepStatus(step.stepId) === 'in_progress') {
-                                <svg
-                                  class="progress-step-icon spinner"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                  style="color: #60A5FA;"
-                                >
-                                  <path
-                                    stroke-linecap="round"
-                                    stroke-width="2"
-                                    d="M4 12a8 8 0 018-8"
-                                  />
-                                </svg>
-                              } @else if (getStepStatus(step.stepId) === 'failed') {
-                                <svg
-                                  class="progress-step-icon"
-                                  fill="currentColor"
-                                  viewBox="0 0 20 20"
-                                  style="color: #EF4444;"
-                                >
-                                  <path
-                                    fill-rule="evenodd"
-                                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                                    clip-rule="evenodd"
-                                  />
-                                </svg>
-                              } @else {
-                                <span class="progress-step-num">{{ step.workflowStepNumber }}</span>
-                              }
-                              <span class="progress-step-text">{{ step.title }}</span>
-                              <span class="progress-step-concept">{{ step.conceptName }}</span>
-                            </div>
-                          }
-                        </div>
+                        Pripremam izvršavanje...
                       }
                     </div>
                   }
                   @if (isYoloMode$() && yoloProgress$()) {
-                    <div class="yolo-progress">
-                      <div class="yolo-progress-title">
-                        <span class="yolo-spinner"></span>
-                        @if (yoloProgress$()!.currentTasks.length > 0) {
-                          Processing {{ yoloProgress$()!.currentTasks.length }} concept{{
-                            yoloProgress$()!.currentTasks.length > 1 ? 's' : ''
-                          }}
-                        } @else {
-                          YOLO Mode — Autonomous Execution
-                        }
-                      </div>
-                      <div class="yolo-progress-stats">
-                        Running:
-                        <span
-                          >{{ yoloProgress$()!.running }}/{{
-                            yoloProgress$()!.maxConcurrency
-                          }}</span
-                        >
-                        | Completed:
-                        <span>{{ yoloProgress$()!.completed }}/{{ yoloProgress$()!.total }}</span>
-                        @if (yoloProgress$()!.failed > 0) {
-                          | Failed: <span class="yolo-failed">{{ yoloProgress$()!.failed }}</span>
-                        }
-                        @if (yoloProgress$()!.discoveredCount > 0) {
-                          |
-                          <span class="yolo-discovered"
-                            >Discovered: {{ yoloProgress$()!.discoveredCount }}</span
-                          >
-                        }
-                      </div>
-                      <div class="yolo-progress-bar">
-                        <div
-                          class="yolo-progress-fill"
-                          [style.width.%]="
-                            yoloProgress$()!.total > 0
-                              ? (yoloProgress$()!.completed / yoloProgress$()!.total) * 100
-                              : 0
-                          "
-                        ></div>
-                      </div>
-
-                      <!-- Per-worker step detail (Story 2.16 AC3) -->
+                    <div class="step-status-msg" style="border-left-color: #F59E0B;">
+                      <svg
+                        class="step-icon spinner"
+                        fill="none"
+                        stroke="#F59E0B"
+                        viewBox="0 0 24 24"
+                      >
+                        <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
+                      </svg>
+                      YOLO — {{ yoloProgress$()!.completed }}/{{
+                        yoloProgress$()!.executionBudget ?? yoloProgress$()!.total
+                      }}
                       @if (yoloProgress$()!.currentTasks.length > 0) {
-                        <div class="yolo-workers">
-                          @for (worker of yoloProgress$()!.currentTasks; track worker.conceptName) {
-                            <div class="yolo-worker-item">
-                              <span class="yolo-worker-spinner"></span>
-                              <span class="yolo-worker-concept">{{ worker.conceptName }}</span>
-                              @if (worker.currentStep) {
-                                <span class="yolo-worker-step">
-                                  Step {{ (worker.currentStepIndex ?? 0) + 1 }}/{{
-                                    worker.totalSteps ?? '?'
-                                  }}: {{ worker.currentStep }}
-                                </span>
-                              }
-                            </div>
-                          }
-                        </div>
+                        | {{ yoloProgress$()!.currentTasks.length }} aktivn{{
+                          yoloProgress$()!.currentTasks.length > 1 ? 'a' : 'o'
+                        }}
                       }
-
-                      <!-- Activity log toggle (Story 2.16 AC4) -->
-                      @if (yoloProgress$()!.recentLogs && yoloProgress$()!.recentLogs!.length > 0) {
-                        <button class="yolo-activity-toggle" (click)="toggleYoloActivityLog()">
-                          <svg
-                            class="yolo-toggle-icon"
-                            [class.expanded]="showYoloActivityLog$()"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M9 5l7 7-7 7"
-                            />
-                          </svg>
-                          {{ showYoloActivityLog$() ? 'Hide' : 'Show' }} Activity Log ({{
-                            yoloProgress$()!.recentLogs!.length
-                          }})
-                        </button>
-                        @if (showYoloActivityLog$()) {
-                          <div class="yolo-activity-log" #yoloLogContainer>
-                            @for (logEntry of yoloProgress$()!.recentLogs!; track $index) {
-                              <div class="yolo-log-entry">{{ logEntry }}</div>
-                            }
-                          </div>
-                        }
+                      @if (yoloProgress$()!.discoveredCount > 0) {
+                        |
+                        <span style="color: #10B981;"
+                          >+{{ yoloProgress$()!.discoveredCount }} otkriveno</span
+                        >
                       }
                     </div>
                   }
@@ -1465,24 +1567,16 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
                   }
 
                   @if (isGeneratingPlan$()) {
-                    <div class="execution-progress">
-                      <div class="progress-header">
-                        <svg
-                          class="progress-spinner"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
-                        </svg>
-                        <span class="progress-label">Učitavam workflow...</span>
-                      </div>
-                      <div class="progress-preparing">
-                        <svg class="spinner" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
-                        </svg>
-                        Generišem plan izvršavanja...
-                      </div>
+                    <div class="step-status-msg">
+                      <svg
+                        class="step-icon spinner"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
+                      </svg>
+                      Generišem plan izvršavanja...
                     </div>
                   }
 
@@ -1528,7 +1622,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
                             </svg>
                           </button>
                           <button class="confirm-btn cancel" (click)="cancelExecution()">
-                            Otkazi
+                            Otkaži
                           </button>
                         </div>
                       } @else {
@@ -1648,6 +1742,29 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
                 </div>
               </div>
             } @else {
+              <!-- Brain Status Dashboard (D6) -->
+              @if (brainStats$().totalDomains > 0) {
+                <div class="brain-status-bar">
+                  <span class="brain-status-label">Mozak</span>
+                  <div class="brain-progress-bar">
+                    <div
+                      class="brain-progress-fill"
+                      [style.width.%]="brainStats$().progressPercent"
+                    ></div>
+                  </div>
+                  <span class="brain-stat"
+                    ><strong
+                      >{{ brainStats$().completedDomains }}/{{ brainStats$().totalDomains }}</strong
+                    >
+                    domena</span
+                  >
+                  @if (brainStats$().pendingTasks > 0) {
+                    <span class="brain-stat" style="color: #F59E0B;"
+                      ><strong>{{ brainStats$().pendingTasks }}</strong> na čekanju</span
+                    >
+                  }
+                </div>
+              }
               <!-- Notes View (conversation mode) -->
               <div class="notes-view" style="flex: 1; overflow-y: auto;">
                 <app-conversation-notes
@@ -1655,12 +1772,44 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
                   [conceptId]="activeConversation$()?.conceptId ?? null"
                   [autoSelectTaskIds]="autoSelectTaskIds$()"
                   [isExecuting]="isExecutingWorkflow$()"
-                  [executingTaskId]="isGeneratingPlan$() ? executingTaskId$() : null"
+                  [executingTaskId]="executingTaskId$()"
+                  [taskExecutionContent]="taskExecutionStreamContent$()"
+                  [submittingResultId]="submittingResultId$()"
+                  [taskResultContent]="taskResultStreamContent$()"
                   [isGeneratingPlan]="isGeneratingPlan$()"
                   (viewMessage)="onViewMessage($event)"
                   (runAgents)="onRunAgents($event)"
                   (executeTask)="onExecuteSingleTask($event)"
+                  (submitTaskResult)="onSubmitTaskResult($event)"
                 />
+              </div>
+            }
+            <!-- D4: Next-step suggestion banner -->
+            @if (nextStepSuggestion$()) {
+              <div class="next-step-banner">
+                <svg class="next-step-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                  />
+                </svg>
+                <span class="next-step-text">{{ nextStepSuggestion$()!.message }}</span>
+                <div class="next-step-actions">
+                  <button class="next-step-btn primary" (click)="onNextStepAction()">
+                    {{ nextStepSuggestion$()!.actionLabel }}
+                  </button>
+                  @if (nextStepSuggestion$()!.secondaryLabel) {
+                    <button
+                      class="next-step-btn secondary"
+                      (click)="activeTab$.set('notes'); dismissNextStep()"
+                    >
+                      {{ nextStepSuggestion$()!.secondaryLabel }}
+                    </button>
+                  }
+                </div>
+                <button class="next-step-close" (click)="dismissNextStep()">&times;</button>
               </div>
             }
             <!-- Chat Input (always visible at bottom when conversation is active) -->
@@ -1712,6 +1861,28 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
                   </svg>
                   Pokreni Brain
                 </button>
+                <button
+                  class="yolo-btn"
+                  [disabled]="
+                    isExecutingWorkflow$() || isYoloMode$() || domainPendingCount$() === 0
+                  "
+                  (click)="onRunBrainYolo()"
+                  title="YOLO režim (bez pregleda plana)"
+                >
+                  <svg
+                    style="width: 16px; height: 16px;"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M13 10V3L4 14h7v7l9-11h-7z"
+                    />
+                  </svg>
+                </button>
                 <button class="add-investigation-btn" (click)="showTopicPicker$.set(true)">
                   <svg
                     style="width: 16px; height: 16px;"
@@ -1730,6 +1901,29 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
                 </button>
               </div>
             </div>
+            <!-- Brain Status Dashboard (D6) — folder view -->
+            @if (brainStats$().totalDomains > 0) {
+              <div class="brain-status-bar">
+                <span class="brain-status-label">Mozak</span>
+                <div class="brain-progress-bar">
+                  <div
+                    class="brain-progress-fill"
+                    [style.width.%]="brainStats$().progressPercent"
+                  ></div>
+                </div>
+                <span class="brain-stat"
+                  ><strong
+                    >{{ brainStats$().completedDomains }}/{{ brainStats$().totalDomains }}</strong
+                  >
+                  domena</span
+                >
+                @if (brainStats$().pendingTasks > 0) {
+                  <span class="brain-stat" style="color: #F59E0B;"
+                    ><strong>{{ brainStats$().pendingTasks }}</strong> na čekanju</span
+                  >
+                }
+              </div>
+            }
             <div class="notes-view">
               <app-conversation-notes
                 [conversationId]="null"
@@ -1739,11 +1933,15 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
                 [folderName]="folderName$()"
                 [autoSelectTaskIds]="autoSelectTaskIds$()"
                 [isExecuting]="isExecutingWorkflow$()"
-                [executingTaskId]="isGeneratingPlan$() ? executingTaskId$() : null"
+                [executingTaskId]="executingTaskId$()"
+                [taskExecutionContent]="taskExecutionStreamContent$()"
+                [submittingResultId]="submittingResultId$()"
+                [taskResultContent]="taskResultStreamContent$()"
                 [isGeneratingPlan]="isGeneratingPlan$()"
                 (viewMessage)="onViewMessage($event)"
                 (runAgents)="onRunAgents($event)"
                 (executeTask)="onExecuteSingleTask($event)"
+                (submitTaskResult)="onSubmitTaskResult($event)"
               />
             </div>
           }
@@ -1766,11 +1964,29 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
                   />
                 </svg>
               </div>
-              <h2 class="empty-title">Welcome to Mentor AI</h2>
+              <h2 class="empty-title">Dobrodošli u Business Brain</h2>
               <p class="empty-desc">
-                Your AI-powered business partner with expertise in Finance, Marketing, Technology,
-                Operations, Legal, and Creative.
+                Vaš AI poslovni partner koji misli umesto vas. Izaberite domen za početak:
               </p>
+              <div class="persona-pills">
+                <button class="domain-pill" (click)="createNewConversation('Poslovanje')">
+                  Poslovanje
+                </button>
+                <button class="domain-pill" (click)="createNewConversation('Marketing')">
+                  Marketing
+                </button>
+                <button class="domain-pill" (click)="createNewConversation('Prodaja')">
+                  Prodaja
+                </button>
+                <button class="domain-pill" (click)="createNewConversation('Finansije')">
+                  Finansije
+                </button>
+                <button class="domain-pill" (click)="createNewConversation('Operacije')">
+                  Operacije
+                </button>
+                <button class="domain-pill" (click)="createNewConversation('HR')">HR</button>
+              </div>
+              <p class="empty-or">ili</p>
               <button class="start-btn" (click)="createNewConversation()">
                 <svg
                   style="width: 20px; height: 20px;"
@@ -1785,16 +2001,8 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
                     d="M12 4v16m8-8H4"
                   />
                 </svg>
-                Start New Conversation
+                Nova konverzacija
               </button>
-              <div class="persona-pills">
-                <span class="persona-pill" style="color: #3B82F6;">CFO</span>
-                <span class="persona-pill" style="color: #8B5CF6;">CMO</span>
-                <span class="persona-pill" style="color: #10B981;">CTO</span>
-                <span class="persona-pill" style="color: #F59E0B;">Operations</span>
-                <span class="persona-pill" style="color: #EF4444;">Legal</span>
-                <span class="persona-pill" style="color: #EC4899;">Creative</span>
-              </div>
             </div>
           </div>
         }
@@ -1815,7 +2023,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
     </div>
   `,
 })
-export class ChatComponent implements OnInit, OnDestroy {
+export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   private readonly conversationService = inject(ConversationService);
   private readonly chatWsService = inject(ChatWebsocketService);
   private readonly http = inject(HttpClient);
@@ -1863,8 +2071,13 @@ export class ChatComponent implements OnInit, OnDestroy {
   // Topic picker state
   readonly showTopicPicker$ = signal(false);
 
+  // Connection state (from WebSocket service)
+  readonly connectionState$ = computed(() => this.chatWsService.connectionState$());
+  readonly disconnectToast$ = signal<string | null>(null);
+
   // Workflow execution state
   readonly showPlanOverlay$ = signal(false);
+  readonly planCollapsed$ = signal(false);
   readonly currentPlan$ = signal<ExecutionPlan | null>(null);
   readonly executionProgress$ = signal<Map<string, ExecutionPlanStep['status']>>(new Map());
   readonly isExecutingWorkflow$ = signal(false);
@@ -1910,6 +2123,9 @@ export class ChatComponent implements OnInit, OnDestroy {
   readonly currentWorkflowStepInput$ = signal<WorkflowStepAwaitingInputPayload | null>(null);
   readonly previousConversationId$ = signal<string | null>(null);
   readonly executingTaskId$ = signal<string | null>(null);
+  readonly taskExecutionStreamContent$ = signal('');
+  readonly submittingResultId$ = signal<string | null>(null);
+  readonly taskResultStreamContent$ = signal('');
   readonly loadingConversationId$ = signal<string | null>(null);
   readonly isCreatingConversation$ = computed(() => this.conversationService.isCreating$());
 
@@ -1920,30 +2136,132 @@ export class ChatComponent implements OnInit, OnDestroy {
   private yoloPending = false;
   private manualAutostartPending = false;
 
+  // Workflow status bar: tracks all active/recent workflow executions
+  readonly workflowHistory$ = signal<WorkflowStatusEntry[]>([]);
+
+  // Trigger for brainStats$ to re-evaluate after ViewChild is set
+  private readonly viewInit$ = signal(false);
+
+  // Brain status dashboard (D6): aggregated from concept tree data
+  readonly brainStats$ = computed(() => {
+    this.viewInit$(); // Force re-evaluation after AfterViewInit
+    const tree = this.conceptTree?.treeData$()?.tree ?? [];
+    if (tree.length === 0)
+      return { totalDomains: 0, completedDomains: 0, pendingTasks: 0, progressPercent: 0 };
+
+    let totalDomains = 0;
+    let completedDomains = 0;
+    let pendingTasks = 0;
+
+    const countLeafStats = (
+      nodes: import('@mentor-ai/shared/types').ConceptHierarchyNode[]
+    ): { completed: number; pending: number; total: number } => {
+      let completed = 0,
+        pending = 0,
+        total = 0;
+      for (const node of nodes) {
+        if (node.children.length > 0) {
+          const sub = countLeafStats(node.children);
+          completed += sub.completed;
+          pending += sub.pending;
+          total += sub.total;
+        } else if (node.status) {
+          total++;
+          if (node.status === 'completed') completed++;
+          if (node.status === 'pending') pending++;
+        }
+      }
+      return { completed, pending, total };
+    };
+
+    for (const domain of tree) {
+      totalDomains++;
+      const stats = countLeafStats(domain.children);
+      pendingTasks += stats.pending;
+      if (stats.total > 0 && stats.completed === stats.total) completedDomains++;
+    }
+
+    const progressPercent =
+      totalDomains > 0 ? Math.round((completedDomains / totalDomains) * 100) : 0;
+    return { totalDomains, completedDomains, pendingTasks, progressPercent };
+  });
+
+  // Next-step suggestion banner (D4)
+  readonly nextStepSuggestion$ = signal<{
+    message: string;
+    actionLabel: string;
+    actionCurriculumId?: string;
+    secondaryLabel?: string;
+  } | null>(null);
+  private nextStepDismissTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private keyboardHandler = (e: KeyboardEvent) => this.handleKeyboardShortcut(e);
+
   ngOnInit(): void {
+    document.addEventListener('keydown', this.keyboardHandler);
     this.setupWebSocket();
 
-    // Check for conversation ID in route
-    this.route.params.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
-      if (params['conversationId']) {
-        this.loadConversation(params['conversationId']);
-      }
-    });
+    // Use combineLatest so both params and queryParams resolve before acting.
+    // This prevents a race condition where loadConversation() runs before
+    // queryParams sets yoloPending/manualAutostartPending flags.
+    combineLatest([this.route.params, this.route.queryParams])
+      .pipe(takeUntilDestroyed(this.destroyRef), take(1))
+      .subscribe(([params, queryParams]) => {
+        // Set YOLO / autostart flags BEFORE loading conversation
+        if (queryParams['yolo'] === 'true' && !this.isYoloMode$()) {
+          this.isYoloMode$.set(true);
+          this.yoloPending = true;
+        }
+        if (queryParams['autostart'] === 'true') {
+          this.manualAutostartPending = true;
+        }
 
-    // Check for query params set by onboarding wizard
-    this.route.queryParams.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
-      if (params['yolo'] === 'true' && !this.isYoloMode$()) {
-        this.isYoloMode$.set(true);
-        this.yoloPending = true;
-      }
-      if (params['autostart'] === 'true') {
-        this.manualAutostartPending = true;
+        // Now load conversation — yoloPending is already set
+        if (params['conversationId']) {
+          this.loadConversation(params['conversationId']);
+        }
+      });
+
+    // Continue listening for subsequent param changes (e.g. navigating between conversations)
+    this.route.params.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+      if (params['conversationId'] && this.activeConversationId$() !== params['conversationId']) {
+        this.loadConversation(params['conversationId']);
       }
     });
   }
 
+  ngAfterViewInit(): void {
+    this.viewInit$.set(true);
+  }
+
   ngOnDestroy(): void {
+    document.removeEventListener('keydown', this.keyboardHandler);
     this.chatWsService.disconnect();
+  }
+
+  private handleKeyboardShortcut(e: KeyboardEvent): void {
+    // Ctrl+N → New conversation
+    if (e.ctrlKey && e.key === 'n') {
+      e.preventDefault();
+      this.createNewConversation();
+    }
+    // Escape → Close plan panel / dismiss error
+    if (e.key === 'Escape') {
+      if (this.showPlanOverlay$()) {
+        this.rejectPlan();
+      }
+      this.errorMessage$.set(null);
+    }
+    // Ctrl+Shift+T → Tasks tab
+    if (e.ctrlKey && e.shiftKey && e.key === 'T') {
+      e.preventDefault();
+      this.activeTab$.set('notes');
+    }
+    // Ctrl+Shift+C → Chat tab
+    if (e.ctrlKey && e.shiftKey && e.key === 'C') {
+      e.preventDefault();
+      this.activeTab$.set('chat');
+    }
   }
 
   async loadConversation(conversationId: string): Promise<void> {
@@ -1951,6 +2269,10 @@ export class ChatComponent implements OnInit, OnDestroy {
       const conversation = await this.conversationService.getConversation(conversationId);
       this.activeConversation$.set(conversation);
       this.activeTab$.set('chat');
+      // Reset transient UI state from any previous conversation
+      this.isLoading$.set(false);
+      this.isStreaming$.set(false);
+      this.streamingContent$.set('');
       // Start YOLO execution if flagged from onboarding redirect
       if (this.yoloPending) {
         this.yoloPending = false;
@@ -1958,7 +2280,7 @@ export class ChatComponent implements OnInit, OnDestroy {
           await this.chatWsService.waitForConnection();
           this.chatWsService.emitStartYolo(conversationId);
         } catch {
-          this.showError('WebSocket connection failed — YOLO mode could not start');
+          this.showError('WebSocket konekcija neuspešna — YOLO mod nije mogao da se pokrene');
         }
       }
       // Auto-start manual workflow if flagged from onboarding redirect
@@ -1973,19 +2295,20 @@ export class ChatComponent implements OnInit, OnDestroy {
       }
     } catch {
       this.activeConversation$.set(null);
-      this.showError('Failed to load conversation');
+      this.showError('Greška pri učitavanju konverzacije');
     }
   }
 
-  async createNewConversation(): Promise<void> {
+  async createNewConversation(domain?: string): Promise<void> {
     // Auto-classification handles topic detection — no manual picker needed
     try {
-      const conversation = await this.conversationService.createConversation();
+      const title = domain ? `${domain} — Nova konverzacija` : undefined;
+      const conversation = await this.conversationService.createConversation(title);
       await this.loadConversation(conversation.id);
       this.router.navigate(['/chat', conversation.id]);
       this.conceptTree?.loadTree();
     } catch {
-      this.showError('Failed to create conversation');
+      this.showError('Greška pri kreiranju konverzacije');
     }
   }
 
@@ -2002,7 +2325,7 @@ export class ChatComponent implements OnInit, OnDestroy {
       this.router.navigate(['/chat', conversation.id]);
       this.conceptTree?.loadTree();
     } catch {
-      this.showError('Failed to create conversation');
+      this.showError('Greška pri kreiranju konverzacije');
     }
   }
 
@@ -2033,7 +2356,7 @@ export class ChatComponent implements OnInit, OnDestroy {
       this.router.navigate(['/chat', conversation.id]);
       this.conceptTree?.loadTree();
     } catch {
-      this.showError('Failed to create conversation');
+      this.showError('Greška pri kreiranju konverzacije');
     } finally {
       this.loadingConversationId$.set(null);
     }
@@ -2080,6 +2403,40 @@ export class ChatComponent implements OnInit, OnDestroy {
    * During workflow execution: always opens panel, never navigates away.
    * Otherwise: navigates to concept conversation if available, or opens panel.
    */
+  onSuggestedAction(action: SuggestedAction): void {
+    switch (action.type) {
+      case 'create_tasks':
+        // Switch to tasks tab
+        this.activeTab$.set('notes');
+        break;
+      case 'view_tasks':
+        this.activeTab$.set('notes');
+        break;
+      case 'deep_dive':
+      case 'explore_concept':
+        // Send a follow-up message asking for deeper analysis
+        this.sendMessage('Istraži ovu temu dublje. Daj detaljniju analizu.');
+        break;
+      case 'next_domain':
+        if (action.payload?.['conceptId']) {
+          this.selectedConceptId$.set(action.payload['conceptId'] as string);
+        }
+        break;
+      case 'save_note':
+        this.activeTab$.set('notes');
+        break;
+      case 'web_search':
+        this.sendMessage('Pretraži web za više informacija o ovoj temi.');
+        break;
+      case 'run_workflow':
+        this.activeTab$.set('notes');
+        break;
+      case 'score_task':
+        this.activeTab$.set('notes');
+        break;
+    }
+  }
+
   onCitationClick(citation: ConceptCitation | string): void {
     if (typeof citation === 'string') {
       // String citation — look up concept by name to open panel
@@ -2173,7 +2530,7 @@ export class ChatComponent implements OnInit, OnDestroy {
           return { ...conv, personaType: updated.personaType };
         });
       } catch {
-        this.showError('Failed to update persona');
+        this.showError('Greška pri ažuriranju persone');
       }
     }
     this.showPersonaSelector$.set(false);
@@ -2196,13 +2553,14 @@ export class ChatComponent implements OnInit, OnDestroy {
       this.activeTab$.set('notes');
 
       // Story 3.2: Compute domain stats
-      // Completed = concepts that have conversations
-      this.domainCompletedCount$.set(event.descendantConversationIds.length);
-      // Pending = concepts without conversations (approximation from tree data)
-      const conceptsWithConvos = new Set(event.descendantConversationIds);
-      this.domainPendingCount$.set(
-        Math.max(0, event.descendantConceptIds.length - conceptsWithConvos.size)
+      // Completed = min(conversations, concepts) — each concept typically has 0-1 conversations
+      const completedCount = Math.min(
+        event.descendantConversationIds.length,
+        event.descendantConceptIds.length
       );
+      this.domainCompletedCount$.set(completedCount);
+      // Pending = concepts minus completed (those without conversations)
+      this.domainPendingCount$.set(Math.max(0, event.descendantConceptIds.length - completedCount));
       return;
     }
 
@@ -2238,7 +2596,7 @@ export class ChatComponent implements OnInit, OnDestroy {
         this.activeTab$.set('chat');
       }
     } catch {
-      this.showError('Failed to load concept');
+      this.showError('Greška pri učitavanju koncepta');
     }
   }
 
@@ -2279,7 +2637,11 @@ export class ChatComponent implements OnInit, OnDestroy {
 
   onRunAgents(taskIds: string[]): void {
     const conversationId = this.activeConversationId$();
-    if (!conversationId || taskIds.length === 0) return;
+    if (!conversationId) {
+      this.showError('Nema aktivne konverzacije za pokretanje zadatka.');
+      return;
+    }
+    if (taskIds.length === 0) return;
     this.isGeneratingPlan$.set(true);
     this.chatWsService.emitRunAgents(taskIds, conversationId);
     // Auto-scroll so the loading indicator is visible
@@ -2290,16 +2652,64 @@ export class ChatComponent implements OnInit, OnDestroy {
   }
 
   onExecuteSingleTask(taskId: string): void {
-    this.executingTaskId$.set(taskId);
+    // Switch to chat tab so user sees the plan overlay
+    this.activeTab$.set('chat');
     this.onRunAgents([taskId]);
   }
 
-  /** Story 3.2: Start per-domain YOLO execution */
+  private resultSubmissionTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  onSubmitTaskResult(taskId: string): void {
+    this.submittingResultId$.set(taskId);
+    this.taskResultStreamContent$.set('');
+    this.chatWsService.emitSubmitTaskResult(taskId);
+
+    // Safety timeout: clear submitting state if no response in 60s
+    if (this.resultSubmissionTimeout) clearTimeout(this.resultSubmissionTimeout);
+    this.resultSubmissionTimeout = setTimeout(() => {
+      if (this.submittingResultId$() === taskId) {
+        this.submittingResultId$.set(null);
+        this.taskResultStreamContent$.set('');
+        this.showError('Ocenjivanje rezultata je isteklo. Pokušajte ponovo.');
+      }
+    }, 60000);
+  }
+
+  /** Story 3.2: Start per-domain Brain execution (plan-first, manual) */
   async onRunBrain(): Promise<void> {
+    const folderName = this.folderName$();
+    const folderConceptIds = this.folderConceptIds$();
+    if (!folderName || folderConceptIds.length === 0) return;
+
+    try {
+      // Create conversation context for the brain execution
+      const title = `Brain: ${folderName}`;
+      const conversation = await this.conversationService.createConversation(title);
+      await this.loadConversation(conversation.id);
+
+      // Fetch pending tasks for this domain's concepts
+      const allNotes = await this.notesApi.getByConceptIds(folderConceptIds);
+      const pendingTaskIds = allNotes
+        .filter((n) => n.noteType === 'TASK' && n.status === 'PENDING')
+        .map((n) => n.id);
+
+      if (pendingTaskIds.length === 0) {
+        this.showError('Nema zadataka na čekanju u ovom domenu.');
+        return;
+      }
+
+      // Feed into existing plan flow (shows plan overlay → user approves → workflow executes)
+      this.onRunAgents(pendingTaskIds);
+    } catch {
+      this.showError('Pokretanje Brain-a nije uspelo. Pokušajte ponovo.');
+    }
+  }
+
+  /** Story 3.2: YOLO mode — autonomous execution without plan review */
+  async onRunBrainYolo(): Promise<void> {
     const folderName = this.folderName$();
     if (!folderName) return;
 
-    // Need a conversation for YOLO execution context
     try {
       const title = `Brain: ${folderName}`;
       const conversation = await this.conversationService.createConversation(title);
@@ -2307,7 +2717,7 @@ export class ChatComponent implements OnInit, OnDestroy {
       this.isYoloMode$.set(true);
       this.chatWsService.emitStartDomainYolo(conversation.id, folderName);
     } catch {
-      this.showError('Failed to start domain Brain execution');
+      this.showError('Pokretanje YOLO režima nije uspelo.');
     }
   }
 
@@ -2320,7 +2730,25 @@ export class ChatComponent implements OnInit, OnDestroy {
     const conversationId = this.activeConversationId$();
     if (!plan || !conversationId) return;
     this.isExecutingWorkflow$.set(true);
+    this.planCollapsed$.set(true); // Auto-collapse plan panel during execution
     this.chatWsService.emitWorkflowApproval(plan.planId, true, conversationId);
+
+    // Add entry to workflow status bar
+    const firstConcept = plan.steps[0]?.conceptName ?? 'Workflow';
+    this.workflowHistory$.update((entries) => [
+      ...entries,
+      {
+        planId: plan.planId,
+        title:
+          plan.conceptOrder.length > 1
+            ? `${firstConcept} (+${plan.conceptOrder.length - 1})`
+            : firstConcept,
+        totalSteps: plan.steps.length,
+        completedSteps: 0,
+        currentStepTitle: null,
+        status: 'executing' as const,
+      },
+    ]);
   }
 
   rejectPlan(): void {
@@ -2336,6 +2764,10 @@ export class ChatComponent implements OnInit, OnDestroy {
     const conversationId = this.activeConversationId$();
     if (!planId || !conversationId) return;
     this.chatWsService.emitWorkflowCancel(planId, conversationId);
+  }
+
+  togglePlanCollapse(): void {
+    this.planCollapsed$.update((v) => !v);
   }
 
   private closePlanOverlay(): void {
@@ -2416,11 +2848,55 @@ export class ChatComponent implements OnInit, OnDestroy {
     });
 
     // Send via WebSocket
-    this.chatWsService.sendMessage(conversationId, content);
+    const sent = this.chatWsService.sendMessage(conversationId, content);
+    if (!sent) {
+      this.isLoading$.set(false);
+      this.showError('Konekcija sa serverom nije uspostavljena. Osvežite stranicu.');
+    }
   }
 
   private setupWebSocket(): void {
     this.chatWsService.connect();
+
+    // Track connection state changes for toast notifications
+    let wasConnected = false;
+    const checkConnection = setInterval(() => {
+      const state = this.chatWsService.connectionState$();
+      if (state === 'disconnected' && wasConnected) {
+        this.disconnectToast$.set('Veza prekinuta. Pokušavam ponovo...');
+      } else if (state === 'reconnecting') {
+        this.disconnectToast$.set('Ponovno povezivanje...');
+      } else if (state === 'connected' && !wasConnected && this.disconnectToast$()) {
+        const wasWorkflow = this.chatWsService.wasWorkflowActive$();
+        if (wasWorkflow) {
+          this.disconnectToast$.set('Veza obnovljena. Workflow je možda nastavljen u pozadini.');
+          this.chatWsService.wasWorkflowActive$.set(false);
+        } else {
+          this.disconnectToast$.set('Veza obnovljena.');
+        }
+        setTimeout(() => this.disconnectToast$.set(null), 5000);
+      }
+      wasConnected = state === 'connected';
+      // Keep workflow running state in sync
+      this.chatWsService.setWorkflowRunning(this.isExecutingWorkflow$() || this.isYoloMode$());
+
+      // Surface emit errors
+      const emitErr = this.chatWsService.lastEmitError$();
+      if (emitErr) {
+        this.disconnectToast$.set(emitErr);
+        this.chatWsService.lastEmitError$.set(null);
+        setTimeout(() => this.disconnectToast$.set(null), 5000);
+      }
+
+      // Surface notes API errors
+      const notesErr = this.notesApi.lastError$();
+      if (notesErr) {
+        this.disconnectToast$.set(notesErr);
+        this.notesApi.lastError$.set(null);
+        setTimeout(() => this.disconnectToast$.set(null), 5000);
+      }
+    }, 500);
+    this.destroyRef.onDestroy(() => clearInterval(checkConnection));
 
     this.chatWsService.onMessageReceived((data) => {
       // Update user message ID with real one from server
@@ -2449,13 +2925,20 @@ export class ChatComponent implements OnInit, OnDestroy {
     });
 
     this.chatWsService.onComplete((data) => {
-      // Extract confidence from metadata (Story 2.5)
+      // Extract metadata (Story 2.5 confidence, 2.6 citations, 2.7 memory, 3.11 web sources)
       const confidence = data.metadata?.['confidence'] as
         | {
             score?: number;
             factors?: ConfidenceFactor[];
           }
         | undefined;
+      const citations = (data.metadata?.['citations'] as ConceptCitation[] | undefined) ?? [];
+      const memoryAttributions =
+        (data.metadata?.['memoryAttributions'] as MemoryAttribution[] | undefined) ?? [];
+      const webSearchSources =
+        (data.metadata?.['webSearchSources'] as WebSearchSource[] | undefined) ?? [];
+      const suggestedActions =
+        (data.metadata?.['suggestedActions'] as SuggestedAction[] | undefined) ?? [];
 
       const aiMessage: Message = {
         id: data.messageId,
@@ -2464,6 +2947,10 @@ export class ChatComponent implements OnInit, OnDestroy {
         content: data.fullContent,
         confidenceScore: confidence?.score ?? null,
         confidenceFactors: confidence?.factors ?? null,
+        citations: citations.length > 0 ? citations : undefined,
+        memoryAttributions: memoryAttributions.length > 0 ? memoryAttributions : undefined,
+        webSearchSources: webSearchSources.length > 0 ? webSearchSources : undefined,
+        suggestedActions: suggestedActions.length > 0 ? suggestedActions : undefined,
         createdAt: new Date().toISOString(),
       };
 
@@ -2480,10 +2967,11 @@ export class ChatComponent implements OnInit, OnDestroy {
       this.streamingContent$.set('');
     });
 
-    this.chatWsService.onError(() => {
+    this.chatWsService.onError((error) => {
       this.isLoading$.set(false);
       this.isStreaming$.set(false);
-      this.showError('Message failed to send. Please try again.');
+      const errorType = error.type ? `[${error.type}] ` : '';
+      this.showError(errorType + (error.message || 'Poruka nije poslata. Pokušajte ponovo.'));
     });
 
     this.chatWsService.onNotesUpdated(() => {
@@ -2497,6 +2985,22 @@ export class ChatComponent implements OnInit, OnDestroy {
       this.autoSelectTaskIds$.set(data.taskIds);
       this.activeTab$.set('notes');
       this.conversationNotes?.loadNotes();
+
+      // Show visible feedback in chat
+      const count = data.taskCount ?? data.taskIds.length;
+      const taskMsg: Message = {
+        id: `tasks_created_${Date.now()}`,
+        conversationId: data.conversationId,
+        role: MessageRole.ASSISTANT,
+        content: `**Kreirano ${count} ${count === 1 ? 'zadatak' : 'zadataka'}!** Pogledajte tab Zadaci za detalje i pokretanje.`,
+        confidenceScore: null,
+        confidenceFactors: null,
+        createdAt: new Date().toISOString(),
+      };
+      this.activeConversation$.update((conv) => {
+        if (!conv) return conv;
+        return { ...conv, messages: [...conv.messages, taskMsg] };
+      });
     });
 
     this.chatWsService.onConceptDetected((data) => {
@@ -2555,6 +3059,27 @@ export class ChatComponent implements OnInit, OnDestroy {
         return next;
       });
 
+      // Update workflow status bar entry
+      if (payload.planId) {
+        this.workflowHistory$.update((entries) =>
+          entries.map((e) =>
+            e.planId === payload.planId
+              ? {
+                  ...e,
+                  currentStepTitle:
+                    payload.status === 'in_progress'
+                      ? (payload.stepTitle ?? e.currentStepTitle)
+                      : e.currentStepTitle,
+                  completedSteps:
+                    payload.status === 'completed' || payload.status === 'failed'
+                      ? e.completedSteps + 1
+                      : e.completedSteps,
+                }
+              : e
+          )
+        );
+      }
+
       // Update inline progress indicator
       if (payload.totalSteps != null) {
         this.totalStepsCount$.set(payload.totalSteps);
@@ -2591,6 +3116,7 @@ export class ChatComponent implements OnInit, OnDestroy {
       if (payload.status === 'completed' && payload.content) {
         this.completedStepsCount$.update((c) => c + 1);
         this.conceptTree?.loadTree();
+        this.conversationNotes?.loadNotes();
 
         // Show "preparing next step" transition if more steps remain
         const completed = this.completedStepsCount$();
@@ -2602,6 +3128,8 @@ export class ChatComponent implements OnInit, OnDestroy {
 
       if (payload.status === 'completed' && !payload.content) {
         this.completedStepsCount$.update((c) => c + 1);
+        this.conceptTree?.loadTree();
+        this.conversationNotes?.loadNotes();
         // Still show transition
         const completed = this.completedStepsCount$();
         const total = this.totalStepsCount$();
@@ -2612,6 +3140,8 @@ export class ChatComponent implements OnInit, OnDestroy {
 
       if (payload.status === 'failed') {
         this.completedStepsCount$.update((c) => c + 1);
+        this.conceptTree?.loadTree();
+        this.conversationNotes?.loadNotes();
       }
     });
 
@@ -2660,17 +3190,124 @@ export class ChatComponent implements OnInit, OnDestroy {
       this.closePlanOverlay();
       this.conversationNotes?.loadNotes();
       this.conceptTree?.loadTree();
+
+      // Update workflow status bar entry
+      if (payload.planId) {
+        const finalStatus =
+          payload.status === 'completed'
+            ? ('completed' as const)
+            : payload.status === 'cancelled'
+              ? ('cancelled' as const)
+              : ('failed' as const);
+        this.workflowHistory$.update((entries) =>
+          entries.map((e) =>
+            e.planId === payload.planId
+              ? { ...e, status: finalStatus, completedSteps: payload.completedSteps }
+              : e
+          )
+        );
+
+        // Auto-clear completed/cancelled entries after 5 seconds (with CSS fade animation)
+        setTimeout(() => {
+          this.workflowHistory$.update((entries) =>
+            entries.filter((e) => e.planId !== payload.planId)
+          );
+        }, 5000);
+      }
+
+      // D4: Suggest next step after successful workflow
+      if (payload.status === 'completed') {
+        setTimeout(() => this.suggestNextStep(), 1500);
+      }
     });
 
     this.chatWsService.onWorkflowError((payload) => {
       if (payload.conversationId !== this.activeConversationId$()) return;
       this.closePlanOverlay();
-      this.showError(payload.message ?? 'Workflow execution failed');
+      // Clear YOLO / execution state so the UI doesn't get stuck
+      this.isYoloMode$.set(false);
+      this.isExecutingWorkflow$.set(false);
+      this.yoloProgress$.set(null);
+      this.showError(payload.message ?? 'Izvršavanje workflow-a neuspešno');
+    });
+
+    // ─── Task AI Execution Events ───────────────────────────────
+
+    this.chatWsService.onTaskAiStart((data) => {
+      if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
+      // Confirm execution state — ensure executingTaskId is set even if click handler missed
+      if (!this.executingTaskId$()) {
+        this.executingTaskId$.set(data.taskId);
+        this.isStreaming$.set(true);
+        this.streamingContent$.set('');
+      }
+    });
+
+    this.chatWsService.onTaskAiChunk((data) => {
+      if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
+      this.streamingContent$.update((content) => content + data.content);
+      this.taskExecutionStreamContent$.update((content) => content + data.content);
+    });
+
+    this.chatWsService.onTaskAiComplete((data) => {
+      if (data.conversationId !== this.activeConversationId$()) return;
+      this.isStreaming$.set(false);
+      this.streamingContent$.set('');
+      this.taskExecutionStreamContent$.set('');
+      this.executingTaskId$.set(null);
+      this.conversationNotes?.loadNotes();
+      // Reload conversation to show the saved AI message
+      const convId = this.activeConversationId$();
+      if (convId) {
+        this.loadConversation(convId);
+      }
+    });
+
+    this.chatWsService.onTaskAiError((data) => {
+      if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
+      this.isStreaming$.set(false);
+      this.streamingContent$.set('');
+      this.taskExecutionStreamContent$.set('');
+      this.executingTaskId$.set(null);
+      this.showError(data.message ?? 'Izvršavanje zadatka neuspešno');
+    });
+
+    // ─── Task Result Submission Events (Story 3.12) ─────────────
+
+    this.chatWsService.onTaskResultChunk((data) => {
+      if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
+      this.taskResultStreamContent$.update((content) => content + data.content);
+    });
+
+    this.chatWsService.onTaskResultComplete((data) => {
+      if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
+      if (this.resultSubmissionTimeout) {
+        clearTimeout(this.resultSubmissionTimeout);
+        this.resultSubmissionTimeout = null;
+      }
+      this.submittingResultId$.set(null);
+      this.taskResultStreamContent$.set('');
+      this.conversationNotes?.loadNotes();
+    });
+
+    this.chatWsService.onTaskResultError((data) => {
+      if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
+      if (this.resultSubmissionTimeout) {
+        clearTimeout(this.resultSubmissionTimeout);
+        this.resultSubmissionTimeout = null;
+      }
+      this.submittingResultId$.set(null);
+      this.taskResultStreamContent$.set('');
+      this.showError(data.message ?? 'Slanje rezultata neuspešno');
     });
 
     this.chatWsService.onStepAwaitingConfirmation((payload) => {
       if (payload.conversationId !== this.activeConversationId$()) return;
       this.activePlanId$.set(payload.planId);
+
+      // During auto-execution after plan approval, skip the awaiting-confirmation UI
+      if (this.isExecutingWorkflow$()) return;
+
       this.awaitingConfirmation$.set(true);
       this.nextStepInfo$.set(payload.nextStep);
       this.userStepInput$.set('');
@@ -2680,6 +3317,16 @@ export class ChatComponent implements OnInit, OnDestroy {
 
     this.chatWsService.onStepAwaitingInput((payload: WorkflowStepAwaitingInputPayload) => {
       if (payload.conversationId !== this.activeConversationId$()) return;
+
+      // Auto-continue confirmation steps so workflow flows automatically after plan approval
+      if (payload.inputType === 'confirmation' && this.isExecutingWorkflow$()) {
+        setTimeout(() => {
+          this.chatWsService.emitStepContinue(payload.planId, payload.conversationId);
+        }, 300);
+        return;
+      }
+
+      // For 'text' input types, show the interactive input UI
       this.currentWorkflowStepInput$.set(payload);
       this.allowWorkflowInput$.set(payload.inputType === 'text');
       this.isLoading$.set(false); // Unblock input for next step
@@ -2730,6 +3377,12 @@ export class ChatComponent implements OnInit, OnDestroy {
       this.isExecutingWorkflow$.set(false);
       this.conversationNotes?.loadNotes();
       this.conceptTree?.loadTree();
+      // D4: Suggest next step after YOLO completion
+      setTimeout(() => this.suggestNextStep(), 1500);
+    });
+
+    this.chatWsService.onTasksDiscovered(() => {
+      this.conceptTree?.loadTree();
     });
   }
 
@@ -2764,5 +3417,93 @@ export class ChatComponent implements OnInit, OnDestroy {
 
   toggleYoloActivityLog(): void {
     this.showYoloActivityLog$.update((v) => !v);
+  }
+
+  /** D4: Show next-step suggestion after workflow completion */
+  private suggestNextStep(): void {
+    const tree = this.conceptTree?.treeData$()?.tree ?? [];
+    if (tree.length === 0) return;
+
+    // Find first domain with pending tasks
+    for (const domain of tree) {
+      const hasPending = this.domainHasPending(domain);
+      if (hasPending) {
+        this.nextStepSuggestion$.set({
+          message: `Preporučujem: ${domain.label} — ima zadatke na čekanju.`,
+          actionLabel: `Otvori ${domain.label} →`,
+          actionCurriculumId: domain.curriculumId,
+          secondaryLabel: 'Pokaži sve domene',
+        });
+        // Auto-dismiss after 60s
+        if (this.nextStepDismissTimer) clearTimeout(this.nextStepDismissTimer);
+        this.nextStepDismissTimer = setTimeout(() => this.nextStepSuggestion$.set(null), 60000);
+        return;
+      }
+    }
+
+    // No pending domains — suggest reviewing scores
+    this.nextStepSuggestion$.set({
+      message: 'Svi zadaci su završeni. Pregledajte rezultate ili započnite novi koncept.',
+      actionLabel: 'Pogledaj zadatke',
+    });
+    if (this.nextStepDismissTimer) clearTimeout(this.nextStepDismissTimer);
+    this.nextStepDismissTimer = setTimeout(() => this.nextStepSuggestion$.set(null), 60000);
+  }
+
+  private domainHasPending(node: import('@mentor-ai/shared/types').ConceptHierarchyNode): boolean {
+    if (node.status === 'pending') return true;
+    return node.children.some((child) => this.domainHasPending(child));
+  }
+
+  dismissNextStep(): void {
+    this.nextStepSuggestion$.set(null);
+    if (this.nextStepDismissTimer) {
+      clearTimeout(this.nextStepDismissTimer);
+      this.nextStepDismissTimer = null;
+    }
+  }
+
+  onNextStepAction(): void {
+    const suggestion = this.nextStepSuggestion$();
+    if (!suggestion) return;
+    if (suggestion.actionCurriculumId) {
+      // Navigate to domain folder via onConceptSelected
+      const tree = this.conceptTree?.treeData$()?.tree ?? [];
+      const domain = tree.find((d) => d.curriculumId === suggestion.actionCurriculumId);
+      if (domain) {
+        const conceptIds = this.collectAllConceptIds(domain);
+        const conversationIds = this.collectAllConversationIds(domain);
+        this.onConceptSelected({
+          conceptId: null,
+          curriculumId: domain.curriculumId,
+          conceptName: domain.label,
+          isFolder: true,
+          descendantConceptIds: conceptIds,
+          descendantConversationIds: conversationIds,
+        });
+      }
+    } else {
+      // Default: switch to notes tab
+      this.activeTab$.set('notes');
+    }
+    this.dismissNextStep();
+  }
+
+  private collectAllConceptIds(
+    node: import('@mentor-ai/shared/types').ConceptHierarchyNode
+  ): string[] {
+    const ids: string[] = [];
+    if (node.conceptId) ids.push(node.conceptId);
+    for (const child of node.children) ids.push(...this.collectAllConceptIds(child));
+    return ids;
+  }
+
+  private collectAllConversationIds(
+    node: import('@mentor-ai/shared/types').ConceptHierarchyNode
+  ): string[] {
+    const ids: string[] = [];
+    for (const conv of node.conversations) ids.push(conv.id);
+    for (const child of node.children) ids.push(...this.collectAllConversationIds(child));
+    return ids;
   }
 }

@@ -14,22 +14,33 @@ interface LmStudioModelsResponse {
 }
 
 /**
- * LM Studio provider implementation.
- * Uses the OpenAI-compatible API exposed by LM Studio at a configurable local endpoint.
- * No API key required by default.
+ * LM Studio / OpenAI-compatible provider implementation.
+ * Uses the OpenAI-compatible API at a configurable endpoint.
+ * Supports optional API key authentication (needed for RunPod, vLLM, etc.).
+ * No API key required by default (local LM Studio).
  */
 export class LmStudioProvider implements LlmProvider {
   private readonly endpoint: string;
+  private readonly apiKey?: string;
 
   constructor(options: LlmProviderOptions) {
     this.endpoint = options.endpoint ?? DEFAULT_LM_STUDIO_ENDPOINT;
+    this.apiKey = options.apiKey;
+  }
+
+  private getHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (this.apiKey) {
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+    }
+    return headers;
   }
 
   async validateCredentials(): Promise<boolean> {
     try {
       const response = await fetch(`${this.endpoint}/v1/models`, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.getHeaders(),
       });
 
       return response.ok;
@@ -41,7 +52,7 @@ export class LmStudioProvider implements LlmProvider {
   async fetchModels(): Promise<LlmModelInfo[]> {
     const response = await fetch(`${this.endpoint}/v1/models`, {
       method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getHeaders(),
     });
 
     if (!response.ok) {

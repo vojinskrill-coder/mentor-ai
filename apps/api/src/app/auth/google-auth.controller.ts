@@ -9,6 +9,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { IsString, IsNotEmpty } from 'class-validator';
 import axios from 'axios';
 import * as jwt from 'jsonwebtoken';
 import { AuthService } from './auth.service';
@@ -36,10 +37,18 @@ interface GoogleIdTokenPayload {
   family_name?: string;
 }
 
-interface GoogleCallbackDto {
-  code: string;
-  redirectUri: string;
-  codeVerifier: string;
+class GoogleCallbackDto {
+  @IsString()
+  @IsNotEmpty()
+  code!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  redirectUri!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  codeVerifier!: string;
 }
 
 @Controller('auth')
@@ -61,8 +70,21 @@ export class GoogleAuthController {
   async handleGoogleCallback(@Body() dto: GoogleCallbackDto) {
     const { code, redirectUri, codeVerifier } = dto;
 
+    this.logger.log({
+      message: 'Google callback received',
+      hasCode: !!code,
+      redirectUri,
+      hasCodeVerifier: !!codeVerifier,
+      codeLength: code?.length ?? 0,
+    });
+
     if (!code) {
-      throw new BadRequestException('Authorization code is required');
+      throw new BadRequestException({
+        type: 'missing_auth_code',
+        title: 'Bad Request',
+        status: 400,
+        detail: 'Authorization code is required. The Google OAuth redirect may have failed.',
+      });
     }
 
     const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
@@ -98,8 +120,24 @@ export class GoogleAuthController {
       );
       tokenData = response.data;
     } catch (error: any) {
-      this.logger.error('Google token exchange failed', error?.response?.data || error.message);
-      throw new UnauthorizedException('Failed to exchange authorization code with Google');
+      const googleError = error?.response?.data;
+      this.logger.error({
+        message: 'Google token exchange failed',
+        googleError,
+        httpStatus: error?.response?.status,
+        errorMessage: error?.message,
+      });
+
+      // Pass Google-specific error details so the frontend can show actionable info
+      const googleErrorCode = googleError?.error ?? 'unknown';
+      const googleErrorDesc = googleError?.error_description ?? error?.message ?? 'Unknown error';
+
+      throw new UnauthorizedException({
+        type: 'google_token_exchange_failed',
+        title: 'Google Authentication Failed',
+        status: 401,
+        detail: `Google OAuth error: ${googleErrorCode} — ${googleErrorDesc}`,
+      });
     }
 
     // Decode the ID token to get user info

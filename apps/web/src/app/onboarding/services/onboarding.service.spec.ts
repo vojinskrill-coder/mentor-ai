@@ -1,8 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import {
-  HttpTestingController,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { OnboardingService } from './onboarding.service';
 import { TenantStatus, Department } from '@mentor-ai/shared/types';
@@ -13,11 +10,7 @@ describe('OnboardingService (Frontend)', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        OnboardingService,
-      ],
+      providers: [provideHttpClient(), provideHttpClientTesting(), OnboardingService],
     });
 
     service = TestBed.inject(OnboardingService);
@@ -140,33 +133,24 @@ describe('OnboardingService (Frontend)', () => {
   describe('completeOnboarding', () => {
     it('should POST complete onboarding request', async () => {
       const mockResponse = {
-        output: 'Generated content',
-        timeSavedMinutes: 15,
-        noteId: 'note_123',
-        celebrationMessage: 'Congratulations! You just saved ~15 minutes!',
-        newTenantStatus: TenantStatus.ACTIVE,
+        celebrationMessage: 'Congratulations! Your workspace is ready!',
+        welcomeConversationId: 'sess_welcome',
       };
 
-      const promise = service.completeOnboarding(
-        'finance-email',
-        'Need Q4 summary',
-        'FINANCE',
-        'Generated content'
-      );
+      const promise = service.completeOnboarding('ANALYSE_BUSINESS', 'Generated content', 'MANUAL');
 
       const req = httpMock.expectOne('/api/onboarding/complete');
       expect(req.request.method).toBe('POST');
       expect(req.request.body).toEqual({
-        taskId: 'finance-email',
-        userContext: 'Need Q4 summary',
-        industry: 'FINANCE',
+        taskId: 'ANALYSE_BUSINESS',
         generatedOutput: 'Generated content',
+        executionMode: 'MANUAL',
       });
       req.flush({ data: mockResponse });
 
       const result = await promise;
       expect(result).toEqual(mockResponse);
-      expect(result.celebrationMessage).toContain('saved');
+      expect(result.celebrationMessage).toContain('Congratulations');
     });
   });
 

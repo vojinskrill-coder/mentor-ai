@@ -8,7 +8,7 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, UnauthorizedException } from '@nestjs/common';
+import { HttpException, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { verify, JwtPayload as JwtPayloadBase } from 'jsonwebtoken';
 import jwksClient from 'jwks-rsa';
@@ -26,9 +26,10 @@ import { ConceptExtractionService } from '../knowledge/services/concept-extracti
 import { WorkflowService } from '../workflow/workflow.service';
 import { YoloSchedulerService } from '../workflow/yolo-scheduler.service';
 import { WebSearchService } from '../web-search/web-search.service';
+import { BusinessContextService } from '../knowledge/services/business-context.service';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
-import { MemoryType, MemorySource } from '@mentor-ai/shared/types';
+import { MemoryType, MemorySource, SuggestedAction } from '@mentor-ai/shared/types';
 import {
   MessageRole,
   type ChatMessageSend,
@@ -94,7 +95,8 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     private readonly conceptService: ConceptService,
     private readonly conceptExtractionService: ConceptExtractionService,
     private readonly yoloScheduler: YoloSchedulerService,
-    private readonly webSearchService: WebSearchService
+    private readonly webSearchService: WebSearchService,
+    private readonly businessContextService: BusinessContextService
   ) {
     this.auth0Domain = this.configService.get<string>('AUTH0_DOMAIN') ?? '';
     this.auth0Audience = this.configService.get<string>('AUTH0_AUDIENCE') ?? '';
@@ -119,22 +121,44 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
       if (devMode) {
         const authenticatedClient = client as AuthenticatedSocket;
 
-        // Try to extract real user identity from JWT token
+        // Try to extract real user identity from JWT token and verify the user exists in DB
         const token = this.extractToken(client);
         if (token && token !== 'dev-mode-token') {
           try {
             const jwtSecret = this.configService.get<string>('JWT_SECRET');
             if (jwtSecret) {
               const payload = verify(token, jwtSecret, { algorithms: ['HS256'] }) as JwtPayload;
-              authenticatedClient.userId = (payload as any).userId || payload.sub || 'dev-user-001';
-              authenticatedClient.tenantId = (payload as any).tenantId || 'dev-tenant-001';
-              await client.join(`tenant:${authenticatedClient.tenantId}`);
-              this.logger.log({
-                message: 'WebSocket client connected (dev mode, real user)',
-                clientId: client.id,
-                userId: authenticatedClient.userId,
-                tenantId: authenticatedClient.tenantId,
+              const tokenUserId = (payload as any).userId || payload.sub || 'dev-user-001';
+              const tokenTenantId = (payload as any).tenantId || 'dev-tenant-001';
+
+              // Verify the user actually exists in DB (may have been cleaned up)
+              const userExists = await this.prisma.user.findUnique({
+                where: { id: tokenUserId },
+                select: { id: true },
               });
+
+              if (userExists) {
+                authenticatedClient.userId = tokenUserId;
+                authenticatedClient.tenantId = tokenTenantId;
+                await client.join(`tenant:${authenticatedClient.tenantId}`);
+                this.logger.log({
+                  message: 'WebSocket client connected (dev mode, real user)',
+                  clientId: client.id,
+                  userId: authenticatedClient.userId,
+                  tenantId: authenticatedClient.tenantId,
+                });
+                return;
+              }
+
+              // User deleted from DB — disconnect so frontend clears stale token
+              this.logger.warn({
+                message: 'WebSocket rejected: JWT user not found in DB',
+                tokenUserId,
+              });
+              client.emit('auth:session-expired', {
+                message: 'Your session is no longer valid. Please log in again.',
+              });
+              client.disconnect();
               return;
             }
           } catch {
@@ -142,12 +166,12 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
           }
         }
 
-        // No real token or validation failed - use dev fallback
+        // No token or placeholder token — use dev fallback
         authenticatedClient.userId = 'dev-user-001';
         authenticatedClient.tenantId = 'dev-tenant-001';
         await client.join('tenant:dev-tenant-001');
         this.logger.log({
-          message: 'WebSocket client connected (dev mode)',
+          message: 'WebSocket client connected (dev mode, dev user)',
           clientId: client.id,
         });
         return;
@@ -163,10 +187,66 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
         return;
       }
 
-      const payload = await this.verifyToken(token);
       const authenticatedClient = client as AuthenticatedSocket;
-      authenticatedClient.userId = payload['https://mentor-ai.com/user_id'] ?? payload.sub;
-      authenticatedClient.tenantId = payload['https://mentor-ai.com/tenant_id'] ?? '';
+
+      // Try JWT_SECRET (HS256) verification first — covers Google OAuth tokens
+      const jwtSecret = this.configService.get<string>('JWT_SECRET');
+      let authenticated = false;
+
+      if (jwtSecret) {
+        try {
+          const payload = verify(token, jwtSecret, { algorithms: ['HS256'] }) as JwtPayload;
+          const tokenUserId = (payload as any).userId || payload.sub;
+          const tokenTenantId = (payload as any).tenantId || '';
+
+          if (tokenUserId) {
+            // Verify the user actually exists in DB
+            const userExists = await this.prisma.user.findUnique({
+              where: { id: tokenUserId },
+              select: { id: true },
+            });
+
+            if (userExists) {
+              authenticatedClient.userId = tokenUserId;
+              authenticatedClient.tenantId = tokenTenantId;
+              authenticated = true;
+            } else {
+              this.logger.warn({
+                message: 'WebSocket rejected: JWT user not found in DB',
+                tokenUserId,
+              });
+              client.emit('auth:session-expired', {
+                message: 'Your session is no longer valid. Please log in again.',
+              });
+              client.disconnect();
+              return;
+            }
+          }
+        } catch {
+          // HS256 verification failed — try Auth0 JWKS fallback below
+        }
+      }
+
+      // Fallback: Auth0 JWKS (RS256) verification if configured
+      if (!authenticated && this.auth0Domain) {
+        try {
+          const payload = await this.verifyToken(token);
+          authenticatedClient.userId = payload['https://mentor-ai.com/user_id'] ?? payload.sub;
+          authenticatedClient.tenantId = payload['https://mentor-ai.com/tenant_id'] ?? '';
+          authenticated = true;
+        } catch {
+          // Auth0 verification also failed
+        }
+      }
+
+      if (!authenticated) {
+        this.logger.warn({
+          message: 'WebSocket connection rejected: Invalid token',
+          clientId: client.id,
+        });
+        client.disconnect();
+        return;
+      }
 
       // Join tenant-specific room for isolation
       await client.join(`tenant:${authenticatedClient.tenantId}`);
@@ -275,32 +355,41 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
         authenticatedClient.userId
       );
 
-      // Pre-AI enrichment: concept search + memory context + web search in parallel
+      // Pre-AI enrichment: concept search + memory context + web search + business brain context in parallel
       const webSearchEnabled = (payload as any).webSearchEnabled !== false;
-      const [relevantConcepts, memoryContext, webSearchResults] = await Promise.all([
-        this.conceptMatchingService
-          .findRelevantConcepts(content, {
-            limit: 5,
-            threshold: 0.5,
-            personaType: conversation.personaType ?? undefined,
-          })
-          .catch(() => [] as import('@mentor-ai/shared/types').ConceptMatch[]),
-        this.memoryContextBuilder
-          .buildContext(content, authenticatedClient.userId, authenticatedClient.tenantId)
-          .catch(() => ({
-            context: '',
-            attributions: [] as import('@mentor-ai/shared/types').MemoryAttribution[],
-            estimatedTokens: 0,
-          })),
-        webSearchEnabled && this.webSearchService.isAvailable()
-          ? this.webSearchService
-              .searchAndExtract(content, 3)
-              .catch(() => [] as import('@mentor-ai/shared/types').EnrichedSearchResult[])
-          : Promise.resolve([] as import('@mentor-ai/shared/types').EnrichedSearchResult[]),
-      ]);
+      const [relevantConcepts, memoryContext, webSearchResults, businessBrainContext] =
+        await Promise.all([
+          this.conceptMatchingService
+            .findRelevantConcepts(content, {
+              limit: 5,
+              threshold: 0.5,
+              personaType: conversation.personaType ?? undefined,
+            })
+            .catch(() => [] as import('@mentor-ai/shared/types').ConceptMatch[]),
+          this.memoryContextBuilder
+            .buildContext(content, authenticatedClient.userId, authenticatedClient.tenantId)
+            .catch(() => ({
+              context: '',
+              attributions: [] as import('@mentor-ai/shared/types').MemoryAttribution[],
+              estimatedTokens: 0,
+            })),
+          webSearchEnabled && this.webSearchService.isAvailable()
+            ? this.webSearchService
+                .searchAndExtract(content, 3)
+                .catch(() => [] as import('@mentor-ai/shared/types').EnrichedSearchResult[])
+            : Promise.resolve([] as import('@mentor-ai/shared/types').EnrichedSearchResult[]),
+          this.businessContextService
+            .getBusinessContext(authenticatedClient.tenantId)
+            .catch(() => ''),
+        ]);
 
-      // Build enriched context with curriculum concepts + memory
+      // Build enriched context with curriculum concepts + memory + business brain
       let enrichedContext = businessContext;
+
+      // Append tenant-wide business brain memories (Story 3.3 AC3)
+      if (businessBrainContext) {
+        enrichedContext += '\n' + businessBrainContext;
+      }
 
       if (relevantConcepts.length > 0) {
         enrichedContext += '\n\n--- CURRICULUM CONCEPT KNOWLEDGE ---\n';
@@ -406,6 +495,28 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
         });
       }
 
+      // Infer suggested actions based on response context (D1)
+      const suggestedActions: SuggestedAction[] = [];
+      if (relevantConcepts.length > 0) {
+        suggestedActions.push(
+          { type: 'create_tasks', label: 'Kreiraj zadatke', icon: 'tasks' },
+          { type: 'deep_dive', label: 'Istraži dublje', icon: 'explore' }
+        );
+        if (relevantConcepts.length > 1) {
+          suggestedActions.push({
+            type: 'next_domain',
+            label: 'Sledeći koncept →',
+            icon: 'arrow',
+            payload: { conceptId: relevantConcepts[1]?.conceptId },
+          });
+        }
+      } else {
+        suggestedActions.push({ type: 'save_note', label: 'Sačuvaj kao belešku', icon: 'note' });
+      }
+      if (confidence && confidence.score < 0.5) {
+        suggestedActions.push({ type: 'web_search', label: 'Pretraži web', icon: 'web' });
+      }
+
       // Emit completion with confidence + citations metadata
       client.emit('chat:complete', {
         messageId: aiMessage.id,
@@ -421,6 +532,11 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
             : null,
           citations,
           memoryAttributions,
+          webSearchSources:
+            webSearchResults.length > 0
+              ? webSearchResults.map((r) => ({ title: r.title, link: r.link }))
+              : undefined,
+          suggestedActions: suggestedActions.length > 0 ? suggestedActions : undefined,
         },
       });
 
@@ -493,7 +609,12 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
         });
       });
 
-      // Fire-and-forget: extract memories from this exchange
+      // Fire-and-forget: extract memories from this exchange (Story 3.3: concept-tagging)
+      const conceptName = conversation.conceptId
+        ? (relevantConcepts.find((c) => c.conceptId === conversation.conceptId)?.conceptName ??
+          (await this.conceptService.findById(conversation.conceptId).catch(() => null))?.name)
+        : undefined;
+
       this.memoryExtractionService
         .extractMemories(
           conversation.messages.concat([
@@ -517,7 +638,8 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
             },
           ]),
           authenticatedClient.userId,
-          authenticatedClient.tenantId
+          authenticatedClient.tenantId,
+          { conceptName }
         )
         .catch((err: unknown) => {
           this.logger.warn({
@@ -609,16 +731,34 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
         }
       }
     } catch (error) {
+      // Extract meaningful error details from HttpException or plain Error
+      let errorType = 'processing_error';
+      let errorMessage = 'Failed to process message';
+
+      if (error instanceof HttpException) {
+        const response = error.getResponse();
+        if (typeof response === 'object' && response !== null) {
+          const resp = response as Record<string, unknown>;
+          errorType = (resp['type'] as string) ?? errorType;
+          errorMessage = (resp['detail'] as string) ?? (resp['message'] as string) ?? error.message;
+        } else {
+          errorMessage = error.message;
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
       this.logger.error({
         message: 'Failed to process chat message',
         conversationId,
         userId: authenticatedClient.userId,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        errorType,
+        error: errorMessage,
       });
 
       client.emit('chat:error', {
-        type: 'processing_error',
-        message: error instanceof Error ? error.message : 'Failed to process message',
+        type: errorType,
+        message: errorMessage,
       });
     }
   }
@@ -688,8 +828,24 @@ If there are no meaningful tasks, respond with an empty array: []`;
       // Use relevantConcepts as fallback if conversation has no conceptId yet
       const effectiveConceptId = conceptId ?? relevantConcepts?.[0]?.conceptId ?? undefined;
       const tasksToCreate = tasks.slice(0, 3);
+
+      // Tenant-wide dedup (Story 3.4 AC3): check by conceptId AND title across entire tenant
+      let createdCount = 0;
       for (const task of tasksToCreate) {
         if (!task.title) continue;
+        const existingId = await this.notesService.findExistingTask(tenantId, {
+          conceptId: effectiveConceptId,
+          title: task.title,
+        });
+        if (existingId) {
+          this.logger.debug({
+            message: 'Skipping duplicate auto-task',
+            title: task.title,
+            existingId,
+            tenantId,
+          });
+          continue;
+        }
         await this.notesService.createNote({
           title: task.title,
           content: task.content ?? '',
@@ -702,10 +858,13 @@ If there are no meaningful tasks, respond with an empty array: []`;
           userId,
           tenantId,
         });
+        createdCount++;
       }
 
+      if (createdCount === 0) return;
+
       // Notify frontend that new notes are available
-      client.emit('chat:notes-updated', { conversationId, count: tasksToCreate.length });
+      client.emit('chat:notes-updated', { conversationId, count: createdCount });
 
       this.logger.log({
         message: 'Auto-tasks generated',
@@ -837,21 +996,45 @@ Ako nema zadataka, odgovori sa: []`;
         }
       );
 
-      const jsonMatch = extractedContent.match(/\[[\s\S]*\]/);
+      // Strip markdown code block wrappers (```json ... ``` or ``` ... ```)
+      const cleanedContent = extractedContent
+        .replace(/```(?:json)?\s*/gi, '')
+        .replace(/```/g, '')
+        .trim();
+
+      const jsonMatch = cleanedContent.match(/\[[\s\S]*\]/);
       if (!jsonMatch) {
-        this.logger.debug({ message: 'No JSON array in explicit task extraction', conversationId });
+        this.logger.warn({
+          message: 'No JSON array in explicit task extraction',
+          conversationId,
+          extractedContent: extractedContent.substring(0, 500),
+        });
         return;
       }
 
       const tasks = JSON.parse(jsonMatch[0]) as Array<{ title: string; content: string }>;
       if (!Array.isArray(tasks) || tasks.length === 0) return;
 
-      // Create task notes in DB
+      // Create task notes in DB (with duplicate prevention)
       const effectiveConceptId = conceptId ?? relevantConcepts?.[0]?.conceptId ?? undefined;
       const createdTaskIds: string[] = [];
 
+      // Tenant-wide dedup (Story 3.4 AC3): check by conceptId AND title across entire tenant
       for (const task of tasks.slice(0, 10)) {
         if (!task.title) continue;
+        const existingId = await this.notesService.findExistingTask(tenantId, {
+          conceptId: effectiveConceptId,
+          title: task.title,
+        });
+        if (existingId) {
+          this.logger.debug({
+            message: 'Skipping duplicate explicit task',
+            title: task.title,
+            existingId,
+            tenantId,
+          });
+          continue;
+        }
         const result = await this.notesService.createNote({
           title: task.title,
           content: task.content ?? '',
@@ -1138,6 +1321,13 @@ Ako nema zadataka, odgovori sa: []`;
               count: 0,
             });
           },
+          onTasksDiscovered: (newConceptIds) => {
+            client.emit('tree:tasks-discovered', {
+              conceptIds: newConceptIds,
+              conversationId: payload.conversationId,
+              timestamp: new Date().toISOString(),
+            });
+          },
           saveMessage: async (_role, content, conceptId) => {
             // Route message to the concept's conversation if available
             const targetConvId =
@@ -1224,6 +1414,297 @@ Ako nema zadataka, odgovori sa: []`;
   }
 
   /**
+   * Story 3.11: Handles "Execute Task with AI" — AI does the task's work directly
+   * and streams the result back. Simpler than the full workflow engine.
+   */
+  @SubscribeMessage('task:execute-ai')
+  async handleExecuteTaskAi(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { taskId: string; conversationId: string }
+  ): Promise<void> {
+    const authenticatedClient = client as AuthenticatedSocket;
+
+    try {
+      this.logger.log({
+        message: 'AI task execution requested',
+        userId: authenticatedClient.userId,
+        taskId: payload.taskId,
+      });
+
+      // 1. Load the task note
+      const task = await this.prisma.note.findUnique({
+        where: { id: payload.taskId },
+      });
+      if (!task || task.tenantId !== authenticatedClient.tenantId) {
+        client.emit('task:ai-error', { taskId: payload.taskId, message: 'Zadatak nije pronađen' });
+        return;
+      }
+
+      // 1b. Resolve conversation ID early for all emissions
+      const convId = task.conversationId ?? payload.conversationId;
+
+      // 1c. Emit immediate acknowledgment so frontend knows execution has started
+      client.emit('task:ai-start', {
+        taskId: payload.taskId,
+        conversationId: convId,
+        timestamp: new Date().toISOString(),
+      });
+
+      // 2. Load conversation history for context
+      let conversationContext = '';
+      if (convId) {
+        try {
+          const conv = await this.conversationService.getConversation(
+            authenticatedClient.tenantId,
+            convId,
+            authenticatedClient.userId
+          );
+          const recentMessages = conv.messages.slice(-6);
+          conversationContext = recentMessages.map((m) => `${m.role}: ${m.content}`).join('\n\n');
+        } catch {
+          /* no context available */
+        }
+      }
+
+      // 3. Build business context
+      const businessContext = await this.buildBusinessContext(
+        authenticatedClient.tenantId,
+        authenticatedClient.userId
+      );
+
+      // 4. Build the prompt
+      const prompt = `Ti si poslovni asistent. Korisnik želi da AI uradi sledeći zadatak umesto njega.
+Uradi zadatak u potpunosti — napiši konkretan rezultat (tekst, analizu, plan, izveštaj, blog post — šta god zadatak traži).
+Ne objašnjavaj šta BI radio — URADI posao i prikaži gotov rezultat.
+
+ZADATAK: ${task.title}
+${task.content ? `OPIS: ${task.content}` : ''}
+${task.expectedOutcome ? `OČEKIVANI REZULTAT: ${task.expectedOutcome}` : ''}
+
+${conversationContext ? `KONTEKST IZ RAZGOVORA:\n${conversationContext}` : ''}
+
+Odgovaraj na srpskom jeziku. Daj kompletan, spreman za upotrebu rezultat.`;
+
+      // 5. Stream the AI response
+      let fullContent = '';
+      let chunkIndex = 0;
+
+      await this.aiGatewayService.streamCompletionWithContext(
+        [{ role: 'user', content: prompt }],
+        {
+          tenantId: authenticatedClient.tenantId,
+          userId: authenticatedClient.userId,
+          conversationId: convId,
+          businessContext,
+        },
+        (chunk: string) => {
+          fullContent += chunk;
+          client.emit('task:ai-chunk', {
+            taskId: payload.taskId,
+            conversationId: convId,
+            content: chunk,
+            index: chunkIndex++,
+          });
+        }
+      );
+
+      // 6. Save AI output as message in the conversation
+      if (convId) {
+        await this.conversationService.addMessage(
+          authenticatedClient.tenantId,
+          convId,
+          MessageRole.ASSISTANT,
+          fullContent
+        );
+      }
+
+      // 7. Mark task as completed with AI output as report
+      const maxReportLength = 10000;
+      if (fullContent.length > maxReportLength) {
+        this.logger.warn({
+          message: 'Task AI output truncated for userReport',
+          taskId: payload.taskId,
+          originalLength: fullContent.length,
+          truncatedTo: maxReportLength,
+        });
+      }
+      await this.prisma.note.update({
+        where: { id: payload.taskId },
+        data: {
+          status: 'COMPLETED',
+          userReport: fullContent.substring(0, maxReportLength),
+        },
+      });
+
+      // 8. Emit completion
+      client.emit('task:ai-complete', {
+        taskId: payload.taskId,
+        fullContent,
+        conversationId: convId,
+      });
+
+      // 9. Refresh notes
+      client.emit('chat:notes-updated', { conversationId: convId, count: 0 });
+
+      this.logger.log({
+        message: 'AI task execution completed',
+        taskId: payload.taskId,
+        contentLength: fullContent.length,
+      });
+    } catch (error) {
+      this.logger.error({
+        message: 'AI task execution failed',
+        taskId: payload.taskId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      client.emit('task:ai-error', {
+        taskId: payload.taskId,
+        conversationId: payload.conversationId,
+        message: 'Izvršavanje zadatka nije uspelo. Pokušajte ponovo.',
+      });
+    }
+  }
+
+  /**
+   * Story 3.12: Handles "Submit Result" — takes completed task output,
+   * produces an optimized final deliverable, and scores it 1-10.
+   */
+  @SubscribeMessage('task:submit-result')
+  async handleSubmitTaskResult(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { taskId: string }
+  ): Promise<void> {
+    const authenticatedClient = client as AuthenticatedSocket;
+
+    try {
+      this.logger.log({
+        message: 'Task result submission requested',
+        userId: authenticatedClient.userId,
+        taskId: payload.taskId,
+      });
+
+      // 1. Load the completed task note
+      const task = await this.prisma.note.findUnique({
+        where: { id: payload.taskId },
+      });
+      if (!task || task.tenantId !== authenticatedClient.tenantId) {
+        client.emit('task:result-error', {
+          taskId: payload.taskId,
+          message: 'Zadatak nije pronađen',
+        });
+        return;
+      }
+      if (task.status !== 'COMPLETED' || !task.userReport) {
+        client.emit('task:result-error', {
+          taskId: payload.taskId,
+          message: 'Zadatak nema izveštaj za ocenjivanje',
+        });
+        return;
+      }
+
+      // 2. Emit start acknowledgment
+      client.emit('task:result-start', {
+        taskId: payload.taskId,
+        conversationId: task.conversationId,
+        timestamp: new Date().toISOString(),
+      });
+
+      // 3. Build the optimization + scoring prompt
+      const prompt = `Ti si ekspert za poslovne rezultate. Pregledaj sledeći izlaz zadatka i uradi dve stvari:
+
+1. OPTIMIZUJ rezultat — napravi finalnu, najbolju moguću verziju deliverable-a (poboljšaj strukturu, jasnoću, konkretnost)
+2. OCENI rezultat od 1 do 10 na osnovu: praktičnosti, specifičnosti, kompletnosti i relevantnosti
+
+ZADATAK: ${task.title}
+${task.content ? `OPIS: ${task.content}` : ''}
+${task.expectedOutcome ? `OČEKIVANI REZULTAT: ${task.expectedOutcome}` : ''}
+
+IZLAZ KOJI TREBA OCENITI I OPTIMIZOVATI:
+${task.userReport}
+
+FORMAT ODGOVORA:
+Prvo napiši optimizovani rezultat.
+Na samom kraju, u poslednjoj liniji napiši SAMO: OCENA: X/10
+
+Odgovaraj na srpskom jeziku.`;
+
+      // 4. Stream the optimized result
+      let fullResult = '';
+      let chunkIndex = 0;
+
+      await this.aiGatewayService.streamCompletionWithContext(
+        [{ role: 'user', content: prompt }],
+        {
+          tenantId: authenticatedClient.tenantId,
+          userId: authenticatedClient.userId,
+          conversationId: task.conversationId ?? undefined,
+          businessContext: '',
+        },
+        (chunk: string) => {
+          fullResult += chunk;
+          client.emit('task:result-chunk', {
+            taskId: payload.taskId,
+            conversationId: task.conversationId,
+            content: chunk,
+            index: chunkIndex++,
+          });
+        }
+      );
+
+      // 5. Extract score from the result (only accept 1-10)
+      let score: number | null = null;
+      const scoreMatch = fullResult.match(/OCENA:\s*(\d{1,2})\s*\/\s*10/i);
+      if (scoreMatch) {
+        const rawScore = parseInt(scoreMatch[1]!, 10);
+        if (rawScore >= 1 && rawScore <= 10) {
+          score = rawScore * 10; // Scale 1-10 → 10-100
+        }
+      }
+
+      // 6. Update the task note with optimized result and score
+      const maxReportLength = 10000;
+      await this.prisma.note.update({
+        where: { id: payload.taskId },
+        data: {
+          userReport: fullResult.substring(0, maxReportLength),
+          aiScore: score,
+          aiFeedback: score !== null ? `AI ocena: ${score}/100` : null,
+        },
+      });
+
+      // 7. Emit completion
+      client.emit('task:result-complete', {
+        taskId: payload.taskId,
+        conversationId: task.conversationId,
+        score,
+        finalResult: fullResult,
+        timestamp: new Date().toISOString(),
+      });
+
+      // 8. Refresh notes
+      client.emit('chat:notes-updated', { conversationId: task.conversationId, count: 0 });
+
+      this.logger.log({
+        message: 'Task result submission completed',
+        taskId: payload.taskId,
+        score,
+        resultLength: fullResult.length,
+      });
+    } catch (error) {
+      this.logger.error({
+        message: 'Task result submission failed',
+        taskId: payload.taskId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      client.emit('task:result-error', {
+        taskId: payload.taskId,
+        conversationId: null,
+        message: 'Ocenjivanje rezultata nije uspelo. Pokušajte ponovo.',
+      });
+    }
+  }
+
+  /**
    * Handles YOLO autonomous execution start.
    * Loads all pending tasks, creates per-concept conversations, and starts the scheduler.
    */
@@ -1297,7 +1778,13 @@ Ako nema zadataka, odgovori sa: []`;
       client.emit('workflow:conversations-created', conversationsPayload);
 
       // Start YOLO scheduler
-      const config = { maxConcurrency: 3, maxConceptsHardStop: 1000, retryAttempts: 3 };
+      const executionBudget = parseInt(process.env['YOLO_EXECUTION_BUDGET'] ?? '50', 10);
+      const config = {
+        maxConcurrency: 3,
+        maxConceptsHardStop: 1000,
+        retryAttempts: 3,
+        maxExecutionBudget: executionBudget,
+      };
 
       this.yoloScheduler
         .startYoloExecution(
@@ -1420,7 +1907,13 @@ Ako nema zadataka, odgovori sa: []`;
       const conceptConversations = new Map<string, string>();
 
       // Start YOLO with category scoping
-      const config = { maxConcurrency: 3, maxConceptsHardStop: 100, retryAttempts: 3 };
+      const executionBudget = parseInt(process.env['YOLO_EXECUTION_BUDGET'] ?? '50', 10);
+      const config = {
+        maxConcurrency: 3,
+        maxConceptsHardStop: 100,
+        retryAttempts: 3,
+        maxExecutionBudget: executionBudget,
+      };
 
       this.yoloScheduler
         .startYoloExecution(
@@ -1707,6 +2200,13 @@ Ako nema zadataka, odgovori sa: []`;
             client.emit('workflow:complete', event);
             client.emit('chat:notes-updated', { conversationId, count: 0 });
           },
+          onTasksDiscovered: (newConceptIds) => {
+            client.emit('tree:tasks-discovered', {
+              conceptIds: newConceptIds,
+              conversationId,
+              timestamp: new Date().toISOString(),
+            });
+          },
           saveMessage: async (_role, content, conceptId) => {
             const targetConvId =
               conceptId && conceptConversations.has(conceptId)
@@ -1759,11 +2259,13 @@ Ako nema zadataka, odgovori sa: []`;
     }
 
     try {
-      // Build minimal business context
-      const businessContext = await this.buildBusinessContext(
-        authenticatedClient.tenantId,
-        authenticatedClient.userId
-      );
+      // Build business context: tenant profile + business brain memories in parallel
+      const [businessContext, brainMemoryContext] = await Promise.all([
+        this.buildBusinessContext(authenticatedClient.tenantId, authenticatedClient.userId),
+        this.businessContextService
+          .getBusinessContext(authenticatedClient.tenantId)
+          .catch(() => ''),
+      ]);
 
       // Web search for discovery context
       let webContext = '';
@@ -1780,7 +2282,7 @@ Ako nema zadataka, odgovori sa: []`;
 
       const systemPrompt = `Ti si poslovni asistent koji pomaže korisniku da istraži i razume poslovne teme.
 Odgovaraj precizno i koncizno na srpskom jeziku.
-${businessContext}${webContext}`;
+${businessContext}${brainMemoryContext ? '\n' + brainMemoryContext : ''}${webContext}`;
 
       // Stream response via discovery-specific events (no persistence)
       let fullContent = '';
@@ -1883,6 +2385,12 @@ ${businessContext}${webContext}`;
     const authHeader = client.handshake.headers.authorization;
     if (authHeader?.startsWith('Bearer ')) {
       return authHeader.slice(7);
+    }
+
+    // Try socket.io auth option (client passes auth: { token })
+    const authToken = (client.handshake as any).auth?.token;
+    if (typeof authToken === 'string' && authToken) {
+      return authToken;
     }
 
     // Try query parameter

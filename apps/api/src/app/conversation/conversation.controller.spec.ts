@@ -4,6 +4,7 @@ import { ConversationController } from './conversation.controller';
 import { ConversationService } from './conversation.service';
 import { CurriculumService } from '../knowledge/services/curriculum.service';
 import { ConceptService } from '../knowledge/services/concept.service';
+import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import type { CurrentUserPayload } from '../auth/strategies/jwt.strategy';
 
 describe('ConversationController', () => {
@@ -21,6 +22,7 @@ describe('ConversationController', () => {
     role: 'MEMBER',
     email: 'test@example.com',
     auth0Id: 'auth0|123',
+    department: null,
   };
 
   beforeEach(async () => {
@@ -36,8 +38,16 @@ describe('ConversationController', () => {
       providers: [
         { provide: ConversationService, useValue: mockConversationService },
         { provide: CurriculumService, useValue: {} },
-        { provide: ConceptService, useValue: { createDynamicRelationships: jest.fn().mockResolvedValue({ relationshipsCreated: 0, errors: [] }) } },
+        {
+          provide: ConceptService,
+          useValue: {
+            createDynamicRelationships: jest
+              .fn()
+              .mockResolvedValue({ relationshipsCreated: 0, errors: [] }),
+          },
+        },
         { provide: ConfigService, useValue: { get: jest.fn() } },
+        { provide: PlatformPrismaService, useValue: {} },
       ],
     }).compile();
 
@@ -53,9 +63,7 @@ describe('ConversationController', () => {
         createdAt: '2026-02-06T00:00:00.000Z',
         updatedAt: '2026-02-06T00:00:00.000Z',
       };
-      mockConversationService.createConversation.mockResolvedValue(
-        mockConversation
-      );
+      mockConversationService.createConversation.mockResolvedValue(mockConversation);
 
       const result = await controller.createConversation(mockUser, {
         title: 'Test Conversation',
@@ -79,9 +87,7 @@ describe('ConversationController', () => {
         createdAt: '2026-02-06T00:00:00.000Z',
         updatedAt: '2026-02-06T00:00:00.000Z',
       };
-      mockConversationService.createConversation.mockResolvedValue(
-        mockConversation
-      );
+      mockConversationService.createConversation.mockResolvedValue(mockConversation);
 
       const result = await controller.createConversation(mockUser, {});
 
@@ -114,9 +120,7 @@ describe('ConversationController', () => {
           updatedAt: '2026-02-06T00:00:00.000Z',
         },
       ];
-      mockConversationService.listConversations.mockResolvedValue(
-        mockConversations
-      );
+      mockConversationService.listConversations.mockResolvedValue(mockConversations);
 
       const result = await controller.listConversations(mockUser);
 
@@ -154,9 +158,7 @@ describe('ConversationController', () => {
           },
         ],
       };
-      mockConversationService.getConversation.mockResolvedValue(
-        mockConversation
-      );
+      mockConversationService.getConversation.mockResolvedValue(mockConversation);
 
       const result = await controller.getConversation(mockUser, 'sess_1');
 

@@ -8,14 +8,18 @@ import { CitationService } from '../knowledge/services/citation.service';
 import { AiGatewayService } from '../ai-gateway/ai-gateway.service';
 import { NotesService } from '../notes/notes.service';
 import { WebSearchService } from '../web-search/web-search.service';
+import { BusinessContextService } from '../knowledge/services/business-context.service';
+import { ConceptRelevanceService } from '../knowledge/services/concept-relevance.service';
 import type { ExecutionPlanStep, EnrichedSearchResult } from '@mentor-ai/shared/types';
 
 describe('WorkflowService', () => {
   let service: WorkflowService;
   let mockPrisma: {
     conceptWorkflow: { findUnique: jest.Mock; create: jest.Mock; deleteMany: jest.Mock };
-    note: { findMany: jest.Mock };
+    note: { findMany: jest.Mock; createMany: jest.Mock };
     tenant: { findUnique: jest.Mock };
+    user: { findUnique: jest.Mock };
+    conceptRelationship: { findMany: jest.Mock };
   };
   let mockConceptService: { findById: jest.Mock };
   let mockAiGateway: { streamCompletionWithContext: jest.Mock };
@@ -31,8 +35,10 @@ describe('WorkflowService', () => {
   beforeEach(async () => {
     mockPrisma = {
       conceptWorkflow: { findUnique: jest.fn(), create: jest.fn(), deleteMany: jest.fn() },
-      note: { findMany: jest.fn() },
+      note: { findMany: jest.fn(), createMany: jest.fn().mockResolvedValue({ count: 0 }) },
       tenant: { findUnique: jest.fn() },
+      user: { findUnique: jest.fn().mockResolvedValue(null) },
+      conceptRelationship: { findMany: jest.fn().mockResolvedValue([]) },
     };
     mockConceptService = { findById: jest.fn() };
     mockAiGateway = { streamCompletionWithContext: jest.fn() };
@@ -42,9 +48,9 @@ describe('WorkflowService', () => {
       search: jest.fn().mockResolvedValue([]),
       fetchWebpage: jest.fn().mockResolvedValue(''),
       searchAndExtract: jest.fn().mockResolvedValue([]),
-      formatSourcesAsObsidian: jest.fn().mockImplementation(
-        WebSearchService.prototype.formatSourcesAsObsidian,
-      ),
+      formatSourcesAsObsidian: jest
+        .fn()
+        .mockImplementation(WebSearchService.prototype.formatSourcesAsObsidian),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -52,12 +58,29 @@ describe('WorkflowService', () => {
         WorkflowService,
         { provide: PlatformPrismaService, useValue: mockPrisma },
         { provide: ConceptService, useValue: mockConceptService },
-        { provide: ConceptMatchingService, useValue: { findRelevantConcepts: jest.fn().mockResolvedValue([]) } },
+        {
+          provide: ConceptMatchingService,
+          useValue: { findRelevantConcepts: jest.fn().mockResolvedValue([]) },
+        },
         { provide: CitationInjectorService, useValue: mockCitationInjector },
         { provide: CitationService, useValue: { storeCitations: jest.fn() } },
         { provide: AiGatewayService, useValue: mockAiGateway },
-        { provide: NotesService, useValue: { createNote: jest.fn(), getNoteById: jest.fn(), updateStatus: jest.fn() } },
+        {
+          provide: NotesService,
+          useValue: { createNote: jest.fn(), getNoteById: jest.fn(), updateStatus: jest.fn() },
+        },
         { provide: WebSearchService, useValue: mockWebSearch },
+        {
+          provide: BusinessContextService,
+          useValue: { getBusinessContext: jest.fn().mockResolvedValue('') },
+        },
+        {
+          provide: ConceptRelevanceService,
+          useValue: {
+            scoreRelevance: jest.fn().mockReturnValue(0.8),
+            getThreshold: jest.fn().mockReturnValue(0.3),
+          },
+        },
       ],
     }).compile();
 
@@ -96,7 +119,10 @@ describe('WorkflowService', () => {
     });
 
     it('should include industry when tenant provides it', () => {
-      const query = service.buildSearchQuery(makeStep(), { name: 'TestCo', industry: 'Technology' });
+      const query = service.buildSearchQuery(makeStep(), {
+        name: 'TestCo',
+        industry: 'Technology',
+      });
       expect(query).toContain('Technology');
     });
 
@@ -117,7 +143,8 @@ describe('WorkflowService', () => {
 
     it('should limit query to 12 words maximum', () => {
       const step = makeStep({
-        title: 'Perform Complete Comprehensive Detailed Strategic Market Research And Analysis For Business Growth',
+        title:
+          'Perform Complete Comprehensive Detailed Strategic Market Research And Analysis For Business Growth',
       });
       const query = service.buildSearchQuery(step, { name: 'TestCo', industry: 'Technology' });
       const wordCount = query.split(' ').length;
@@ -148,13 +175,15 @@ describe('WorkflowService', () => {
     });
 
     it('should format results with page content when available', () => {
-      const results: EnrichedSearchResult[] = [{
-        title: 'Test Article',
-        link: 'https://example.com/article',
-        snippet: 'A brief snippet',
-        pageContent: 'Full page content extracted from the article',
-        fetchedAt: '2026-02-09T12:00:00Z',
-      }];
+      const results: EnrichedSearchResult[] = [
+        {
+          title: 'Test Article',
+          link: 'https://example.com/article',
+          snippet: 'A brief snippet',
+          pageContent: 'Full page content extracted from the article',
+          fetchedAt: '2026-02-09T12:00:00Z',
+        },
+      ];
 
       const context = service.formatWebContext(results);
 
@@ -162,16 +191,18 @@ describe('WorkflowService', () => {
       expect(context).toContain('Test Article');
       expect(context).toContain('https://example.com/article');
       expect(context).toContain('Full page content extracted');
-      expect(context).toContain('Izvori / Sources');
+      expect(context).toContain('INLINE');
     });
 
     it('should use snippet when page content is not available', () => {
-      const results: EnrichedSearchResult[] = [{
-        title: 'Snippet Only',
-        link: 'https://example.com/snippet',
-        snippet: 'Only the snippet is available',
-        fetchedAt: '2026-02-09T12:00:00Z',
-      }];
+      const results: EnrichedSearchResult[] = [
+        {
+          title: 'Snippet Only',
+          link: 'https://example.com/snippet',
+          snippet: 'Only the snippet is available',
+          fetchedAt: '2026-02-09T12:00:00Z',
+        },
+      ];
 
       const context = service.formatWebContext(results);
 
@@ -179,17 +210,19 @@ describe('WorkflowService', () => {
     });
 
     it('should include source attribution instruction', () => {
-      const results: EnrichedSearchResult[] = [{
-        title: 'Source',
-        link: 'https://example.com',
-        snippet: 'Content',
-        fetchedAt: '2026-02-09T12:00:00Z',
-      }];
+      const results: EnrichedSearchResult[] = [
+        {
+          title: 'Source',
+          link: 'https://example.com',
+          snippet: 'Content',
+          fetchedAt: '2026-02-09T12:00:00Z',
+        },
+      ];
 
       const context = service.formatWebContext(results);
 
       expect(context).toContain('citiraj izvor');
-      expect(context).toContain('Izvori / Sources');
+      expect(context).toContain('INLINE');
     });
 
     it('should format multiple results', () => {
@@ -224,7 +257,16 @@ describe('WorkflowService', () => {
       mockPrisma.conceptWorkflow.findUnique.mockResolvedValue({
         conceptId: 'cpt_ws1',
         concept: { name: 'Market Segmentation' },
-        steps: [{ stepNumber: 1, title: 'Analyze target segments', description: 'Identify key market segments', promptTemplate: 'Analyze {{conceptName}} for {{businessContext}}', expectedOutcome: 'Segment analysis', estimatedMinutes: 10 }],
+        steps: [
+          {
+            stepNumber: 1,
+            title: 'Analyze target segments',
+            description: 'Identify key market segments',
+            promptTemplate: 'Analyze {{conceptName}} for {{businessContext}}',
+            expectedOutcome: 'Segment analysis',
+            estimatedMinutes: 10,
+          },
+        ],
       });
       // Mock concept lookup for knowledge building
       mockConceptService.findById.mockResolvedValue({
@@ -247,7 +289,7 @@ describe('WorkflowService', () => {
         (_messages: unknown, _opts: unknown, onChunk: (chunk: string) => void) => {
           onChunk('AI response content');
           return Promise.resolve();
-        },
+        }
       );
       // Mock citation injector
       mockCitationInjector.injectCitations.mockReturnValue({
@@ -265,7 +307,7 @@ describe('WorkflowService', () => {
       expect(mockWebSearch.searchAndExtract).toHaveBeenCalledTimes(1);
       expect(mockWebSearch.searchAndExtract).toHaveBeenCalledWith(
         expect.stringContaining('Market'),
-        5,
+        5
       );
     });
 
@@ -281,7 +323,13 @@ describe('WorkflowService', () => {
       mockWebSearch.isAvailable.mockReturnValue(true);
       mockWebSearch.searchAndExtract.mockRejectedValue(new Error('API down'));
 
-      const result = await service.executeStepAutonomous(step, 'conv_1', 'usr_1', 'tnt_1', jest.fn());
+      const result = await service.executeStepAutonomous(
+        step,
+        'conv_1',
+        'usr_1',
+        'tnt_1',
+        jest.fn()
+      );
 
       expect(result.content).toBe('AI response content');
     });

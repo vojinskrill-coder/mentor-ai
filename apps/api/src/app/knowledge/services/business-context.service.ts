@@ -15,8 +15,9 @@ import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 /** Approximate characters per token for estimation */
 const CHARS_PER_TOKEN = 4;
 
-/** Max tokens for the business context section in the system prompt */
-const MAX_CONTEXT_TOKENS = 4000;
+/** Max tokens for the business context section in the system prompt.
+ *  Reduced from 4000 to 1500 to fit within 8K context window models. */
+const MAX_CONTEXT_TOKENS = 1500;
 
 @Injectable()
 export class BusinessContextService {

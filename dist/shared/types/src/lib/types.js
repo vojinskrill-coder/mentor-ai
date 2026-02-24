@@ -154,6 +154,7 @@ var LlmProviderType;
     LlmProviderType["OPENAI"] = "OPENAI";
     LlmProviderType["ANTHROPIC"] = "ANTHROPIC";
     LlmProviderType["LM_STUDIO"] = "LM_STUDIO";
+    LlmProviderType["DEEPSEEK"] = "DEEPSEEK";
 })(LlmProviderType || (LlmProviderType = {}));
 var MessageRole;
 (function(MessageRole) {
@@ -261,6 +262,7 @@ var NoteType;
     NoteType["TASK"] = "TASK";
     NoteType["NOTE"] = "NOTE";
     NoteType["SUMMARY"] = "SUMMARY";
+    NoteType["COMMENT"] = "COMMENT";
 })(NoteType || (NoteType = {}));
 var NoteStatus;
 (function(NoteStatus) {

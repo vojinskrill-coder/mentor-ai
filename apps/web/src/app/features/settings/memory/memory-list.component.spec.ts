@@ -21,6 +21,7 @@ describe('MemoryListComponent', () => {
       content: 'Acme Corp has a budget of $50,000',
       subject: 'Acme Corp',
       confidence: 0.92,
+      isDeleted: false,
       createdAt: '2026-02-05T10:00:00.000Z',
       updatedAt: '2026-02-05T10:00:00.000Z',
     },
@@ -33,6 +34,7 @@ describe('MemoryListComponent', () => {
       content: 'Project Phoenix deadline is end of Q1 2026',
       subject: 'Project Phoenix',
       confidence: 1.0,
+      isDeleted: false,
       createdAt: '2026-02-04T10:00:00.000Z',
       updatedAt: '2026-02-04T10:00:00.000Z',
     },
@@ -46,10 +48,7 @@ describe('MemoryListComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [MemoryListComponent, FormsModule],
-      providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
-      ],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(MemoryListComponent);
@@ -182,7 +181,7 @@ describe('MemoryListComponent', () => {
       // Mock window.confirm
       vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-      component.onDelete(mockMemories[0]);
+      component.onDelete(mockMemories[0]!);
 
       const deleteReq = httpMock.expectOne('/api/v1/memory/mem_1');
       expect(deleteReq.request.method).toBe('DELETE');
@@ -196,7 +195,7 @@ describe('MemoryListComponent', () => {
     it('should not delete when cancelled', fakeAsync(() => {
       vi.spyOn(window, 'confirm').mockReturnValue(false);
 
-      component.onDelete(mockMemories[0]);
+      component.onDelete(mockMemories[0]!);
       tick();
 
       httpMock.expectNone('/api/v1/memory/mem_1');
@@ -206,7 +205,7 @@ describe('MemoryListComponent', () => {
     it('should show deleting state during delete', fakeAsync(() => {
       vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-      component.onDelete(mockMemories[0]);
+      component.onDelete(mockMemories[0]!);
       expect(component.deletingIds$().has('mem_1')).toBe(true);
 
       const deleteReq = httpMock.expectOne('/api/v1/memory/mem_1');
@@ -227,14 +226,14 @@ describe('MemoryListComponent', () => {
     }));
 
     it('should open correction dialog on edit', () => {
-      component.onEdit(mockMemories[0]);
+      component.onEdit(mockMemories[0]!);
 
       expect(component.showCorrectionDialog$()).toBe(true);
       expect(component.selectedMemory$()).toEqual(mockMemories[0]);
     });
 
     it('should close correction dialog', () => {
-      component.onEdit(mockMemories[0]);
+      component.onEdit(mockMemories[0]!);
       component.closeCorrectionDialog();
 
       expect(component.showCorrectionDialog$()).toBe(false);

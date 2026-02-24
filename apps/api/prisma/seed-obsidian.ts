@@ -158,6 +158,7 @@ async function main() {
   interface ConceptRecord {
     id: string;
     name: string;
+    originalName: string; // Before uniqueness modification
     slug: string;
     category: string;
     definition: string;
@@ -167,6 +168,7 @@ async function main() {
     sortOrder: number;
     filePath: string;
     fileName: string;
+    curriculumId: string | null;
   }
 
   const concepts: ConceptRecord[] = [];
@@ -188,7 +190,8 @@ async function main() {
 
     const fileName = filePath.split('/').pop()!.replace('.md', '');
     const category = extractCategory(filePath);
-    let cleanName = stripNumberPrefix(fileName);
+    const originalName = stripNumberPrefix(fileName);
+    let cleanName = originalName;
 
     // Ensure unique names
     if (nameSet.has(cleanName)) {
@@ -215,6 +218,7 @@ async function main() {
     concepts.push({
       id,
       name: cleanName,
+      originalName,
       slug,
       category,
       definition: extractDefinition(content),
@@ -224,10 +228,112 @@ async function main() {
       sortOrder: extractSortOrder(fileName),
       filePath,
       fileName,
+      curriculumId: null, // Resolved in Pass 1.5
     });
   }
 
   console.log(`Built ${concepts.length} concept records`);
+
+  // ─── Pass 1.5: Resolve curriculumId from curriculum.json ──
+
+  console.log('\n=== Pass 1.5: Matching concepts to curriculum.json ===');
+
+  interface CurriculumNode {
+    id: string;
+    parentId: string | null;
+    label: string;
+    sortOrder: number;
+  }
+
+  const curriculumPath = path.join(
+    __dirname,
+    '..',
+    'src',
+    'app',
+    'knowledge',
+    'data',
+    'curriculum.json'
+  );
+  let curriculumNodes: CurriculumNode[] = [];
+  try {
+    curriculumNodes = JSON.parse(fs.readFileSync(curriculumPath, 'utf8'));
+    console.log(`Loaded ${curriculumNodes.length} curriculum nodes`);
+  } catch {
+    console.warn('Could not load curriculum.json — curriculumId will be null for all concepts');
+  }
+
+  if (curriculumNodes.length > 0) {
+    // Build label → nodes lookup (some labels appear multiple times for folders vs pages)
+    const labelToNodes = new Map<string, CurriculumNode[]>();
+    for (const node of curriculumNodes) {
+      const existing = labelToNodes.get(node.label) ?? [];
+      existing.push(node);
+      labelToNodes.set(node.label, existing);
+    }
+
+    // Build id → node for parent traversal
+    const nodeById = new Map<string, CurriculumNode>(curriculumNodes.map((n) => [n.id, n]));
+
+    // Helper: find root ancestor label for a curriculum node
+    function getRootLabel(node: CurriculumNode): string {
+      let current: CurriculumNode | undefined = node;
+      while (current?.parentId) {
+        const parent = nodeById.get(current.parentId);
+        if (!parent) break;
+        current = parent;
+      }
+      return current?.label ?? '';
+    }
+
+    let matched = 0;
+    let unmatched = 0;
+
+    for (const concept of concepts) {
+      // Try matching by originalName (before uniqueness modification)
+      const candidates = labelToNodes.get(concept.originalName);
+      if (!candidates || candidates.length === 0) {
+        unmatched++;
+        continue;
+      }
+
+      if (candidates.length === 1) {
+        concept.curriculumId = candidates[0]!.id;
+        matched++;
+        continue;
+      }
+
+      // Multiple candidates: disambiguate by category → root ancestor label
+      let found = false;
+      for (const candidate of candidates) {
+        const rootLabel = getRootLabel(candidate);
+        if (rootLabel === concept.category) {
+          concept.curriculumId = candidate.id;
+          matched++;
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        // Fallback: prefer non-folder nodes (those with a parentId, deeper in tree)
+        const deepest = candidates
+          .filter((c) => c.parentId !== null)
+          .sort((a, b) => b.id.length - a.id.length);
+        if (deepest.length > 0) {
+          concept.curriculumId = deepest[0]!.id;
+          matched++;
+        } else {
+          concept.curriculumId = candidates[0]!.id;
+          matched++;
+        }
+      }
+    }
+
+    console.log(`Matched ${matched} concepts to curriculum nodes`);
+    if (unmatched > 0) {
+      console.log(`Unmatched: ${unmatched} concepts (no curriculum node found)`);
+    }
+  }
 
   // ─── Pass 2: Build relationships from wikilinks ────────
 
@@ -309,6 +415,7 @@ async function main() {
             extendedDescription: c.extendedDescription,
             departmentTags: c.departmentTags,
             sortOrder: c.sortOrder,
+            curriculumId: c.curriculumId,
           },
           create: {
             id: c.id,
@@ -320,6 +427,7 @@ async function main() {
             departmentTags: c.departmentTags,
             source: c.source,
             sortOrder: c.sortOrder,
+            curriculumId: c.curriculumId,
           },
         })
       )

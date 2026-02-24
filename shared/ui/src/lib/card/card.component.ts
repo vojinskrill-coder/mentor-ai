@@ -18,18 +18,20 @@ import { CommonModule } from '@angular/common';
       <ng-content />
     </div>
   `,
-  styles: [`
-    :host {
-      display: block;
-    }
-  `],
+  styles: [
+    `
+      :host {
+        display: block;
+      }
+    `,
+  ],
 })
 export class CardComponent {
   readonly clickable = input(false);
   readonly selected = input(false);
   readonly ariaLabel = input<string | undefined>(undefined);
 
-  readonly cardClick = output<MouseEvent | KeyboardEvent>();
+  readonly cardClick = output<Event>();
 
   readonly cardClasses = computed(() => {
     const base = [
@@ -56,7 +58,7 @@ export class CardComponent {
     }
   }
 
-  handleKeydown(event: KeyboardEvent): void {
+  handleKeydown(event: Event): void {
     if (this.clickable()) {
       event.preventDefault();
       this.cardClick.emit(event);

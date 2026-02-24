@@ -629,16 +629,32 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
     <div class="page">
       <div class="container">
         <div class="header">
-          <h1>Welcome to Mentor AI</h1>
-          <p>Set up your workspace and see AI in action</p>
+          <h1>Dobrodošli u Mentor AI</h1>
+          <p>Podesite radni prostor i vidite AI u akciji</p>
         </div>
 
-        <div class="progress">
+        <div
+          class="progress"
+          role="progressbar"
+          [attr.aria-valuenow]="currentStep$()"
+          aria-valuemin="1"
+          aria-valuemax="4"
+          [attr.aria-label]="'Korak ' + currentStep$() + ' od 4'"
+        >
           @for (stepNum of [1, 2, 3, 4]; track stepNum) {
             <div
               class="step-circle"
               [class.active]="currentStep$() >= stepNum"
               [class.inactive]="currentStep$() < stepNum"
+              [attr.aria-label]="
+                'Korak ' +
+                stepNum +
+                (currentStep$() > stepNum
+                  ? ' — završen'
+                  : currentStep$() === stepNum
+                    ? ' — aktivan'
+                    : ' — predstoji')
+              "
             >
               @if (currentStep$() > stepNum) {
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -666,25 +682,25 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         <div class="card">
           <!-- Step 1: Company Setup -->
           @if (currentStep$() === 1) {
-            <h2>Set Up Your Workspace</h2>
+            <h2>Podesite vaš radni prostor</h2>
             <p class="card-desc">
-              Tell us about your company so we can tailor the experience to your needs.
+              Recite nam o vašoj kompaniji da bismo prilagodili iskustvo vašim potrebama.
             </p>
 
             <div class="form-group">
-              <label class="form-label">Company Name</label>
+              <label class="form-label">Naziv kompanije</label>
               <input
                 class="form-input"
                 type="text"
                 [ngModel]="companyName$()"
                 (ngModelChange)="companyName$.set($event)"
-                placeholder="e.g., Acme Corporation"
+                placeholder="npr. Acme Corporation"
                 maxlength="100"
               />
             </div>
 
             <div class="form-group">
-              <label class="form-label">Industry</label>
+              <label class="form-label">Industrija</label>
               <div class="industry-grid">
                 @for (industry of industries; track industry) {
                   <button
@@ -702,7 +718,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
                   type="text"
                   [ngModel]="customIndustry$()"
                   (ngModelChange)="customIndustry$.set($event)"
-                  placeholder="Enter your industry..."
+                  placeholder="Unesite vašu industriju..."
                   maxlength="100"
                 />
               }
@@ -710,27 +726,27 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
 
             <div class="form-group">
               <label class="form-label"
-                >Business Description
+                >Opis poslovanja
                 <span style="color:#666; text-transform:none; letter-spacing:0"
-                  >(optional but recommended)</span
+                  >(opciono ali preporučeno)</span
                 ></label
               >
               <textarea
                 class="form-textarea"
                 [ngModel]="companyDescription$()"
                 (ngModelChange)="companyDescription$.set($event)"
-                placeholder="Describe your business in detail — what you do, who your customers are, your current products/services, revenue model, etc. The more detail, the better the AI can help you."
+                placeholder="Opišite vaše poslovanje detaljno — čime se bavite, ko su vaši klijenti, trenutni proizvodi/usluge, model prihoda, itd. Više detalja znači bolju AI pomoć."
                 maxlength="3000"
                 rows="6"
               ></textarea>
-              <div class="form-hint">{{ companyDescription$().length }}/3000 characters</div>
+              <div class="form-hint">{{ companyDescription$().length }}/3000 karaktera</div>
             </div>
 
             <div class="form-group">
               <label class="form-label"
-                >Website URL
+                >URL sajta
                 <span style="color:#666; text-transform:none; letter-spacing:0"
-                  >(optional — AI will analyze your site for better recommendations)</span
+                  >(opciono — AI će analizirati vaš sajt za bolje preporuke)</span
                 ></label
               >
               <input
@@ -745,9 +761,9 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
 
             <div class="form-group">
               <label class="form-label"
-                >PDF Brochure
+                >PDF brošura
                 <span style="color:#666; text-transform:none; letter-spacing:0"
-                  >(optional)</span
+                  >(opciono)</span
                 ></label
               >
               <div class="pdf-upload-row">
@@ -757,7 +773,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
                   (click)="pdfInput.click()"
                 >
                   @if (isUploadingPdf$()) {
-                    <span class="pdf-spinner"></span> Processing...
+                    <span class="pdf-spinner"></span> Obrađujem...
                   } @else {
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path
@@ -767,7 +783,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
                         d="M12 4v16m8-8H4"
                       />
                     </svg>
-                    Upload PDF
+                    Otpremi PDF
                   }
                 </button>
                 @if (pdfFileName$()) {
@@ -788,7 +804,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
                 <div class="pdf-error-text">{{ pdfError$() }}</div>
               }
               <div class="pdf-hint">
-                PDF up to 70MB. Text will be extracted to enrich AI responses.
+                PDF do 70MB. Tekst će biti ekstrahovan za obogaćivanje AI odgovora.
               </div>
             </div>
             <input
@@ -802,8 +818,8 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
 
           <!-- Step 2: Choose Strategy -->
           @if (currentStep$() === 2) {
-            <h2>Choose Your Path</h2>
-            <p class="card-desc">How would you like the AI to help you get started?</p>
+            <h2>Izaberite vaš put</h2>
+            <p class="card-desc">Kako želite da vam AI pomogne da počnete?</p>
 
             <div class="strategy-grid">
               <button
@@ -821,10 +837,10 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
                     />
                   </svg>
                 </div>
-                <div class="strategy-name">Analyse My Business</div>
+                <div class="strategy-name">Analiziraj moje poslovanje</div>
                 <div class="strategy-desc">
-                  Get a comprehensive AI-powered analysis of your business — strengths,
-                  opportunities, and strategic recommendations.
+                  Dobijte sveobuhvatnu AI analizu vašeg poslovanja — snage, prilike i strateške
+                  preporuke.
                 </div>
               </button>
 
@@ -843,17 +859,17 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
                     />
                   </svg>
                 </div>
-                <div class="strategy-name">Create My Business Brain</div>
+                <div class="strategy-name">Kreiraj moj poslovni mozak</div>
                 <div class="strategy-desc">
-                  Auto-generate personalized tasks and focus areas based on your business. These
-                  will appear in your chat workspace.
+                  Automatski generišite personalizovane zadatke i fokus oblasti na osnovu vašeg
+                  poslovanja. Oni će se pojaviti u vašem radnom prostoru za razgovor.
                 </div>
               </button>
             </div>
 
             @if (selectedStrategy$() === 'CREATE_BUSINESS_BRAIN') {
               <div class="mode-toggle-section">
-                <div class="mode-toggle-label">Execution Mode</div>
+                <div class="mode-toggle-label">Režim izvršavanja</div>
                 <div class="mode-toggle">
                   <button
                     class="mode-toggle-btn"
@@ -872,12 +888,12 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
                 </div>
                 @if (executionMode$() === 'YOLO') {
                   <div class="mode-hint">
-                    All tasks will execute automatically without manual interaction. Tasks respect
-                    dependency ordering and run in parallel (up to 3 at a time).
+                    Svi zadaci će se izvršavati automatski bez ručne interakcije. Zadaci poštuju
+                    redosled zavisnosti i izvršavaju se paralelno (do 3 istovremeno).
                   </div>
                 } @else {
                   <div class="mode-hint">
-                    You'll review and approve each task step before it executes.
+                    Pregledaćete i odobriti svaki korak zadatka pre izvršavanja.
                   </div>
                 }
               </div>
@@ -906,26 +922,26 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
 
           <!-- Step 3: Business Context + Generate -->
           @if (currentStep$() === 3 && !isGenerating$() && !generatedOutput$()) {
-            <h2>Tell Us More</h2>
+            <h2>Recite nam više</h2>
             <p class="card-desc">
-              Provide context about your business to get the most relevant results.
+              Obezbedite kontekst o vašem poslovanju za najrelevantnije rezultate.
             </p>
 
             <div class="form-group">
-              <label class="form-label">Where is your business currently?</label>
+              <label class="form-label">Gde se vaše poslovanje trenutno nalazi?</label>
               <textarea
                 class="form-textarea"
                 [ngModel]="businessState$()"
                 (ngModelChange)="businessState$.set($event)"
-                placeholder="E.g., We're a 2-year-old startup with 15 employees, growing 20% month-over-month. We recently raised a Series A and are looking to expand into new markets..."
+                placeholder="Npr. mi smo startup star 2 godine sa 15 zaposlenih..."
                 maxlength="1000"
                 rows="4"
               ></textarea>
-              <div class="form-hint">{{ businessState$().length }}/1000 characters</div>
+              <div class="form-hint">{{ businessState$().length }}/1000 karaktera</div>
             </div>
 
             <div class="form-group">
-              <label class="form-label">What functions/departments does your business have?</label>
+              <label class="form-label">Koje funkcije/odeljenja ima vaše poslovanje?</label>
               <div class="dept-grid">
                 @for (dept of departments; track dept) {
                   <button
@@ -945,12 +961,12 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
               <div class="gen-spinner"></div>
               <div class="gen-title">
                 @if (selectedStrategy$() === 'ANALYSE_BUSINESS') {
-                  Analysing Your Business...
+                  Analiziram vaše poslovanje...
                 } @else {
-                  Creating Your Business Brain...
+                  Kreiram vaš poslovni mozak...
                 }
               </div>
-              <div class="gen-sub">This usually takes less than 30 seconds...</div>
+              <div class="gen-sub">Ovo obično traje manje od 30 sekundi...</div>
               @if (generationTimer$() > 0) {
                 <div class="gen-timer">{{ formatTime(generationTimer$()) }}</div>
               }
@@ -961,12 +977,12 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
             <div class="result-header">
               <h2>
                 @if (selectedStrategy$() === 'ANALYSE_BUSINESS') {
-                  Your Business Analysis
+                  Vaša poslovna analiza
                 } @else {
-                  Your Business Brain
+                  Vaš poslovni mozak
                 }
               </h2>
-              <span class="result-time">Generated in {{ formatTime(generationTimeMs$()) }}</span>
+              <span class="result-time">Generisano za {{ formatTime(generationTimeMs$()) }}</span>
             </div>
             <div class="result-box">{{ generatedOutput$() }}</div>
           }
@@ -988,13 +1004,13 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
               <h2>{{ celebrationMessage$() }}</h2>
               @if (selectedStrategy$() === 'ANALYSE_BUSINESS') {
                 <p>
-                  Your business analysis has been saved as a note. You're all set to explore Mentor
+                  Vaša poslovna analiza je sačuvana kao beleška. Sve je spremno za korišćenje Mentor
                   AI!
                 </p>
               } @else {
                 <p>
-                  Your Business Brain has been created! Head to chat to explore your personalized
-                  tasks and focus areas.
+                  Vaš poslovni mozak je kreiran! Idite na razgovor da istražite personalizovane
+                  zadatke i fokus oblasti.
                 </p>
               }
             </div>
@@ -1012,7 +1028,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
               />
             </svg>
             <div>
-              <div class="error-title">Something went wrong</div>
+              <div class="error-title">Nešto je pošlo naopako</div>
               <div class="error-detail">{{ errorMessage$() }}</div>
             </div>
           </div>
@@ -1020,7 +1036,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
 
         <div class="btn-row">
           @if (currentStep$() > 1 && !isGenerating$() && !showCelebration$()) {
-            <button class="btn btn-secondary" (click)="previousStep()">&#8592; Back</button>
+            <button class="btn btn-secondary" (click)="previousStep()">&#8592; Nazad</button>
           } @else {
             <div></div>
           }
@@ -1032,28 +1048,28 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
               [disabled]="!canProceed$() || isSavingCompany$()"
             >
               @if (isSavingCompany$()) {
-                <span class="saving-spinner"></span> Saving...
+                <span class="saving-spinner"></span> Čuvam...
               } @else {
-                Continue &#8594;
+                Nastavi &#8594;
               }
             </button>
           }
 
           @if (currentStep$() === 3 && !isGenerating$() && !generatedOutput$()) {
             <button class="btn btn-primary" (click)="generateOutput()" [disabled]="!canGenerate$()">
-              Generate
+              Generiši
             </button>
           }
 
           @if (generatedOutput$() && !showCelebration$() && !isCompletingOnboarding$()) {
             <button class="btn btn-primary" (click)="saveAndComplete()">
-              Save & Continue &#8594;
+              Sačuvaj i nastavi &#8594;
             </button>
           }
 
           @if (showCelebration$()) {
             <button class="btn btn-primary btn-right" (click)="goToChat()">
-              Go to Chat &#8594;
+              Idi na razgovor &#8594;
             </button>
           }
         </div>
@@ -1197,11 +1213,11 @@ export class OnboardingWizardComponent implements OnInit {
 
     // Client-side validation
     if (file.type !== 'application/pdf') {
-      this.pdfError$.set('Please select a PDF file.');
+      this.pdfError$.set('Izaberite PDF datoteku.');
       return;
     }
     if (file.size > 70 * 1024 * 1024) {
-      this.pdfError$.set('File is too large. Maximum size is 70MB.');
+      this.pdfError$.set('Datoteka je prevelika. Maksimalna veličina je 70MB.');
       return;
     }
 
@@ -1216,7 +1232,7 @@ export class OnboardingWizardComponent implements OnInit {
       this.pdfExtractedText$.set(result.extractedText);
     } catch (error: any) {
       const detail = error?.error?.detail || error?.error?.message || error?.message;
-      this.pdfError$.set(detail || 'Failed to process PDF. Please try again.');
+      this.pdfError$.set(detail || 'Obrada PDF-a nije uspela. Pokušajte ponovo.');
     } finally {
       this.isUploadingPdf$.set(false);
     }
@@ -1306,7 +1322,7 @@ export class OnboardingWizardComponent implements OnInit {
       this.generationTimeMs$.set(result.generationTimeMs);
     } catch (error: any) {
       const detail = error?.error?.detail || error?.error?.message || error?.message;
-      const message = detail || 'Failed to generate content. Please try again.';
+      const message = detail || 'Generisanje sadržaja nije uspelo. Pokušajte ponovo.';
       console.error('Generate output error:', error);
       this.errorMessage$.set(message);
     } finally {
@@ -1339,7 +1355,7 @@ export class OnboardingWizardComponent implements OnInit {
     } catch (error) {
       console.error('Failed to save onboarding completion:', error);
       this.isCompletingOnboarding$.set(false);
-      this.celebrationMessage$.set('Congratulations! Your workspace is ready!');
+      this.celebrationMessage$.set('Čestitamo! Vaš radni prostor je spreman!');
       this.showCelebration$.set(true);
       this.currentStep$.set(4);
     }

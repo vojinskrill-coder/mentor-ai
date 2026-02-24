@@ -1,12 +1,7 @@
-import {
-  Component,
-  input,
-  output,
-  computed,
-  ChangeDetectionStrategy,
-} from '@angular/core';
+import { Component, input, output, computed, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { marked, type Tokens } from 'marked';
+import DOMPurify from 'dompurify';
 import type { ConceptCitation, ConceptCategory } from '@mentor-ai/shared/types';
 
 // Configure marked for Obsidian-like rendering with target="_blank" links
@@ -21,6 +16,42 @@ marked.setOptions({
   breaks: true,
   renderer,
 });
+
+/** DOMPurify config matching the shared markdown-config */
+const PURIFY_CONFIG = {
+  ADD_ATTR: ['target', 'rel', 'class'],
+  ALLOWED_TAGS: [
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'p',
+    'br',
+    'hr',
+    'strong',
+    'em',
+    'del',
+    's',
+    'ul',
+    'ol',
+    'li',
+    'a',
+    'code',
+    'pre',
+    'blockquote',
+    'table',
+    'thead',
+    'tbody',
+    'tr',
+    'th',
+    'td',
+    'span',
+    'div',
+    'img',
+  ],
+};
 
 /**
  * Rendered segment of message content.
@@ -53,8 +84,17 @@ interface ContentSegment {
           <button
             type="button"
             class="citation-badge"
-            [class]="getCategoryClass(segment.citation?.conceptCategory)"
-            [attr.aria-label]="'Concept: ' + segment.content + '. Click to view details.'"
+            [class.finance]="getCategoryClass(segment.citation?.conceptCategory) === 'finance'"
+            [class.marketing]="getCategoryClass(segment.citation?.conceptCategory) === 'marketing'"
+            [class.technology]="
+              getCategoryClass(segment.citation?.conceptCategory) === 'technology'
+            "
+            [class.operations]="
+              getCategoryClass(segment.citation?.conceptCategory) === 'operations'
+            "
+            [class.legal]="getCategoryClass(segment.citation?.conceptCategory) === 'legal'"
+            [class.creative]="getCategoryClass(segment.citation?.conceptCategory) === 'creative'"
+            [attr.aria-label]="'Koncept: ' + segment.content + '. Kliknite za detalje.'"
             tabindex="0"
             (click)="emitCitation(segment)"
             (keydown.enter)="emitCitation(segment)"
@@ -66,104 +106,105 @@ interface ContentSegment {
       }
     </div>
   `,
-  styles: [`
-    .content-with-citations {
-      display: block;
-      line-height: 1.6;
-    }
+  styles: [
+    `
+      .content-with-citations {
+        display: block;
+        line-height: 1.6;
+      }
 
-    .citation-badge {
-      display: inline-flex;
-      align-items: center;
-      padding: 0.125rem 0.5rem;
-      margin: 0 0.125rem;
-      font-size: 0.875rem;
-      font-weight: 500;
-      font-family: 'Inter', system-ui, sans-serif;
-      border-radius: 0.375rem;
-      background-color: #1a1a1a;
-      border: 1px solid #333;
-      color: #a3a3a3;
-      cursor: pointer;
-      transition: all 0.15s ease;
-      vertical-align: baseline;
-      text-decoration: none;
-    }
+      .citation-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.125rem 0.5rem;
+        margin: 0 0.125rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        font-family: 'Inter', system-ui, sans-serif;
+        border-radius: 0.375rem;
+        background-color: #1a1a1a;
+        border: 1px solid #333;
+        color: #a3a3a3;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        vertical-align: baseline;
+        text-decoration: none;
+      }
 
-    .citation-badge:hover,
-    .citation-badge:focus {
-      background-color: #262626;
-      border-color: #525252;
-      color: #e5e5e5;
-      outline: none;
-    }
+      .citation-badge:hover,
+      .citation-badge:focus {
+        background-color: #262626;
+        border-color: #525252;
+        color: #e5e5e5;
+        outline: none;
+      }
 
-    .citation-badge:focus-visible {
-      box-shadow: 0 0 0 2px #3b82f6;
-    }
+      .citation-badge:focus-visible {
+        box-shadow: 0 0 0 2px #3b82f6;
+      }
 
-    /* Category-specific colors */
-    .citation-badge.finance {
-      border-color: #10b98133;
-      color: #10b981;
-    }
+      /* Category-specific colors */
+      .citation-badge.finance {
+        border-color: #10b98133;
+        color: #10b981;
+      }
 
-    .citation-badge.finance:hover {
-      background-color: #10b98120;
-      border-color: #10b981;
-    }
+      .citation-badge.finance:hover {
+        background-color: #10b98120;
+        border-color: #10b981;
+      }
 
-    .citation-badge.marketing {
-      border-color: #f59e0b33;
-      color: #f59e0b;
-    }
+      .citation-badge.marketing {
+        border-color: #f59e0b33;
+        color: #f59e0b;
+      }
 
-    .citation-badge.marketing:hover {
-      background-color: #f59e0b20;
-      border-color: #f59e0b;
-    }
+      .citation-badge.marketing:hover {
+        background-color: #f59e0b20;
+        border-color: #f59e0b;
+      }
 
-    .citation-badge.technology {
-      border-color: #3b82f633;
-      color: #3b82f6;
-    }
+      .citation-badge.technology {
+        border-color: #3b82f633;
+        color: #3b82f6;
+      }
 
-    .citation-badge.technology:hover {
-      background-color: #3b82f620;
-      border-color: #3b82f6;
-    }
+      .citation-badge.technology:hover {
+        background-color: #3b82f620;
+        border-color: #3b82f6;
+      }
 
-    .citation-badge.operations {
-      border-color: #8b5cf633;
-      color: #8b5cf6;
-    }
+      .citation-badge.operations {
+        border-color: #8b5cf633;
+        color: #8b5cf6;
+      }
 
-    .citation-badge.operations:hover {
-      background-color: #8b5cf620;
-      border-color: #8b5cf6;
-    }
+      .citation-badge.operations:hover {
+        background-color: #8b5cf620;
+        border-color: #8b5cf6;
+      }
 
-    .citation-badge.legal {
-      border-color: #6b728033;
-      color: #6b7280;
-    }
+      .citation-badge.legal {
+        border-color: #6b728033;
+        color: #6b7280;
+      }
 
-    .citation-badge.legal:hover {
-      background-color: #6b728020;
-      border-color: #6b7280;
-    }
+      .citation-badge.legal:hover {
+        background-color: #6b728020;
+        border-color: #6b7280;
+      }
 
-    .citation-badge.creative {
-      border-color: #ec489933;
-      color: #ec4899;
-    }
+      .citation-badge.creative {
+        border-color: #ec489933;
+        color: #ec4899;
+      }
 
-    .citation-badge.creative:hover {
-      background-color: #ec489920;
-      border-color: #ec4899;
-    }
-
-  `],
+      .citation-badge.creative:hover {
+        background-color: #ec489920;
+        border-color: #ec4899;
+      }
+    `,
+  ],
 })
 export class ConceptCitationComponent {
   /** Message content with [[Citation]] markers */
@@ -184,10 +225,7 @@ export class ConceptCitationComponent {
    * 2. Run marked.parse() on the placeholder-substituted text
    * 3. Split HTML on placeholders → produce text + citation segments
    */
-  private parseContent(
-    content: string,
-    citations: ConceptCitation[]
-  ): ContentSegment[] {
+  private parseContent(content: string, citations: ConceptCitation[]): ContentSegment[] {
     // Build citation lookup map
     const citationMap = new Map<string, ConceptCitation>();
     for (const citation of citations) {
@@ -206,8 +244,27 @@ export class ConceptCitationComponent {
       return key;
     });
 
-    // Pass 2: Run marked.parse() to produce HTML
-    const html = marked.parse(withPlaceholders, { async: false }) as string;
+    // Pass 2: Run marked.parse() to produce HTML, sanitize with DOMPurify
+    const rawHtml = marked.parse(withPlaceholders, { async: false }) as string;
+    // Add callout classes to blockquotes with specific Serbian keywords (D2)
+    const withCallouts = rawHtml
+      .replace(
+        /<blockquote>\s*<p>\s*<strong>Ključni uvid:?<\/strong>/gi,
+        '<blockquote class="callout callout-insight"><p><strong>Ključni uvid:</strong>'
+      )
+      .replace(
+        /<blockquote>\s*<p>\s*<strong>Upozorenje:?<\/strong>/gi,
+        '<blockquote class="callout callout-warning"><p><strong>Upozorenje:</strong>'
+      )
+      .replace(
+        /<blockquote>\s*<p>\s*<strong>Metrika:?<\/strong>/gi,
+        '<blockquote class="callout callout-metric"><p><strong>Metrika:</strong>'
+      )
+      .replace(
+        /<blockquote>\s*<p>\s*<strong>Rezime:?<\/strong>/gi,
+        '<blockquote class="callout callout-summary"><p><strong>Rezime:</strong>'
+      );
+    const html = DOMPurify.sanitize(withCallouts, PURIFY_CONFIG) as string;
 
     // Pass 3: Split HTML on placeholders, produce segments
     if (placeholders.size === 0) {

@@ -1,6 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
-import { MemoryCorrectionDialogComponent, MemoryCorrectionResult } from './memory-correction-dialog.component';
+import {
+  MemoryCorrectionDialogComponent,
+  MemoryCorrectionResult,
+} from './memory-correction-dialog.component';
 import type { Memory, MemoryType, MemorySource } from '@mentor-ai/shared/types';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
@@ -17,6 +20,7 @@ describe('MemoryCorrectionDialogComponent', () => {
     content: 'Acme Corp has a budget of $50,000',
     subject: 'Acme Corp',
     confidence: 0.92,
+    isDeleted: false,
     createdAt: '2026-02-05T10:00:00.000Z',
     updatedAt: '2026-02-05T10:00:00.000Z',
   };

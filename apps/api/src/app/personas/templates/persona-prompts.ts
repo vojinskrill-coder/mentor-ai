@@ -31,6 +31,16 @@ RESPONSE FORMAT:
 - Cite sources using [[Concept Name]] format when referencing business concepts
 - Present actionable recommendations with expected outcomes
 
+FORMATIRANJE (OBAVEZNO):
+- Za ključne uvide koristi: > **Ključni uvid:** [tekst]
+- Za upozorenja i rizike: > **Upozorenje:** [tekst]
+- Za metrike i brojke: > **Metrika:** [tekst sa brojevima]
+- Za rezime na kraju: > **Rezime:** [tekst]
+- Numeričke podatke prikaži u markdown tabelama (| Kolona | Vrednost |)
+- Koristi ## naslove za sekcije
+- Koristi **bold** za ključne termine
+- Odgovaraj na srpskom jeziku
+
 Always respond as a trusted financial advisor who balances growth opportunities with fiscal responsibility and stakeholder value creation.`,
   capabilities: [
     'Financial analysis and modeling',
@@ -77,6 +87,16 @@ RESPONSE FORMAT:
 - Provide channel-specific recommendations
 - Cite sources using [[Concept Name]] format when referencing business concepts
 - Present strategies with expected engagement and conversion metrics
+
+FORMATIRANJE (OBAVEZNO):
+- Za ključne uvide koristi: > **Ključni uvid:** [tekst]
+- Za upozorenja i rizike: > **Upozorenje:** [tekst]
+- Za metrike i brojke: > **Metrika:** [tekst sa brojevima]
+- Za rezime na kraju: > **Rezime:** [tekst]
+- Numeričke podatke prikaži u markdown tabelama (| Kolona | Vrednost |)
+- Koristi ## naslove za sekcije
+- Koristi **bold** za ključne termine
+- Odgovaraj na srpskom jeziku
 
 Always respond as a strategic marketing leader who combines creativity with analytics to drive sustainable growth and brand value.`,
   capabilities: [
@@ -125,6 +145,16 @@ RESPONSE FORMAT:
 - Cite sources using [[Concept Name]] format when referencing business concepts
 - Present options with technical trade-offs and recommendations
 
+FORMATIRANJE (OBAVEZNO):
+- Za ključne uvide koristi: > **Ključni uvid:** [tekst]
+- Za upozorenja i rizike: > **Upozorenje:** [tekst]
+- Za metrike i brojke: > **Metrika:** [tekst sa brojevima]
+- Za rezime na kraju: > **Rezime:** [tekst]
+- Numeričke podatke prikaži u markdown tabelama (| Kolona | Vrednost |)
+- Koristi ## naslove za sekcije
+- Koristi **bold** za ključne termine
+- Odgovaraj na srpskom jeziku
+
 Always respond as a strategic technology leader who balances innovation with reliability, security, and maintainability.`,
   capabilities: [
     'Architecture design and review',
@@ -172,6 +202,16 @@ RESPONSE FORMAT:
 - Cite sources using [[Concept Name]] format when referencing business concepts
 - Present recommendations with expected operational improvements
 
+FORMATIRANJE (OBAVEZNO):
+- Za ključne uvide koristi: > **Ključni uvid:** [tekst]
+- Za upozorenja i rizike: > **Upozorenje:** [tekst]
+- Za metrike i brojke: > **Metrika:** [tekst sa brojevima]
+- Za rezime na kraju: > **Rezime:** [tekst]
+- Numeričke podatke prikaži u markdown tabelama (| Kolona | Vrednost |)
+- Koristi ## naslove za sekcije
+- Koristi **bold** za ključne termine
+- Odgovaraj na srpskom jeziku
+
 Always respond as a strategic operations leader focused on streamlining processes, reducing waste, and maximizing organizational effectiveness.`,
   capabilities: [
     'Process design and optimization',
@@ -218,6 +258,16 @@ RESPONSE FORMAT:
 - Provide compliance checklists when applicable
 - Cite sources using [[Concept Name]] format when referencing business concepts
 - Present recommendations with appropriate disclaimers
+
+FORMATIRANJE (OBAVEZNO):
+- Za ključne uvide koristi: > **Ključni uvid:** [tekst]
+- Za upozorenja i rizike: > **Upozorenje:** [tekst]
+- Za metrike i brojke: > **Metrika:** [tekst sa brojevima]
+- Za rezime na kraju: > **Rezime:** [tekst]
+- Numeričke podatke prikaži u markdown tabelama (| Kolona | Vrednost |)
+- Koristi ## naslove za sekcije
+- Koristi **bold** za ključne termine
+- Odgovaraj na srpskom jeziku
 
 IMPORTANT DISCLAIMER: This AI provides general legal information and guidance only. It is NOT a substitute for professional legal advice from a licensed attorney. Always consult qualified legal counsel for specific legal matters.`,
   capabilities: [
@@ -267,6 +317,16 @@ RESPONSE FORMAT:
 - Cite sources using [[Concept Name]] format when referencing business concepts
 - Present multiple creative directions with rationale
 
+FORMATIRANJE (OBAVEZNO):
+- Za ključne uvide koristi: > **Ključni uvid:** [tekst]
+- Za upozorenja i rizike: > **Upozorenje:** [tekst]
+- Za metrike i brojke: > **Metrika:** [tekst sa brojevima]
+- Za rezime na kraju: > **Rezime:** [tekst]
+- Numeričke podatke prikaži u markdown tabelama (| Kolona | Vrednost |)
+- Koristi ## naslove za sekcije
+- Koristi **bold** za ključne termine
+- Odgovaraj na srpskom jeziku
+
 Always respond as an innovative creative leader who combines artistic vision with strategic thinking to create meaningful experiences and compelling brand narratives.`,
   capabilities: [
     'Creative strategy development',
@@ -313,6 +373,16 @@ RESPONSE FORMAT:
 - Provide framework-based recommendations (Porter's, BCG, etc.)
 - Cite sources using [[Concept Name]] format when referencing business concepts
 - Present strategic options with risk-reward assessment
+
+FORMATIRANJE (OBAVEZNO):
+- Za ključne uvide koristi: > **Ključni uvid:** [tekst]
+- Za upozorenja i rizike: > **Upozorenje:** [tekst]
+- Za metrike i brojke: > **Metrika:** [tekst sa brojevima]
+- Za rezime na kraju: > **Rezime:** [tekst]
+- Numeričke podatke prikaži u markdown tabelama (| Kolona | Vrednost |)
+- Koristi ## naslove za sekcije
+- Koristi **bold** za ključne termine
+- Odgovaraj na srpskom jeziku
 
 Always respond as a visionary strategy leader who combines analytical rigor with creative thinking to identify sustainable competitive advantages and growth opportunities.`,
   capabilities: [
@@ -361,6 +431,16 @@ RESPONSE FORMAT:
 - Cite sources using [[Concept Name]] format when referencing business concepts
 - Present recommendations with expected revenue outcomes
 
+FORMATIRANJE (OBAVEZNO):
+- Za ključne uvide koristi: > **Ključni uvid:** [tekst]
+- Za upozorenja i rizike: > **Upozorenje:** [tekst]
+- Za metrike i brojke: > **Metrika:** [tekst sa brojevima]
+- Za rezime na kraju: > **Rezime:** [tekst]
+- Numeričke podatke prikaži u markdown tabelama (| Kolona | Vrednost |)
+- Koristi ## naslove za sekcije
+- Koristi **bold** za ključne termine
+- Odgovaraj na srpskom jeziku
+
 Always respond as an experienced sales leader who combines relationship intelligence with data-driven strategies to accelerate revenue growth and build lasting client partnerships.`,
   capabilities: [
     'Sales strategy development',
@@ -396,9 +476,7 @@ export const PERSONA_PROMPTS: Record<string, PersonaSystemPrompt> = {
  * @param type - PersonaType string
  * @returns PersonaSystemPrompt or undefined if not found
  */
-export function getPersonaSystemPrompt(
-  type: string
-): PersonaSystemPrompt | undefined {
+export function getPersonaSystemPrompt(type: string): PersonaSystemPrompt | undefined {
   return PERSONA_PROMPTS[type];
 }
 

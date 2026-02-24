@@ -41,20 +41,19 @@ export class BrainSeedingService {
     department: string | null,
     role: string
   ): Promise<{ seeded: number }> {
-    // Idempotency guard: skip if user already has pending tasks
+    // Idempotency guard: skip if user already has any concept task notes (any status)
     const existingCount = await this.prisma.note.count({
       where: {
         userId,
         tenantId,
         noteType: NoteType.TASK,
-        status: NoteStatus.PENDING,
         conceptId: { not: null },
       },
     });
 
     if (existingCount > 0) {
       this.logger.log({
-        message: 'Skipping brain seeding — user already has pending tasks',
+        message: 'Skipping brain seeding — user already has task notes',
         userId,
         tenantId,
         existingCount,

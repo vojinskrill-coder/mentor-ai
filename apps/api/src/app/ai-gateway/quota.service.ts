@@ -24,10 +24,7 @@ export class QuotaService {
     private readonly tokenTrackerService: TokenTrackerService,
     private readonly configService: ConfigService
   ) {
-    this.defaultQuota = this.configService.get<number>(
-      'DEFAULT_TENANT_TOKEN_QUOTA',
-      1000000
-    );
+    this.defaultQuota = this.configService.get<number>('DEFAULT_TENANT_TOKEN_QUOTA', 10000000);
 
     this.logger.log({
       message: 'Quota service initialized',
@@ -47,6 +44,14 @@ export class QuotaService {
       where: { id: tenantId },
       select: { tokenQuota: true },
     });
+
+    if (!tenant) {
+      this.logger.warn({
+        message: 'Tenant not found for quota check, using default quota',
+        tenantId,
+        defaultQuota: this.defaultQuota,
+      });
+    }
 
     const limit = tenant?.tokenQuota ?? this.defaultQuota;
 
