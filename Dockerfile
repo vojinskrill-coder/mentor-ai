@@ -13,7 +13,6 @@ RUN node -e "const p=JSON.parse(require('fs').readFileSync('package.json','utf8'
 # Copy source code and build configs
 COPY nx.json tsconfig.base.json ./
 COPY apps ./apps
-COPY libs ./libs
 COPY shared ./shared
 
 # Generate Prisma client and build API
