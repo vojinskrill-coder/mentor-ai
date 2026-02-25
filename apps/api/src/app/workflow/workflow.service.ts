@@ -336,27 +336,11 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
       throw new Error('No pending tasks found for the given IDs');
     }
 
-    // Collect concept IDs from explicit task links + semantic search (parallel)
+    // Collect concept IDs directly linked to tasks (no semantic expansion)
     const conceptIdSet = new Set<string>();
     for (const task of tasks) {
       if (task.conceptId) {
         conceptIdSet.add(task.conceptId);
-      }
-    }
-    // Run semantic searches in parallel
-    const searchPromises = tasks
-      .map((task) => {
-        const searchText = `${task.title} ${task.content ?? ''}`.trim();
-        if (searchText.length <= 5) return null;
-        return this.conceptMatchingService
-          .findRelevantConcepts(searchText, { limit: 3, threshold: 0.3 })
-          .catch(() => [] as { conceptId: string }[]);
-      })
-      .filter(Boolean);
-    const searchResults = await Promise.all(searchPromises);
-    for (const matches of searchResults) {
-      for (const m of matches!) {
-        conceptIdSet.add(m.conceptId);
       }
     }
     const conceptIds = [...conceptIdSet];
@@ -533,7 +517,7 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
         completedSummaries.push({
           title: step.title,
           conceptName: step.conceptName,
-          summary: result.content.substring(0, 300),
+          summary: result.content.substring(0, 2000),
         });
         callbacks.onStepComplete(step.stepId, result.content, result.citations);
 
@@ -569,7 +553,7 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
                 conversationId,
                 conceptId: step.conceptId,
                 parentNoteId: taskId,
-                expectedOutcome: step.description?.substring(0, 500),
+                expectedOutcome: step.description?.substring(0, 2000),
                 workflowStepNumber: step.workflowStepNumber,
               });
               break;

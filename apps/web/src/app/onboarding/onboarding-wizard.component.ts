@@ -1106,6 +1106,7 @@ export class OnboardingWizardComponent implements OnInit {
   readonly websiteUrl$ = signal('');
   readonly businessState$ = signal('');
   readonly welcomeConversationId$ = signal<string | null>(null);
+  readonly planId$ = signal<string | null>(null);
 
   readonly isUploadingPdf$ = signal(false);
   readonly pdfFileName$ = signal<string | null>(null);
@@ -1349,6 +1350,7 @@ export class OnboardingWizardComponent implements OnInit {
       );
       this.celebrationMessage$.set(result.celebrationMessage);
       this.welcomeConversationId$.set(result.welcomeConversationId ?? null);
+      this.planId$.set(result.planId ?? null);
       this.isCompletingOnboarding$.set(false);
       this.showCelebration$.set(true);
       this.currentStep$.set(4);
@@ -1363,7 +1365,10 @@ export class OnboardingWizardComponent implements OnInit {
 
   goToChat(): void {
     const convId = this.welcomeConversationId$();
-    const queryParams = this.executionMode$() === 'YOLO' ? { yolo: 'true' } : { autostart: 'true' };
+    const planId = this.planId$();
+    const queryParams: Record<string, string> = {};
+    if (this.executionMode$() === 'YOLO') queryParams['yolo'] = 'true';
+    if (planId) queryParams['planId'] = planId;
     if (convId) {
       this.router.navigate(['/chat', convId], { queryParams });
     } else {

@@ -7,6 +7,7 @@ import { KnowledgeModule } from '../knowledge/knowledge.module';
 import { ConversationModule } from '../conversation/conversation.module';
 import { WebSearchModule } from '../web-search/web-search.module';
 import { FileUploadModule } from '../file-upload/file-upload.module';
+import { WorkflowModule } from '../workflow/workflow.module';
 import { OnboardingController } from './onboarding.controller';
 import { OnboardingService } from './onboarding.service';
 import { OnboardingMetricService } from './onboarding-metric.service';
@@ -25,6 +26,7 @@ import { OnboardingMetricService } from './onboarding-metric.service';
     ConversationModule, // Provides ConversationService for welcome conversation
     WebSearchModule, // Provides WebSearchService for website analysis
     FileUploadModule, // Provides FileUploadService for PDF validation
+    WorkflowModule, // Provides WorkflowService for building execution plans
   ],
   controllers: [OnboardingController],
   providers: [OnboardingService, OnboardingMetricService],

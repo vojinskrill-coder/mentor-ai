@@ -886,6 +886,8 @@ export interface OnboardingCompleteResponse {
   welcomeConversationId?: string;
   /** Execution mode selected during onboarding */
   executionMode?: ExecutionMode;
+  /** Pre-built execution plan ID (generated during onboarding) */
+  planId?: string;
 }
 
 /** Onboarding metric for analytics */

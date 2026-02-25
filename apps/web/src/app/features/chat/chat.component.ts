@@ -51,6 +51,8 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
 
 interface WorkflowStatusEntry {
   planId: string;
+  conversationId: string;
+  taskIds: string[];
   title: string;
   totalSteps: number;
   completedSteps: number;
@@ -798,6 +800,12 @@ interface WorkflowStatusEntry {
         border-radius: 6px;
         background: #0d0d0d;
       }
+      .wse-clickable {
+        cursor: pointer;
+      }
+      .wse-clickable:hover {
+        background: #1a1a1a;
+      }
       .ws-detail-row {
         display: flex;
         align-items: center;
@@ -1130,7 +1138,7 @@ interface WorkflowStatusEntry {
 
         <app-concept-tree
           [activeConversationId]="activeConversationId$()"
-          [locked]="isExecutingWorkflow$()"
+          [locked]="isCurrentConversationExecuting$()"
           [newConversationIds]="newConversationIds$()"
           [loadingItemId]="loadingConversationId$()"
           (conversationSelected)="selectConversation($event)"
@@ -1319,14 +1327,18 @@ interface WorkflowStatusEntry {
                       />
                     </svg>
                     <h3>
-                      {{ isExecutingWorkflow$() ? 'Izvršavanje plana...' : 'Plan izvršavanja' }}
+                      {{
+                        isCurrentConversationExecuting$()
+                          ? 'Izvršavanje plana...'
+                          : 'Plan izvršavanja'
+                      }}
                     </h3>
                     <div class="plan-meta">
                       <span>{{ currentPlan$()!.steps.length }} koraka</span>
                       <span>~{{ currentPlan$()!.totalEstimatedMinutes }} min</span>
                     </div>
                     @if (!planCollapsed$()) {
-                      @if (isExecutingWorkflow$()) {
+                      @if (isCurrentConversationExecuting$()) {
                         <button
                           class="plan-btn-cancel"
                           (click)="cancelExecution(); $event.stopPropagation()"
@@ -1460,11 +1472,12 @@ interface WorkflowStatusEntry {
                   }
                   @for (entry of workflowHistory$(); track entry.planId) {
                     <div
-                      class="workflow-status-entry"
+                      class="workflow-status-entry wse-clickable"
                       [class.wse-executing]="entry.status === 'executing'"
                       [class.wse-completed]="entry.status === 'completed'"
                       [class.wse-failed]="entry.status === 'failed'"
                       [class.wse-cancelled]="entry.status === 'cancelled'"
+                      (click)="navigateToWorkflow(entry)"
                     >
                       <span class="ws-title">{{ entry.title }}</span>
                       <div class="ws-detail-row">
@@ -1511,7 +1524,7 @@ interface WorkflowStatusEntry {
                       style="display: block; margin-bottom: 16px;"
                     />
                   }
-                  @if (isExecutingWorkflow$() && !showPlanOverlay$()) {
+                  @if (isCurrentConversationExecuting$() && !showPlanOverlay$()) {
                     <div class="step-status-msg">
                       <svg
                         class="step-icon spinner"
@@ -1576,11 +1589,7 @@ interface WorkflowStatusEntry {
                       >
                         <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
                       </svg>
-                      @if (isOnboardingAutostart$()) {
-                        Pokrećem inicijalni radni tok — pripremam plan za vaše poslovanje...
-                      } @else {
-                        Generišem plan izvršavanja...
-                      }
+                      Generišem plan izvršavanja...
                     </div>
                   }
 
@@ -1775,7 +1784,7 @@ interface WorkflowStatusEntry {
                   [conversationId]="activeConversationId$()"
                   [conceptId]="activeConversation$()?.conceptId ?? null"
                   [autoSelectTaskIds]="autoSelectTaskIds$()"
-                  [isExecuting]="isExecutingWorkflow$()"
+                  [isExecuting]="isCurrentConversationExecuting$()"
                   [executingTaskId]="executingTaskId$()"
                   [taskExecutionContent]="taskExecutionStreamContent$()"
                   [submittingResultId]="submittingResultId$()"
@@ -1846,7 +1855,9 @@ interface WorkflowStatusEntry {
                 <button
                   class="run-brain-btn"
                   [disabled]="
-                    isExecutingWorkflow$() || isYoloMode$() || domainPendingCount$() === 0
+                    isCurrentConversationExecuting$() ||
+                    isYoloMode$() ||
+                    domainPendingCount$() === 0
                   "
                   (click)="onRunBrain()"
                 >
@@ -1868,7 +1879,9 @@ interface WorkflowStatusEntry {
                 <button
                   class="yolo-btn"
                   [disabled]="
-                    isExecutingWorkflow$() || isYoloMode$() || domainPendingCount$() === 0
+                    isCurrentConversationExecuting$() ||
+                    isYoloMode$() ||
+                    domainPendingCount$() === 0
                   "
                   (click)="onRunBrainYolo()"
                   title="YOLO režim (bez pregleda plana)"
@@ -1936,7 +1949,7 @@ interface WorkflowStatusEntry {
                 [folderConversationIds]="folderConversationIds$()"
                 [folderName]="folderName$()"
                 [autoSelectTaskIds]="autoSelectTaskIds$()"
-                [isExecuting]="isExecutingWorkflow$()"
+                [isExecuting]="isCurrentConversationExecuting$()"
                 [executingTaskId]="executingTaskId$()"
                 [taskExecutionContent]="taskExecutionStreamContent$()"
                 [submittingResultId]="submittingResultId$()"
@@ -2084,7 +2097,15 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   readonly planCollapsed$ = signal(false);
   readonly currentPlan$ = signal<ExecutionPlan | null>(null);
   readonly executionProgress$ = signal<Map<string, ExecutionPlanStep['status']>>(new Map());
-  readonly isExecutingWorkflow$ = signal(false);
+  // Track ALL active workflow conversations (enables parallel execution)
+  readonly executingWorkflowConversationIds$ = signal<Set<string>>(new Set());
+  // True if ANY workflow is running (backward-compatible global check)
+  readonly isExecutingWorkflow$ = computed(() => this.executingWorkflowConversationIds$().size > 0);
+  // True only when the CURRENT conversation is executing a workflow
+  readonly isCurrentConversationExecuting$ = computed(() => {
+    const activeConv = this.activeConversationId$();
+    return activeConv !== null && this.executingWorkflowConversationIds$().has(activeConv);
+  });
 
   // Per-concept conversations created during workflow execution
   readonly createdConceptConversations$ = signal<
@@ -2138,8 +2159,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   readonly yoloProgress$ = signal<YoloProgressPayload | null>(null);
   readonly showYoloActivityLog$ = signal(false);
   private yoloPending = false;
-  private manualAutostartPending = false;
-  readonly isOnboardingAutostart$ = signal(false);
+  private pendingPlanId: string | null = null;
 
   // Workflow status bar: tracks all active/recent workflow executions
   readonly workflowHistory$ = signal<WorkflowStatusEntry[]>([]);
@@ -2208,20 +2228,17 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
     // Use combineLatest so both params and queryParams resolve before acting.
     // This prevents a race condition where loadConversation() runs before
-    // queryParams sets yoloPending/manualAutostartPending flags.
+    // queryParams sets yoloPending/pendingPlanId flags.
     combineLatest([this.route.params, this.route.queryParams])
       .pipe(takeUntilDestroyed(this.destroyRef), take(1))
       .subscribe(([params, queryParams]) => {
-        // Set YOLO / autostart flags BEFORE loading conversation
+        // Set YOLO / planId flags BEFORE loading conversation
         if (queryParams['yolo'] === 'true' && !this.isYoloMode$()) {
           this.isYoloMode$.set(true);
           this.yoloPending = true;
         }
-        if (queryParams['autostart'] === 'true') {
-          this.manualAutostartPending = true;
-          // Show busy status immediately so user sees activity right away
-          this.isGeneratingPlan$.set(true);
-          this.isOnboardingAutostart$.set(true);
+        if (queryParams['planId'] && !this.yoloPending) {
+          this.pendingPlanId = queryParams['planId'];
         }
 
         // Now load conversation — yoloPending is already set
@@ -2291,22 +2308,19 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           this.showError('WebSocket konekcija neuspešna — YOLO mod nije mogao da se pokrene');
         }
       }
-      // Auto-start manual workflow if flagged from onboarding redirect
-      if (this.manualAutostartPending) {
-        this.manualAutostartPending = false;
+      // Load pre-built plan from onboarding if planId is set
+      if (this.pendingPlanId) {
+        const planId = this.pendingPlanId;
+        this.pendingPlanId = null;
         try {
           await this.chatWsService.waitForConnection();
-          this.autoStartManualWorkflow(conversationId);
+          this.chatWsService.emitGetPlan(planId, conversationId);
         } catch {
-          // WebSocket failed — clear busy state so user isn't stuck
-          this.isGeneratingPlan$.set(false);
-          this.isOnboardingAutostart$.set(false);
+          this.showError('WebSocket konekcija neuspešna — plan nije mogao da se učita');
         }
       }
     } catch {
       this.activeConversation$.set(null);
-      this.isGeneratingPlan$.set(false);
-      this.isOnboardingAutostart$.set(false);
       this.showError('Greška pri učitavanju konverzacije');
     }
   }
@@ -2457,7 +2471,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     // During workflow execution, never navigate away — just open the panel
-    if (this.isExecutingWorkflow$()) {
+    if (this.isCurrentConversationExecuting$()) {
       this.selectedConceptId$.set(citation.conceptId);
       return;
     }
@@ -2633,26 +2647,6 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // ─── Workflow / Agent Execution ──────────────────────────────
 
-  private async autoStartManualWorkflow(conversationId: string): Promise<void> {
-    try {
-      const notes = await this.notesApi.getByConversation(conversationId);
-      const pendingTaskIds = notes
-        .filter((n) => n.noteType === 'TASK' && n.status === 'PENDING')
-        .map((n) => n.id);
-      if (pendingTaskIds.length > 0) {
-        this.onRunAgents(pendingTaskIds);
-      } else {
-        // No pending tasks found — clear the busy state
-        this.isGeneratingPlan$.set(false);
-        this.isOnboardingAutostart$.set(false);
-      }
-    } catch {
-      // Clear busy state on error — user can still start manually
-      this.isGeneratingPlan$.set(false);
-      this.isOnboardingAutostart$.set(false);
-    }
-  }
-
   private planGenerationTimeout: ReturnType<typeof setTimeout> | null = null;
 
   onRunAgents(taskIds: string[]): void {
@@ -2669,7 +2663,6 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     this.planGenerationTimeout = setTimeout(() => {
       if (this.isGeneratingPlan$()) {
         this.isGeneratingPlan$.set(false);
-        this.isOnboardingAutostart$.set(false);
         this.showError('Generisanje plana je trajalo predugo — pokušajte ponovo.');
       }
     }, 90_000);
@@ -2750,6 +2743,17 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  navigateToWorkflow(entry: WorkflowStatusEntry): void {
+    // Navigate to conversation, switch to notes tab, highlight the tasks
+    this.folderConceptIds$.set([]);
+    this.folderConversationIds$.set([]);
+    this.folderName$.set(null);
+    this.activeTab$.set('notes');
+    // Set task highlight AFTER clearing (selectConversation would reset it)
+    this.autoSelectTaskIds$.set(entry.taskIds.length > 0 ? entry.taskIds : []);
+    this.router.navigate(['/chat', entry.conversationId]);
+  }
+
   getStepStatus(stepId: string): ExecutionPlanStep['status'] {
     return this.executionProgress$().get(stepId) ?? 'pending';
   }
@@ -2758,7 +2762,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     const plan = this.currentPlan$();
     const conversationId = this.activeConversationId$();
     if (!plan || !conversationId) return;
-    this.isExecutingWorkflow$.set(true);
+    this.executingWorkflowConversationIds$.update((s) => new Set([...s, conversationId]));
     this.planCollapsed$.set(true); // Auto-collapse plan panel during execution
     this.chatWsService.emitWorkflowApproval(plan.planId, true, conversationId);
 
@@ -2768,6 +2772,8 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       ...entries,
       {
         planId: plan.planId,
+        conversationId,
+        taskIds: plan.taskIds ?? [],
         title:
           plan.conceptOrder.length > 1
             ? `${firstConcept} (+${plan.conceptOrder.length - 1})`
@@ -2804,7 +2810,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     this.currentPlan$.set(null);
     this.activePlanId$.set(null);
     this.executionProgress$.set(new Map());
-    this.isExecutingWorkflow$.set(false);
+    // NOTE: execution state is managed per-conversation by callers, not here
     this.currentStepTitle$.set(null);
     this.currentStepIndex$.set(0);
     this.totalStepsCount$.set(0);
@@ -2814,7 +2820,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     this.nextStepInfo$.set(null);
     this.userStepInput$.set('');
     this.isGeneratingPlan$.set(false);
-    this.isOnboardingAutostart$.set(false);
+
     this.allowWorkflowInput$.set(false);
     this.currentWorkflowStepInput$.set(null);
     this.previousConversationId$.set(null);
@@ -3054,12 +3060,11 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         this.planGenerationTimeout = null;
       }
       this.isGeneratingPlan$.set(false);
-      this.isOnboardingAutostart$.set(false);
+
       this.executingTaskId$.set(null);
       this.currentPlan$.set(payload.plan);
       this.activePlanId$.set(payload.plan.planId);
       this.executionProgress$.set(new Map());
-      this.isExecutingWorkflow$.set(false);
       this.showPlanOverlay$.set(true);
     });
 
@@ -3078,23 +3083,8 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     this.chatWsService.onStepProgress((payload) => {
-      if (payload.conversationId !== this.activeConversationId$()) return;
-
-      // Auto-execute path: set executing state and planId on first step-progress
-      if (!this.isExecutingWorkflow$()) {
-        this.isExecutingWorkflow$.set(true);
-      }
-      if (!this.activePlanId$() && payload.planId) {
-        this.activePlanId$.set(payload.planId);
-      }
-
-      this.executionProgress$.update((map) => {
-        const next = new Map(map);
-        next.set(payload.stepId, payload.status);
-        return next;
-      });
-
-      // Update workflow status bar entry
+      // Global updates: status bar + executing set (must work for ALL conversations)
+      this.executingWorkflowConversationIds$.update((s) => new Set([...s, payload.conversationId]));
       if (payload.planId) {
         this.workflowHistory$.update((entries) =>
           entries.map((e) =>
@@ -3114,6 +3104,19 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           )
         );
       }
+
+      // Per-conversation UI updates: only for the active conversation
+      if (payload.conversationId !== this.activeConversationId$()) return;
+
+      if (!this.activePlanId$() && payload.planId) {
+        this.activePlanId$.set(payload.planId);
+      }
+
+      this.executionProgress$.update((map) => {
+        const next = new Map(map);
+        next.set(payload.stepId, payload.status);
+        return next;
+      });
 
       // Update inline progress indicator
       if (payload.totalSteps != null) {
@@ -3181,9 +3184,36 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     this.chatWsService.onWorkflowComplete((payload) => {
+      // Global updates: executing set + status bar (must work for ALL conversations)
+      this.executingWorkflowConversationIds$.update((s) => {
+        const next = new Set(s);
+        next.delete(payload.conversationId);
+        return next;
+      });
+      if (payload.planId) {
+        const finalStatus =
+          payload.status === 'completed'
+            ? ('completed' as const)
+            : payload.status === 'cancelled'
+              ? ('cancelled' as const)
+              : ('failed' as const);
+        this.workflowHistory$.update((entries) =>
+          entries.map((e) =>
+            e.planId === payload.planId
+              ? { ...e, status: finalStatus, completedSteps: payload.completedSteps }
+              : e
+          )
+        );
+        setTimeout(() => {
+          this.workflowHistory$.update((entries) =>
+            entries.filter((e) => e.planId !== payload.planId)
+          );
+        }, 30000);
+      }
+
+      // Per-conversation UI updates: only for the active conversation
       if (payload.conversationId !== this.activeConversationId$()) return;
 
-      // Build completion summary with links to concept conversations
       const statusLabel =
         payload.status === 'completed'
           ? 'Završeno'
@@ -3216,7 +3246,6 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         return { ...conv, messages: [...conv.messages, summaryMessage] };
       });
 
-      // Reset inline progress
       this.currentStepTitle$.set(null);
       this.currentStepIndex$.set(0);
       this.totalStepsCount$.set(0);
@@ -3226,42 +3255,22 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       this.conversationNotes?.loadNotes();
       this.conceptTree?.loadTree();
 
-      // Update workflow status bar entry
-      if (payload.planId) {
-        const finalStatus =
-          payload.status === 'completed'
-            ? ('completed' as const)
-            : payload.status === 'cancelled'
-              ? ('cancelled' as const)
-              : ('failed' as const);
-        this.workflowHistory$.update((entries) =>
-          entries.map((e) =>
-            e.planId === payload.planId
-              ? { ...e, status: finalStatus, completedSteps: payload.completedSteps }
-              : e
-          )
-        );
-
-        // Auto-clear completed/cancelled entries after 5 seconds (with CSS fade animation)
-        setTimeout(() => {
-          this.workflowHistory$.update((entries) =>
-            entries.filter((e) => e.planId !== payload.planId)
-          );
-        }, 5000);
-      }
-
-      // D4: Suggest next step after successful workflow
       if (payload.status === 'completed') {
         setTimeout(() => this.suggestNextStep(), 1500);
       }
     });
 
     this.chatWsService.onWorkflowError((payload) => {
+      // Global: remove from executing set regardless of active conversation
+      this.executingWorkflowConversationIds$.update((s) => {
+        const next = new Set(s);
+        next.delete(payload.conversationId);
+        return next;
+      });
+      // Per-conversation UI cleanup only for active conversation
       if (payload.conversationId !== this.activeConversationId$()) return;
       this.closePlanOverlay();
-      // Clear YOLO / execution state so the UI doesn't get stuck
       this.isYoloMode$.set(false);
-      this.isExecutingWorkflow$.set(false);
       this.yoloProgress$.set(null);
       this.showError(payload.message ?? 'Izvršavanje workflow-a neuspešno');
     });
@@ -3270,6 +3279,14 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
     this.chatWsService.onTaskAiStart((data) => {
       if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
+      // Clear plan-generation state: direct AI execution replaces workflow plan
+      if (this.isGeneratingPlan$()) {
+        this.isGeneratingPlan$.set(false);
+        if (this.planGenerationTimeout) {
+          clearTimeout(this.planGenerationTimeout);
+          this.planGenerationTimeout = null;
+        }
+      }
       // Confirm execution state — ensure executingTaskId is set even if click handler missed
       if (!this.executingTaskId$()) {
         this.executingTaskId$.set(data.taskId);
@@ -3340,8 +3357,8 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       if (payload.conversationId !== this.activeConversationId$()) return;
       this.activePlanId$.set(payload.planId);
 
-      // During auto-execution after plan approval, skip the awaiting-confirmation UI
-      if (this.isExecutingWorkflow$()) return;
+      // Backend auto-continues confirmation steps — no action needed here during execution
+      if (this.isCurrentConversationExecuting$()) return;
 
       this.awaitingConfirmation$.set(true);
       this.nextStepInfo$.set(payload.nextStep);
@@ -3353,13 +3370,8 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     this.chatWsService.onStepAwaitingInput((payload: WorkflowStepAwaitingInputPayload) => {
       if (payload.conversationId !== this.activeConversationId$()) return;
 
-      // Auto-continue confirmation steps so workflow flows automatically after plan approval
-      if (payload.inputType === 'confirmation' && this.isExecutingWorkflow$()) {
-        setTimeout(() => {
-          this.chatWsService.emitStepContinue(payload.planId, payload.conversationId);
-        }, 300);
-        return;
-      }
+      // Confirmation steps are auto-resolved on the backend — skip on frontend
+      if (payload.inputType === 'confirmation') return;
 
       // For 'text' input types, show the interactive input UI
       this.currentWorkflowStepInput$.set(payload);
@@ -3393,9 +3405,11 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     // ─── YOLO Mode Events ───────────────────────────────────────
 
     this.chatWsService.onYoloProgress((payload) => {
+      // Global: track executing conversation regardless of active view
+      this.executingWorkflowConversationIds$.update((s) => new Set([...s, payload.conversationId]));
+      // Per-conversation UI updates
       if (payload.conversationId !== this.activeConversationId$()) return;
       this.yoloProgress$.set(payload);
-      this.isExecutingWorkflow$.set(true);
       // Auto-scroll activity log to latest entry (AC4)
       if (this.showYoloActivityLog$() && this.yoloLogContainer?.nativeElement) {
         setTimeout(() => {
@@ -3406,10 +3420,16 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     this.chatWsService.onYoloComplete((payload) => {
+      // Global: remove from executing set regardless of active view
+      this.executingWorkflowConversationIds$.update((s) => {
+        const next = new Set(s);
+        next.delete(payload.conversationId);
+        return next;
+      });
+      // Per-conversation UI cleanup
       if (payload.conversationId !== this.activeConversationId$()) return;
       this.yoloProgress$.set(null);
       this.isYoloMode$.set(false);
-      this.isExecutingWorkflow$.set(false);
       this.conversationNotes?.loadNotes();
       this.conceptTree?.loadTree();
       // D4: Suggest next step after YOLO completion

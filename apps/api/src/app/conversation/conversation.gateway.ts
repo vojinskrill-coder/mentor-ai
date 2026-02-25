@@ -937,26 +937,15 @@ If there are no meaningful tasks, respond with an empty array: []`;
   // ─── Explicit Task Creation ─────────────────────────────────────
 
   private hasExplicitTaskIntent(userMessage: string): boolean {
-    const taskKeywords = [
-      'kreiraj task',
-      'kreiraj zadat',
-      'napravi task',
-      'napravi zadat',
-      'kreiraj plan',
-      'napravi plan',
-      'kreiraj workflow',
-      'napravi workflow',
-      'generiši task',
-      'generiši zadat',
-      'kreiraj korake',
-      'napravi korake',
-      'create task',
-      'create plan',
-      'make a plan',
-      'make task',
-    ];
     const lowerMsg = userMessage.toLowerCase();
-    return taskKeywords.some((kw) => lowerMsg.includes(kw));
+
+    // Action verbs (Serbian + English)
+    const actionVerbs = /\b(kreiraj|napravi|generiši|generisi|dodaj|create|make|add|generate)\b/;
+    // Task nouns (Serbian + English) — match root forms so inflected words work
+    const taskNouns = /\b(task|zadat|plan|workflow|korake?|korak|akcij|to-do|todo|stavk)\b/;
+
+    // Match if message contains both an action verb and a task noun (in any order, with words between)
+    return actionVerbs.test(lowerMsg) && taskNouns.test(lowerMsg);
   }
 
   private async detectAndCreateExplicitTasks(
@@ -1095,8 +1084,43 @@ Ako nema zadataka, odgovori sa: []`;
         conversationId: payload.conversationId,
       });
 
+      // Check if tasks have linked concepts — tasks created from chat may not
+      const tasks = await this.prisma.note.findMany({
+        where: {
+          id: { in: payload.taskIds },
+          tenantId: authenticatedClient.tenantId,
+          noteType: 'TASK',
+          status: 'PENDING',
+        },
+        select: { id: true, conceptId: true },
+      });
+
+      const tasksWithConcepts = tasks.filter((t) => t.conceptId);
+      const tasksWithoutConcepts = tasks.filter((t) => !t.conceptId);
+
+      // If ALL tasks lack concepts, use direct AI execution instead of workflow
+      if (tasksWithConcepts.length === 0 && tasksWithoutConcepts.length > 0) {
+        this.logger.log({
+          message: 'Tasks have no concepts — falling back to direct AI execution',
+          taskCount: tasksWithoutConcepts.length,
+        });
+        for (const task of tasksWithoutConcepts) {
+          await this.handleExecuteTaskAi(client, {
+            taskId: task.id,
+            conversationId: payload.conversationId,
+          });
+        }
+        return;
+      }
+
+      // Build workflow execution plan for concept-linked tasks
+      const taskIdsForPlan =
+        tasksWithConcepts.length < tasks.length
+          ? tasksWithConcepts.map((t) => t.id)
+          : payload.taskIds;
+
       const plan = await this.workflowService.buildExecutionPlan(
-        payload.taskIds,
+        taskIdsForPlan,
         authenticatedClient.userId,
         authenticatedClient.tenantId,
         payload.conversationId
@@ -1107,6 +1131,14 @@ Ako nema zadataka, odgovori sa: []`;
         conversationId: payload.conversationId,
       };
       client.emit('workflow:plan-ready', event);
+
+      // Execute concept-less tasks via direct AI (after plan is sent)
+      for (const task of tasksWithoutConcepts) {
+        await this.handleExecuteTaskAi(client, {
+          taskId: task.id,
+          conversationId: payload.conversationId,
+        });
+      }
     } catch (error) {
       this.logger.error({
         message: 'Failed to build execution plan',
@@ -1114,6 +1146,90 @@ Ako nema zadataka, odgovori sa: []`;
       });
       client.emit('workflow:error', {
         message: error instanceof Error ? error.message : 'Failed to build plan',
+        conversationId: payload.conversationId,
+      });
+    }
+  }
+
+  /**
+   * Fetches a pre-built execution plan by ID.
+   * If the plan is not in memory (e.g. server restart), rebuilds from DB tasks.
+   */
+  @SubscribeMessage('workflow:get-plan')
+  async handleGetPlan(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { planId: string; conversationId: string }
+  ): Promise<void> {
+    const authenticatedClient = client as AuthenticatedSocket;
+    const { userId, tenantId } = authenticatedClient;
+
+    try {
+      // Verify the user owns this conversation
+      const conv = await this.conversationService.getConversation(
+        tenantId,
+        payload.conversationId,
+        userId
+      );
+      if (!conv) {
+        client.emit('workflow:error', {
+          message: 'Conversation not found',
+          conversationId: payload.conversationId,
+        });
+        return;
+      }
+
+      // Try to fetch the plan from in-memory store
+      const plan = this.workflowService.getActivePlan(payload.planId);
+      if (plan) {
+        client.emit('workflow:plan-ready', {
+          plan,
+          conversationId: payload.conversationId,
+        } as WorkflowPlanReadyPayload);
+        return;
+      }
+
+      // Fallback: rebuild plan from conversation's pending tasks
+      this.logger.warn({
+        message: 'Plan not found in memory, rebuilding from DB tasks',
+        planId: payload.planId,
+        conversationId: payload.conversationId,
+      });
+
+      const tasks = await this.prisma.note.findMany({
+        where: {
+          conversationId: payload.conversationId,
+          tenantId,
+          noteType: 'TASK',
+          status: 'PENDING',
+        },
+        select: { id: true },
+      });
+
+      if (tasks.length > 0) {
+        const rebuilt = await this.workflowService.buildExecutionPlan(
+          tasks.map((t) => t.id),
+          userId,
+          tenantId,
+          payload.conversationId
+        );
+        client.emit('workflow:plan-ready', {
+          plan: rebuilt,
+          conversationId: payload.conversationId,
+        } as WorkflowPlanReadyPayload);
+      } else {
+        client.emit('workflow:error', {
+          message: 'Nije pronađen plan niti zadaci za rekonstrukciju',
+          conversationId: payload.conversationId,
+        });
+      }
+    } catch (error) {
+      this.logger.error({
+        message: 'Failed to get/rebuild execution plan',
+        planId: payload.planId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      client.emit('workflow:error', {
+        message: error instanceof Error ? error.message : 'Failed to load plan',
         conversationId: payload.conversationId,
       });
     }
@@ -1276,6 +1392,8 @@ Ako nema zadataka, odgovori sa: []`;
             const stepIndex =
               plan?.steps.findIndex((s: ExecutionPlanStep) => s.stepId === upcomingStep.stepId) ??
               -1;
+
+            // Notify frontend for UI tracking (non-blocking)
             const event: WorkflowStepConfirmationPayload = {
               planId: payload.planId,
               completedStepId: '',
@@ -1291,19 +1409,11 @@ Ako nema zadataka, odgovori sa: []`;
             };
             client.emit('workflow:step-awaiting-confirmation', event);
 
-            // New interactive event with inputType discriminator
-            const inputEvent: WorkflowStepAwaitingInputPayload = {
-              planId: payload.planId,
-              stepId: upcomingStep.stepId,
-              stepTitle: upcomingStep.title,
-              stepDescription: upcomingStep.description,
-              conceptName: upcomingStep.conceptName,
-              stepIndex,
-              totalSteps,
-              inputType: 'confirmation',
-              conversationId: payload.conversationId,
-            };
-            client.emit('workflow:step-awaiting-input', inputEvent);
+            // Auto-resolve on backend: plan was already approved, no frontend round-trip needed.
+            // This prevents the workflow from hanging when the user navigates to another conversation.
+            setTimeout(() => {
+              this.workflowService.continueStep(payload.planId);
+            }, 100);
           },
           onComplete: (status, completedSteps, totalStepsCount) => {
             const event: WorkflowCompletePayload = {
@@ -1450,21 +1560,12 @@ Ako nema zadataka, odgovori sa: []`;
         timestamp: new Date().toISOString(),
       });
 
-      // 2. Load conversation history for context
-      let conversationContext = '';
-      if (convId) {
-        try {
-          const conv = await this.conversationService.getConversation(
-            authenticatedClient.tenantId,
-            convId,
-            authenticatedClient.userId
-          );
-          const recentMessages = conv.messages.slice(-6);
-          conversationContext = recentMessages.map((m) => `${m.role}: ${m.content}`).join('\n\n');
-        } catch {
-          /* no context available */
-        }
-      }
+      // 2. Load all workflow step outputs (child notes = completed workflow steps)
+      const childNotes = await this.prisma.note.findMany({
+        where: { parentNoteId: task.id },
+        select: { title: true, content: true, workflowStepNumber: true, status: true },
+        orderBy: { workflowStepNumber: 'asc' },
+      });
 
       // 3. Build business context
       const businessContext = await this.buildBusinessContext(
@@ -1472,9 +1573,55 @@ Ako nema zadataka, odgovori sa: []`;
         authenticatedClient.userId
       );
 
-      // 4. Build the prompt
-      const prompt = `Ti si poslovni asistent. Korisnik želi da AI uradi sledeći zadatak umesto njega.
-Uradi zadatak u potpunosti — napiši konkretan rezultat (tekst, analizu, plan, izveštaj, blog post — šta god zadatak traži).
+      // 4. Build the prompt — if workflow steps exist, synthesize them into a deliverable
+      let prompt: string;
+
+      if (childNotes.length > 0) {
+        // Build workflow results section from all child notes
+        const workflowResults = childNotes
+          .map((note, i) => {
+            const stepNum = note.workflowStepNumber ?? i + 1;
+            return `--- KORAK ${stepNum}: ${note.title} ---\n${note.content}`;
+          })
+          .join('\n\n');
+
+        prompt = `Ti si vrhunski poslovni stručnjak. Tvoj tim je završio detaljnu analizu i istraživanje kroz ${childNotes.length} koraka workflow-a. Sada trebaš da sintetišeš SVE rezultate u FINALNI DOKUMENT koji vlasnik poslovanja može odmah da koristi.
+
+ZADATAK: ${task.title}
+${task.expectedOutcome ? `OČEKIVANI REZULTAT: ${task.expectedOutcome}` : ''}
+
+REZULTATI ISTRAŽIVANJA I ANALIZE (ovo je tvoj ulazni materijal — koristi SVE podatke):
+${workflowResults}
+
+INSTRUKCIJE:
+1. Ovo NIJE izveštaj o tome šta je urađeno. Ovo je FINALNI DELIVERABLE — gotov dokument koji vlasnik koristi.
+2. Ako su koraci proizveli analizu (SWOT, konkurencija, tržište) — sintetiši nalaze u AKCIONI PLAN sa konkretnim preporukama
+3. Ako su koraci definisali strategiju — napravi KOMPLETNU STRATEGIJU sa koracima implementacije, rokovima i metrikama
+4. Ako su koraci istražili vrednost — definiši KONKRETNE OBLIKE VREDNOSTI sa cenovnom strategijom
+5. Ako su koraci kreirali sadržaj — napravi GOTOV SADRŽAJ spreman za objavljivanje
+6. Koristi specifične podatke, brojke i nalaze iz koraka — nemoj generalizovati
+7. Strukturiraj sa jasnim zaglavljima, tabelama, nabrajanjima
+8. NIKADA ne piši "u prethodnim koracima smo..." ili "analiza je pokazala da treba..." — PRIKAŽI gotov rezultat
+
+Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
+      } else {
+        // No workflow steps — simple task execution (fallback to original behavior with conversation context)
+        let conversationContext = '';
+        if (convId) {
+          try {
+            const conv = await this.conversationService.getConversation(
+              authenticatedClient.tenantId,
+              convId,
+              authenticatedClient.userId
+            );
+            const recentMessages = conv.messages.slice(-6);
+            conversationContext = recentMessages.map((m) => `${m.role}: ${m.content}`).join('\n\n');
+          } catch {
+            /* no context available */
+          }
+        }
+
+        prompt = `Ti si poslovni stručnjak. Uradi sledeći zadatak u potpunosti — proizvedi konkretan rezultat koji se može odmah koristiti.
 Ne objašnjavaj šta BI radio — URADI posao i prikaži gotov rezultat.
 
 ZADATAK: ${task.title}
@@ -1484,6 +1631,7 @@ ${task.expectedOutcome ? `OČEKIVANI REZULTAT: ${task.expectedOutcome}` : ''}
 ${conversationContext ? `KONTEKST IZ RAZGOVORA:\n${conversationContext}` : ''}
 
 Odgovaraj na srpskom jeziku. Daj kompletan, spreman za upotrebu rezultat.`;
+      }
 
       // 5. Stream the AI response
       let fullContent = '';
@@ -1519,20 +1667,11 @@ Odgovaraj na srpskom jeziku. Daj kompletan, spreman za upotrebu rezultat.`;
       }
 
       // 7. Mark task as completed with AI output as report
-      const maxReportLength = 10000;
-      if (fullContent.length > maxReportLength) {
-        this.logger.warn({
-          message: 'Task AI output truncated for userReport',
-          taskId: payload.taskId,
-          originalLength: fullContent.length,
-          truncatedTo: maxReportLength,
-        });
-      }
       await this.prisma.note.update({
         where: { id: payload.taskId },
         data: {
           status: 'COMPLETED',
-          userReport: fullContent.substring(0, maxReportLength),
+          userReport: fullContent,
         },
       });
 
@@ -1662,11 +1801,10 @@ Odgovaraj na srpskom jeziku.`;
       }
 
       // 6. Update the task note with optimized result and score
-      const maxReportLength = 10000;
       await this.prisma.note.update({
         where: { id: payload.taskId },
         data: {
-          userReport: fullResult.substring(0, maxReportLength),
+          userReport: fullResult,
           aiScore: score,
           aiFeedback: score !== null ? `AI ocena: ${score}/100` : null,
         },

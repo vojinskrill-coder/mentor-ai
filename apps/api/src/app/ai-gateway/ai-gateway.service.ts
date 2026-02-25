@@ -1204,11 +1204,11 @@ export class AiGatewayService {
    * Preserves the system message and the latest user message, dropping oldest
    * conversation history first. Uses rough token estimation (1 token ≈ 4 chars).
    *
-   * Budget: 8192 max - 1500 reserved for output = 6692 input tokens.
+   * Budget: 128000 max - 16000 reserved for output = 112000 input tokens.
    */
   private truncateMessagesToFit(messages: ChatMessage[], correlationId: string): ChatMessage[] {
-    const MAX_CONTEXT_TOKENS = 8192;
-    const RESERVED_FOR_OUTPUT = 1500;
+    const MAX_CONTEXT_TOKENS = 128000;
+    const RESERVED_FOR_OUTPUT = 16000;
     const MAX_INPUT_TOKENS = MAX_CONTEXT_TOKENS - RESERVED_FOR_OUTPUT;
 
     const estimateTokens = (text: string): number => Math.ceil(text.length / 4);

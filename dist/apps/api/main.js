@@ -4676,9 +4676,14 @@ class OpenAIProvider {
         }
         const data = (await response.json());
         // Filter to chat-capable models
-        const chatModelPrefixes = ['gpt-4', 'gpt-3.5', 'chatgpt', 'o1', 'o3'];
+        const chatModelPrefixes = ['gpt-5', 'gpt-4', 'gpt-3.5', 'chatgpt', 'o1', 'o3'];
         // Preferred models shown first
         const preferredOrder = [
+            'gpt-5.2-chat-latest',
+            'gpt-5.2',
+            'gpt-5',
+            'gpt-5-mini',
+            'gpt-5-nano',
             'gpt-4o',
             'gpt-4o-mini',
             'gpt-4-turbo',
@@ -4688,7 +4693,6 @@ class OpenAIProvider {
             'o3-mini',
             'o1',
             'o1-mini',
-            'chatgpt-4o-latest',
         ];
         return data.data
             .filter((model) => chatModelPrefixes.some((prefix) => model.id.startsWith(prefix)))
@@ -6161,11 +6165,11 @@ let AiGatewayService = AiGatewayService_1 = class AiGatewayService {
      * Preserves the system message and the latest user message, dropping oldest
      * conversation history first. Uses rough token estimation (1 token ≈ 4 chars).
      *
-     * Budget: 8192 max - 1500 reserved for output = 6692 input tokens.
+     * Budget: 128000 max - 16000 reserved for output = 112000 input tokens.
      */
     truncateMessagesToFit(messages, correlationId) {
-        const MAX_CONTEXT_TOKENS = 8192;
-        const RESERVED_FOR_OUTPUT = 1500;
+        const MAX_CONTEXT_TOKENS = 128000;
+        const RESERVED_FOR_OUTPUT = 16000;
         const MAX_INPUT_TOKENS = MAX_CONTEXT_TOKENS - RESERVED_FOR_OUTPUT;
         const estimateTokens = (text) => Math.ceil(text.length / 4);
         const totalTokens = messages.reduce((acc, m) => acc + estimateTokens(m.content), 0);
@@ -16185,28 +16189,11 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
         if (tasks.length === 0) {
             throw new Error('No pending tasks found for the given IDs');
         }
-        // Collect concept IDs from explicit task links + semantic search (parallel)
+        // Collect concept IDs directly linked to tasks (no semantic expansion)
         const conceptIdSet = new Set();
         for (const task of tasks) {
             if (task.conceptId) {
                 conceptIdSet.add(task.conceptId);
-            }
-        }
-        // Run semantic searches in parallel
-        const searchPromises = tasks
-            .map((task) => {
-            const searchText = `${task.title} ${task.content ?? ''}`.trim();
-            if (searchText.length <= 5)
-                return null;
-            return this.conceptMatchingService
-                .findRelevantConcepts(searchText, { limit: 3, threshold: 0.3 })
-                .catch(() => []);
-        })
-            .filter(Boolean);
-        const searchResults = await Promise.all(searchPromises);
-        for (const matches of searchResults) {
-            for (const m of matches) {
-                conceptIdSet.add(m.conceptId);
             }
         }
         const conceptIds = [...conceptIdSet];
@@ -16344,7 +16331,7 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
                 completedSummaries.push({
                     title: step.title,
                     conceptName: step.conceptName,
-                    summary: result.content.substring(0, 300),
+                    summary: result.content.substring(0, 2000),
                 });
                 callbacks.onStepComplete(step.stepId, result.content, result.citations);
                 // Create sub-task note linked to parent task (with dedup by parentNoteId + stepNumber, Story 3.4 AC3)
@@ -16375,7 +16362,7 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
                                 conversationId,
                                 conceptId: step.conceptId,
                                 parentNoteId: taskId,
-                                expectedOutcome: step.description?.substring(0, 500),
+                                expectedOutcome: step.description?.substring(0, 2000),
                                 workflowStepNumber: step.workflowStepNumber,
                             });
                             break;
@@ -18544,7 +18531,7 @@ tslib_1.__decorate([
 
 
 var ConversationGateway_1;
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ConversationGateway = void 0;
 const tslib_1 = __webpack_require__(4);
@@ -19268,26 +19255,13 @@ If there are no meaningful tasks, respond with an empty array: []`;
     }
     // ─── Explicit Task Creation ─────────────────────────────────────
     hasExplicitTaskIntent(userMessage) {
-        const taskKeywords = [
-            'kreiraj task',
-            'kreiraj zadat',
-            'napravi task',
-            'napravi zadat',
-            'kreiraj plan',
-            'napravi plan',
-            'kreiraj workflow',
-            'napravi workflow',
-            'generiši task',
-            'generiši zadat',
-            'kreiraj korake',
-            'napravi korake',
-            'create task',
-            'create plan',
-            'make a plan',
-            'make task',
-        ];
         const lowerMsg = userMessage.toLowerCase();
-        return taskKeywords.some((kw) => lowerMsg.includes(kw));
+        // Action verbs (Serbian + English)
+        const actionVerbs = /\b(kreiraj|napravi|generiši|generisi|dodaj|create|make|add|generate)\b/;
+        // Task nouns (Serbian + English) — match root forms so inflected words work
+        const taskNouns = /\b(task|zadat|plan|workflow|korake?|korak|akcij|to-do|todo|stavk)\b/;
+        // Match if message contains both an action verb and a task noun (in any order, with words between)
+        return actionVerbs.test(lowerMsg) && taskNouns.test(lowerMsg);
     }
     async detectAndCreateExplicitTasks(client, userId, tenantId, conversationId, conceptId, userMessage, aiResponse, relevantConcepts) {
         this.logger.log({
@@ -19397,12 +19371,49 @@ Ako nema zadataka, odgovori sa: []`;
                 taskIds: payload.taskIds,
                 conversationId: payload.conversationId,
             });
-            const plan = await this.workflowService.buildExecutionPlan(payload.taskIds, authenticatedClient.userId, authenticatedClient.tenantId, payload.conversationId);
+            // Check if tasks have linked concepts — tasks created from chat may not
+            const tasks = await this.prisma.note.findMany({
+                where: {
+                    id: { in: payload.taskIds },
+                    tenantId: authenticatedClient.tenantId,
+                    noteType: 'TASK',
+                    status: 'PENDING',
+                },
+                select: { id: true, conceptId: true },
+            });
+            const tasksWithConcepts = tasks.filter((t) => t.conceptId);
+            const tasksWithoutConcepts = tasks.filter((t) => !t.conceptId);
+            // If ALL tasks lack concepts, use direct AI execution instead of workflow
+            if (tasksWithConcepts.length === 0 && tasksWithoutConcepts.length > 0) {
+                this.logger.log({
+                    message: 'Tasks have no concepts — falling back to direct AI execution',
+                    taskCount: tasksWithoutConcepts.length,
+                });
+                for (const task of tasksWithoutConcepts) {
+                    await this.handleExecuteTaskAi(client, {
+                        taskId: task.id,
+                        conversationId: payload.conversationId,
+                    });
+                }
+                return;
+            }
+            // Build workflow execution plan for concept-linked tasks
+            const taskIdsForPlan = tasksWithConcepts.length < tasks.length
+                ? tasksWithConcepts.map((t) => t.id)
+                : payload.taskIds;
+            const plan = await this.workflowService.buildExecutionPlan(taskIdsForPlan, authenticatedClient.userId, authenticatedClient.tenantId, payload.conversationId);
             const event = {
                 plan,
                 conversationId: payload.conversationId,
             };
             client.emit('workflow:plan-ready', event);
+            // Execute concept-less tasks via direct AI (after plan is sent)
+            for (const task of tasksWithoutConcepts) {
+                await this.handleExecuteTaskAi(client, {
+                    taskId: task.id,
+                    conversationId: payload.conversationId,
+                });
+            }
         }
         catch (error) {
             this.logger.error({
@@ -19411,6 +19422,73 @@ Ako nema zadataka, odgovori sa: []`;
             });
             client.emit('workflow:error', {
                 message: error instanceof Error ? error.message : 'Failed to build plan',
+                conversationId: payload.conversationId,
+            });
+        }
+    }
+    /**
+     * Fetches a pre-built execution plan by ID.
+     * If the plan is not in memory (e.g. server restart), rebuilds from DB tasks.
+     */
+    async handleGetPlan(client, payload) {
+        const authenticatedClient = client;
+        const { userId, tenantId } = authenticatedClient;
+        try {
+            // Verify the user owns this conversation
+            const conv = await this.conversationService.getConversation(tenantId, payload.conversationId, userId);
+            if (!conv) {
+                client.emit('workflow:error', {
+                    message: 'Conversation not found',
+                    conversationId: payload.conversationId,
+                });
+                return;
+            }
+            // Try to fetch the plan from in-memory store
+            const plan = this.workflowService.getActivePlan(payload.planId);
+            if (plan) {
+                client.emit('workflow:plan-ready', {
+                    plan,
+                    conversationId: payload.conversationId,
+                });
+                return;
+            }
+            // Fallback: rebuild plan from conversation's pending tasks
+            this.logger.warn({
+                message: 'Plan not found in memory, rebuilding from DB tasks',
+                planId: payload.planId,
+                conversationId: payload.conversationId,
+            });
+            const tasks = await this.prisma.note.findMany({
+                where: {
+                    conversationId: payload.conversationId,
+                    tenantId,
+                    noteType: 'TASK',
+                    status: 'PENDING',
+                },
+                select: { id: true },
+            });
+            if (tasks.length > 0) {
+                const rebuilt = await this.workflowService.buildExecutionPlan(tasks.map((t) => t.id), userId, tenantId, payload.conversationId);
+                client.emit('workflow:plan-ready', {
+                    plan: rebuilt,
+                    conversationId: payload.conversationId,
+                });
+            }
+            else {
+                client.emit('workflow:error', {
+                    message: 'Nije pronađen plan niti zadaci za rekonstrukciju',
+                    conversationId: payload.conversationId,
+                });
+            }
+        }
+        catch (error) {
+            this.logger.error({
+                message: 'Failed to get/rebuild execution plan',
+                planId: payload.planId,
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
+            client.emit('workflow:error', {
+                message: error instanceof Error ? error.message : 'Failed to load plan',
                 conversationId: payload.conversationId,
             });
         }
@@ -19545,6 +19623,7 @@ Ako nema zadataka, odgovori sa: []`;
             onStepAwaitingConfirmation: (upcomingStep) => {
                 const stepIndex = plan?.steps.findIndex((s) => s.stepId === upcomingStep.stepId) ??
                     -1;
+                // Notify frontend for UI tracking (non-blocking)
                 const event = {
                     planId: payload.planId,
                     completedStepId: '',
@@ -19559,19 +19638,11 @@ Ako nema zadataka, odgovori sa: []`;
                     conversationId: payload.conversationId,
                 };
                 client.emit('workflow:step-awaiting-confirmation', event);
-                // New interactive event with inputType discriminator
-                const inputEvent = {
-                    planId: payload.planId,
-                    stepId: upcomingStep.stepId,
-                    stepTitle: upcomingStep.title,
-                    stepDescription: upcomingStep.description,
-                    conceptName: upcomingStep.conceptName,
-                    stepIndex,
-                    totalSteps,
-                    inputType: 'confirmation',
-                    conversationId: payload.conversationId,
-                };
-                client.emit('workflow:step-awaiting-input', inputEvent);
+                // Auto-resolve on backend: plan was already approved, no frontend round-trip needed.
+                // This prevents the workflow from hanging when the user navigates to another conversation.
+                setTimeout(() => {
+                    this.workflowService.continueStep(payload.planId);
+                }, 100);
             },
             onComplete: (status, completedSteps, totalStepsCount) => {
                 const event = {
@@ -19688,23 +19759,58 @@ Ako nema zadataka, odgovori sa: []`;
                 conversationId: convId,
                 timestamp: new Date().toISOString(),
             });
-            // 2. Load conversation history for context
-            let conversationContext = '';
-            if (convId) {
-                try {
-                    const conv = await this.conversationService.getConversation(authenticatedClient.tenantId, convId, authenticatedClient.userId);
-                    const recentMessages = conv.messages.slice(-6);
-                    conversationContext = recentMessages.map((m) => `${m.role}: ${m.content}`).join('\n\n');
-                }
-                catch {
-                    /* no context available */
-                }
-            }
+            // 2. Load all workflow step outputs (child notes = completed workflow steps)
+            const childNotes = await this.prisma.note.findMany({
+                where: { parentNoteId: task.id },
+                select: { title: true, content: true, workflowStepNumber: true, status: true },
+                orderBy: { workflowStepNumber: 'asc' },
+            });
             // 3. Build business context
             const businessContext = await this.buildBusinessContext(authenticatedClient.tenantId, authenticatedClient.userId);
-            // 4. Build the prompt
-            const prompt = `Ti si poslovni asistent. Korisnik želi da AI uradi sledeći zadatak umesto njega.
-Uradi zadatak u potpunosti — napiši konkretan rezultat (tekst, analizu, plan, izveštaj, blog post — šta god zadatak traži).
+            // 4. Build the prompt — if workflow steps exist, synthesize them into a deliverable
+            let prompt;
+            if (childNotes.length > 0) {
+                // Build workflow results section from all child notes
+                const workflowResults = childNotes
+                    .map((note, i) => {
+                    const stepNum = note.workflowStepNumber ?? (i + 1);
+                    return `--- KORAK ${stepNum}: ${note.title} ---\n${note.content}`;
+                })
+                    .join('\n\n');
+                prompt = `Ti si vrhunski poslovni stručnjak. Tvoj tim je završio detaljnu analizu i istraživanje kroz ${childNotes.length} koraka workflow-a. Sada trebaš da sintetišeš SVE rezultate u FINALNI DOKUMENT koji vlasnik poslovanja može odmah da koristi.
+
+ZADATAK: ${task.title}
+${task.expectedOutcome ? `OČEKIVANI REZULTAT: ${task.expectedOutcome}` : ''}
+
+REZULTATI ISTRAŽIVANJA I ANALIZE (ovo je tvoj ulazni materijal — koristi SVE podatke):
+${workflowResults}
+
+INSTRUKCIJE:
+1. Ovo NIJE izveštaj o tome šta je urađeno. Ovo je FINALNI DELIVERABLE — gotov dokument koji vlasnik koristi.
+2. Ako su koraci proizveli analizu (SWOT, konkurencija, tržište) — sintetiši nalaze u AKCIONI PLAN sa konkretnim preporukama
+3. Ako su koraci definisali strategiju — napravi KOMPLETNU STRATEGIJU sa koracima implementacije, rokovima i metrikama
+4. Ako su koraci istražili vrednost — definiši KONKRETNE OBLIKE VREDNOSTI sa cenovnom strategijom
+5. Ako su koraci kreirali sadržaj — napravi GOTOV SADRŽAJ spreman za objavljivanje
+6. Koristi specifične podatke, brojke i nalaze iz koraka — nemoj generalizovati
+7. Strukturiraj sa jasnim zaglavljima, tabelama, nabrajanjima
+8. NIKADA ne piši "u prethodnim koracima smo..." ili "analiza je pokazala da treba..." — PRIKAŽI gotov rezultat
+
+Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
+            }
+            else {
+                // No workflow steps — simple task execution (fallback to original behavior with conversation context)
+                let conversationContext = '';
+                if (convId) {
+                    try {
+                        const conv = await this.conversationService.getConversation(authenticatedClient.tenantId, convId, authenticatedClient.userId);
+                        const recentMessages = conv.messages.slice(-6);
+                        conversationContext = recentMessages.map((m) => `${m.role}: ${m.content}`).join('\n\n');
+                    }
+                    catch {
+                        /* no context available */
+                    }
+                }
+                prompt = `Ti si poslovni stručnjak. Uradi sledeći zadatak u potpunosti — proizvedi konkretan rezultat koji se može odmah koristiti.
 Ne objašnjavaj šta BI radio — URADI posao i prikaži gotov rezultat.
 
 ZADATAK: ${task.title}
@@ -19714,6 +19820,7 @@ ${task.expectedOutcome ? `OČEKIVANI REZULTAT: ${task.expectedOutcome}` : ''}
 ${conversationContext ? `KONTEKST IZ RAZGOVORA:\n${conversationContext}` : ''}
 
 Odgovaraj na srpskom jeziku. Daj kompletan, spreman za upotrebu rezultat.`;
+            }
             // 5. Stream the AI response
             let fullContent = '';
             let chunkIndex = 0;
@@ -19736,20 +19843,11 @@ Odgovaraj na srpskom jeziku. Daj kompletan, spreman za upotrebu rezultat.`;
                 await this.conversationService.addMessage(authenticatedClient.tenantId, convId, types_2.MessageRole.ASSISTANT, fullContent);
             }
             // 7. Mark task as completed with AI output as report
-            const maxReportLength = 10000;
-            if (fullContent.length > maxReportLength) {
-                this.logger.warn({
-                    message: 'Task AI output truncated for userReport',
-                    taskId: payload.taskId,
-                    originalLength: fullContent.length,
-                    truncatedTo: maxReportLength,
-                });
-            }
             await this.prisma.note.update({
                 where: { id: payload.taskId },
                 data: {
                     status: 'COMPLETED',
-                    userReport: fullContent.substring(0, maxReportLength),
+                    userReport: fullContent,
                 },
             });
             // 8. Emit completion
@@ -19860,11 +19958,10 @@ Odgovaraj na srpskom jeziku.`;
                 }
             }
             // 6. Update the task note with optimized result and score
-            const maxReportLength = 10000;
             await this.prisma.note.update({
                 where: { id: payload.taskId },
                 data: {
-                    userReport: fullResult.substring(0, maxReportLength),
+                    userReport: fullResult,
                     aiScore: score,
                     aiFeedback: score !== null ? `AI ocena: ${score}/100` : null,
                 },
@@ -20516,19 +20613,27 @@ tslib_1.__decorate([
     tslib_1.__metadata("design:returntype", typeof (_w = typeof Promise !== "undefined" && Promise) === "function" ? _w : Object)
 ], ConversationGateway.prototype, "handleRunAgents", null);
 tslib_1.__decorate([
-    (0, websockets_1.SubscribeMessage)('workflow:approve'),
+    (0, websockets_1.SubscribeMessage)('workflow:get-plan'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
     tslib_1.__metadata("design:paramtypes", [typeof (_x = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _x : Object, Object]),
     tslib_1.__metadata("design:returntype", typeof (_y = typeof Promise !== "undefined" && Promise) === "function" ? _y : Object)
+], ConversationGateway.prototype, "handleGetPlan", null);
+tslib_1.__decorate([
+    (0, websockets_1.SubscribeMessage)('workflow:approve'),
+    tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
+    tslib_1.__param(1, (0, websockets_1.MessageBody)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_z = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _z : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_0 = typeof Promise !== "undefined" && Promise) === "function" ? _0 : Object)
 ], ConversationGateway.prototype, "handleWorkflowApproval", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('workflow:cancel'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_z = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _z : Object, Object]),
+    tslib_1.__metadata("design:paramtypes", [typeof (_1 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _1 : Object, Object]),
     tslib_1.__metadata("design:returntype", void 0)
 ], ConversationGateway.prototype, "handleWorkflowCancel", null);
 tslib_1.__decorate([
@@ -20536,7 +20641,7 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_0 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _0 : Object, Object]),
+    tslib_1.__metadata("design:paramtypes", [typeof (_2 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _2 : Object, Object]),
     tslib_1.__metadata("design:returntype", void 0)
 ], ConversationGateway.prototype, "handleStepContinue", null);
 tslib_1.__decorate([
@@ -20544,40 +20649,40 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_1 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _1 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_2 = typeof Promise !== "undefined" && Promise) === "function" ? _2 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_3 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _3 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_4 = typeof Promise !== "undefined" && Promise) === "function" ? _4 : Object)
 ], ConversationGateway.prototype, "handleExecuteTaskAi", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('task:submit-result'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_3 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _3 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_4 = typeof Promise !== "undefined" && Promise) === "function" ? _4 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_5 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _5 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_6 = typeof Promise !== "undefined" && Promise) === "function" ? _6 : Object)
 ], ConversationGateway.prototype, "handleSubmitTaskResult", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('workflow:start-yolo'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_5 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _5 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_6 = typeof Promise !== "undefined" && Promise) === "function" ? _6 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_7 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _7 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_8 = typeof Promise !== "undefined" && Promise) === "function" ? _8 : Object)
 ], ConversationGateway.prototype, "handleStartYolo", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('yolo:start-domain'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_7 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _7 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_8 = typeof Promise !== "undefined" && Promise) === "function" ? _8 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_9 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _9 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_10 = typeof Promise !== "undefined" && Promise) === "function" ? _10 : Object)
 ], ConversationGateway.prototype, "handleStartDomainYolo", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('discovery:send-message'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_9 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _9 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_10 = typeof Promise !== "undefined" && Promise) === "function" ? _10 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_11 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _11 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_12 = typeof Promise !== "undefined" && Promise) === "function" ? _12 : Object)
 ], ConversationGateway.prototype, "handleDiscoveryMessage", null);
 exports.ConversationGateway = ConversationGateway = ConversationGateway_1 = tslib_1.__decorate([
     (0, websockets_1.WebSocketGateway)({
@@ -20626,6 +20731,7 @@ const knowledge_module_1 = __webpack_require__(72);
 const conversation_module_1 = __webpack_require__(129);
 const web_search_module_1 = __webpack_require__(143);
 const file_upload_module_1 = __webpack_require__(39);
+const workflow_module_1 = __webpack_require__(142);
 const onboarding_controller_1 = __webpack_require__(156);
 const onboarding_service_1 = __webpack_require__(157);
 const onboarding_metric_service_1 = __webpack_require__(158);
@@ -20647,6 +20753,7 @@ exports.OnboardingModule = OnboardingModule = tslib_1.__decorate([
             conversation_module_1.ConversationModule, // Provides ConversationService for welcome conversation
             web_search_module_1.WebSearchModule, // Provides WebSearchService for website analysis
             file_upload_module_1.FileUploadModule, // Provides FileUploadService for PDF validation
+            workflow_module_1.WorkflowModule, // Provides WorkflowService for building execution plans
         ],
         controllers: [onboarding_controller_1.OnboardingController],
         providers: [onboarding_service_1.OnboardingService, onboarding_metric_service_1.OnboardingMetricService],
@@ -20976,7 +21083,7 @@ exports.OnboardingController = OnboardingController = OnboardingController_1 = t
 
 
 var OnboardingService_1;
-var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.OnboardingService = void 0;
 const tslib_1 = __webpack_require__(4);
@@ -20990,6 +21097,7 @@ const concept_matching_service_1 = __webpack_require__(109);
 const conversation_service_1 = __webpack_require__(148);
 const web_search_service_1 = __webpack_require__(144);
 const brain_seeding_service_1 = __webpack_require__(116);
+const workflow_service_1 = __webpack_require__(145);
 const onboarding_metric_service_1 = __webpack_require__(158);
 const quick_task_templates_1 = __webpack_require__(159);
 const department_categories_1 = __webpack_require__(117);
@@ -20998,7 +21106,7 @@ const department_categories_1 = __webpack_require__(117);
  * Enables users to experience AI value within 5 minutes of registration.
  */
 let OnboardingService = OnboardingService_1 = class OnboardingService {
-    constructor(prisma, aiGateway, notesService, metricService, conceptService, conceptMatchingService, conversationService, webSearchService, brainSeedingService) {
+    constructor(prisma, aiGateway, notesService, metricService, conceptService, conceptMatchingService, conversationService, webSearchService, brainSeedingService, workflowService) {
         this.prisma = prisma;
         this.aiGateway = aiGateway;
         this.notesService = notesService;
@@ -21008,6 +21116,7 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
         this.conversationService = conversationService;
         this.webSearchService = webSearchService;
         this.brainSeedingService = brainSeedingService;
+        this.workflowService = workflowService;
         this.logger = new common_1.Logger(OnboardingService_1.name);
     }
     /**
@@ -21469,8 +21578,11 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
         });
         // Generate initial action plan from business context via embeddings
         let welcomeConversationId = null;
+        let taskIds = [];
         try {
-            welcomeConversationId = await this.generateInitialPlan(tenantId, userId);
+            const planResult = await this.generateInitialPlan(tenantId, userId);
+            welcomeConversationId = planResult.conversationId;
+            taskIds = planResult.taskIds;
         }
         catch (err) {
             this.logger.warn({
@@ -21479,6 +21591,30 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
                 userId,
                 error: err instanceof Error ? err.message : 'Unknown',
             });
+        }
+        // Build execution plan during onboarding so chat can load it immediately
+        let planId;
+        try {
+            if (taskIds.length > 0 && welcomeConversationId) {
+                const plan = await this.workflowService.buildExecutionPlan(taskIds, userId, tenantId, welcomeConversationId);
+                planId = plan.planId;
+                this.logger.log({
+                    message: 'Execution plan built during onboarding',
+                    planId,
+                    taskCount: taskIds.length,
+                    tenantId,
+                    userId,
+                });
+            }
+        }
+        catch (err) {
+            this.logger.warn({
+                message: 'Plan generation failed during onboarding (non-blocking)',
+                tenantId,
+                userId,
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+            // planId stays undefined — chat falls back to manual task panel
         }
         // Story 3.2: Seed Brain pending tasks based on user's department (fire-and-forget)
         // Loads user's department from DB and seeds concept tasks accordingly
@@ -21512,6 +21648,7 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
             newTenantStatus: 'ACTIVE',
             welcomeConversationId: welcomeConversationId ?? undefined,
             executionMode: executionMode ?? undefined,
+            planId,
         };
     }
     /**
@@ -21525,7 +21662,7 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
             select: { name: true, industry: true, description: true },
         });
         if (!tenant)
-            return null;
+            return { conversationId: null, taskIds: [] };
         // Multi-query approach for maximum concept coverage
         const queries = [
             tenant.industry,
@@ -21544,9 +21681,18 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
                 }
             }
         }
-        // Always include foundation concepts ("Uvod u Poslovanje") first
+        // Always include foundation concepts — match DB categories with/without number prefix
+        // DB has: "1. Uvod u Poslovanje", "Poslovanje", "2. Vrednost", "Vrednost"
         const foundationConcepts = await this.prisma.concept.findMany({
-            where: { category: { in: [...department_categories_1.FOUNDATION_CATEGORIES] } },
+            where: {
+                OR: [
+                    ...department_categories_1.FOUNDATION_CATEGORIES.flatMap((cat) => [
+                        { category: cat },
+                        { category: { endsWith: cat } }, // matches "1. Uvod u Poslovanje", "2. Vrednost"
+                    ]),
+                    { category: 'Poslovanje' }, // core business category
+                ],
+            },
             select: { id: true, name: true, category: true, definition: true },
             orderBy: { sortOrder: 'asc' },
         });
@@ -21580,12 +21726,21 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
         const diversified = [...foundationMatches, ...embeddingMatches];
         if (diversified.length === 0) {
             this.logger.warn({ message: 'No concepts found for initial plan', tenantId });
-            return null;
+            return { conversationId: null, taskIds: [] };
         }
-        // Create TASK notes for each matched concept
-        for (const match of diversified) {
+        // Ensure "Poslovanje" concept is first (foundational starting point)
+        const poslovanjeIdx = diversified.findIndex((m) => m.conceptName === 'Poslovanje');
+        if (poslovanjeIdx > 0) {
+            const removed = diversified.splice(poslovanjeIdx, 1);
+            diversified.unshift(removed[0]);
+        }
+        // Limit to top 10 most important tasks
+        const topTasks = diversified.slice(0, 10);
+        // Create TASK notes for each matched concept (collect IDs for plan building)
+        const createdTaskIds = [];
+        for (const match of topTasks) {
             const title = this.buildActionTitle(match.conceptName);
-            await this.notesService.createNote({
+            const note = await this.notesService.createNote({
                 title,
                 content: `Primenite ${match.conceptName} na vaše poslovanje: ${match.definition}`,
                 source: prisma_1.NoteSource.ONBOARDING,
@@ -21595,9 +21750,10 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
                 userId,
                 tenantId,
             });
+            createdTaskIds.push(note.id);
         }
         // Build concept summaries for narrative welcome message generation
-        const conceptSummaries = diversified
+        const conceptSummaries = topTasks
             .map((m, i) => {
             const title = this.buildActionTitle(m.conceptName);
             return `${i + 1}. "${title}" — Koncept: ${m.conceptName}, Definicija: ${m.definition}`;
@@ -21643,29 +21799,29 @@ Napiši personalizovanu dobrodošlicu.`;
                 error: err instanceof Error ? err.message : 'Unknown',
             });
             // Fallback to simple template if LLM fails
-            const taskList = diversified
+            const taskList = topTasks
                 .map((m, i) => `${i + 1}. **${this.buildActionTitle(m.conceptName)}**${i === 0 ? ' (preporučeno)' : ''}`)
                 .join('\n');
-            welcomeMsg = `Dobrodošli! Pripremili smo ${diversified.length} zadataka za vaše poslovanje:\n\n${taskList}\n\nOdgovorite "da" da pokrenete sve zadatke.`;
+            welcomeMsg = `Dobrodošli! Pripremili smo ${topTasks.length} zadataka za vaše poslovanje:\n\n${taskList}\n\nOdgovorite "da" da pokrenete sve zadatke.`;
         }
         // Create welcome conversation linked to the first matched concept
         const conversation = await this.conversationService.createConversation(tenantId, userId, 'Dobrodošli u Mentor AI', undefined, // personaType
-        diversified[0]?.conceptId // link to first matched concept for tree display
+        topTasks[0]?.conceptId // link to first matched concept for tree display
         );
         await this.conversationService.addMessage(tenantId, conversation.id, 'ASSISTANT', welcomeMsg);
         // Link all onboarding task notes to the welcome conversation
         // so they appear in the notes panel when viewing this conversation
-        const conceptIds = diversified.map((m) => m.conceptId);
+        const conceptIds = topTasks.map((m) => m.conceptId);
         await this.notesService.linkNotesToConversation(conceptIds, conversation.id, userId, tenantId);
         this.logger.log({
             message: 'Initial plan generated from embeddings',
             tenantId,
             userId,
-            taskCount: diversified.length,
-            concepts: diversified.map((m) => m.conceptName),
+            taskCount: topTasks.length,
+            concepts: topTasks.map((m) => m.conceptName),
             welcomeConversationId: conversation.id,
         });
-        return conversation.id;
+        return { conversationId: conversation.id, taskIds: createdTaskIds };
     }
     buildActionTitle(conceptName) {
         const lower = conceptName.toLowerCase();
@@ -21731,7 +21887,7 @@ Napiši personalizovanu dobrodošlicu.`;
 exports.OnboardingService = OnboardingService;
 exports.OnboardingService = OnboardingService = OnboardingService_1 = tslib_1.__decorate([
     (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _c : Object, typeof (_d = typeof onboarding_metric_service_1.OnboardingMetricService !== "undefined" && onboarding_metric_service_1.OnboardingMetricService) === "function" ? _d : Object, typeof (_e = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _e : Object, typeof (_f = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _f : Object, typeof (_g = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _g : Object, typeof (_h = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _h : Object, typeof (_j = typeof brain_seeding_service_1.BrainSeedingService !== "undefined" && brain_seeding_service_1.BrainSeedingService) === "function" ? _j : Object])
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _c : Object, typeof (_d = typeof onboarding_metric_service_1.OnboardingMetricService !== "undefined" && onboarding_metric_service_1.OnboardingMetricService) === "function" ? _d : Object, typeof (_e = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _e : Object, typeof (_f = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _f : Object, typeof (_g = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _g : Object, typeof (_h = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _h : Object, typeof (_j = typeof brain_seeding_service_1.BrainSeedingService !== "undefined" && brain_seeding_service_1.BrainSeedingService) === "function" ? _j : Object, typeof (_k = typeof workflow_service_1.WorkflowService !== "undefined" && workflow_service_1.WorkflowService) === "function" ? _k : Object])
 ], OnboardingService);
 
 

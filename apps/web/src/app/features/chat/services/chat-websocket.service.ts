@@ -439,6 +439,11 @@ export class ChatWebsocketService {
     this.socket!.emit('workflow:run-agents', { taskIds, conversationId });
   }
 
+  emitGetPlan(planId: string, conversationId: string): void {
+    if (!this.checkConnected('učitavanje plana')) return;
+    this.socket!.emit('workflow:get-plan', { planId, conversationId });
+  }
+
   emitWorkflowApproval(planId: string, approved: boolean, conversationId: string): void {
     if (!this.checkConnected('odobravanje plana')) return;
     this.socket!.emit('workflow:approve', { planId, approved, conversationId });

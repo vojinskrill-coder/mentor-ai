@@ -57,10 +57,15 @@ export class OpenAIProvider implements LlmProvider {
     const data = (await response.json()) as OpenAIModelsResponse;
 
     // Filter to chat-capable models
-    const chatModelPrefixes = ['gpt-4', 'gpt-3.5', 'chatgpt', 'o1', 'o3'];
+    const chatModelPrefixes = ['gpt-5', 'gpt-4', 'gpt-3.5', 'chatgpt', 'o1', 'o3'];
 
     // Preferred models shown first
     const preferredOrder = [
+      'gpt-5.2-chat-latest',
+      'gpt-5.2',
+      'gpt-5',
+      'gpt-5-mini',
+      'gpt-5-nano',
       'gpt-4o',
       'gpt-4o-mini',
       'gpt-4-turbo',
@@ -70,13 +75,10 @@ export class OpenAIProvider implements LlmProvider {
       'o3-mini',
       'o1',
       'o1-mini',
-      'chatgpt-4o-latest',
     ];
 
     return data.data
-      .filter((model) =>
-        chatModelPrefixes.some((prefix) => model.id.startsWith(prefix))
-      )
+      .filter((model) => chatModelPrefixes.some((prefix) => model.id.startsWith(prefix)))
       .map((model) => ({
         id: model.id,
         name: model.id,

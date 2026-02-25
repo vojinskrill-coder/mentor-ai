@@ -24,6 +24,7 @@ import { ConceptMatchingService } from '../knowledge/services/concept-matching.s
 import { ConversationService } from '../conversation/conversation.service';
 import { WebSearchService } from '../web-search/web-search.service';
 import { BrainSeedingService } from '../knowledge/services/brain-seeding.service';
+import { WorkflowService } from '../workflow/workflow.service';
 import { OnboardingMetricService } from './onboarding-metric.service';
 import {
   QUICK_TASK_TEMPLATES,
@@ -51,7 +52,8 @@ export class OnboardingService {
     private readonly conceptMatchingService: ConceptMatchingService,
     private readonly conversationService: ConversationService,
     private readonly webSearchService: WebSearchService,
-    private readonly brainSeedingService: BrainSeedingService
+    private readonly brainSeedingService: BrainSeedingService,
+    private readonly workflowService: WorkflowService
   ) {}
 
   /**
@@ -606,8 +608,11 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
 
     // Generate initial action plan from business context via embeddings
     let welcomeConversationId: string | null = null;
+    let taskIds: string[] = [];
     try {
-      welcomeConversationId = await this.generateInitialPlan(tenantId, userId);
+      const planResult = await this.generateInitialPlan(tenantId, userId);
+      welcomeConversationId = planResult.conversationId;
+      taskIds = planResult.taskIds;
     } catch (err) {
       this.logger.warn({
         message: 'Initial plan generation failed (non-blocking)',
@@ -615,6 +620,35 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
         userId,
         error: err instanceof Error ? err.message : 'Unknown',
       });
+    }
+
+    // Build execution plan during onboarding so chat can load it immediately
+    let planId: string | undefined;
+    try {
+      if (taskIds.length > 0 && welcomeConversationId) {
+        const plan = await this.workflowService.buildExecutionPlan(
+          taskIds,
+          userId,
+          tenantId,
+          welcomeConversationId
+        );
+        planId = plan.planId;
+        this.logger.log({
+          message: 'Execution plan built during onboarding',
+          planId,
+          taskCount: taskIds.length,
+          tenantId,
+          userId,
+        });
+      }
+    } catch (err) {
+      this.logger.warn({
+        message: 'Plan generation failed during onboarding (non-blocking)',
+        tenantId,
+        userId,
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+      // planId stays undefined — chat falls back to manual task panel
     }
 
     // Story 3.2: Seed Brain pending tasks based on user's department (fire-and-forget)
@@ -656,6 +690,7 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
       newTenantStatus: 'ACTIVE' as TenantStatus,
       welcomeConversationId: welcomeConversationId ?? undefined,
       executionMode: (executionMode as 'MANUAL' | 'YOLO') ?? undefined,
+      planId,
     };
   }
 
@@ -664,12 +699,15 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
    * Multi-query approach for maximum coverage, diversified across categories.
    * Creates a welcome conversation with task list.
    */
-  private async generateInitialPlan(tenantId: string, userId: string): Promise<string | null> {
+  private async generateInitialPlan(
+    tenantId: string,
+    userId: string
+  ): Promise<{ conversationId: string | null; taskIds: string[] }> {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
       select: { name: true, industry: true, description: true },
     });
-    if (!tenant) return null;
+    if (!tenant) return { conversationId: null, taskIds: [] };
 
     // Multi-query approach for maximum concept coverage
     const queries = [
@@ -691,9 +729,18 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
       }
     }
 
-    // Always include foundation concepts ("Uvod u Poslovanje") first
+    // Always include foundation concepts — match DB categories with/without number prefix
+    // DB has: "1. Uvod u Poslovanje", "Poslovanje", "2. Vrednost", "Vrednost"
     const foundationConcepts = await this.prisma.concept.findMany({
-      where: { category: { in: [...FOUNDATION_CATEGORIES] } },
+      where: {
+        OR: [
+          ...FOUNDATION_CATEGORIES.flatMap((cat) => [
+            { category: cat },
+            { category: { endsWith: cat } }, // matches "1. Uvod u Poslovanje", "2. Vrednost"
+          ]),
+          { category: 'Poslovanje' }, // core business category
+        ],
+      },
       select: { id: true, name: true, category: true, definition: true },
       orderBy: { sortOrder: 'asc' },
     });
@@ -729,13 +776,24 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
 
     if (diversified.length === 0) {
       this.logger.warn({ message: 'No concepts found for initial plan', tenantId });
-      return null;
+      return { conversationId: null, taskIds: [] };
     }
 
-    // Create TASK notes for each matched concept
-    for (const match of diversified) {
+    // Ensure "Poslovanje" concept is first (foundational starting point)
+    const poslovanjeIdx = diversified.findIndex((m) => m.conceptName === 'Poslovanje');
+    if (poslovanjeIdx > 0) {
+      const removed = diversified.splice(poslovanjeIdx, 1);
+      diversified.unshift(removed[0]!);
+    }
+
+    // Limit to top 10 most important tasks
+    const topTasks = diversified.slice(0, 10);
+
+    // Create TASK notes for each matched concept (collect IDs for plan building)
+    const createdTaskIds: string[] = [];
+    for (const match of topTasks) {
       const title = this.buildActionTitle(match.conceptName);
-      await this.notesService.createNote({
+      const note = await this.notesService.createNote({
         title,
         content: `Primenite ${match.conceptName} na vaše poslovanje: ${match.definition}`,
         source: NoteSource.ONBOARDING,
@@ -745,10 +803,11 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
         userId,
         tenantId,
       });
+      createdTaskIds.push(note.id);
     }
 
     // Build concept summaries for narrative welcome message generation
-    const conceptSummaries = diversified
+    const conceptSummaries = topTasks
       .map((m, i) => {
         const title = this.buildActionTitle(m.conceptName);
         return `${i + 1}. "${title}" — Koncept: ${m.conceptName}, Definicija: ${m.definition}`;
@@ -800,13 +859,13 @@ Napiši personalizovanu dobrodošlicu.`;
         error: err instanceof Error ? err.message : 'Unknown',
       });
       // Fallback to simple template if LLM fails
-      const taskList = diversified
+      const taskList = topTasks
         .map(
           (m, i) =>
             `${i + 1}. **${this.buildActionTitle(m.conceptName)}**${i === 0 ? ' (preporučeno)' : ''}`
         )
         .join('\n');
-      welcomeMsg = `Dobrodošli! Pripremili smo ${diversified.length} zadataka za vaše poslovanje:\n\n${taskList}\n\nOdgovorite "da" da pokrenete sve zadatke.`;
+      welcomeMsg = `Dobrodošli! Pripremili smo ${topTasks.length} zadataka za vaše poslovanje:\n\n${taskList}\n\nOdgovorite "da" da pokrenete sve zadatke.`;
     }
 
     // Create welcome conversation linked to the first matched concept
@@ -815,7 +874,7 @@ Napiši personalizovanu dobrodošlicu.`;
       userId,
       'Dobrodošli u Mentor AI',
       undefined, // personaType
-      diversified[0]?.conceptId // link to first matched concept for tree display
+      topTasks[0]?.conceptId // link to first matched concept for tree display
     );
     await this.conversationService.addMessage(
       tenantId,
@@ -826,19 +885,19 @@ Napiši personalizovanu dobrodošlicu.`;
 
     // Link all onboarding task notes to the welcome conversation
     // so they appear in the notes panel when viewing this conversation
-    const conceptIds = diversified.map((m) => m.conceptId);
+    const conceptIds = topTasks.map((m) => m.conceptId);
     await this.notesService.linkNotesToConversation(conceptIds, conversation.id, userId, tenantId);
 
     this.logger.log({
       message: 'Initial plan generated from embeddings',
       tenantId,
       userId,
-      taskCount: diversified.length,
-      concepts: diversified.map((m) => m.conceptName),
+      taskCount: topTasks.length,
+      concepts: topTasks.map((m) => m.conceptName),
       welcomeConversationId: conversation.id,
     });
 
-    return conversation.id;
+    return { conversationId: conversation.id, taskIds: createdTaskIds };
   }
 
   private buildActionTitle(conceptName: string): string {

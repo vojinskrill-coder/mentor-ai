@@ -1811,9 +1811,11 @@ export class ConversationNotesComponent {
       return;
     }
 
-    // Single conversation mode
+    // Single conversation mode — also merge concept-based notes if conceptId available
     const convId = this.conversationId();
-    if (!convId) {
+    const cId = this.conceptId();
+
+    if (!convId && !cId) {
       this.notes.set([]);
       this.updateFilteredNotes();
       return;
@@ -1821,8 +1823,20 @@ export class ConversationNotesComponent {
 
     this.loading.set(true);
     try {
-      const notes = await this.notesApi.getByConversation(convId);
-      this.notes.set(notes);
+      const [convNotes, conceptNotes] = await Promise.all([
+        convId ? this.notesApi.getByConversation(convId) : Promise.resolve([]),
+        cId ? this.notesApi.getByConcept(cId).catch(() => []) : Promise.resolve([]),
+      ]);
+      // Merge and deduplicate by note ID
+      const seen = new Set<string>();
+      const merged: NoteItem[] = [];
+      for (const note of [...convNotes, ...conceptNotes]) {
+        if (!seen.has(note.id)) {
+          seen.add(note.id);
+          merged.push(note);
+        }
+      }
+      this.notes.set(merged);
       this.updateFilteredNotes();
       this.applyAutoSelect();
     } catch {
