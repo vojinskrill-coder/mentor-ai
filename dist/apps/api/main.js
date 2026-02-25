@@ -19773,7 +19773,7 @@ Ako nema zadataka, odgovori sa: []`;
                 // Build workflow results section from all child notes
                 const workflowResults = childNotes
                     .map((note, i) => {
-                    const stepNum = note.workflowStepNumber ?? (i + 1);
+                    const stepNum = note.workflowStepNumber ?? i + 1;
                     return `--- KORAK ${stepNum}: ${note.title} ---\n${note.content}`;
                 })
                     .join('\n\n');
