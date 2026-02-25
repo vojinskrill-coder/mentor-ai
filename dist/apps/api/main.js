@@ -21554,7 +21554,8 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
         const foundationMatches = foundationConcepts.map((c) => ({
             conceptId: c.id,
             conceptName: c.name,
-            category: (c.category ?? 'Uvod u Poslovanje'),
+            category: (c.category ??
+                'Uvod u Poslovanje'),
             definition: c.definition ?? '',
             score: 1.0, // Max score to ensure they come first
         }));

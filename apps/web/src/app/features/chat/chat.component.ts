@@ -2298,11 +2298,15 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           await this.chatWsService.waitForConnection();
           this.autoStartManualWorkflow(conversationId);
         } catch {
-          // Non-blocking — user can still start manually
+          // WebSocket failed — clear busy state so user isn't stuck
+          this.isGeneratingPlan$.set(false);
+          this.isOnboardingAutostart$.set(false);
         }
       }
     } catch {
       this.activeConversation$.set(null);
+      this.isGeneratingPlan$.set(false);
+      this.isOnboardingAutostart$.set(false);
       this.showError('Greška pri učitavanju konverzacije');
     }
   }
@@ -2649,6 +2653,8 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  private planGenerationTimeout: ReturnType<typeof setTimeout> | null = null;
+
   onRunAgents(taskIds: string[]): void {
     const conversationId = this.activeConversationId$();
     if (!conversationId) {
@@ -2658,6 +2664,15 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     if (taskIds.length === 0) return;
     this.isGeneratingPlan$.set(true);
     this.chatWsService.emitRunAgents(taskIds, conversationId);
+    // Safety timeout: clear generating state after 90s if server never responds
+    if (this.planGenerationTimeout) clearTimeout(this.planGenerationTimeout);
+    this.planGenerationTimeout = setTimeout(() => {
+      if (this.isGeneratingPlan$()) {
+        this.isGeneratingPlan$.set(false);
+        this.isOnboardingAutostart$.set(false);
+        this.showError('Generisanje plana je trajalo predugo — pokušajte ponovo.');
+      }
+    }, 90_000);
     // Auto-scroll so the loading indicator is visible
     setTimeout(() => {
       const el = this.messagesContainer?.nativeElement;
@@ -3034,6 +3049,10 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
     this.chatWsService.onPlanReady((payload) => {
       if (payload.conversationId !== this.activeConversationId$()) return;
+      if (this.planGenerationTimeout) {
+        clearTimeout(this.planGenerationTimeout);
+        this.planGenerationTimeout = null;
+      }
       this.isGeneratingPlan$.set(false);
       this.isOnboardingAutostart$.set(false);
       this.executingTaskId$.set(null);
