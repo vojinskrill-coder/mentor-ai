@@ -89,6 +89,34 @@ type TaskResultErrorCallback = (data: {
   conversationId: string | null;
   message: string;
 }) => void;
+type ResearchPhaseCallback = (data: { phase: 'researching' | 'responding' }) => void;
+type AutoPopuniStartCallback = (data: { taskIds: string[]; taskCount: number }) => void;
+type AutoPopuniCompleteCallback = (data: { totalTasks: number; completedTasks: number }) => void;
+type AutoPopuniTaskErrorCallback = (data: { taskId: string; message: string }) => void;
+
+/** Execution persistence types for reconnect resilience */
+export interface ActiveExecution {
+  id: string;
+  type: string;
+  status: string;
+  planId: string | null;
+  conversationId: string | null;
+  checkpoint: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+export interface RecentCompletion {
+  id: string;
+  type: string;
+  result: Record<string, unknown> | null;
+  conversationId: string | null;
+  updatedAt: string;
+}
+export interface ExecutionActiveState {
+  active: ActiveExecution[];
+  recentlyCompleted: RecentCompletion[];
+}
+type ExecutionActiveStateCallback = (data: ExecutionActiveState) => void;
 
 /**
  * Service for managing WebSocket connection for real-time chat.
@@ -153,6 +181,11 @@ export class ChatWebsocketService {
   private taskResultChunkCallbacks: TaskResultChunkCallback[] = [];
   private taskResultCompleteCallbacks: TaskResultCompleteCallback[] = [];
   private taskResultErrorCallbacks: TaskResultErrorCallback[] = [];
+  private researchPhaseCallbacks: ResearchPhaseCallback[] = [];
+  private autoPopuniStartCallbacks: AutoPopuniStartCallback[] = [];
+  private autoPopuniCompleteCallbacks: AutoPopuniCompleteCallback[] = [];
+  private autoPopuniTaskErrorCallbacks: AutoPopuniTaskErrorCallback[] = [];
+  private executionActiveStateCallbacks: ExecutionActiveStateCallback[] = [];
 
   /**
    * Connects to the WebSocket server.
@@ -230,6 +263,10 @@ export class ChatWebsocketService {
 
     this.socket.on('chat:complete', (data: ChatComplete) => {
       this.completeCallbacks.forEach((cb) => cb(data));
+    });
+
+    this.socket.on('chat:research-phase', (data: { phase: 'researching' | 'responding' }) => {
+      this.researchPhaseCallbacks.forEach((cb) => cb(data));
     });
 
     this.socket.on('chat:error', (error: ChatErrorData) => {
@@ -380,6 +417,27 @@ export class ChatWebsocketService {
         this.taskResultErrorCallbacks.forEach((cb) => cb(data));
       }
     );
+
+    // Auto AI Popuni events
+    this.socket.on('auto-popuni:start', (data: { taskIds: string[]; taskCount: number }) => {
+      this.autoPopuniStartCallbacks.forEach((cb) => cb(data));
+    });
+
+    this.socket.on(
+      'auto-popuni:complete',
+      (data: { totalTasks: number; completedTasks: number }) => {
+        this.autoPopuniCompleteCallbacks.forEach((cb) => cb(data));
+      }
+    );
+
+    this.socket.on('auto-popuni:task-error', (data: { taskId: string; message: string }) => {
+      this.autoPopuniTaskErrorCallbacks.forEach((cb) => cb(data));
+    });
+
+    // Execution persistence: active state response
+    this.socket.on('execution:active-state', (data: ExecutionActiveState) => {
+      this.executionActiveStateCallbacks.forEach((cb) => cb(data));
+    });
   }
 
   /**
@@ -487,6 +545,18 @@ export class ChatWebsocketService {
     this.socket!.emit('task:submit-result', { taskId });
   }
 
+  /** Request active execution state from server (for reconnect resilience) */
+  getActiveExecutions(): void {
+    if (!this.checkConnected('provera aktivnih izvršavanja')) return;
+    this.socket!.emit('execution:get-active');
+  }
+
+  /** Request replay of events since a timestamp for an execution */
+  replayEvents(executionId: string, since?: string): void {
+    if (!this.checkConnected('replay događaja')) return;
+    this.socket!.emit('execution:replay-events', { executionId, since });
+  }
+
   /**
    * Registers a callback for when a message is received by the server.
    * @param callback - Function to call with message data
@@ -523,6 +593,14 @@ export class ChatWebsocketService {
     return () => {
       const index = this.completeCallbacks.indexOf(callback);
       if (index > -1) this.completeCallbacks.splice(index, 1);
+    };
+  }
+
+  onResearchPhase(callback: ResearchPhaseCallback): () => void {
+    this.researchPhaseCallbacks.push(callback);
+    return () => {
+      const index = this.researchPhaseCallbacks.indexOf(callback);
+      if (index > -1) this.researchPhaseCallbacks.splice(index, 1);
     };
   }
 
@@ -757,6 +835,38 @@ export class ChatWebsocketService {
     };
   }
 
+  onAutoPopuniStart(callback: AutoPopuniStartCallback): () => void {
+    this.autoPopuniStartCallbacks.push(callback);
+    return () => {
+      const index = this.autoPopuniStartCallbacks.indexOf(callback);
+      if (index > -1) this.autoPopuniStartCallbacks.splice(index, 1);
+    };
+  }
+
+  onAutoPopuniComplete(callback: AutoPopuniCompleteCallback): () => void {
+    this.autoPopuniCompleteCallbacks.push(callback);
+    return () => {
+      const index = this.autoPopuniCompleteCallbacks.indexOf(callback);
+      if (index > -1) this.autoPopuniCompleteCallbacks.splice(index, 1);
+    };
+  }
+
+  onAutoPopuniTaskError(callback: AutoPopuniTaskErrorCallback): () => void {
+    this.autoPopuniTaskErrorCallbacks.push(callback);
+    return () => {
+      const index = this.autoPopuniTaskErrorCallbacks.indexOf(callback);
+      if (index > -1) this.autoPopuniTaskErrorCallbacks.splice(index, 1);
+    };
+  }
+
+  onExecutionActiveState(callback: ExecutionActiveStateCallback): () => void {
+    this.executionActiveStateCallbacks.push(callback);
+    return () => {
+      const index = this.executionActiveStateCallbacks.indexOf(callback);
+      if (index > -1) this.executionActiveStateCallbacks.splice(index, 1);
+    };
+  }
+
   clearCallbacks(): void {
     this.messageReceivedCallbacks = [];
     this.messageChunkCallbacks = [];
@@ -788,5 +898,10 @@ export class ChatWebsocketService {
     this.taskResultChunkCallbacks = [];
     this.taskResultCompleteCallbacks = [];
     this.taskResultErrorCallbacks = [];
+    this.researchPhaseCallbacks = [];
+    this.autoPopuniStartCallbacks = [];
+    this.autoPopuniCompleteCallbacks = [];
+    this.autoPopuniTaskErrorCallbacks = [];
+    this.executionActiveStateCallbacks = [];
   }
 }

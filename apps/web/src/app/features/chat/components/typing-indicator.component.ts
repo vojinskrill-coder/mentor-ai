@@ -90,7 +90,9 @@ import type { PersonaType } from '@mentor-ai/shared/types';
           <span class="typing-name" [style.color]="getPersonaColor()">
             {{ getPersonaLabel() }}
           </span>
-          <span class="typing-status">razmišlja...</span>
+          <span class="typing-status">{{
+            phase() === 'researching' ? 'istražuje...' : 'razmišlja...'
+          }}</span>
         </div>
       </div>
       <div class="typing-content">
@@ -106,6 +108,9 @@ import type { PersonaType } from '@mentor-ai/shared/types';
 export class TypingIndicatorComponent {
   /** Optional persona type for personalized styling */
   readonly personaType = input<PersonaType | null>(null);
+
+  /** Current phase: thinking (default) or researching */
+  readonly phase = input<'thinking' | 'researching'>('thinking');
 
   /** Persona color mapping */
   private readonly personaColors: Record<string, string> = {

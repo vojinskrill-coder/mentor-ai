@@ -8,7 +8,7 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { HttpException, Logger, UnauthorizedException } from '@nestjs/common';
+import { HttpException, Logger, OnModuleInit, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { verify, JwtPayload as JwtPayloadBase } from 'jsonwebtoken';
 import jwksClient from 'jwks-rsa';
@@ -27,7 +27,9 @@ import { WorkflowService } from '../workflow/workflow.service';
 import { YoloSchedulerService } from '../workflow/yolo-scheduler.service';
 import { WebSearchService } from '../web-search/web-search.service';
 import { BusinessContextService } from '../knowledge/services/business-context.service';
+import { ExecutionStateService } from '../execution/execution-state.service';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
+import { createId } from '@paralleldrive/cuid2';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
 import { MemoryType, MemorySource, SuggestedAction } from '@mentor-ai/shared/types';
 import {
@@ -44,6 +46,8 @@ import {
   type WorkflowStepAwaitingInputPayload,
   type WorkflowStepMessagePayload,
   type WorkflowNavigatePayload,
+  type YoloProgressPayload,
+  type YoloCompletePayload,
 } from '@mentor-ai/shared/types';
 
 interface AuthenticatedSocket extends Socket {
@@ -70,7 +74,7 @@ interface JwtPayload extends JwtPayloadBase {
     credentials: true,
   },
 })
-export class ConversationGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class ConversationGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit {
   @WebSocketServer()
   server!: Server;
 
@@ -96,7 +100,8 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     private readonly conceptExtractionService: ConceptExtractionService,
     private readonly yoloScheduler: YoloSchedulerService,
     private readonly webSearchService: WebSearchService,
-    private readonly businessContextService: BusinessContextService
+    private readonly businessContextService: BusinessContextService,
+    private readonly executionStateService: ExecutionStateService
   ) {
     this.auth0Domain = this.configService.get<string>('AUTH0_DOMAIN') ?? '';
     this.auth0Audience = this.configService.get<string>('AUTH0_AUDIENCE') ?? '';
@@ -106,6 +111,337 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
       rateLimit: true,
       jwksRequestsPerMinute: 5,
       jwksUri: `https://${this.auth0Domain}/.well-known/jwks.json`,
+    });
+  }
+
+  /**
+   * Server restart recovery: mark stale executions as failed, resume YOLO from checkpoint.
+   */
+  async onModuleInit(): Promise<void> {
+    // Mark stale executions (stuck > 30 min) as failed
+    const stale = await this.executionStateService.getStaleExecutions(30);
+    for (const exec of stale) {
+      await this.executionStateService.updateStatus(
+        exec.id,
+        'failed',
+        null,
+        'Server restarted during execution'
+      );
+      this.logger.warn({
+        message: 'Marked stale execution as failed',
+        executionId: exec.id,
+        type: exec.type,
+      });
+    }
+
+    // Find recently active executions (not stale) that can be resumed
+    const resumable = await this.executionStateService.getActiveExecutions('*');
+    for (const exec of resumable) {
+      if (exec.type === 'yolo' || exec.type === 'domain-yolo') {
+        this.scheduleYoloResume(exec);
+      }
+      // Workflows with user-confirmation steps cannot auto-resume
+      if (exec.type === 'workflow') {
+        await this.executionStateService.updateStatus(
+          exec.id,
+          'failed',
+          null,
+          'Server restarted — workflow requires user interaction to resume'
+        );
+        this.logger.warn({ message: 'Workflow interrupted by restart', executionId: exec.id });
+      }
+      // Auto-popuni: mark as failed (ephemeral pipeline, not safely resumable)
+      if (exec.type === 'auto-popuni') {
+        await this.executionStateService.updateStatus(
+          exec.id,
+          'failed',
+          null,
+          'Server restarted during auto-popuni'
+        );
+      }
+    }
+
+    // Daily event journal cleanup
+    setInterval(
+      () => {
+        this.executionStateService
+          .pruneOldEvents(7)
+          .catch((err) =>
+            this.logger.debug({ message: 'Event pruning failed', error: err?.message })
+          );
+      },
+      24 * 60 * 60 * 1000
+    );
+  }
+
+  /**
+   * Schedule YOLO resume after server restart. Delays 5s to allow full initialization.
+   */
+  private scheduleYoloResume(exec: {
+    id: string;
+    tenantId: string;
+    userId: string;
+    type: string;
+    conversationId: string | null;
+    metadata: unknown;
+    checkpoint: unknown;
+  }): void {
+    // M4: Runtime metadata validation
+    const metadata = exec.metadata;
+    if (!metadata || typeof metadata !== 'object') {
+      this.executionStateService
+        .updateStatus(exec.id, 'failed', null, 'Invalid metadata for resume')
+        .catch((err) => this.logger.warn({ message: 'Status update failed', error: err?.message }));
+      this.logger.warn({
+        message: 'YOLO resume skipped — invalid metadata',
+        executionId: exec.id,
+        metadata: JSON.stringify(metadata),
+      });
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const meta = metadata as { config?: any; category?: string };
+    const checkpoint = (exec.checkpoint ?? {}) as { completedCount?: number };
+
+    if (!meta.config || !exec.conversationId) {
+      this.executionStateService
+        .updateStatus(exec.id, 'failed', null, 'Insufficient metadata for resume')
+        .catch((err) => this.logger.warn({ message: 'Status update failed', error: err?.message }));
+      return;
+    }
+
+    this.logger.log({
+      message: 'Scheduling YOLO resume after server restart',
+      executionId: exec.id,
+      type: exec.type,
+      completedSoFar: checkpoint.completedCount ?? 0,
+    });
+
+    // M3: Mark as 'pending' while waiting for resume to prevent duplicate scheduling
+    this.executionStateService
+      .updateStatus(exec.id, 'pending')
+      .catch((err) =>
+        this.logger.warn({
+          message: 'Failed to mark execution as pending for resume',
+          error: err?.message,
+        })
+      );
+
+    // Delay to let server fully initialize (WebSocket server, DB pool, etc.)
+    setTimeout(() => {
+      // Re-mark as executing before starting
+      this.executionStateService
+        .updateStatus(exec.id, 'executing')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .then(() => this.resumeYoloExecution(exec as any))
+        .catch((err) => {
+          this.logger.error({
+            message: 'YOLO resume failed',
+            executionId: exec.id,
+            error: err?.message,
+          });
+          this.executionStateService
+            .updateStatus(exec.id, 'failed', null, err?.message ?? 'Resume failed')
+            .catch((e) => this.logger.warn({ message: 'Status update failed', error: e?.message }));
+        });
+    }, 5000);
+  }
+
+  /**
+   * Resume a YOLO execution from checkpoint after server restart.
+   * Leverages the fact that completed tasks are already COMPLETED in DB —
+   * the scheduler naturally picks up only PENDING tasks.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async resumeYoloExecution(exec: {
+    id: string;
+    tenantId: string;
+    userId: string;
+    type: string;
+    conversationId: string;
+    metadata: any;
+  }): Promise<void> {
+    const tenantId = exec.tenantId;
+    const userId = exec.userId;
+    const conversationId = exec.conversationId;
+    const executionId = exec.id;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const metadata = exec.metadata as { config?: any; category?: string };
+    const config = metadata.config;
+    const category = metadata.category;
+    const conceptConversations = new Map<string, string>();
+
+    this.logger.log({ message: 'Resuming YOLO execution', executionId, tenantId });
+
+    await this.yoloScheduler.startYoloExecution(
+      tenantId,
+      userId,
+      conversationId,
+      config,
+      {
+        onProgress: (progress: YoloProgressPayload) => {
+          this.emitToTenant(tenantId, executionId, 'workflow:yolo-progress', progress);
+          this.executionStateService
+            .updateCheckpoint(executionId, progress)
+            .catch((err) =>
+              this.logger.debug({ message: 'Checkpoint update failed', error: err?.message })
+            );
+        },
+        onComplete: (result: YoloCompletePayload) => {
+          this.emitToTenant(tenantId, executionId, 'workflow:yolo-complete', result);
+          this.emitToTenant(tenantId, executionId, 'chat:notes-updated', {
+            conversationId,
+            count: 0,
+          });
+          this.executionStateService
+            .updateStatus(executionId, 'completed', result)
+            .catch((err) =>
+              this.logger.debug({ message: 'Execution status update failed', error: err?.message })
+            );
+        },
+        onError: (error: string) => {
+          this.emitToTenant(tenantId, executionId, 'workflow:error', {
+            message: error,
+            conversationId,
+          });
+          this.executionStateService
+            .updateStatus(executionId, 'failed', null, error)
+            .catch((err) =>
+              this.logger.debug({ message: 'Execution status update failed', error: err?.message })
+            );
+        },
+        saveMessage: async (_role: string, content: string, conceptId?: string) => {
+          const targetConvId =
+            conceptId && conceptConversations.has(conceptId)
+              ? conceptConversations.get(conceptId)!
+              : conversationId;
+          const msg = await this.conversationService.addMessage(
+            tenantId,
+            targetConvId,
+            MessageRole.ASSISTANT,
+            content
+          );
+          return msg.id;
+        },
+        createConversationForConcept: async (conceptId: string, conceptName: string) => {
+          try {
+            const conv = await this.conversationService.createConversation(
+              tenantId,
+              userId,
+              conceptName,
+              undefined,
+              conceptId
+            );
+            conceptConversations.set(conceptId, conv.id);
+            this.emitToTenant(tenantId, executionId, 'workflow:conversations-created', {
+              planId: 'yolo-resume',
+              conversations: [{ conceptId, conceptName, conversationId: conv.id }],
+              originalConversationId: conversationId,
+            });
+            return conv.id;
+          } catch (err) {
+            this.logger.warn({
+              message: 'Failed to create conversation during YOLO resume',
+              conceptId,
+              error: err instanceof Error ? err.message : 'Unknown',
+            });
+            return null;
+          }
+        },
+        onConceptDiscovered: (
+          conceptId: string,
+          conceptName: string,
+          discoveredConversationId: string
+        ) => {
+          this.emitToTenant(tenantId, executionId, 'chat:concept-detected', {
+            conversationId,
+            conceptId,
+            conceptName,
+            discoveredConversationId,
+          });
+        },
+      },
+      conceptConversations,
+      category
+    );
+  }
+
+  /**
+   * Broadcast an event to all connected sockets belonging to a tenant.
+   * Also journals the event for replay on reconnect.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private emitToTenant(
+    tenantId: string,
+    executionId: string,
+    eventName: string,
+    payload: any
+  ): void {
+    // Journal the event for replay
+    this.executionStateService
+      .appendEvent(executionId, eventName, payload)
+      .catch((err) =>
+        this.logger.debug({ message: 'Event journaling failed', error: err?.message })
+      );
+
+    // Broadcast to all sockets in this tenant's room
+    if (this.server) {
+      this.server.to(`tenant:${tenantId}`).emit(eventName, payload);
+    }
+  }
+
+  /**
+   * Returns active executions and recently completed ones for reconnecting clients.
+   */
+  @SubscribeMessage('execution:get-active')
+  async handleGetActiveExecutions(@ConnectedSocket() client: Socket): Promise<void> {
+    const auth = client as AuthenticatedSocket;
+
+    const active = await this.executionStateService.getActiveExecutions(auth.tenantId);
+    const recentlyCompleted = await this.executionStateService.getRecentCompletions(
+      auth.tenantId,
+      new Date(Date.now() - 5 * 60 * 1000) // last 5 minutes
+    );
+
+    client.emit('execution:active-state', {
+      active: active.map((e) => ({
+        id: e.id,
+        type: e.type,
+        status: e.status,
+        planId: e.planId,
+        conversationId: e.conversationId,
+        checkpoint: e.checkpoint,
+        metadata: e.metadata,
+        createdAt: e.createdAt,
+      })),
+      recentlyCompleted: recentlyCompleted.map((e) => ({
+        id: e.id,
+        type: e.type,
+        result: e.result,
+        conversationId: e.conversationId,
+        updatedAt: e.updatedAt,
+      })),
+    });
+  }
+
+  /**
+   * Replays journaled events for an execution since a given timestamp.
+   * Used after reconnect to catch up on missed events.
+   */
+  @SubscribeMessage('execution:replay-events')
+  async handleReplayEvents(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { executionId: string; since?: string }
+  ): Promise<void> {
+    const since = payload.since ? new Date(payload.since) : new Date(0);
+    const events = await this.executionStateService.getEventsSince(payload.executionId, since);
+
+    for (const event of events) {
+      client.emit(event.eventName, event.payload);
+    }
+    client.emit('execution:replay-complete', {
+      executionId: payload.executionId,
+      eventCount: events.length,
     });
   }
 
@@ -392,23 +728,30 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
       }
 
       if (relevantConcepts.length > 0) {
-        enrichedContext += '\n\n--- CURRICULUM CONCEPT KNOWLEDGE ---\n';
-        for (const concept of relevantConcepts.slice(0, 3)) {
-          enrichedContext += `\nCONCEPT: ${concept.conceptName}\n`;
-          enrichedContext += `DEFINITION: ${concept.definition}\n`;
+        enrichedContext += '\n\n--- BAZA ZNANJA (koristi za analizu i preporuke) ---\n';
+        for (const concept of relevantConcepts.slice(0, 5)) {
+          enrichedContext += `\nKONCEPT: ${concept.conceptName} (${concept.category})`;
+          enrichedContext += `\nDEFINICIJA: ${concept.definition}`;
           try {
             const full = await this.conceptService.findById(concept.conceptId);
             if (full.extendedDescription) {
-              enrichedContext += `DETAILS: ${full.extendedDescription}\n`;
+              enrichedContext += `\nDETALJNO: ${full.extendedDescription}`;
+            }
+            if (full.relatedConcepts && full.relatedConcepts.length > 0) {
+              const related = full.relatedConcepts
+                .slice(0, 3)
+                .map((r) => `${r.concept.name} (${r.relationshipType})`)
+                .join(', ');
+              enrichedContext += `\nPOVEZANI: ${related}`;
             }
           } catch {
             /* skip if concept not found */
           }
+          enrichedContext += '\n';
         }
-        enrichedContext += '--- END CONCEPT KNOWLEDGE ---\n';
+        enrichedContext += '--- KRAJ BAZE ZNANJA ---\n';
         enrichedContext +=
-          'Apply these concepts in your response. When referencing a concept, use [[Concept Name]] notation.\n';
-        enrichedContext += 'VAŽNO: Odgovaraj na srpskom jeziku.\n';
+          'Primeni ove koncepte u odgovoru. Kada referenciraš koncept, koristi [[Naziv Koncepta]] oznaku.\n';
       }
 
       if (memoryContext.context) {
@@ -423,6 +766,28 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
         enrichedContext += this.webSearchService.formatSourcesAsObsidian(webSearchResults);
       }
 
+      // === MULTI-STEP ORCHESTRATION ===
+      const isComplex = this.isComplexQuery(content);
+      let researchBrief = '';
+
+      if (isComplex) {
+        client.emit('chat:research-phase', { phase: 'researching' });
+        researchBrief = await this.buildResearchBrief(
+          content,
+          enrichedContext,
+          relevantConcepts,
+          webSearchEnabled,
+          conversation.personaType ?? undefined,
+          authenticatedClient.tenantId,
+          authenticatedClient.userId
+        );
+        client.emit('chat:research-phase', { phase: 'responding' });
+      }
+
+      const finalContext = researchBrief
+        ? `${enrichedContext}\n\n--- ISTRAŽIVAČKI BRIEF ---\n${researchBrief}\n--- KRAJ BRIEFA ---\nKoristi brief kao osnovu za stručan odgovor. Ne pominjaj brief — samo daj sveobuhvatan odgovor.`
+        : enrichedContext;
+
       // Stream AI response with confidence calculation (Story 2.5)
       let fullContent = '';
       let chunkIndex = 0;
@@ -436,9 +801,9 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
           personaType: conversation.personaType ?? undefined,
           messageCount: conversation.messages.length,
           hasClientContext: memoryContext.attributions.length > 0,
-          hasSpecificData: relevantConcepts.length > 0,
+          hasSpecificData: relevantConcepts.length > 0 || researchBrief.length > 0,
           userQuestion: content,
-          businessContext: enrichedContext,
+          businessContext: finalContext,
         },
         (chunk: string) => {
           fullContent += chunk;
@@ -783,23 +1148,56 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     const messageCount = conversationHistory.length;
     if (messageCount < 2) return; // Need at least 1 exchange
 
-    const taskPrompt = `Based on the following conversation exchange, generate 1-3 actionable tasks or key takeaways that would help the user. Focus on practical next steps.
+    // Load tenant for business-specific context
+    let tenantName = 'klijent';
+    let tenantIndustry = 'opšta';
+    try {
+      const tenant = await this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true, industry: true },
+      });
+      if (tenant?.name) tenantName = tenant.name;
+      if (tenant?.industry) tenantIndustry = tenant.industry;
+    } catch {
+      /* non-blocking */
+    }
 
-USER MESSAGE:
-${userMessage}
+    // Build concept context
+    let conceptHint = '';
+    if (relevantConcepts && relevantConcepts.length > 0) {
+      conceptHint =
+        '\nPovezani koncepti: ' +
+        relevantConcepts
+          .slice(0, 3)
+          .map((c) => c.conceptName)
+          .join(', ');
+    }
 
-AI RESPONSE:
-${aiResponse}
+    const taskSystemPrompt = `Ti si poslovni asistent za "${tenantName}" (${tenantIndustry}).
+Iz konverzacije izvuci 1-3 konkretna, izvršiva zadatka. Fokusiraj se na praktične sledeće korake koje korisnik može preduzeti.${conceptHint}
 
-Respond ONLY with a valid JSON array. Each item must have "title" (short, max 80 chars) and "content" (brief description, max 200 chars). Example:
-[{"title": "Review quarterly budget", "content": "Analyze Q1 spending vs projections based on the discussed financial strategy"}]
+PRAVILA:
+- "title": akcioni naslov na srpskom, max 80 karaktera (npr. "Analizirajte mesečne troškove marketinga")
+- "content": konkretan opis šta treba uraditi, zašto, i koji je očekivani rezultat (150-400 karaktera)
+- Zadaci moraju biti SPECIFIČNI za "${tenantName}" — ne generički poslovni saveti
+- Samo izvršive stavke — ne opšte observacije
+- Ako nema smislenih zadataka, vrati prazan niz
+- Piši ISKLJUČIVO na srpskom jeziku`;
 
-If there are no meaningful tasks, respond with an empty array: []`;
+    const taskUserPrompt = `KORISNIK: ${userMessage}
+
+AI ODGOVOR: ${aiResponse.length > 2000 ? aiResponse.substring(0, 2000) + '...' : aiResponse}
+
+Odgovori SAMO sa validnim JSON nizom: [{"title":"...","content":"..."}]
+Ako nema zadataka: []`;
 
     try {
       let taskResponseContent = '';
       await this.aiGatewayService.streamCompletionWithContext(
-        [{ role: 'user', content: taskPrompt }],
+        [
+          { role: 'system', content: taskSystemPrompt },
+          { role: 'user', content: taskUserPrompt },
+        ],
         {
           tenantId,
           userId,
@@ -812,7 +1210,11 @@ If there are no meaningful tasks, respond with an empty array: []`;
       );
 
       // Parse the JSON response
-      const jsonMatch = taskResponseContent.match(/\[[\s\S]*\]/);
+      const cleanedContent = taskResponseContent
+        .replace(/```(?:json)?\s*/gi, '')
+        .replace(/```/g, '')
+        .trim();
+      const jsonMatch = cleanedContent.match(/\[[\s\S]*\]/);
       if (!jsonMatch) {
         this.logger.debug({
           message: 'No JSON array found in task generation response',
@@ -825,11 +1227,10 @@ If there are no meaningful tasks, respond with an empty array: []`;
       if (!Array.isArray(tasks) || tasks.length === 0) return;
 
       // Create notes for each task (max 3)
-      // Use relevantConcepts as fallback if conversation has no conceptId yet
       const effectiveConceptId = conceptId ?? relevantConcepts?.[0]?.conceptId ?? undefined;
       const tasksToCreate = tasks.slice(0, 3);
 
-      // Tenant-wide dedup (Story 3.4 AC3): check by conceptId AND title across entire tenant
+      // Tenant-wide dedup (Story 3.4 AC3)
       let createdCount = 0;
       for (const task of tasksToCreate) {
         if (!task.title) continue;
@@ -848,7 +1249,10 @@ If there are no meaningful tasks, respond with an empty array: []`;
         }
         await this.notesService.createNote({
           title: task.title,
-          content: task.content ?? '',
+          content:
+            typeof task.content === 'object'
+              ? JSON.stringify(task.content, null, 2)
+              : (task.content ?? ''),
           source: NoteSource.CONVERSATION,
           noteType: NoteType.TASK,
           status: NoteStatus.PENDING,
@@ -869,7 +1273,7 @@ If there are no meaningful tasks, respond with an empty array: []`;
       this.logger.log({
         message: 'Auto-tasks generated',
         conversationId,
-        taskCount: tasksToCreate.length,
+        taskCount: createdCount,
       });
     } catch (error: unknown) {
       this.logger.warn({
@@ -934,17 +1338,51 @@ If there are no meaningful tasks, respond with an empty array: []`;
     }
   }
 
+  // ─── Complex Query Detection (Multi-Step Orchestration) ────────
+
+  private isComplexQuery(content: string): boolean {
+    const lower = content.toLowerCase().trim();
+
+    // Skip short messages (greetings, yes/no)
+    if (lower.length < 15) return false;
+
+    // Skip simple patterns
+    if (
+      /^(šta je|što je|what is|objasni|explain|zdravo|hej|ćao|hi|hello|da|ne|ok|važi|hvala)\b/.test(
+        lower
+      )
+    )
+      return false;
+
+    // Complex intent verbs (Serbian + English)
+    const complexVerbs =
+      /\b(analiziraj|analizuj|uporedi|poredi|istraži|istražuj|razvij|razradi|predloži|predlozi|osmisli|isplaniraj|planiraj|dizajniraj|optimizuj|proceni|evaluate|analyze|compare|research|develop|plan|design|optimize|assess|benchmark|strategij)/;
+
+    // Complex intent nouns signaling depth
+    const complexNouns =
+      /\b(strategij|analiz|konkurencij|tržišt|market|poslovni model|finansijsk|budžet|budget|roi|plan rasta|growth|scaling|skaliranj|optimizacij|swot|pest|porter|canvas|due diligence|rizik|pricing|cenovna|revenue|prihod|forecast|prognoz|roadmap)/;
+
+    // Multi-clause (comma + action verb = multiple asks)
+    const multiClause = /,\s*(i\s+)?(predloži|analiziraj|napravi|razvij|osmisli|kreiraj)/.test(
+      lower
+    );
+
+    return complexVerbs.test(lower) || complexNouns.test(lower) || multiClause;
+  }
+
   // ─── Explicit Task Creation ─────────────────────────────────────
 
   private hasExplicitTaskIntent(userMessage: string): boolean {
     const lowerMsg = userMessage.toLowerCase();
 
-    // Action verbs (Serbian + English)
-    const actionVerbs = /\b(kreiraj|napravi|generiši|generisi|dodaj|create|make|add|generate)\b/;
-    // Task nouns (Serbian + English) — match root forms so inflected words work
-    const taskNouns = /\b(task|zadat|plan|workflow|korake?|korak|akcij|to-do|todo|stavk)\b/;
+    // Action verbs (Serbian + English) — \b only at start so "kreirajte" matches "kreiraj" prefix
+    const actionVerbs =
+      /\b(kreiraj|napravi|generiši|generisi|dodaj|create|make|add|generate|osmisli|predloži|predlozi|definiši|definisi|razradi|isplaniraj|planiraj|odredi|postavi|sastavi|pripremi)/;
+    // Task nouns — NO trailing \b so Serbian inflected roots match: "zadat" → "zadatke", "akcij" → "akcije"
+    const taskNouns =
+      /\b(tasks?|zadat|plan|workflow|korak|koraci|akcij|to-?do|stavk|cilj|strategi|aktivnost|raspored|checklis|list)/;
 
-    // Match if message contains both an action verb and a task noun (in any order, with words between)
+    // Match if message contains both an action verb and a task noun (in any order)
     return actionVerbs.test(lowerMsg) && taskNouns.test(lowerMsg);
   }
 
@@ -964,28 +1402,88 @@ If there are no meaningful tasks, respond with an empty array: []`;
       userId,
     });
 
-    // Use LLM to extract structured tasks from the AI response
-    const extractPrompt = `Na osnovu sledećeg AI odgovora, ekstrahuj konkretne zadatke kao JSON niz.
-Svaki zadatak mora imati "title" (kratak, max 80 karaktera) i "content" (opis, max 500 karaktera).
-Izdvoji samo konkretne, izvršive stavke — ne opšte observacije.
+    // Load business context for task personalization
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true, industry: true, description: true },
+    });
+
+    // Load recent conversation history for full context
+    let conversationContext = '';
+    try {
+      const recentMessages = await this.prisma.message.findMany({
+        where: { conversationId },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: { role: true, content: true },
+      });
+      if (recentMessages.length > 0) {
+        conversationContext = '\n\nISTORIJA KONVERZACIJE (kontekst iz kojeg nastaju zadaci):\n';
+        for (const msg of recentMessages.reverse()) {
+          const role = msg.role === 'USER' ? 'KORISNIK' : 'AI';
+          const content =
+            msg.content.length > 800 ? msg.content.substring(0, 800) + '...' : msg.content;
+          conversationContext += `${role}: ${content}\n`;
+        }
+      }
+    } catch {
+      /* non-blocking */
+    }
+
+    // Build concept context from matched concepts
+    let conceptContext = '';
+    if (relevantConcepts && relevantConcepts.length > 0) {
+      conceptContext = '\n\nPOVEZANI POSLOVNI KONCEPTI:\n';
+      for (const c of relevantConcepts.slice(0, 5)) {
+        conceptContext += `- ${c.conceptName} (${c.category}): ${c.definition}\n`;
+      }
+    }
+
+    // LLM extraction with full context
+    const extractSystemPrompt = `Ti si poslovni konsultant koji kreira konkretne, izvršive zadatke za kompaniju "${tenant?.name ?? 'klijent'}" u industriji "${tenant?.industry ?? 'opšta'}".
+${tenant?.description ? `Opis kompanije: ${tenant.description}` : ''}
+
+Tvoj posao: Na osnovu onoga što je korisnik TRAŽIO i šta je AI ODGOVORIO, ekstrahuj konkretne poslovne zadatke.
+
+PRAVILA ZA SVAKI ZADATAK:
+1. "title" — akcioni naslov na srpskom (glagol + radnja, max 80 karaktera): "Analizirajte...", "Kreirajte...", "Definišite..."
+2. "content" — strukturiran opis sa:
+   - Cilj: šta konkretno treba postići (1-2 rečenice)
+   - Kontekst: zašto je ovo važno za poslovanje (1-2 rečenice)
+   - Koraci: 3-5 konkretnih koraka za realizaciju
+   - Očekivani rezultat: merljiv ishod ili deliverable
+3. "conceptMatch" — ako zadatak odgovara nekom od POVEZANIH POSLOVNIH KONCEPATA, navedi naziv koncepta (tačan match)
+
+KRITIČNO:
+- Zadaci MORAJU biti direktno povezani sa onim što je korisnik TRAŽIO u konverzaciji
+- Svaki zadatak mora biti SPECIFIČAN za "${tenant?.name ?? 'ovu kompaniju'}" — ne generički
+- Izdvoji samo izvršive stavke — ne opšte observacije ili savete
+- Minimum 3, maksimum 8 zadataka
+- Piši ISKLJUČIVO na srpskom jeziku`;
+
+    const extractUserPrompt = `KORISNIKOV ZAHTEV:
+${userMessage}
 
 AI ODGOVOR:
-${aiResponse}
+${aiResponse}${conversationContext}${conceptContext}
 
-Odgovori SAMO sa validnim JSON nizom: [{"title":"...","content":"..."}]
-Ako nema zadataka, odgovori sa: []`;
+Odgovori SAMO sa validnim JSON nizom:
+[{"title":"...","content":"...","conceptMatch":"naziv koncepta ili null"}]`;
 
     try {
       let extractedContent = '';
       await this.aiGatewayService.streamCompletionWithContext(
-        [{ role: 'user', content: extractPrompt }],
+        [
+          { role: 'system', content: extractSystemPrompt },
+          { role: 'user', content: extractUserPrompt },
+        ],
         { tenantId, userId, skipRateLimit: true, skipQuotaCheck: true },
         (chunk: string) => {
           extractedContent += chunk;
         }
       );
 
-      // Strip markdown code block wrappers (```json ... ``` or ``` ... ```)
+      // Strip markdown code block wrappers
       const cleanedContent = extractedContent
         .replace(/```(?:json)?\s*/gi, '')
         .replace(/```/g, '')
@@ -1001,18 +1499,43 @@ Ako nema zadataka, odgovori sa: []`;
         return;
       }
 
-      const tasks = JSON.parse(jsonMatch[0]) as Array<{ title: string; content: string }>;
+      const tasks = JSON.parse(jsonMatch[0]) as Array<{
+        title: string;
+        content: string;
+        conceptMatch?: string | null;
+      }>;
       if (!Array.isArray(tasks) || tasks.length === 0) return;
 
-      // Create task notes in DB (with duplicate prevention)
-      const effectiveConceptId = conceptId ?? relevantConcepts?.[0]?.conceptId ?? undefined;
-      const createdTaskIds: string[] = [];
+      // Build concept name → ID map for matching
+      const conceptNameMap = new Map<string, string>();
+      if (relevantConcepts) {
+        for (const c of relevantConcepts) {
+          conceptNameMap.set(c.conceptName.toLowerCase(), c.conceptId);
+        }
+      }
 
-      // Tenant-wide dedup (Story 3.4 AC3): check by conceptId AND title across entire tenant
+      // Create task notes in DB (with duplicate prevention)
+      const fallbackConceptId = conceptId ?? relevantConcepts?.[0]?.conceptId ?? undefined;
+      const createdTasks: Array<{
+        id: string;
+        title: string;
+        conceptId: string | null;
+        conversationId: string;
+      }> = [];
+
       for (const task of tasks.slice(0, 10)) {
         if (!task.title) continue;
+
+        // Resolve concept: LLM-matched concept name → ID, or fallback
+        let taskConceptId = fallbackConceptId;
+        if (task.conceptMatch) {
+          const matchedId = conceptNameMap.get(task.conceptMatch.toLowerCase());
+          if (matchedId) taskConceptId = matchedId;
+        }
+
+        // Tenant-wide dedup (Story 3.4 AC3)
         const existingId = await this.notesService.findExistingTask(tenantId, {
-          conceptId: effectiveConceptId,
+          conceptId: taskConceptId,
           title: task.title,
         });
         if (existingId) {
@@ -1024,37 +1547,50 @@ Ako nema zadataka, odgovori sa: []`;
           });
           continue;
         }
+
         const result = await this.notesService.createNote({
           title: task.title,
-          content: task.content ?? '',
+          content:
+            typeof task.content === 'object'
+              ? JSON.stringify(task.content, null, 2)
+              : (task.content ?? ''),
           source: NoteSource.CONVERSATION,
           noteType: NoteType.TASK,
           status: NoteStatus.PENDING,
           conversationId,
-          conceptId: effectiveConceptId,
+          conceptId: taskConceptId,
           userId,
           tenantId,
         });
-        createdTaskIds.push(result.id);
+        createdTasks.push({
+          id: result.id,
+          title: task.title,
+          conceptId: taskConceptId ?? null,
+          conversationId,
+        });
       }
 
-      if (createdTaskIds.length === 0) return;
+      if (createdTasks.length === 0) return;
 
       // Emit event so frontend shows tasks with execute option
       client.emit('chat:tasks-created-for-execution', {
         conversationId,
-        taskIds: createdTaskIds,
-        taskCount: createdTaskIds.length,
+        taskIds: createdTasks.map((t) => t.id),
+        taskCount: createdTasks.length,
       });
 
       // Also notify notes updated
-      client.emit('chat:notes-updated', { conversationId, count: createdTaskIds.length });
+      client.emit('chat:notes-updated', { conversationId, count: createdTasks.length });
 
       this.logger.log({
         message: 'Explicit tasks created',
         conversationId,
-        taskCount: createdTaskIds.length,
+        taskCount: createdTasks.length,
+        conceptsLinked: createdTasks.filter((t) => t.conceptId !== null).length,
       });
+
+      // Auto AI Popuni is now triggered from frontend when toggle is ON
+      // (frontend receives 'chat:tasks-created-for-execution' and auto-emits 'task:execute-ai')
     } catch (error: unknown) {
       this.logger.warn({
         message: 'Failed to create explicit tasks',
@@ -1062,6 +1598,716 @@ Ako nema zadataka, odgovori sa: []`;
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
+  }
+
+  /**
+   * Auto AI Popuni pipeline: checks tenant config, then for each task:
+   * 1. Execute AI (same as handleExecuteTaskAi)
+   * 2. Copy aiResult to userReport, mark COMPLETED
+   * 3. Score the result (same as handleSubmitTaskResult)
+   * Emits the same events so frontend picks up progress transparently.
+   */
+  private async triggerAutoAiPopuni(
+    client: Socket,
+    tenantId: string,
+    userId: string,
+    tasks: Array<{ id: string; title: string; conceptId: string | null; conversationId: string }>,
+    originConversationId?: string
+  ): Promise<void> {
+    // Check if auto AI popuni is enabled for this tenant
+    let tenant: { autoAiPopuni: boolean } | null;
+    try {
+      tenant = await this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { autoAiPopuni: true },
+      });
+    } catch (err) {
+      this.logger.warn({
+        message: 'Auto AI Popuni: tenant lookup failed',
+        tenantId,
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+      return;
+    }
+    if (!tenant?.autoAiPopuni) return;
+
+    this.logger.log({
+      message: 'Auto AI Popuni enabled — starting pipeline',
+      tenantId,
+      taskCount: tasks.length,
+    });
+
+    // Create execution record for persistence
+    const executionId = await this.executionStateService.createExecution(
+      tenantId,
+      userId,
+      'auto-popuni',
+      undefined,
+      originConversationId,
+      { taskIds: tasks.map((t) => t.id) }
+    );
+
+    // Emit event so frontend knows auto-popuni is starting
+    this.emitToTenant(tenantId, executionId, 'auto-popuni:start', {
+      taskIds: tasks.map((t) => t.id),
+      taskCount: tasks.length,
+    });
+
+    // Process tasks sequentially (max 1 at a time to avoid LLM overload)
+    let completedCount = 0;
+    const completedTaskIds: string[] = [];
+    for (const task of tasks) {
+      try {
+        await this.autoPopuniSingleTask(client, tenantId, userId, task, originConversationId);
+        completedCount++;
+        completedTaskIds.push(task.id);
+        this.executionStateService
+          .updateCheckpoint(executionId, { completedTaskIds, completedCount })
+          .catch((err) =>
+            this.logger.debug({ message: 'Checkpoint update failed', error: err?.message })
+          );
+      } catch (err) {
+        this.logger.warn({
+          message: 'Auto AI Popuni failed for task',
+          taskId: task.id,
+          taskTitle: task.title,
+          error: err instanceof Error ? err.message : 'Unknown error',
+        });
+        this.emitToTenant(tenantId, executionId, 'auto-popuni:task-error', {
+          taskId: task.id,
+          message: 'Automatsko popunjavanje nije uspelo',
+        });
+      }
+    }
+
+    this.emitToTenant(tenantId, executionId, 'auto-popuni:complete', {
+      totalTasks: tasks.length,
+      completedTasks: completedCount,
+    });
+
+    this.executionStateService
+      .updateStatus(executionId, 'completed', {
+        totalTasks: tasks.length,
+        completedTasks: completedCount,
+      })
+      .catch((err) =>
+        this.logger.debug({ message: 'Execution status update failed', error: err?.message })
+      );
+
+    this.logger.log({
+      message: 'Auto AI Popuni pipeline finished',
+      tenantId,
+      totalTasks: tasks.length,
+      completedTasks: completedCount,
+    });
+
+    // TODO(H4): After auto-popuni completes tasks, traverse concept_relationships
+    // to spawn new PENDING tasks for ADVANCED/related concepts. This would close
+    // the autonomous growth loop (Business Brain architecture). Requires:
+    // 1. Query concept_relationships for outgoing edges from completed concepts
+    // 2. Create PENDING tasks for connected concepts that don't already have tasks
+    // 3. Depth limit to prevent infinite auto-popuni → spawn → auto-popuni loops
+    // 4. Must NOT re-trigger triggerAutoAiPopuni on spawned tasks (break recursion)
+  }
+
+  /**
+   * Auto-popuni for a single task:
+   * 1. AI executes the task (stream to client)
+   * 2. Mark as COMPLETED with userReport
+   * 3. Score the result (stream to client)
+   */
+  private async autoPopuniSingleTask(
+    client: Socket,
+    tenantId: string,
+    userId: string,
+    task: { id: string; title: string; conceptId: string | null; conversationId: string },
+    _originConversationId?: string
+  ): Promise<void> {
+    const convId = task.conversationId;
+
+    // ── Phase 1: Generate workflow + execute steps ──
+    client.emit('task:ai-start', {
+      taskId: task.id,
+      conversationId: convId,
+      timestamp: new Date().toISOString(),
+      auto: true,
+    });
+
+    const businessContext = await this.buildBusinessContext(tenantId, userId);
+
+    // Load task details
+    const taskNote = await this.prisma.note.findUnique({ where: { id: task.id } });
+    if (!taskNote) return;
+
+    // Check if this task already has children (workflow steps)
+    let childNotes = await this.prisma.note.findMany({
+      where: { parentNoteId: task.id },
+      select: { title: true, content: true, workflowStepNumber: true, status: true },
+      orderBy: { workflowStepNumber: 'asc' },
+    });
+
+    // Generate and execute workflow if no children exist
+    if (childNotes.length === 0) {
+      try {
+        client.emit('task:ai-workflow-start', {
+          taskId: task.id,
+          conversationId: convId,
+          message: 'Generišem plan izvršavanja...',
+          auto: true,
+        });
+
+        // Choose workflow type: concept-based for concept-linked tasks with minimal content
+        const isMinimalContent = !taskNote.content || taskNote.content.length < 200;
+        const hasConcept = !!taskNote.conceptId;
+
+        let workflow: {
+          conceptName: string;
+          steps: import('@mentor-ai/shared/types').WorkflowStep[];
+        };
+        if (hasConcept && isMinimalContent) {
+          workflow = await this.workflowService.getOrGenerateWorkflow(
+            taskNote.conceptId!,
+            tenantId,
+            userId
+          );
+        } else {
+          workflow = await this.workflowService.generateTaskSpecificWorkflow(
+            {
+              title: taskNote.title,
+              content: taskNote.content ?? '',
+              conversationId: convId ?? null,
+              conceptId: taskNote.conceptId,
+            },
+            tenantId,
+            userId
+          );
+        }
+
+        this.logger.log({
+          message: 'Auto-popuni: workflow generated for task',
+          taskId: task.id,
+          taskTitle: taskNote.title,
+          stepCount: workflow.steps.length,
+          workflowType: hasConcept && isMinimalContent ? 'concept-based' : 'task-specific',
+        });
+
+        const completedSummaries: Array<{ title: string; conceptName: string; summary: string }> =
+          [];
+
+        for (let stepIdx = 0; stepIdx < workflow.steps.length; stepIdx++) {
+          const workflowStep = workflow.steps[stepIdx]!;
+
+          client.emit('task:ai-step-progress', {
+            taskId: task.id,
+            conversationId: convId,
+            stepIndex: stepIdx,
+            totalSteps: workflow.steps.length,
+            stepTitle: workflowStep.title,
+            auto: true,
+          });
+
+          const step: ExecutionPlanStep = {
+            stepId: `auto_step_${createId()}`,
+            conceptId: taskNote.conceptId ?? '',
+            conceptName: workflow.conceptName,
+            workflowStepNumber: workflowStep.stepNumber,
+            title: workflowStep.title,
+            description: workflowStep.description,
+            estimatedMinutes: workflowStep.estimatedMinutes,
+            departmentTag: workflowStep.departmentTag,
+            status: 'in_progress',
+            taskTitle: taskNote.title,
+            taskContent: taskNote.content ?? undefined,
+            taskConversationId: convId ?? undefined,
+          };
+
+          const result = await this.workflowService.executeStepAutonomous(
+            step,
+            convId ?? '',
+            userId,
+            tenantId,
+            () => {
+              /* auto-popuni: collect silently */
+            },
+            completedSummaries
+          );
+
+          // Dedup: check if child note already exists
+          const existingSubTask = await this.notesService.findExistingSubTask(
+            tenantId,
+            task.id,
+            workflowStep.stepNumber
+          );
+
+          if (!existingSubTask) {
+            await this.notesService.createNote({
+              title: workflowStep.title,
+              content: result.content,
+              source: NoteSource.CONVERSATION,
+              noteType: NoteType.TASK,
+              status: NoteStatus.READY_FOR_REVIEW,
+              userId,
+              tenantId,
+              conversationId: convId ?? undefined,
+              conceptId: taskNote.conceptId ?? undefined,
+              parentNoteId: task.id,
+              expectedOutcome: workflowStep.expectedOutcome?.substring(0, 500),
+              workflowStepNumber: workflowStep.stepNumber,
+            });
+          }
+
+          completedSummaries.push({
+            title: workflowStep.title,
+            conceptName: workflow.conceptName,
+            summary: result.content.substring(0, 500),
+          });
+
+          client.emit('task:ai-step-complete', {
+            taskId: task.id,
+            conversationId: convId,
+            stepIndex: stepIdx,
+            totalSteps: workflow.steps.length,
+            stepTitle: workflowStep.title,
+            auto: true,
+          });
+        }
+
+        // Re-load children
+        childNotes = await this.prisma.note.findMany({
+          where: { parentNoteId: task.id },
+          select: { title: true, content: true, workflowStepNumber: true, status: true },
+          orderBy: { workflowStepNumber: 'asc' },
+        });
+
+        this.logger.log({
+          message: 'Auto-popuni: workflow steps completed, proceeding to synthesis',
+          taskId: task.id,
+          childCount: childNotes.length,
+        });
+      } catch (err) {
+        this.logger.warn({
+          message: 'Auto-popuni: workflow generation failed, falling back to direct execution',
+          taskId: task.id,
+          error: err instanceof Error ? err.message : 'Unknown',
+        });
+      }
+    }
+
+    // ── Phase 2: Synthesis ──
+    // Load concept knowledge for synthesis prompt
+    let conceptKnowledge = '';
+    if (taskNote.conceptId) {
+      try {
+        const concept = await this.conceptService.findById(taskNote.conceptId);
+        conceptKnowledge = `\n\n--- BAZA ZNANJA ---`;
+        conceptKnowledge += `\nKONCEPT: ${concept.name} (${concept.category})`;
+        conceptKnowledge += `\nDEFINICIJA: ${concept.definition}`;
+        if (concept.extendedDescription) {
+          conceptKnowledge += `\nDETALJNO: ${concept.extendedDescription}`;
+        }
+        if (concept.relatedConcepts && concept.relatedConcepts.length > 0) {
+          const related = concept.relatedConcepts
+            .slice(0, 5)
+            .map((r) => `${r.concept.name} (${r.relationshipType})`)
+            .join(', ');
+          conceptKnowledge += `\nPOVEZANI KONCEPTI: ${related}`;
+        }
+        conceptKnowledge += '\n--- KRAJ BAZE ZNANJA ---';
+      } catch {
+        /* concept not found */
+      }
+    }
+
+    // Web search for synthesis enrichment
+    let webContext = '';
+    if (this.webSearchService.isAvailable()) {
+      try {
+        const tenant = await this.prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { name: true, industry: true },
+        });
+        const searchQuery = `${taskNote.title} ${tenant?.industry ?? ''} ${new Date().getFullYear()}`;
+        const webResults = await this.webSearchService.searchAndExtract(searchQuery, 3);
+        if (webResults.length > 0) {
+          webContext = this.webSearchService.formatSourcesAsObsidian(webResults);
+        }
+      } catch {
+        /* non-blocking */
+      }
+    }
+
+    let prompt: string;
+
+    if (childNotes.length > 0) {
+      // Synthesis from workflow step outputs
+      const workflowResults = childNotes
+        .map((note, i) => {
+          const stepNum = note.workflowStepNumber ?? i + 1;
+          return `--- KORAK ${stepNum}: ${note.title} ---\n${note.content}`;
+        })
+        .join('\n\n');
+
+      prompt = `Ti si vrhunski poslovni stručnjak. Tvoj tim je završio detaljnu analizu kroz ${childNotes.length} koraka workflow-a. Sintetiši SVE rezultate u FINALNI DOKUMENT koji vlasnik može odmah koristiti.
+
+ZADATAK: ${taskNote.title}
+${taskNote.content ? `OPIS ZADATKA: ${taskNote.content}` : ''}
+${taskNote.expectedOutcome ? `OČEKIVANI REZULTAT: ${taskNote.expectedOutcome}` : ''}
+
+REZULTATI ISTRAŽIVANJA I ANALIZE (koristi SVE podatke iz svih koraka):
+${workflowResults}
+${conceptKnowledge}${webContext}
+
+KRITIČNO — RAZLIKUJ DVA TIPA ZADATAKA:
+
+A) DIGITALNI ZADACI (sadržaj, planovi, kampanje, mejlovi, strategije, analize, dokumenti, budžeti, prezentacije):
+   → PROIZVEDI GOTOV REZULTAT. Ne piši instrukcije — NAPIŠI sam dokument/sadržaj/plan.
+   → Primer: ako je zadatak "Napišite marketing email" → NAPIŠI ceo email sa subject linijom, telom, CTA
+   → Primer: ako je zadatak "Kreirajte content calendar" → NAPRAVI kompletan kalendar sa datumima, temama, platformama
+
+B) FIZIČKI ZADACI (odlazak u prodavnicu, naručivanje, pozivanje klijenta, fizička instalacija):
+   → NE simuliraj da si uradio fizičku radnju. NE piši "Naručio sam..." ili "Obavio sam poziv..."
+   → UMESTO TOGA: napiši TAČNO šta treba uraditi, ko treba da uradi, sa svim detaljima
+   → Označi sa "⚠ ZAHTEVA LJUDSKU AKCIJU:"
+
+PRAVILA ZA FINALNI DOKUMENT:
+1. Ovo je FINALNI DELIVERABLE — gotov dokument, NE izveštaj o radu
+2. Sintetiši rezultate iz koraka u koherentan, upotrebljiv dokument
+3. NIKADA ne piši "trebalo bi da...", "preporučuje se..." za digitalne zadatke — URADI to
+4. Koristi SPECIFIČNE podatke, brojke i nalaze iz koraka — ne generalizuj
+5. Strukturiraj sa ## zaglavljima, tabelama, nabrajanjima
+6. Dodaj sekciju "Sledeći koraci" sa konkretnim akcijama koje zahtevaju LJUDSKU INTERVENCIJU
+7. NIKADA ne piši "u prethodnim koracima smo..." — PRIKAŽI gotov rezultat
+8. Ako imaš web izvore, citiraj INLINE: ([Naziv](URL))
+9. Minimum 1000 reči — ovo je sveobuhvatan dokument
+10. Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
+    } else {
+      // Fallback: direct execution (no workflow steps available)
+      let conversationContext = '';
+      try {
+        const conv = await this.conversationService.getConversation(tenantId, convId, userId);
+        const recentMessages = conv.messages.slice(-10);
+        conversationContext = recentMessages
+          .map((m) => {
+            const role = m.role === 'USER' ? 'KORISNIK' : 'AI';
+            const content =
+              m.content.length > 800 ? m.content.substring(0, 800) + '...' : m.content;
+            return `${role}: ${content}`;
+          })
+          .join('\n\n');
+      } catch {
+        /* no context available */
+      }
+
+      prompt = `Ti si poslovni stručnjak. IZVRŠI sledeći zadatak u potpunosti.
+
+ZADATAK: ${taskNote.title}
+${taskNote.content ? `OPIS:\n${taskNote.content}` : ''}
+${taskNote.expectedOutcome ? `OČEKIVANI REZULTAT: ${taskNote.expectedOutcome}` : ''}
+${conceptKnowledge}${webContext}
+${conversationContext ? `\nKONTEKST IZ KONVERZACIJE (tvoj rezultat MORA biti relevantan za ovo):\n${conversationContext}` : ''}
+
+KRITIČNO — RAZLIKUJ DVA TIPA ZADATAKA:
+
+A) DIGITALNI ZADACI (sadržaj, planovi, kampanje, mejlovi, strategije, analize, dokumenti, budžeti, šabloni, procedure):
+   → PROIZVEDI GOTOV REZULTAT koji se može odmah koristiti. NE daj instrukcije — URADI posao.
+
+B) FIZIČKI ZADACI (odlazak negde, naručivanje, pozivi, fizička instalacija, sastanci):
+   → NE simuliraj da si obavio fizičku radnju
+   → NAPIŠI DETALJAN PLAN: ko treba da uradi šta, sa svim detaljima
+   → Jasno naznači: "⚠ ZAHTEVA LJUDSKU AKCIJU:" ispred svakog koraka koji AI ne može izvršiti
+
+PRAVILA:
+1. Proizvedi KOMPLETAN, GOTOV dokument — ne skicu, ne sažetak, ne listu preporuka
+2. NIKADA ne piši "trebalo bi da...", "preporučuje se..." za digitalne zadatke — NAPRAVI to sam
+3. NIKADA ne izmišljaj podatke — ako nemaš podatak, naznači "[POPUNITI: ...]"
+4. Strukturiraj sa ## zaglavljima, tabelama, nabrajanjima
+5. Minimum 800 reči za analitičke zadatke
+6. Odgovaraj ISKLJUČIVO na srpskom jeziku`;
+    }
+
+    let fullContent = '';
+    let chunkIndex = 0;
+
+    await this.aiGatewayService.streamCompletionWithContext(
+      [{ role: 'user', content: prompt }],
+      { tenantId, userId, conversationId: convId, businessContext },
+      (chunk: string) => {
+        fullContent += chunk;
+        client.emit('task:ai-chunk', {
+          taskId: task.id,
+          conversationId: convId,
+          content: chunk,
+          index: chunkIndex++,
+          auto: true,
+        });
+      }
+    );
+
+    // Save AI output as message + mark task COMPLETED
+    if (convId) {
+      await this.conversationService.addMessage(
+        tenantId,
+        convId,
+        MessageRole.ASSISTANT,
+        fullContent
+      );
+    }
+    await this.prisma.note.update({
+      where: { id: task.id },
+      data: { status: 'COMPLETED', userReport: fullContent },
+    });
+
+    client.emit('task:ai-complete', {
+      taskId: task.id,
+      fullContent,
+      conversationId: convId,
+      auto: true,
+    });
+    client.emit('chat:notes-updated', { conversationId: convId, count: 0 });
+
+    // ── Phase 3: Score the result ──
+    client.emit('task:result-start', {
+      taskId: task.id,
+      conversationId: convId,
+      timestamp: new Date().toISOString(),
+      auto: true,
+    });
+
+    // Load tenant info for scoring context
+    let tenantInfo = '';
+    try {
+      const tenant = await this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true, industry: true },
+      });
+      if (tenant) {
+        tenantInfo = `\nKOMPANIJA: ${tenant.name}${tenant.industry ? ` | INDUSTRIJA: ${tenant.industry}` : ''}`;
+      }
+    } catch {
+      /* non-blocking */
+    }
+
+    let conceptScoreContext = '';
+    if (taskNote.conceptId) {
+      try {
+        const concept = await this.conceptService.findById(taskNote.conceptId);
+        conceptScoreContext = `\nKONCEPT: ${concept.name} (${concept.category}) — ${concept.definition}`;
+      } catch {
+        /* non-blocking */
+      }
+    }
+
+    const scorePrompt = `Ti si senior poslovni konsultant koji recenzira deliverable-e. Tvoj zadatak je da:
+
+1. OPTIMIZUJEŠ rezultat — napravi finalnu, poliranu verziju:
+   - Poboljšaj strukturu (## zaglavlja, tabele, nabrajanja)
+   - Dodaj konkretne brojke, rokove i metrike gde nedostaju
+   - Zameni generičke preporuke SPECIFIČNIM akcijama prilagođenim kompaniji
+   - Ukloni redundantni tekst i ponavljanja
+   - Dodaj sekciju "Sledeći koraci" ako ne postoji
+
+2. OCENI rezultat po 5 kriterijuma (svaki 1-10):
+   - PRIMENLJIVOST: Da li se može odmah implementirati?
+   - SPECIFIČNOST: Da li sadrži konkretne brojke, nazive, rokove?
+   - KOMPLETNOST: Da li pokriva sve aspekte zadatka?
+   - RELEVANTNOST: Da li je prilagođen industriji i kompaniji?
+   - KVALITET: Da li je profesionalno strukturiran i jasan?
+${tenantInfo}${conceptScoreContext}
+
+ZADATAK: ${taskNote.title}
+${taskNote.content ? `OPIS: ${taskNote.content}` : ''}
+${taskNote.expectedOutcome ? `OČEKIVANI REZULTAT: ${taskNote.expectedOutcome}` : ''}
+
+IZLAZ KOJI TREBA OCENITI I OPTIMIZOVATI:
+${fullContent}
+
+FORMAT ODGOVORA:
+1. Napiši OPTIMIZOVANI REZULTAT (kompletan dokument)
+2. Na samom kraju dodaj:
+---
+EVALUACIJA:
+- Primenljivost: X/10
+- Specifičnost: X/10
+- Kompletnost: X/10
+- Relevantnost: X/10
+- Kvalitet: X/10
+OCENA: X/10
+---
+
+Gde je OCENA prosek svih pet kriterijuma (zaokružen na ceo broj).
+Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
+
+    let scoreResult = '';
+    let scoreChunkIndex = 0;
+
+    await this.aiGatewayService.streamCompletionWithContext(
+      [{ role: 'user', content: scorePrompt }],
+      { tenantId, userId, conversationId: convId, businessContext },
+      (chunk: string) => {
+        scoreResult += chunk;
+        client.emit('task:result-chunk', {
+          taskId: task.id,
+          conversationId: convId,
+          content: chunk,
+          index: scoreChunkIndex++,
+          auto: true,
+        });
+      }
+    );
+
+    // Extract score
+    let score: number | null = null;
+    const scoreMatch = scoreResult.match(/OCENA:\s*(\d{1,2})\s*\/\s*10/i);
+    if (scoreMatch) {
+      const rawScore = parseInt(scoreMatch[1]!, 10);
+      if (rawScore >= 1 && rawScore <= 10) {
+        score = rawScore * 10;
+      }
+    }
+
+    // Save optimized result + score
+    await this.prisma.note.update({
+      where: { id: task.id },
+      data: {
+        userReport: scoreResult,
+        aiScore: score,
+        aiFeedback: score !== null ? `AI ocena: ${score}/100` : null,
+      },
+    });
+
+    client.emit('task:result-complete', {
+      taskId: task.id,
+      conversationId: convId,
+      score,
+      finalResult: scoreResult,
+      timestamp: new Date().toISOString(),
+      auto: true,
+    });
+    client.emit('chat:notes-updated', { conversationId: convId, count: 0 });
+  }
+
+  // ─── YOLO Auto-Popuni Queue (H2 fix: sequential to avoid LLM overload) ───
+  private autoPopuniYoloQueue: Array<{
+    client: Socket;
+    tenantId: string;
+    userId: string;
+    taskId: string;
+    conversationId: string;
+  }> = [];
+  private isProcessingAutoPopuniYolo = false;
+
+  /**
+   * Enqueue a YOLO-completed task for auto-popuni (synthesize + score).
+   * Tasks are processed sequentially to avoid overwhelming the LLM provider.
+   */
+  private enqueueAutoPopuniAfterYolo(
+    client: Socket,
+    tenantId: string,
+    userId: string,
+    taskId: string,
+    conversationId: string
+  ): void {
+    this.autoPopuniYoloQueue.push({ client, tenantId, userId, taskId, conversationId });
+    this.processAutoPopuniYoloQueue().catch((err) => {
+      this.logger.warn({
+        message: 'YOLO auto-popuni queue processing error',
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+    });
+  }
+
+  private async processAutoPopuniYoloQueue(): Promise<void> {
+    if (this.isProcessingAutoPopuniYolo) return;
+    this.isProcessingAutoPopuniYolo = true;
+
+    while (this.autoPopuniYoloQueue.length > 0) {
+      const item = this.autoPopuniYoloQueue.shift()!;
+      await this.autoPopuniAfterYolo(
+        item.client,
+        item.tenantId,
+        item.userId,
+        item.taskId,
+        item.conversationId
+      );
+    }
+
+    this.isProcessingAutoPopuniYolo = false;
+  }
+
+  /**
+   * Auto AI Popuni after YOLO completes a task: synthesize workflow step
+   * outputs into a userReport and score it. Checks tenant config first.
+   * Reuses the same handleExecuteTaskAi → handleSubmitTaskResult logic.
+   * Emits auto-popuni:start/complete events for frontend spinner (H3 fix).
+   */
+  private async autoPopuniAfterYolo(
+    client: Socket,
+    tenantId: string,
+    userId: string,
+    taskId: string,
+    conversationId: string
+  ): Promise<void> {
+    // Check if auto AI popuni is enabled
+    try {
+      const tenant = await this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { autoAiPopuni: true },
+      });
+      if (!tenant?.autoAiPopuni) return;
+    } catch (err) {
+      this.logger.warn({
+        message: 'YOLO auto-popuni: tenant lookup failed',
+        tenantId,
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+      return;
+    }
+
+    this.logger.log({
+      message: 'YOLO auto-popuni: synthesizing + scoring task',
+      taskId,
+      tenantId,
+    });
+
+    // Emit start event so frontend shows spinner (H3 fix)
+    client.emit('auto-popuni:start', {
+      taskIds: [taskId],
+      taskCount: 1,
+    });
+
+    let completed = false;
+
+    // Reuse the same handlers — handleExecuteTaskAi will find child notes
+    // and synthesize them into a final deliverable
+    try {
+      await this.handleExecuteTaskAi(client, { taskId, conversationId });
+    } catch (err) {
+      this.logger.warn({
+        message: 'YOLO auto-popuni AI execute failed',
+        taskId,
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+      client.emit('auto-popuni:complete', { totalTasks: 1, completedTasks: 0 });
+      return;
+    }
+
+    // Now score the result
+    try {
+      await this.handleSubmitTaskResult(client, { taskId });
+      completed = true;
+    } catch (err) {
+      this.logger.warn({
+        message: 'YOLO auto-popuni scoring failed',
+        taskId,
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+    }
+
+    // Emit complete event (H3 fix)
+    client.emit('auto-popuni:complete', {
+      totalTasks: 1,
+      completedTasks: completed ? 1 : 0,
+    });
   }
 
   // ─── Workflow / Agent Execution Events ─────────────────────────
@@ -1561,11 +2807,169 @@ Ako nema zadataka, odgovori sa: []`;
       });
 
       // 2. Load all workflow step outputs (child notes = completed workflow steps)
-      const childNotes = await this.prisma.note.findMany({
+      let childNotes = await this.prisma.note.findMany({
         where: { parentNoteId: task.id },
         select: { title: true, content: true, workflowStepNumber: true, status: true },
         orderBy: { workflowStepNumber: 'asc' },
       });
+
+      // 2b. If no children exist, generate a workflow and execute each step first
+      //     This ensures every task goes through multi-step research before synthesis
+      if (childNotes.length === 0) {
+        try {
+          client.emit('task:ai-workflow-start', {
+            taskId: payload.taskId,
+            conversationId: convId,
+            message: 'Generišem plan izvršavanja...',
+          });
+
+          // Choose workflow type: concept-based (rich context from KB) for concept-linked
+          // tasks with minimal content; task-specific (uses conversation context) otherwise
+          const isMinimalContent = !task.content || task.content.length < 200;
+          const hasConcept = !!task.conceptId;
+
+          let workflow: {
+            conceptName: string;
+            steps: import('@mentor-ai/shared/types').WorkflowStep[];
+          };
+          if (hasConcept && isMinimalContent) {
+            // Concept-based: gets definition, prerequisites, related concepts, tenant context
+            workflow = await this.workflowService.getOrGenerateWorkflow(
+              task.conceptId!,
+              authenticatedClient.tenantId,
+              authenticatedClient.userId
+            );
+          } else {
+            // Task-specific: uses task title, content, conversation context
+            workflow = await this.workflowService.generateTaskSpecificWorkflow(
+              {
+                title: task.title,
+                content: task.content ?? '',
+                conversationId: convId ?? null,
+                conceptId: task.conceptId,
+              },
+              authenticatedClient.tenantId,
+              authenticatedClient.userId
+            );
+          }
+
+          this.logger.log({
+            message: 'AI Popuni: workflow generated for task',
+            taskId: payload.taskId,
+            taskTitle: task.title,
+            stepCount: workflow.steps.length,
+            workflowType: hasConcept && isMinimalContent ? 'concept-based' : 'task-specific',
+          });
+
+          // Execute each workflow step and save as child note
+          const completedSummaries: Array<{ title: string; conceptName: string; summary: string }> =
+            [];
+
+          for (let stepIdx = 0; stepIdx < workflow.steps.length; stepIdx++) {
+            const workflowStep = workflow.steps[stepIdx]!;
+
+            client.emit('task:ai-step-progress', {
+              taskId: payload.taskId,
+              conversationId: convId,
+              stepIndex: stepIdx,
+              totalSteps: workflow.steps.length,
+              stepTitle: workflowStep.title,
+            });
+
+            const step: ExecutionPlanStep = {
+              stepId: `popuni_step_${createId()}`,
+              conceptId: task.conceptId ?? '',
+              conceptName: workflow.conceptName,
+              workflowStepNumber: workflowStep.stepNumber,
+              title: workflowStep.title,
+              description: workflowStep.description,
+              estimatedMinutes: workflowStep.estimatedMinutes,
+              departmentTag: workflowStep.departmentTag,
+              status: 'in_progress',
+              taskTitle: task.title,
+              taskContent: task.content ?? undefined,
+              taskConversationId: convId ?? undefined,
+            };
+
+            const result = await this.workflowService.executeStepAutonomous(
+              step,
+              convId ?? '',
+              authenticatedClient.userId,
+              authenticatedClient.tenantId,
+              (chunk: string) => {
+                // Stream step chunks to frontend so user sees progress
+                client.emit('task:ai-chunk', {
+                  taskId: payload.taskId,
+                  conversationId: convId,
+                  content: chunk,
+                  index: stepIdx * 1000 + completedSummaries.length,
+                  stepTitle: workflowStep.title,
+                });
+              },
+              completedSummaries
+            );
+
+            // Dedup: check if child note already exists for this step
+            const existingSubTask = await this.notesService.findExistingSubTask(
+              authenticatedClient.tenantId,
+              payload.taskId,
+              workflowStep.stepNumber
+            );
+
+            if (!existingSubTask) {
+              await this.notesService.createNote({
+                title: workflowStep.title,
+                content: result.content,
+                source: NoteSource.CONVERSATION,
+                noteType: NoteType.TASK,
+                status: NoteStatus.READY_FOR_REVIEW,
+                userId: authenticatedClient.userId,
+                tenantId: authenticatedClient.tenantId,
+                conversationId: convId ?? undefined,
+                conceptId: task.conceptId ?? undefined,
+                parentNoteId: payload.taskId,
+                expectedOutcome: workflowStep.expectedOutcome?.substring(0, 500),
+                workflowStepNumber: workflowStep.stepNumber,
+              });
+            }
+
+            completedSummaries.push({
+              title: workflowStep.title,
+              conceptName: workflow.conceptName,
+              summary: result.content.substring(0, 500),
+            });
+
+            client.emit('task:ai-step-complete', {
+              taskId: payload.taskId,
+              conversationId: convId,
+              stepIndex: stepIdx,
+              totalSteps: workflow.steps.length,
+              stepTitle: workflowStep.title,
+            });
+          }
+
+          // Re-load child notes now that they exist
+          childNotes = await this.prisma.note.findMany({
+            where: { parentNoteId: task.id },
+            select: { title: true, content: true, workflowStepNumber: true, status: true },
+            orderBy: { workflowStepNumber: 'asc' },
+          });
+
+          this.logger.log({
+            message: 'AI Popuni: workflow steps completed, proceeding to synthesis',
+            taskId: payload.taskId,
+            childCount: childNotes.length,
+          });
+        } catch (err) {
+          this.logger.warn({
+            message:
+              'AI Popuni: workflow generation/execution failed, falling back to direct execution',
+            taskId: payload.taskId,
+            error: err instanceof Error ? err.message : 'Unknown',
+          });
+          // Fall through to direct execution (childNotes still empty)
+        }
+      }
 
       // 3. Build business context
       const businessContext = await this.buildBusinessContext(
@@ -1573,7 +2977,49 @@ Ako nema zadataka, odgovori sa: []`;
         authenticatedClient.userId
       );
 
-      // 4. Build the prompt — if workflow steps exist, synthesize them into a deliverable
+      // 4. Load concept knowledge if task is linked to a concept
+      let conceptKnowledge = '';
+      if (task.conceptId) {
+        try {
+          const concept = await this.conceptService.findById(task.conceptId);
+          conceptKnowledge = `\n\n--- BAZA ZNANJA ---`;
+          conceptKnowledge += `\nKONCEPT: ${concept.name} (${concept.category})`;
+          conceptKnowledge += `\nDEFINICIJA: ${concept.definition}`;
+          if (concept.extendedDescription) {
+            conceptKnowledge += `\nDETALJNO: ${concept.extendedDescription}`;
+          }
+          if (concept.relatedConcepts && concept.relatedConcepts.length > 0) {
+            const related = concept.relatedConcepts
+              .slice(0, 5)
+              .map((r) => `${r.concept.name} (${r.relationshipType})`)
+              .join(', ');
+            conceptKnowledge += `\nPOVEZANI KONCEPTI: ${related}`;
+          }
+          conceptKnowledge += '\n--- KRAJ BAZE ZNANJA ---';
+        } catch {
+          /* concept not found */
+        }
+      }
+
+      // 4b. Web search for current data (if available)
+      let webContext = '';
+      if (this.webSearchService.isAvailable()) {
+        try {
+          const tenant = await this.prisma.tenant.findUnique({
+            where: { id: authenticatedClient.tenantId },
+            select: { name: true, industry: true },
+          });
+          const searchQuery = `${task.title} ${tenant?.industry ?? ''} ${new Date().getFullYear()}`;
+          const webResults = await this.webSearchService.searchAndExtract(searchQuery, 3);
+          if (webResults.length > 0) {
+            webContext = this.webSearchService.formatSourcesAsObsidian(webResults);
+          }
+        } catch {
+          /* non-blocking */
+        }
+      }
+
+      // 5. Build the prompt
       let prompt: string;
 
       if (childNotes.length > 0) {
@@ -1585,27 +3031,45 @@ Ako nema zadataka, odgovori sa: []`;
           })
           .join('\n\n');
 
-        prompt = `Ti si vrhunski poslovni stručnjak. Tvoj tim je završio detaljnu analizu i istraživanje kroz ${childNotes.length} koraka workflow-a. Sada trebaš da sintetišeš SVE rezultate u FINALNI DOKUMENT koji vlasnik poslovanja može odmah da koristi.
+        prompt = `Ti si vrhunski poslovni stručnjak. Tvoj tim je završio detaljnu analizu kroz ${childNotes.length} koraka workflow-a. Sintetiši SVE rezultate u FINALNI DOKUMENT koji vlasnik može odmah koristiti.
 
 ZADATAK: ${task.title}
+${task.content ? `OPIS ZADATKA: ${task.content}` : ''}
 ${task.expectedOutcome ? `OČEKIVANI REZULTAT: ${task.expectedOutcome}` : ''}
 
-REZULTATI ISTRAŽIVANJA I ANALIZE (ovo je tvoj ulazni materijal — koristi SVE podatke):
+REZULTATI ISTRAŽIVANJA I ANALIZE (koristi SVE podatke iz svih koraka):
 ${workflowResults}
+${conceptKnowledge}${webContext}
 
-INSTRUKCIJE:
-1. Ovo NIJE izveštaj o tome šta je urađeno. Ovo je FINALNI DELIVERABLE — gotov dokument koji vlasnik koristi.
-2. Ako su koraci proizveli analizu (SWOT, konkurencija, tržište) — sintetiši nalaze u AKCIONI PLAN sa konkretnim preporukama
-3. Ako su koraci definisali strategiju — napravi KOMPLETNU STRATEGIJU sa koracima implementacije, rokovima i metrikama
-4. Ako su koraci istražili vrednost — definiši KONKRETNE OBLIKE VREDNOSTI sa cenovnom strategijom
-5. Ako su koraci kreirali sadržaj — napravi GOTOV SADRŽAJ spreman za objavljivanje
-6. Koristi specifične podatke, brojke i nalaze iz koraka — nemoj generalizovati
-7. Strukturiraj sa jasnim zaglavljima, tabelama, nabrajanjima
-8. NIKADA ne piši "u prethodnim koracima smo..." ili "analiza je pokazala da treba..." — PRIKAŽI gotov rezultat
+KRITIČNO — RAZLIKUJ DVA TIPA ZADATAKA:
+
+A) DIGITALNI ZADACI (sadržaj, planovi, kampanje, mejlovi, strategije, analize, dokumenti, budžeti, prezentacije):
+   → PROIZVEDI GOTOV REZULTAT. Ne piši instrukcije — NAPIŠI sam dokument/sadržaj/plan.
+   → Primer: ako je zadatak "Napišite marketing email" → NAPIŠI ceo email sa subject linijom, telom, CTA
+   → Primer: ako je zadatak "Kreirajte content calendar" → NAPRAVI kompletan kalendar sa datumima, temama, platformama
+   → Primer: ako je zadatak "Definišite budžet" → NAPRAVI tabelu sa stavkama, iznosima, totalima
+
+B) FIZIČKI ZADACI (odlazak u prodavnicu, naručivanje, pozivanje klijenta, fizička instalacija):
+   → NE simuliraj da si uradio fizičku radnju. NE piši "Naručio sam..." ili "Obavio sam poziv..."
+   → UMESTO TOGA: napiši TAČNO šta treba uraditi, ko treba da uradi, sa svim detaljima (kontakti, rokovi, koraci)
+   → Primer: "Vlasnik treba da pozove dobavljača XY na broj 011-... i dogovori isporuku do DD.MM."
+
+PRAVILA ZA FINALNI DOKUMENT:
+1. Ovo je FINALNI DELIVERABLE — gotov dokument, NE izveštaj o radu
+2. Ako su koraci proizveli analizu → sintetiši u AKCIONI PLAN sa konkretnim preporukama, rokovima i odgovornim osobama
+3. Ako su koraci definisali strategiju → napravi KOMPLETNU STRATEGIJU sa implementacionim koracima i metrikama
+4. Ako su koraci istražili vrednost → definiši KONKRETNE OBLIKE VREDNOSTI sa cenovnom strategijom
+5. NIKADA ne piši "trebalo bi da...", "preporučuje se..." za digitalne zadatke — URADI to
+6. Koristi SPECIFIČNE podatke, brojke i nalaze iz koraka — ne generalizuj
+7. Strukturiraj sa ## zaglavljima, tabelama, nabrajanjima
+8. Dodaj sekciju "Sledeći koraci" sa konkretnim akcijama koje zahtevaju LJUDSKU INTERVENCIJU (samo ono što AI ne može)
+9. NIKADA ne piši "u prethodnim koracima smo..." — PRIKAŽI gotov rezultat
+10. Ako imaš web izvore, citiraj INLINE: ([Naziv](URL))
+11. Minimum 1000 reči — ovo je sveobuhvatan dokument
 
 Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
       } else {
-        // No workflow steps — simple task execution (fallback to original behavior with conversation context)
+        // No workflow steps — direct task execution with full context
         let conversationContext = '';
         if (convId) {
           try {
@@ -1614,23 +3078,53 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
               convId,
               authenticatedClient.userId
             );
-            const recentMessages = conv.messages.slice(-6);
-            conversationContext = recentMessages.map((m) => `${m.role}: ${m.content}`).join('\n\n');
+            const recentMessages = conv.messages.slice(-10);
+            conversationContext = recentMessages
+              .map((m) => {
+                const role = m.role === 'USER' ? 'KORISNIK' : 'AI';
+                const content =
+                  m.content.length > 800 ? m.content.substring(0, 800) + '...' : m.content;
+                return `${role}: ${content}`;
+              })
+              .join('\n\n');
           } catch {
             /* no context available */
           }
         }
 
-        prompt = `Ti si poslovni stručnjak. Uradi sledeći zadatak u potpunosti — proizvedi konkretan rezultat koji se može odmah koristiti.
-Ne objašnjavaj šta BI radio — URADI posao i prikaži gotov rezultat.
+        prompt = `Ti si poslovni stručnjak. IZVRŠI sledeći zadatak u potpunosti.
 
 ZADATAK: ${task.title}
-${task.content ? `OPIS: ${task.content}` : ''}
+${task.content ? `OPIS:\n${task.content}` : ''}
 ${task.expectedOutcome ? `OČEKIVANI REZULTAT: ${task.expectedOutcome}` : ''}
+${conceptKnowledge}${webContext}
+${conversationContext ? `\nKONTEKST IZ KONVERZACIJE (tvoj rezultat MORA biti relevantan za ovo):\n${conversationContext}` : ''}
 
-${conversationContext ? `KONTEKST IZ RAZGOVORA:\n${conversationContext}` : ''}
+KRITIČNO — RAZLIKUJ DVA TIPA ZADATAKA:
 
-Odgovaraj na srpskom jeziku. Daj kompletan, spreman za upotrebu rezultat.`;
+A) DIGITALNI ZADACI (sadržaj, planovi, kampanje, mejlovi, strategije, analize, dokumenti, budžeti, prezentacije, šabloni, procedure):
+   → PROIZVEDI GOTOV REZULTAT koji se može odmah koristiti. NE daj instrukcije — URADI posao.
+   → Primer: "Napišite email za klijente" → NAPIŠI ceo email sa subject, telom i CTA
+   → Primer: "Kreirajte social media plan" → NAPRAVI kompletan plan sa konkretnim postovima, datumima, platformama
+   → Primer: "Definišite SOP za onboarding" → NAPIŠI celu proceduru korak po korak
+   → Primer: "Analizirajte konkurenciju" → URADI analizu sa tabelom konkurenata, cenama, prednostima/manama
+
+B) FIZIČKI ZADACI (odlazak negde, naručivanje, pozivi, fizička instalacija, sastanci):
+   → NE simuliraj da si obavio fizičku radnju
+   → NAPIŠI DETALJAN PLAN: ko treba da uradi šta, sa svim detaljima (kontakti, rokovi, koraci, budžet)
+   → Jasno naznači: "⚠ ZAHTEVA LJUDSKU AKCIJU:" ispred svakog koraka koji AI ne može izvršiti
+
+PRAVILA:
+1. Proizvedi KOMPLETAN, GOTOV dokument — ne skicu, ne sažetak, ne listu preporuka
+2. NIKADA ne piši "trebalo bi da...", "preporučuje se da napravite..." za digitalne zadatke — NAPRAVI to sam
+3. NIKADA ne izmišljaj podatke ili simuliraj da je nešto urađeno — ako nemaš podatak, naznači "[POPUNITI: ...]"
+4. Strukturiraj sa ## zaglavljima, tabelama, nabrajanjima
+5. Koristi znanje iz BAZE ZNANJA i WEB IZVORA ako su dostupni
+6. Kada referenciraš koncept, koristi [[Naziv Koncepta]] oznaku
+7. Ako imaš web izvore, citiraj INLINE: ([Naziv](URL))
+8. Na kraju dodaj "Sledeći koraci" SAMO za stvari koje zahtevaju LJUDSKU intervenciju
+9. Minimum 800 reči za analitičke zadatke
+10. Odgovaraj ISKLJUČIVO na srpskom jeziku`;
       }
 
       // 5. Stream the AI response
@@ -1690,6 +3184,36 @@ Odgovaraj na srpskom jeziku. Daj kompletan, spreman za upotrebu rezultat.`;
         taskId: payload.taskId,
         contentLength: fullContent.length,
       });
+
+      // 10. Auto-trigger AI Score after completion
+      try {
+        client.emit('task:scoring-start', { taskId: payload.taskId });
+        const {
+          score,
+          result,
+          conversationId: scoredConvId,
+        } = await this.scoreTaskInternal(
+          client,
+          payload.taskId,
+          authenticatedClient.tenantId,
+          authenticatedClient.userId
+        );
+        client.emit('task:result-complete', {
+          taskId: payload.taskId,
+          conversationId: scoredConvId,
+          score,
+          finalResult: result,
+          timestamp: new Date().toISOString(),
+        });
+        client.emit('chat:notes-updated', { conversationId: scoredConvId, count: 0 });
+      } catch (scoreErr) {
+        this.logger.warn({
+          message: 'Auto-scoring failed after AI task execution',
+          taskId: payload.taskId,
+          error: scoreErr instanceof Error ? scoreErr.message : 'Unknown error',
+        });
+        // Non-fatal — task stays COMPLETED, user can manually retry via "Get AI Score"
+      }
     } catch (error) {
       this.logger.error({
         message: 'AI task execution failed',
@@ -1702,6 +3226,151 @@ Odgovaraj na srpskom jeziku. Daj kompletan, spreman za upotrebu rezultat.`;
         message: 'Izvršavanje zadatka nije uspelo. Pokušajte ponovo.',
       });
     }
+  }
+
+  /**
+   * Internal scoring logic: loads task, builds context, streams optimization + score.
+   * Used by both manual "Get AI Score" and auto-scoring after AI Popuni.
+   */
+  private async scoreTaskInternal(
+    client: Socket,
+    taskId: string,
+    tenantId: string,
+    userId: string
+  ): Promise<{ score: number | null; result: string; conversationId: string | null }> {
+    // 1. Load the completed task note
+    const task = await this.prisma.note.findUnique({
+      where: { id: taskId },
+    });
+    if (!task || task.tenantId !== tenantId) {
+      throw new Error('Zadatak nije pronađen');
+    }
+    if (task.status !== 'COMPLETED' || !task.userReport) {
+      throw new Error('Zadatak nema izveštaj za ocenjivanje');
+    }
+
+    // 2. Build context for scoring
+    const businessContext = await this.buildBusinessContext(tenantId, userId);
+
+    let conceptContext = '';
+    if (task.conceptId) {
+      try {
+        const concept = await this.conceptService.findById(task.conceptId);
+        conceptContext = `\n\nKONCEPT: ${concept.name} (${concept.category})`;
+        conceptContext += `\nDEFINICIJA: ${concept.definition}`;
+        if (concept.extendedDescription) {
+          conceptContext += `\nDETALJNO: ${concept.extendedDescription.substring(0, 500)}`;
+        }
+      } catch {
+        /* concept not found */
+      }
+    }
+
+    let tenantInfo = '';
+    try {
+      const tenant = await this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true, industry: true, description: true },
+      });
+      if (tenant) {
+        tenantInfo = `\nKOMPANIJA: ${tenant.name}${tenant.industry ? ` | INDUSTRIJA: ${tenant.industry}` : ''}`;
+      }
+    } catch {
+      /* non-blocking */
+    }
+
+    // 3. Build the optimization + scoring prompt
+    const prompt = `Ti si senior poslovni konsultant koji recenzira deliverable-e za klijenta. Tvoj zadatak je da:
+
+1. OPTIMIZUJEŠ rezultat — napravi finalnu, poliranu verziju dokumenta:
+   - Poboljšaj strukturu (## zaglavlja, tabele, nabrajanja)
+   - Dodaj konkretne brojke, rokove i metrike gde nedostaju
+   - Zameni generičke preporuke SPECIFIČNIM akcijama prilagođenim kompaniji
+   - Ukloni redundantni tekst i ponavljanja
+   - Dodaj sekciju "Sledeći koraci" ako ne postoji
+
+2. OCENI rezultat po 5 kriterijuma (svaki 1-10):
+   - PRIMENLJIVOST: Da li se može odmah implementirati bez dodatnog istraživanja?
+   - SPECIFIČNOST: Da li sadrži konkretne brojke, nazive, rokove, a ne generičke savete?
+   - KOMPLETNOST: Da li pokriva sve aspekte zadatka i očekivanog rezultata?
+   - RELEVANTNOST: Da li je prilagođen industriji i specifičnim potrebama kompanije?
+   - KVALITET: Da li je profesionalno strukturiran, jasan i bez grešaka?
+${tenantInfo}${conceptContext}
+
+ZADATAK: ${task.title}
+${task.content ? `OPIS: ${task.content}` : ''}
+${task.expectedOutcome ? `OČEKIVANI REZULTAT: ${task.expectedOutcome}` : ''}
+
+IZLAZ KOJI TREBA OCENITI I OPTIMIZOVATI:
+${task.userReport}
+
+FORMAT ODGOVORA:
+1. Napiši OPTIMIZOVANI REZULTAT (kompletan dokument, ne samo izmene)
+2. Na samom kraju dodaj:
+---
+EVALUACIJA:
+- Primenljivost: X/10
+- Specifičnost: X/10
+- Kompletnost: X/10
+- Relevantnost: X/10
+- Kvalitet: X/10
+OCENA: X/10
+---
+
+Gde je OCENA prosek svih pet kriterijuma (zaokružen na ceo broj).
+Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
+
+    // 4. Stream the optimized result
+    let fullResult = '';
+    let chunkIndex = 0;
+
+    await this.aiGatewayService.streamCompletionWithContext(
+      [{ role: 'user', content: prompt }],
+      {
+        tenantId,
+        userId,
+        conversationId: task.conversationId ?? undefined,
+        businessContext,
+      },
+      (chunk: string) => {
+        fullResult += chunk;
+        client.emit('task:result-chunk', {
+          taskId,
+          conversationId: task.conversationId,
+          content: chunk,
+          index: chunkIndex++,
+        });
+      }
+    );
+
+    // 5. Extract score from the result (only accept 1-10)
+    let score: number | null = null;
+    const scoreMatch = fullResult.match(/OCENA:\s*(\d{1,2})\s*\/\s*10/i);
+    if (scoreMatch) {
+      const rawScore = parseInt(scoreMatch[1]!, 10);
+      if (rawScore >= 1 && rawScore <= 10) {
+        score = rawScore * 10; // Scale 1-10 → 10-100
+      }
+    }
+
+    // 6. Update the task note with optimized result and score
+    await this.prisma.note.update({
+      where: { id: taskId },
+      data: {
+        userReport: fullResult,
+        aiScore: score,
+        aiFeedback: score !== null ? `AI ocena: ${score}/100` : null,
+      },
+    });
+
+    this.logger.log({
+      message: 'Task scoring completed',
+      taskId,
+      score,
+      resultLength: fullResult.length,
+    });
+
+    return { score, result: fullResult, conversationId: task.conversationId };
   }
 
   /**
@@ -1722,112 +3391,31 @@ Odgovaraj na srpskom jeziku. Daj kompletan, spreman za upotrebu rezultat.`;
         taskId: payload.taskId,
       });
 
-      // 1. Load the completed task note
-      const task = await this.prisma.note.findUnique({
-        where: { id: payload.taskId },
-      });
-      if (!task || task.tenantId !== authenticatedClient.tenantId) {
-        client.emit('task:result-error', {
-          taskId: payload.taskId,
-          message: 'Zadatak nije pronađen',
-        });
-        return;
-      }
-      if (task.status !== 'COMPLETED' || !task.userReport) {
-        client.emit('task:result-error', {
-          taskId: payload.taskId,
-          message: 'Zadatak nema izveštaj za ocenjivanje',
-        });
-        return;
-      }
-
-      // 2. Emit start acknowledgment
+      // Emit start acknowledgment
       client.emit('task:result-start', {
         taskId: payload.taskId,
-        conversationId: task.conversationId,
+        conversationId: null,
         timestamp: new Date().toISOString(),
       });
 
-      // 3. Build the optimization + scoring prompt
-      const prompt = `Ti si ekspert za poslovne rezultate. Pregledaj sledeći izlaz zadatka i uradi dve stvari:
-
-1. OPTIMIZUJ rezultat — napravi finalnu, najbolju moguću verziju deliverable-a (poboljšaj strukturu, jasnoću, konkretnost)
-2. OCENI rezultat od 1 do 10 na osnovu: praktičnosti, specifičnosti, kompletnosti i relevantnosti
-
-ZADATAK: ${task.title}
-${task.content ? `OPIS: ${task.content}` : ''}
-${task.expectedOutcome ? `OČEKIVANI REZULTAT: ${task.expectedOutcome}` : ''}
-
-IZLAZ KOJI TREBA OCENITI I OPTIMIZOVATI:
-${task.userReport}
-
-FORMAT ODGOVORA:
-Prvo napiši optimizovani rezultat.
-Na samom kraju, u poslednjoj liniji napiši SAMO: OCENA: X/10
-
-Odgovaraj na srpskom jeziku.`;
-
-      // 4. Stream the optimized result
-      let fullResult = '';
-      let chunkIndex = 0;
-
-      await this.aiGatewayService.streamCompletionWithContext(
-        [{ role: 'user', content: prompt }],
-        {
-          tenantId: authenticatedClient.tenantId,
-          userId: authenticatedClient.userId,
-          conversationId: task.conversationId ?? undefined,
-          businessContext: '',
-        },
-        (chunk: string) => {
-          fullResult += chunk;
-          client.emit('task:result-chunk', {
-            taskId: payload.taskId,
-            conversationId: task.conversationId,
-            content: chunk,
-            index: chunkIndex++,
-          });
-        }
+      const { score, result, conversationId } = await this.scoreTaskInternal(
+        client,
+        payload.taskId,
+        authenticatedClient.tenantId,
+        authenticatedClient.userId
       );
 
-      // 5. Extract score from the result (only accept 1-10)
-      let score: number | null = null;
-      const scoreMatch = fullResult.match(/OCENA:\s*(\d{1,2})\s*\/\s*10/i);
-      if (scoreMatch) {
-        const rawScore = parseInt(scoreMatch[1]!, 10);
-        if (rawScore >= 1 && rawScore <= 10) {
-          score = rawScore * 10; // Scale 1-10 → 10-100
-        }
-      }
-
-      // 6. Update the task note with optimized result and score
-      await this.prisma.note.update({
-        where: { id: payload.taskId },
-        data: {
-          userReport: fullResult,
-          aiScore: score,
-          aiFeedback: score !== null ? `AI ocena: ${score}/100` : null,
-        },
-      });
-
-      // 7. Emit completion
+      // Emit completion
       client.emit('task:result-complete', {
         taskId: payload.taskId,
-        conversationId: task.conversationId,
+        conversationId,
         score,
-        finalResult: fullResult,
+        finalResult: result,
         timestamp: new Date().toISOString(),
       });
 
-      // 8. Refresh notes
-      client.emit('chat:notes-updated', { conversationId: task.conversationId, count: 0 });
-
-      this.logger.log({
-        message: 'Task result submission completed',
-        taskId: payload.taskId,
-        score,
-        resultLength: fullResult.length,
-      });
+      // Refresh notes
+      client.emit('chat:notes-updated', { conversationId, count: 0 });
     } catch (error) {
       this.logger.error({
         message: 'Task result submission failed',
@@ -1837,7 +3425,10 @@ Odgovaraj na srpskom jeziku.`;
       client.emit('task:result-error', {
         taskId: payload.taskId,
         conversationId: null,
-        message: 'Ocenjivanje rezultata nije uspelo. Pokušajte ponovo.',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Ocenjivanje rezultata nije uspelo. Pokušajte ponovo.',
       });
     }
   }
@@ -2480,23 +4071,43 @@ ${businessContext}${brainMemoryContext ? '\n' + brainMemoryContext : ''}${webCon
         return '';
       }
 
-      let context = '--- BUSINESS CONTEXT ---\n';
-      context += `Company: ${tenant.name}`;
+      // Core identity — this is the base system prompt when no persona is set
+      let context = `Ti si poslovni savetnik za kompaniju "${tenant.name}".
+Tvoj cilj: pružaj konkretne, upotrebljive savete prilagođene OVOM poslovanju. Misli kao iskusan konsultant koji poznaje ovu kompaniju iznutra.
+
+--- POSLOVNI KONTEKST ---
+Kompanija: ${tenant.name}`;
       if (tenant.industry) {
-        context += ` | Industry: ${tenant.industry}`;
+        context += `\nIndustrija: ${tenant.industry}`;
       }
-      context += '\n';
       if (tenant.description) {
-        context += `Description: ${tenant.description}\n`;
+        context += `\nOpis: ${tenant.description}`;
       }
 
       if (onboardingNote?.content) {
-        context += `\nBusiness Analysis:\n${onboardingNote.content}\n`;
+        // Truncate very long onboarding notes to keep prompt focused
+        const noteContent =
+          onboardingNote.content.length > 3000
+            ? onboardingNote.content.substring(0, 3000) + '\n...(skraćeno)'
+            : onboardingNote.content;
+        context += `\n\nPoslovna analiza (iz onboardinga):\n${noteContent}`;
       }
 
-      context += '--- END BUSINESS CONTEXT ---\n';
-      context +=
-        'Use this business context to personalize your responses.\nVAŽNO: Odgovaraj na srpskom jeziku.';
+      context += '\n--- KRAJ POSLOVNOG KONTEKSTA ---';
+
+      // Output quality rules
+      context += `
+
+--- PRAVILA ZA ODGOVARANJE ---
+1. UVEK personalizuj odgovore za "${tenant.name}" (${tenant.industry ?? 'opšte poslovanje'}) — ne daj generičke savete
+2. Koristi podatke iz POSLOVNOG KONTEKSTA, BAZE ZNANJA i MEMORIJE za konkretne preporuke
+3. Kada koristiš znanje iz koncepta, označi ga kao [[Naziv Koncepta]]
+4. Strukturiraj odgovore sa ## zaglavljima, bullet listama i tabelama gde je korisno
+5. Budi konkretan: umesto "trebalo bi da razmotrite..." reci šta tačno treba uraditi i zašto
+6. Ako imaš web izvore, citiraj INLINE: ([Naziv izvora](URL))
+7. Odgovaraj ISKLJUČIVO na srpskom jeziku
+8. Minimum 300 reči za pitanja koja zahtevaju analizu — ne daj površne odgovore
+--- KRAJ PRAVILA ---`;
 
       this.logger.log({
         message: 'Business context built for chat',
@@ -2513,6 +4124,161 @@ ${businessContext}${brainMemoryContext ? '\n' + brainMemoryContext : ''}${webCon
         tenantId,
         userId,
         error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return '';
+    }
+  }
+
+  // ─── Multi-Step Orchestration: Research Brief Builder ──────────
+
+  private generateSearchAngles(query: string): string[] {
+    return [query, `${query} statistika podaci`, `${query} primeri best practice`];
+  }
+
+  private deduplicateConcepts(
+    concepts: import('@mentor-ai/shared/types').ConceptMatch[]
+  ): import('@mentor-ai/shared/types').ConceptMatch[] {
+    const map = new Map<string, import('@mentor-ai/shared/types').ConceptMatch>();
+    for (const c of concepts) {
+      const existing = map.get(c.conceptId);
+      if (!existing || c.score > existing.score) {
+        map.set(c.conceptId, c);
+      }
+    }
+    return Array.from(map.values());
+  }
+
+  private async buildResearchBrief(
+    userQuery: string,
+    existingContext: string,
+    existingConcepts: import('@mentor-ai/shared/types').ConceptMatch[],
+    webSearchEnabled: boolean,
+    personaType: import('@mentor-ai/shared/types').PersonaType | undefined,
+    tenantId: string,
+    userId: string
+  ): Promise<string> {
+    const startTime = Date.now();
+    try {
+      this.logger.log({
+        message: 'Complex query detected — building research brief',
+        userQuery: userQuery.substring(0, 80),
+      });
+
+      const searchAngles = this.generateSearchAngles(userQuery);
+
+      // Parallel: deeper concept matching + web searches
+      const [deepConcepts, ...webResults] = await Promise.all([
+        this.conceptMatchingService.findRelevantConcepts(userQuery, { limit: 8, threshold: 0.35 }),
+        ...(webSearchEnabled
+          ? searchAngles.map((angle) =>
+              this.webSearchService.searchAndExtract(angle, 3).catch(() => [])
+            )
+          : []),
+      ]);
+
+      // Deduplicate and merge concepts
+      const allConcepts = this.deduplicateConcepts([...existingConcepts, ...deepConcepts]);
+      const topConcepts = allConcepts.slice(0, 6);
+
+      // Load full concept trees for top matches
+      const conceptDetails = await Promise.all(
+        topConcepts.map((c) => this.conceptService.findById(c.conceptId).catch(() => null))
+      );
+
+      // Build concept knowledge for brief
+      let conceptKnowledge = '';
+      for (const detail of conceptDetails) {
+        if (!detail) continue;
+        conceptKnowledge += `\n## ${detail.name} (${detail.category})\n${detail.definition?.substring(0, 500) ?? ''}\n`;
+        const prereqs = detail.relatedConcepts
+          ?.filter((r) => r.relationshipType === 'PREREQUISITE' && r.direction === 'outgoing')
+          .map((r) => r.concept?.name)
+          .filter(Boolean);
+        if (prereqs?.length) {
+          conceptKnowledge += `Preduslovi: ${prereqs.join(', ')}\n`;
+        }
+      }
+
+      // Deduplicate web results by link
+      const allWebResults = webResults.flat();
+      const seenLinks = new Set<string>();
+      const uniqueWeb = allWebResults.filter((r) => {
+        if (!r.link || seenLinks.has(r.link)) return false;
+        seenLinks.add(r.link);
+        return true;
+      });
+
+      let webKnowledge = '';
+      for (const r of uniqueWeb.slice(0, 8)) {
+        webKnowledge += `\n- ${r.title}: ${r.snippet ?? ''}${r.pageContent ? ` | ${r.pageContent.substring(0, 300)}` : ''}\n  Izvor: ${r.link}\n`;
+      }
+
+      // Internal LLM call to synthesize research brief
+      const briefPrompt = `Na osnovu korisničkog pitanja i prikupljenih podataka, napravi ISTRAŽIVAČKI BRIEF (500-800 reči).
+
+KORISNIČKO PITANJE: ${userQuery}
+
+BAZA ZNANJA:
+${conceptKnowledge || '(nema koncepata)'}
+
+WEB ISTRAŽIVANJE:
+${webKnowledge || '(nema web rezultata)'}
+
+FORMAT BRIEFA:
+1. KLJUČNA PITANJA: Koji su glavni aspekti korisničkog pitanja?
+2. NALAZI: Za svaki aspekt — šta govore podaci iz baze i weba?
+3. PRAZNINE: Koje informacije nedostaju?
+4. STRUKTURA ODGOVORA: Predloži logičan raspored sekcija za finalni odgovor
+5. KONKRETNI PODACI: Navedi sve brojke, statistike, primere iz izvora`;
+
+      const briefMessages = [{ role: 'user' as const, content: briefPrompt }];
+
+      let briefContent = '';
+      const RESEARCH_TIMEOUT_MS = 10_000;
+
+      const briefResult = await Promise.race([
+        this.aiGatewayService.streamCompletionWithContext(
+          briefMessages,
+          {
+            tenantId,
+            userId,
+            conversationId: 'research-brief',
+            personaType,
+            messageCount: 1,
+            hasClientContext: false,
+            hasSpecificData: true,
+            userQuestion: userQuery,
+            businessContext: existingContext,
+          },
+          (chunk: string) => {
+            briefContent += chunk;
+          }
+        ),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), RESEARCH_TIMEOUT_MS)),
+      ]);
+
+      if (!briefResult || briefContent.length < 100) {
+        this.logger.warn({
+          message: 'Research brief too short or timed out, discarding',
+          length: briefContent.length,
+        });
+        return '';
+      }
+
+      this.logger.log({
+        message: 'Research brief completed',
+        duration: Date.now() - startTime,
+        briefLength: briefContent.length,
+        conceptCount: topConcepts.length,
+        webResultCount: uniqueWeb.length,
+      });
+
+      return briefContent;
+    } catch (error) {
+      this.logger.warn({
+        message: 'Research brief generation failed, falling back to single-pass',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        duration: Date.now() - startTime,
       });
       return '';
     }

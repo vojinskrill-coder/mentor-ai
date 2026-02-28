@@ -315,30 +315,150 @@ export class OnboardingService {
       select: { name: true, industry: true, description: true },
     });
 
-    const companyName = tenant?.name ?? 'Unknown Company';
-    const industry = tenant?.industry ?? 'General';
+    const companyName = tenant?.name ?? 'Nepoznata kompanija';
+    const industry = tenant?.industry ?? 'Opšta';
     const companyDescription = tenant?.description ?? '';
 
-    const systemPrompt = `You are a senior business consultant with 20+ years of experience across multiple industries. You provide clear, actionable analysis grounded in proven business frameworks.
+    // 1. Web search for industry context — trends, competitors, market data
+    let webContext = '';
+    if (this.webSearchService.isAvailable()) {
+      try {
+        const searchQueries = [
+          `${industry} tržište Srbija trendovi 2025 2026`,
+          `${companyName} ${industry} konkurencija analiza`,
+        ];
+        const allResults = await Promise.all(
+          searchQueries.map((q) => this.webSearchService.searchAndExtract(q, 3).catch(() => []))
+        );
+        const combined = allResults.flat();
+        if (combined.length > 0) {
+          webContext = this.webSearchService.formatSourcesAsObsidian(combined);
+        }
+      } catch (err) {
+        this.logger.warn({
+          message: 'Web search failed during business analysis (non-blocking)',
+          error: err instanceof Error ? err.message : 'Unknown',
+        });
+      }
+    }
 
-Analyze the following business and provide:
-1. **Business Overview** — A concise summary of where the business stands
-2. **Strengths** — 3-5 key strengths to leverage
-3. **Opportunities** — 3-5 growth opportunities specific to their industry and situation
-4. **Risk Areas** — 2-3 potential risks or challenges to watch
-5. **Strategic Recommendations** — 3-5 concrete, prioritized next steps
+    // 2. Load knowledge base concepts: foundation first, then keyword-matched
+    let conceptContext = '';
+    try {
+      // Always include foundation concepts (Uvod u Poslovanje, Vrednost) — the starting point
+      const foundationConcepts = await this.prisma.concept.findMany({
+        where: {
+          OR: [
+            ...FOUNDATION_CATEGORIES.flatMap((cat) => [
+              { category: cat },
+              { category: { endsWith: cat } },
+            ]),
+          ],
+        },
+        select: { id: true, name: true, category: true, definition: true },
+        orderBy: { sortOrder: 'asc' },
+      });
 
-Be specific and practical. Avoid generic advice. Reference their industry, departments, and current state directly.`;
+      // Then find industry/business-relevant concepts via keyword matching
+      const query = [companyName, industry, companyDescription].filter(Boolean).join('. ');
+      const keywordMatches = await this.conceptMatchingService.findRelevantConcepts(query, {
+        limit: 15,
+        threshold: 0.3,
+      });
 
-    const userPrompt = `Company: ${companyName}
-Industry: ${industry}
-${companyDescription ? `Description: ${companyDescription}` : ''}
+      // Merge: foundation first (deduped), then keyword matches
+      const foundationIds = new Set(foundationConcepts.map((c) => c.id));
+      const allConcepts = [
+        ...foundationConcepts.map((c) => ({
+          name: c.name,
+          category: c.category ?? 'Uvod u Poslovanje',
+          definition: c.definition ?? '',
+        })),
+        ...keywordMatches
+          .filter((m) => !foundationIds.has(m.conceptId))
+          .map((m) => ({
+            name: m.conceptName,
+            category: m.category as string,
+            definition: m.definition,
+          })),
+      ];
 
-Current Business State: ${businessState}
+      if (allConcepts.length > 0) {
+        conceptContext = '\n\n--- RELEVANTNI POSLOVNI KONCEPTI IZ BAZE ZNANJA ---\n';
+        conceptContext +=
+          'Počni od OSNOVA (Uvod u Poslovanje, Vrednost) pa nadograđuj sa specifičnim konceptima:\n\n';
+        conceptContext += allConcepts
+          .map((c) => `- **${c.name}** (${c.category}): ${c.definition}`)
+          .join('\n');
+        conceptContext += '\n--- KRAJ KONCEPTA ---';
+        conceptContext +=
+          '\nKoristi ove koncepte kao osnovu za konkretne preporuke. Poveži svaku preporuku sa relevantnim konceptom.';
+      }
+    } catch {
+      // Non-blocking — concepts may not be seeded yet
+    }
 
-Active Departments/Functions: ${departments.join(', ')}
+    const systemPrompt = `Ti si vodeći poslovni konsultant specijalizovan za ${industry} sektor na Balkanu i u regionu.
+Tvoj zadatak je da napraviš DUBOKU, KONTEKSTUALIZOVANU analizu poslovanja koja će vlasniku dati jasnu sliku gde se nalazi i kuda treba da ide.
 
-Please provide a comprehensive business analysis.`;
+OVO NIJE GENERIČKA ANALIZA. Svaki uvid mora biti specifičan za ovu kompaniju, ovu industriju, ovo tržište.
+
+STRUKTURA ANALIZE:
+
+## 1. Dijagnoza Trenutnog Stanja (300-500 reči)
+- Gde se kompanija ZAISTA nalazi — bez ulepšavanja
+- Koji su ključni pokazatelji zdravlja poslovanja
+- Šta funkcioniše, a šta ne — konkretno, sa primerima iz njihove industrije
+
+## 2. Analiza Tržišta i Konkurencije (300-500 reči)
+- Kakvo je stanje u ${industry} sektoru — trendovi, prilike, pretnje
+- Ko su glavni konkurenti i kako se ova kompanija pozicionira
+- Koje su tržišne niše neiskorišćene
+- Koristi podatke iz web istraživanja ako su dostupni
+
+## 3. Strateške Prednosti (200-300 reči)
+- 3-5 konkretnih prednosti koje kompanija može da iskoristi ODMAH
+- Za svaku prednost: ZAŠTO je to prednost i KAKO je pretvoriti u profit
+
+## 4. Kritične Ranjivosti (200-300 reči)
+- 2-4 najveća rizika koji mogu da UNIŠTE poslovanje ako se ne reše
+- Za svaki rizik: verovatnoća, uticaj, i prva akcija za mitigaciju
+- Budi direktan — vlasnik treba da zna istinu
+
+## 5. Akcioni Plan — Prvih 90 Dana (500-700 reči)
+- 5-8 KONKRETNIH koraka, poređanih po prioritetu
+- Za svaki korak:
+  * Šta tačno treba da se uradi (ne "poboljšajte marketing" nego "kreirajte landing stranicu za segment X sa ponudom Y")
+  * Ko je odgovoran (koji departman/funkcija)
+  * Očekivani rezultat i KPI za merenje
+  * Vremenski okvir (nedelja 1-2, nedelja 3-4, mesec 2-3)
+  * Povezani poslovni koncept iz baze znanja (ako postoji)
+
+## 6. Dugoročna Vizija — 12 Meseci (200-300 reči)
+- Gde kompanija može da bude za godinu dana ako prati plan
+- Koji su ključni mejlstoni na tom putu
+- Koja ulaganja su neophodna
+
+PRAVILA:
+- Piši ISKLJUČIVO na srpskom jeziku (latinica)
+- Koristi direktan, profesionalan ton — kao da razgovaraš sa vlasnikom
+- SVAKA preporuka mora biti SPECIFIČNA za ovu kompaniju i industriju
+- NE koristi generičke fraze ("poboljšajte marketing", "investirajte u ljude")
+- Koristi konkretne brojke, procente, i vremenske okvire gde god je moguće
+- Ako imaš podatke iz web istraživanja, citiraj izvore inline u formatu ([Naziv](URL))
+- Ukupna dužina: 1800-2500 reči`;
+
+    const userPrompt = `KOMPANIJA: ${companyName}
+INDUSTRIJA: ${industry}
+${companyDescription ? `OPIS POSLOVANJA:\n${companyDescription}` : ''}
+
+TRENUTNO STANJE POSLOVANJA: ${businessState}
+
+AKTIVNI DEPARTMANI: ${departments.join(', ')}
+${webContext}
+${conceptContext}
+
+Napravi duboku analizu ovog poslovanja.`;
 
     const startTime = Date.now();
     let fullOutput = '';
@@ -389,39 +509,189 @@ Please provide a comprehensive business analysis.`;
       select: { name: true, industry: true, description: true },
     });
 
-    const companyName = tenant?.name ?? 'Unknown Company';
-    const industry = tenant?.industry ?? 'General';
+    const companyName = tenant?.name ?? 'Nepoznata kompanija';
+    const industry = tenant?.industry ?? 'Opšta';
     const companyDescription = tenant?.description ?? '';
 
-    // Fetch relevant concepts to ground the business brain in domain knowledge
-    const conceptsResult = await this.conceptService.findAll({ limit: 30 });
-    const conceptSummaries = conceptsResult.data
-      .map((c) => `- ${c.name} (${c.category}): ${c.definition}`)
-      .join('\n');
+    // 1. Web search — industry best practices, competitor strategies, market opportunities
+    let webContext = '';
+    if (this.webSearchService.isAvailable()) {
+      try {
+        const searchQueries = [
+          `${industry} najbolje prakse strategija rast Srbija`,
+          `${industry} ${departments[0] ?? ''} zadaci prioriteti akcioni plan`,
+        ];
+        const allResults = await Promise.all(
+          searchQueries.map((q) => this.webSearchService.searchAndExtract(q, 3).catch(() => []))
+        );
+        const combined = allResults.flat();
+        if (combined.length > 0) {
+          webContext = this.webSearchService.formatSourcesAsObsidian(combined);
+        }
+      } catch (err) {
+        this.logger.warn({
+          message: 'Web search failed during brain creation (non-blocking)',
+          error: err instanceof Error ? err.message : 'Unknown',
+        });
+      }
+    }
 
-    const systemPrompt = `You are a senior business strategist and management consultant with 20+ years of experience. Your task is to create a personalized "Business Brain" — a set of actionable, prioritized tasks that will drive measurable business improvement.
+    // 2. Load knowledge base concepts: foundation first, then keyword-matched, then department-relevant
+    let conceptContext = '';
+    try {
+      // Always include foundation concepts (Uvod u Poslovanje, Vrednost)
+      const foundationConcepts = await this.prisma.concept.findMany({
+        where: {
+          OR: [
+            ...FOUNDATION_CATEGORIES.flatMap((cat) => [
+              { category: cat },
+              { category: { endsWith: cat } },
+            ]),
+          ],
+        },
+        select: { id: true, name: true, category: true, definition: true },
+        orderBy: { sortOrder: 'asc' },
+      });
+      // Keyword-matched concepts for this business
+      const query = [companyName, industry, companyDescription, businessState]
+        .filter(Boolean)
+        .join('. ');
+      const keywordMatches = await this.conceptMatchingService.findRelevantConcepts(query, {
+        limit: 25,
+        threshold: 0.25,
+      });
 
-For each task, provide:
-1. **Title** — Clear, action-oriented title
-2. **Description** — 2-3 sentences explaining what to do and WHY it matters for this specific business
-3. **Priority** — High / Medium / Low
-4. **Department** — Which department owns this task
-5. **Related Concept** — Which business concept from the provided list this task applies
+      // Department-specific concepts (if departments selected)
+      const deptCategories = departments.flatMap((dept) => {
+        const mapping: Record<string, string[]> = {
+          MARKETING: ['Marketing', 'Digitalni Marketing'],
+          FINANCE: ['Finansije', 'Računovodstvo'],
+          SALES: ['Prodaja', 'Odnosi sa Klijentima'],
+          OPERATIONS: ['Operacije', 'Preduzetništvo', 'Menadžment'],
+          TECHNOLOGY: ['Tehnologija', 'Inovacije'],
+          STRATEGY: ['Strategija', 'Poslovni Modeli', 'Liderstvo'],
+          LEGAL: ['Menadžment'],
+          CREATIVE: ['Marketing', 'Digitalni Marketing'],
+        };
+        return mapping[dept] ?? [];
+      });
+      let deptConcepts: Array<{
+        id: string;
+        name: string;
+        category: string | null;
+        definition: string;
+      }> = [];
+      if (deptCategories.length > 0) {
+        deptConcepts = await this.prisma.concept.findMany({
+          where: {
+            OR: deptCategories.flatMap((cat) => [
+              { category: cat },
+              { category: { endsWith: cat } },
+            ]),
+          },
+          select: { id: true, name: true, category: true, definition: true },
+          orderBy: { sortOrder: 'asc' },
+          take: 30,
+        });
+      }
 
-Generate 8-10 tasks. Be specific to the company's industry, current state, and departments. Avoid generic advice.`;
+      // Merge: foundation → keyword matches → department concepts (deduped)
+      const seenIds = new Set<string>();
+      const allConcepts: Array<{ name: string; category: string; definition: string }> = [];
 
-    const userPrompt = `Company: ${companyName}
-Industry: ${industry}
-${companyDescription ? `Description: ${companyDescription}` : ''}
+      for (const c of foundationConcepts) {
+        seenIds.add(c.id);
+        allConcepts.push({
+          name: c.name,
+          category: c.category ?? 'Uvod u Poslovanje',
+          definition: c.definition ?? '',
+        });
+      }
+      for (const m of keywordMatches) {
+        if (!seenIds.has(m.conceptId)) {
+          seenIds.add(m.conceptId);
+          allConcepts.push({
+            name: m.conceptName,
+            category: m.category as string,
+            definition: m.definition,
+          });
+        }
+      }
+      for (const c of deptConcepts) {
+        if (!seenIds.has(c.id)) {
+          seenIds.add(c.id);
+          allConcepts.push({
+            name: c.name,
+            category: c.category ?? 'Opšta',
+            definition: c.definition ?? '',
+          });
+        }
+      }
 
-Current Business State: ${businessState}
+      if (allConcepts.length > 0) {
+        conceptContext = '\n\n--- BAZA POSLOVNIH KONCEPATA ---\n';
+        conceptContext +=
+          'Koncepti su poređani po važnosti: OSNOVE (Uvod u Poslovanje, Vrednost) su temelj na kom se gradi sve ostalo.\n';
+        conceptContext += 'SVAKI zadatak MORA biti vezan za jedan ili više ovih koncepata:\n\n';
+        conceptContext += allConcepts
+          .map((c) => `- **${c.name}** (${c.category}): ${c.definition}`)
+          .join('\n');
+        conceptContext += '\n--- KRAJ BAZE KONCEPATA ---';
+      }
+    } catch {
+      // Non-blocking — concepts may not be seeded yet
+    }
 
-Active Departments: ${departments.join(', ')}
+    const systemPrompt = `Ti si poslovni strateg koji kreira personalizovani "Poslovni Mozak" — sistem zadataka koji će pokrenuti kompaniju napred.
 
-Available Business Concepts:
-${conceptSummaries}
+Tvoj zadatak je da kreiraš TAČNO 10 KONKRETNIH, IZVRŠIVIH zadataka prilagođenih OVOJ kompaniji, OVOJ industriji, i OVOM trenutnom stanju.
+NE više od 10 — fokus je na kvalitetu, ne kvantitetu. Svaki zadatak mora biti dovoljno detaljan da se može odmah početi sa radom.
 
-Generate a personalized Business Brain with 8-10 prioritized tasks.`;
+ZA SVAKI ZADATAK OBAVEZNO NAVEDI:
+
+### [Broj]. [Naslov zadatka — akcioni, jasan]
+- **Koncept:** [Koji poslovni koncept iz baze znanja je osnova ovog zadatka]
+- **Departman:** [Koji departman je odgovoran]
+- **Prioritet:** KRITIČAN / VISOK / SREDNJI
+- **Zašto baš ovo:** [2-3 rečenice — ZAŠTO je ovaj zadatak važan za OVO KONKRETNO poslovanje. Poveži sa trenutnim stanjem, industrijom, izazovima. Ne generičke fraze.]
+- **Šta konkretno treba uraditi:**
+  1. [Korak 1 — specifičan, merljiv]
+  2. [Korak 2 — specifičan, merljiv]
+  3. [Korak 3 — specifičan, merljiv]
+- **Očekivani rezultat:** [Šta će kompanija imati/znati/postići kada se završi]
+- **KPI za merenje:** [Konkretna metrika — broj, procenat, rok]
+- **Vremenski okvir:** [Nedelja 1-2 / Mesec 1 / Mesec 2-3]
+- **Zavisi od:** [Koji prethodni zadaci moraju biti završeni pre ovog — ili "Nezavisan"]
+
+REDOSLED ZADATAKA:
+- Počni sa DIJAGNOSTIČKIM zadacima (analiza, mapiranje, audit) — vlasnik prvo mora da RAZUME gde je
+- Zatim STRATEŠKI zadaci (definisanje pozicije, ciljeva, plana)
+- Zatim OPERATIVNI zadaci (implementacija, kreiranje procesa)
+- Na kraju OPTIMIZACIONI zadaci (merenje, poboljšanje, skaliranje)
+
+GRUPIŠI po departmanima: ${departments.join(', ')}
+Svaki departman treba da ima minimum 2 zadatka.
+
+PRAVILA:
+- Piši ISKLJUČIVO na srpskom jeziku (latinica)
+- NE koristi generičke zadatke ("poboljšajte komunikaciju", "investirajte u tim")
+- SVAKI zadatak mora biti toliko specifičan da vlasnik može da počne da radi ODMAH
+- Koristi podatke iz web istraživanja za preporuke zasnovane na tržištu
+- OBAVEZNO poveži svaki zadatak sa konceptom iz baze znanja
+- Ako imaš web podatke, citiraj izvore inline ([Naziv](URL))
+- Ukupna dužina: 2000-3000 reči`;
+
+    const userPrompt = `KOMPANIJA: ${companyName}
+INDUSTRIJA: ${industry}
+${companyDescription ? `OPIS POSLOVANJA:\n${companyDescription}` : ''}
+
+TRENUTNO STANJE POSLOVANJA: ${businessState}
+
+AKTIVNI DEPARTMANI: ${departments.join(', ')}
+${webContext}
+${conceptContext}
+
+Kreiraj personalizovani Poslovni Mozak sa tačno 10 prioritizovanih zadataka.`;
 
     const startTime = Date.now();
     let fullOutput = '';
@@ -622,10 +892,10 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
       });
     }
 
-    // Build execution plan during onboarding so chat can load it immediately
+    // Build execution plan and return planId so frontend can load it
     let planId: string | undefined;
-    try {
-      if (taskIds.length > 0 && welcomeConversationId) {
+    if (taskIds.length > 0 && welcomeConversationId) {
+      try {
         const plan = await this.workflowService.buildExecutionPlan(
           taskIds,
           userId,
@@ -634,21 +904,20 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
         );
         planId = plan.planId;
         this.logger.log({
-          message: 'Execution plan built during onboarding',
-          planId,
+          message: 'Execution plan built for onboarding',
+          planId: plan.planId,
           taskCount: taskIds.length,
           tenantId,
           userId,
         });
+      } catch (err) {
+        this.logger.warn({
+          message: 'Plan generation failed (non-blocking)',
+          tenantId,
+          userId,
+          error: err instanceof Error ? err.message : 'Unknown',
+        });
       }
-    } catch (err) {
-      this.logger.warn({
-        message: 'Plan generation failed during onboarding (non-blocking)',
-        tenantId,
-        userId,
-        error: err instanceof Error ? err.message : 'Unknown',
-      });
-      // planId stays undefined — chat falls back to manual task panel
     }
 
     // Story 3.2: Seed Brain pending tasks based on user's department (fire-and-forget)
@@ -695,9 +964,9 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
   }
 
   /**
-   * Generates initial action plan by searching Qdrant embeddings with business context.
+   * Generates initial action plan by searching embeddings with business context.
    * Multi-query approach for maximum coverage, diversified across categories.
-   * Creates a welcome conversation with task list.
+   * Creates rich TASK notes with structured content, then a welcome conversation.
    */
   private async generateInitialPlan(
     tenantId: string,
@@ -716,11 +985,16 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
       [tenant.name, tenant.industry, tenant.description].filter(Boolean).join('. '),
     ].filter(Boolean) as string[];
 
+    // Run all searches in parallel
     const allMatches = new Map<string, ConceptMatch>();
-    for (const query of queries) {
-      const matches = await this.conceptMatchingService
-        .findRelevantConcepts(query, { limit: 20, threshold: 0.3 })
-        .catch(() => [] as ConceptMatch[]);
+    const searchResults = await Promise.all(
+      queries.map((query) =>
+        this.conceptMatchingService
+          .findRelevantConcepts(query, { limit: 20, threshold: 0.3 })
+          .catch(() => [] as ConceptMatch[])
+      )
+    );
+    for (const matches of searchResults) {
       for (const m of matches) {
         const existing = allMatches.get(m.conceptId);
         if (!existing || m.score > existing.score) {
@@ -729,37 +1003,35 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
       }
     }
 
-    // Always include foundation concepts — match DB categories with/without number prefix
-    // DB has: "1. Uvod u Poslovanje", "Poslovanje", "2. Vrednost", "Vrednost"
+    // Always include foundation concepts
     const foundationConcepts = await this.prisma.concept.findMany({
       where: {
         OR: [
           ...FOUNDATION_CATEGORIES.flatMap((cat) => [
             { category: cat },
-            { category: { endsWith: cat } }, // matches "1. Uvod u Poslovanje", "2. Vrednost"
+            { category: { endsWith: cat } },
           ]),
-          { category: 'Poslovanje' }, // core business category
+          { category: 'Poslovanje' },
         ],
       },
       select: { id: true, name: true, category: true, definition: true },
       orderBy: { sortOrder: 'asc' },
     });
 
-    // Build foundation matches (not from embeddings — guaranteed inclusion)
     const foundationMatches: ConceptMatch[] = foundationConcepts.map((c) => ({
       conceptId: c.id,
       conceptName: c.name,
       category: (c.category ??
         'Uvod u Poslovanje') as unknown as import('@mentor-ai/shared/types').ConceptCategory,
       definition: c.definition ?? '',
-      score: 1.0, // Max score to ensure they come first
+      score: 1.0,
     }));
 
-    // Diversify embedding matches: max 5 per category, sorted by score
+    // Diversify: max 5 per category, sorted by score
     const byCategory = new Map<string, ConceptMatch[]>();
     const foundationIds = new Set(foundationConcepts.map((c) => c.id));
     for (const m of allMatches.values()) {
-      if (foundationIds.has(m.conceptId)) continue; // Skip — already in foundation
+      if (foundationIds.has(m.conceptId)) continue;
       const cat = m.category ?? 'General';
       if (!byCategory.has(cat)) byCategory.set(cat, []);
       byCategory.get(cat)!.push(m);
@@ -771,7 +1043,6 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
     }
     embeddingMatches.sort((a, b) => b.score - a.score);
 
-    // Foundation first, then embedding-matched concepts
     const diversified = [...foundationMatches, ...embeddingMatches];
 
     if (diversified.length === 0) {
@@ -786,16 +1057,118 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
       diversified.unshift(removed[0]!);
     }
 
-    // Limit to top 10 most important tasks
+    // Limit to top 10 concepts
     const topTasks = diversified.slice(0, 10);
 
-    // Create TASK notes for each matched concept (collect IDs for plan building)
+    // Load prerequisite relationships for all selected concepts
+    const topConceptIds = topTasks.map((m) => m.conceptId);
+    const prerequisites = await this.prisma.conceptRelationship.findMany({
+      where: {
+        sourceConceptId: { in: topConceptIds },
+        relationshipType: 'PREREQUISITE',
+      },
+      select: {
+        sourceConceptId: true,
+        targetConcept: { select: { name: true } },
+      },
+    });
+    const prereqMap = new Map<string, string[]>();
+    for (const rel of prerequisites) {
+      const existing = prereqMap.get(rel.sourceConceptId) ?? [];
+      existing.push(rel.targetConcept.name);
+      prereqMap.set(rel.sourceConceptId, existing);
+    }
+
+    // Generate rich task content via LLM — single batched call for all 10 concepts
+    const conceptDescriptions = topTasks
+      .map((m, i) => {
+        const prereqs = prereqMap.get(m.conceptId) ?? [];
+        return `${i + 1}. Koncept: "${m.conceptName}" | Kategorija: ${m.category} | Definicija: ${m.definition}${prereqs.length > 0 ? ` | Preduslovi: ${prereqs.join(', ')}` : ''}`;
+      })
+      .join('\n');
+
+    const taskEnrichmentSystemPrompt = `Ti si srpski poslovni konsultant koji kreira akcione zadatke.
+
+Za SVAKI koncept napiši strukturirani zadatak u sledećem formatu:
+
+---ZADATAK: {redni broj}---
+NASLOV: {akcioni naslov na srpskom — glagol + konkretna radnja, max 60 karaktera}
+SADRŽAJ:
+## Cilj
+{1-2 rečenice: šta konkretno treba postići za "${tenant.name}" u industriji "${tenant.industry}"}
+
+## Zašto je ovo važno
+{2-3 rečenice: poslovna vrednost, šta se gubi ako se ne uradi}
+
+## Koraci za realizaciju
+1. {Konkretan korak sa opisom — ne generički}
+2. {Konkretan korak sa opisom}
+3. {Konkretan korak sa opisom}
+4. {Konkretan korak sa opisom}
+5. {Konkretan korak sa opisom}
+
+## Očekivani rezultat
+{1-2 rečenice: merljiv ishod, KPI ili deliverable}
+
+## Vremenski okvir
+{Predloženi rok: 1 nedelja / 2 nedelje / 1 mesec}
+---KRAJ ZADATKA---
+
+PRAVILA:
+- Svaki naslov MORA biti akcioni glagol na srpskom: "Analizirajte...", "Definišite...", "Kreirajte...", "Mapriajte...", "Razvijte...", "Optimizujte...", "Uspostavite..."
+- Koraci moraju biti SPECIFIČNI za "${tenant.name}" i "${tenant.industry}" — ne generički
+- Ako koncept ima preduslove, pomeni ih u sekciji "Zašto je ovo važno"
+- ${tenant.description ? `Kontekst kompanije: ${tenant.description}` : ''}
+- Piši ISKLJUČIVO na srpskom jeziku
+- TAČNO ${topTasks.length} zadataka, ni više ni manje`;
+
+    const taskEnrichmentUserPrompt = `Koncepti za koje treba kreirati zadatke:
+${conceptDescriptions}
+
+Generiši strukturirane zadatke.`;
+
+    let enrichedContent = '';
+    try {
+      await this.aiGateway.streamCompletionWithContext(
+        [
+          { role: 'system', content: taskEnrichmentSystemPrompt },
+          { role: 'user', content: taskEnrichmentUserPrompt },
+        ],
+        { tenantId, userId, skipRateLimit: true, skipQuotaCheck: true },
+        (chunk: string) => {
+          enrichedContent += chunk;
+        }
+      );
+    } catch (err) {
+      this.logger.warn({
+        message: 'Task enrichment LLM call failed, using template fallback',
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+    }
+
+    // Parse LLM output into per-task title + content
+    const parsedTasks = this.parseEnrichedTasks(enrichedContent, topTasks);
+
+    // Create TASK notes (dedup: skip if task already exists for this concept)
     const createdTaskIds: string[] = [];
-    for (const match of topTasks) {
-      const title = this.buildActionTitle(match.conceptName);
+    for (let i = 0; i < topTasks.length; i++) {
+      const match = topTasks[i]!;
+      const parsed = parsedTasks[i];
+
+      const existingId = await this.notesService.findExistingTask(tenantId, {
+        conceptId: match.conceptId,
+      });
+      if (existingId) {
+        createdTaskIds.push(existingId);
+        continue;
+      }
+
+      const title = parsed?.title ?? this.buildActionTitle(match.conceptName);
+      const content = parsed?.content ?? this.buildFallbackTaskContent(match, tenant);
+
       const note = await this.notesService.createNote({
         title,
-        content: `Primenite ${match.conceptName} na vaše poslovanje: ${match.definition}`,
+        content,
         source: NoteSource.ONBOARDING,
         noteType: NoteType.TASK,
         status: NoteStatus.PENDING,
@@ -806,35 +1179,37 @@ Generate a personalized Business Brain with 8-10 prioritized tasks.`;
       createdTaskIds.push(note.id);
     }
 
-    // Build concept summaries for narrative welcome message generation
+    // Build concept summaries for welcome message
     const conceptSummaries = topTasks
       .map((m, i) => {
-        const title = this.buildActionTitle(m.conceptName);
+        const parsed = parsedTasks[i];
+        const title = parsed?.title ?? this.buildActionTitle(m.conceptName);
         return `${i + 1}. "${title}" — Koncept: ${m.conceptName}, Definicija: ${m.definition}`;
       })
       .join('\n');
 
-    // Generate narrative welcome message via LLM (explains WHY each task matters)
+    // Generate narrative welcome message via LLM
     const welcomeSystemPrompt = `Ti si poslovni savetnik koji upoznaje klijenta sa personalizovanim akcionim planom.
 
 Napiši dobrodošlicu koja:
-1. Pozdravi klijenta i kratko rezimira njihov poslovni profil (1-2 rečenice)
-2. Objasni ZAŠTO je svaki zadatak važan za NJIHOVO konkretno poslovanje
-3. Objasni REDOSLED — zašto počinjemo sa zadatkom #1, kako svaki naredni nadograđuje prethodni
-4. Preporuči da počnu sa zadatkom #1 i objasni zašto
+1. Pozdravi klijenta po imenu kompanije i rezimira njihov profil (2-3 rečenice)
+2. Objasni strategiju: ZAŠTO ovih ${topTasks.length} zadataka, koji je krajnji cilj
+3. Za SVAKI zadatak objasni ZAŠTO je važan za NJIHOVO poslovanje (ne samo naziv — poslovnu vrednost)
+4. Objasni REDOSLED — zašto počinjemo sa zadatkom #1, kako svaki naredni nadograđuje prethodni
+5. Na kraju jasno predloži prvi korak
 
 PRAVILA:
-- NE koristi [[Naziv Koncepta]] oznake — ovo je pregled plana, ne isporučeni dokument
-- NE nabraja korake kao suvu listu — objasni poslovnu vrednost svakog
-- Koristi ime kompanije i industrije
+- NE koristi [[Naziv Koncepta]] oznake
+- NE nabraja korake kao suvu listu — objasni poslovnu logiku iza svakog
+- Koristi ime kompanije "${tenant.name}" i industrije "${tenant.industry}"
 - Piši toplo ali profesionalno, kao iskusan konsultant
-- Na kraju dodaj instrukcije: odgovorite "da" za sve zadatke, "pokreni 1, 3, 5" za izbor, ili "pokreni prvi" za samo prvi
+- Na kraju dodaj: odgovorite "da" za sve zadatke, "pokreni 1, 3, 5" za izbor, ili "pokreni prvi" za samo prvi
 - Piši ISKLJUČIVO na srpskom jeziku
-- Maksimum 400 reči`;
+- Između 500 i 800 reči — dovoljno detalja za kontekst`;
 
-    const welcomeUserPrompt = `Kompanija: ${tenant?.name ?? 'Nepoznata'}
-Industrija: ${tenant?.industry ?? 'Opšta'}
-${tenant?.description ? `Opis: ${tenant.description}` : ''}
+    const welcomeUserPrompt = `Kompanija: ${tenant.name ?? 'Nepoznata'}
+Industrija: ${tenant.industry ?? 'Opšta'}
+${tenant.description ? `Opis: ${tenant.description}` : ''}
 
 Pripremljeni zadaci (po redosledu):
 ${conceptSummaries}
@@ -858,23 +1233,23 @@ Napiši personalizovanu dobrodošlicu.`;
         message: 'Failed to generate narrative welcome message, using fallback',
         error: err instanceof Error ? err.message : 'Unknown',
       });
-      // Fallback to simple template if LLM fails
       const taskList = topTasks
-        .map(
-          (m, i) =>
-            `${i + 1}. **${this.buildActionTitle(m.conceptName)}**${i === 0 ? ' (preporučeno)' : ''}`
-        )
+        .map((m, i) => {
+          const parsed = parsedTasks[i];
+          const title = parsed?.title ?? this.buildActionTitle(m.conceptName);
+          return `${i + 1}. **${title}**${i === 0 ? ' (preporučeno)' : ''}`;
+        })
         .join('\n');
       welcomeMsg = `Dobrodošli! Pripremili smo ${topTasks.length} zadataka za vaše poslovanje:\n\n${taskList}\n\nOdgovorite "da" da pokrenete sve zadatke.`;
     }
 
-    // Create welcome conversation linked to the first matched concept
+    // Create welcome conversation
     const conversation = await this.conversationService.createConversation(
       tenantId,
       userId,
       'Dobrodošli u Mentor AI',
-      undefined, // personaType
-      topTasks[0]?.conceptId // link to first matched concept for tree display
+      undefined,
+      topTasks[0]?.conceptId
     );
     await this.conversationService.addMessage(
       tenantId,
@@ -883,16 +1258,16 @@ Napiši personalizovanu dobrodošlicu.`;
       welcomeMsg
     );
 
-    // Link all onboarding task notes to the welcome conversation
-    // so they appear in the notes panel when viewing this conversation
+    // Link task notes to the welcome conversation
     const conceptIds = topTasks.map((m) => m.conceptId);
     await this.notesService.linkNotesToConversation(conceptIds, conversation.id, userId, tenantId);
 
     this.logger.log({
-      message: 'Initial plan generated from embeddings',
+      message: 'Initial plan generated',
       tenantId,
       userId,
       taskCount: topTasks.length,
+      enrichedViaLLM: enrichedContent.length > 0,
       concepts: topTasks.map((m) => m.conceptName),
       welcomeConversationId: conversation.id,
     });
@@ -900,22 +1275,96 @@ Napiši personalizovanu dobrodošlicu.`;
     return { conversationId: conversation.id, taskIds: createdTaskIds };
   }
 
+  /**
+   * Parses LLM-generated enriched task content into per-task title + content.
+   * Falls back gracefully if LLM output is malformed.
+   */
+  private parseEnrichedTasks(
+    llmOutput: string,
+    concepts: ConceptMatch[]
+  ): Array<{ title: string; content: string } | null> {
+    if (!llmOutput || llmOutput.trim().length === 0) {
+      return concepts.map(() => null);
+    }
+
+    // Split by task delimiters
+    const taskBlocks = llmOutput.split(/---ZADATAK:\s*\d+---/).filter((b) => b.trim().length > 0);
+
+    return concepts.map((_, index) => {
+      const block = taskBlocks[index];
+      if (!block) return null;
+
+      // Remove end delimiter if present
+      const cleaned = block.replace(/---KRAJ ZADATKA---/g, '').trim();
+
+      // Extract title
+      const titleMatch = cleaned.match(/NASLOV:\s*(.+?)(?:\n|$)/);
+      const title = titleMatch?.[1]?.trim();
+      if (!title) return null;
+
+      // Extract content (everything after SADRŽAJ:)
+      const contentMatch = cleaned.match(/SADRŽAJ:\s*([\s\S]+)/);
+      const content = contentMatch?.[1]?.trim();
+      if (!content) return null;
+
+      return { title, content };
+    });
+  }
+
+  /**
+   * Fallback task content when LLM enrichment fails.
+   * Still richer than a single line — includes definition + category context.
+   */
+  private buildFallbackTaskContent(
+    match: ConceptMatch,
+    tenant: { name: string | null; industry: string | null }
+  ): string {
+    return `## Cilj
+Primenite koncept "${match.conceptName}" na poslovanje ${tenant.name ?? 'vaše kompanije'} u industriji ${tenant.industry ?? 'vašoj industriji'}.
+
+## Definicija koncepta
+${match.definition}
+
+## Kategorija
+${match.category}
+
+## Koraci za realizaciju
+1. Analizirajte trenutno stanje u kontekstu ovog koncepta
+2. Identifikujte ključne oblasti za poboljšanje
+3. Definišite konkretne akcije i odgovorne osobe
+4. Postavite merljive KPI za praćenje napretka
+5. Implementirajte i pratite rezultate`;
+  }
+
+  /**
+   * Generates an action title for a concept name (Serbian).
+   * Uses category-aware verb mapping for natural Serbian titles.
+   */
   private buildActionTitle(conceptName: string): string {
     const lower = conceptName.toLowerCase();
-    if (lower.includes('swot')) return 'Izvršite SWOT Analizu';
-    if (lower.includes('value proposition')) return 'Definišite Vrednosnu Ponudu';
-    if (lower.includes('marketing plan') || lower.includes('marketing strategy'))
-      return 'Kreirajte Marketing Plan';
-    if (lower.includes('business model')) return 'Mapirajte Poslovni Model';
-    if (lower.includes('cash flow')) return 'Analizirajte Novčani Tok';
-    if (lower.includes('pricing')) return 'Razvijte Strategiju Cena';
-    if (lower.includes('competitor') || lower.includes('competitive'))
-      return 'Analizirajte Konkurenciju';
-    if (lower.includes('target market') || lower.includes('segmentation'))
-      return 'Definišite Ciljno Tržište';
-    if (lower.includes('financial plan')) return 'Kreirajte Finansijski Plan';
-    if (lower.includes('brand')) return 'Razvijte Strategiju Brenda';
-    return `Primenite ${conceptName}`;
+
+    // Category-based Serbian verb prefixes
+    if (lower.includes('analiz') || lower.includes('swot') || lower.includes('dijagnos'))
+      return `Analizirajte: ${conceptName}`;
+    if (lower.includes('plan') || lower.includes('strategij') || lower.includes('model'))
+      return `Kreirajte: ${conceptName}`;
+    if (lower.includes('vrednost') || lower.includes('ponud') || lower.includes('cen'))
+      return `Definišite: ${conceptName}`;
+    if (lower.includes('marketing') || lower.includes('brend') || lower.includes('brand'))
+      return `Razvijte: ${conceptName}`;
+    if (lower.includes('prodaj') || lower.includes('kupac') || lower.includes('klijent'))
+      return `Optimizujte: ${conceptName}`;
+    if (lower.includes('finans') || lower.includes('budžet') || lower.includes('novčan'))
+      return `Analizirajte: ${conceptName}`;
+    if (lower.includes('operaci') || lower.includes('proces') || lower.includes('efikas'))
+      return `Uspostavite: ${conceptName}`;
+    if (lower.includes('tim') || lower.includes('lider') || lower.includes('menadž'))
+      return `Razvijte: ${conceptName}`;
+    if (lower.includes('inovacij') || lower.includes('tehnolog') || lower.includes('digital'))
+      return `Implementirajte: ${conceptName}`;
+
+    // Default: "Primenite" (Apply) — universal action verb
+    return `Primenite: ${conceptName}`;
   }
 
   /**

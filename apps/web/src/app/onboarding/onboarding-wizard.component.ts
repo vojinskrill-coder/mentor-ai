@@ -93,6 +93,17 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         border-radius: 12px;
         padding: 24px;
         border: 1px solid #2a2a2a;
+        animation: cardFadeIn 0.3s ease;
+      }
+      @keyframes cardFadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
       .card h2 {
         font-size: 20px;
@@ -192,7 +203,8 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         font-family: inherit;
       }
       .industry-btn:hover {
-        border-color: rgba(59, 130, 246, 0.5);
+        border-color: rgba(59, 130, 246, 0.7);
+        background: rgba(59, 130, 246, 0.05);
       }
       .industry-btn.selected {
         border-color: #3b82f6;
@@ -429,6 +441,21 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         margin-bottom: 24px;
         line-height: 1.5;
       }
+      .celebration-summary {
+        text-align: left;
+        background: #0d0d0d;
+        border-radius: 8px;
+        padding: 16px;
+        margin-top: 20px;
+      }
+      .summary-item {
+        font-size: 13px;
+        color: #a1a1a1;
+        padding: 4px 0;
+      }
+      .summary-item strong {
+        color: #fafafa;
+      }
 
       /* Spinners */
       .saving-spinner {
@@ -442,6 +469,17 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       }
 
       /* PDF Upload */
+      .pdf-dropzone {
+        border: 2px dashed #2a2a2a;
+        border-radius: 10px;
+        padding: 16px;
+        transition: all 0.2s;
+        text-align: center;
+      }
+      .pdf-dropzone.drag-over {
+        border-color: #3b82f6;
+        background: rgba(59, 130, 246, 0.04);
+      }
       .pdf-upload-row {
         display: flex;
         align-items: center;
@@ -766,45 +804,51 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
                   >(opciono)</span
                 ></label
               >
-              <div class="pdf-upload-row">
-                <button
-                  class="btn-upload-pdf"
-                  [disabled]="isUploadingPdf$()"
-                  (click)="pdfInput.click()"
-                >
-                  @if (isUploadingPdf$()) {
-                    <span class="pdf-spinner"></span> Obrađujem...
-                  } @else {
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M12 4v16m8-8H4"
-                      />
-                    </svg>
-                    Otpremi PDF
+              <div
+                class="pdf-dropzone"
+                [class.drag-over]="isDragging$()"
+                (dragover)="onDragOver($event)"
+                (dragleave)="onDragLeave($event)"
+                (drop)="onDrop($event)"
+              >
+                <div class="pdf-upload-row">
+                  <button
+                    class="btn-upload-pdf"
+                    [disabled]="isUploadingPdf$()"
+                    (click)="pdfInput.click()"
+                  >
+                    @if (isUploadingPdf$()) {
+                      <span class="pdf-spinner"></span> Obrađujem...
+                    } @else {
+                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M12 4v16m8-8H4"
+                        />
+                      </svg>
+                      Otpremi PDF
+                    }
+                  </button>
+                  @if (pdfFileName$()) {
+                    <span class="pdf-success">
+                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                      {{ pdfFileName$() }}
+                    </span>
                   }
-                </button>
-                @if (pdfFileName$()) {
-                  <span class="pdf-success">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                    {{ pdfFileName$() }}
-                  </span>
+                </div>
+                @if (pdfError$()) {
+                  <div class="pdf-error-text">{{ pdfError$() }}</div>
                 }
-              </div>
-              @if (pdfError$()) {
-                <div class="pdf-error-text">{{ pdfError$() }}</div>
-              }
-              <div class="pdf-hint">
-                PDF do 70MB. Tekst će biti ekstrahovan za obogaćivanje AI odgovora.
+                <div class="pdf-hint">PDF do 70MB. Prevucite datoteku ovde ili kliknite dugme.</div>
               </div>
             </div>
             <input
@@ -1112,6 +1156,7 @@ export class OnboardingWizardComponent implements OnInit {
   readonly pdfFileName$ = signal<string | null>(null);
   readonly pdfExtractedText$ = signal<string | null>(null);
   readonly pdfError$ = signal<string | null>(null);
+  readonly isDragging$ = signal(false);
 
   readonly isSavingCompany$ = signal(false);
   readonly isCompletingOnboarding$ = signal(false);
@@ -1208,11 +1253,29 @@ export class OnboardingWizardComponent implements OnInit {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-
-    // Reset file input so the same file can be re-selected
     input.value = '';
+    await this.processPdfFile(file);
+  }
 
-    // Client-side validation
+  onDragOver(e: DragEvent): void {
+    e.preventDefault();
+    e.stopPropagation();
+    this.isDragging$.set(true);
+  }
+  onDragLeave(e: DragEvent): void {
+    e.stopPropagation();
+    this.isDragging$.set(false);
+  }
+  onDrop(e: DragEvent): void {
+    e.preventDefault();
+    e.stopPropagation();
+    this.isDragging$.set(false);
+    const file = e.dataTransfer?.files[0];
+    if (file?.type === 'application/pdf') this.processPdfFile(file);
+    else if (file) this.pdfError$.set('Izaberite PDF datoteku.');
+  }
+
+  private async processPdfFile(file: File): Promise<void> {
     if (file.type !== 'application/pdf') {
       this.pdfError$.set('Izaberite PDF datoteku.');
       return;
@@ -1265,6 +1328,8 @@ export class OnboardingWizardComponent implements OnInit {
         );
       } catch (error) {
         console.warn('Failed to save company details:', error);
+        this.errorMessage$.set('Greška pri čuvanju podataka o kompaniji. Pokušajte ponovo.');
+        return;
       } finally {
         this.isSavingCompany$.set(false);
       }
@@ -1277,6 +1342,8 @@ export class OnboardingWizardComponent implements OnInit {
         await this.onboardingService.setDepartment(dept);
       } catch (err) {
         console.warn('Failed to save department:', err);
+        this.errorMessage$.set('Greška pri čuvanju odeljenja. Pokušajte ponovo.');
+        return;
       }
     }
 

@@ -110,6 +110,9 @@ model Tenant {
   // Default: 10,000,000 tokens per month
   tokenQuota  Int          @default(10000000) @map("token_quota")
 
+  // Autonomous AI Popuni — when enabled, newly created tasks auto-fill + auto-score
+  autoAiPopuni Boolean     @default(false) @map("auto_ai_popuni")
+
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
 
@@ -131,6 +134,7 @@ model Tenant {
   users        User[]
   invitations  Invitation[]
   dataExports  DataExport[]
+  executions   Execution[]
 
   @@map("tenant")
 }
@@ -576,3 +580,44 @@ model Memory {
   @@index([subject])
   @@map("memories")
 }
+
+// ── Execution Persistence (Resilience Layer) ──
+// Tracks YOLO, workflow, and auto-popuni executions for reconnect resilience
+// and server restart recovery. Events journal enables replay on reconnect.
+
+model Execution {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  userId          String   @map("user_id")
+  type            String   // 'yolo' | 'domain-yolo' | 'workflow' | 'auto-popuni'
+  status          String   @default("pending") // pending | executing | completed | failed | cancelled
+  planId          String?  @unique @map("plan_id") // links to YOLO/workflow planId
+  conversationId  String?  @map("conversation_id")
+  metadata        Json     @default("{}") // config, conceptIds, taskIds — serialized init params
+  checkpoint      Json     @default("{}") // last progress snapshot for resume
+  result          Json?    // final summary on completion
+  error           String?  // error message if failed
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  events ExecutionEvent[]
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([planId])
+  @@map("executions")
+}
+
+model ExecutionEvent {
+  id          String   @id @default(cuid())
+  executionId String   @map("execution_id")
+  eventName   String   @map("event_name")
+  payload     Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  execution Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@index([executionId, createdAt])
+  @@map("execution_events")
+}
+

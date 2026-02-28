@@ -1,9 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
-import { LlmConfigService } from '../../llm-config/llm-config.service';
 import { QdrantClientService } from '../../qdrant/qdrant-client.service';
-import { LlmProviderType } from '@mentor-ai/shared/types';
 
 /**
  * Embedding vector result.
@@ -11,7 +9,7 @@ import { LlmProviderType } from '@mentor-ai/shared/types';
 export interface EmbeddingResult {
   /** Unique ID for the embedding */
   embeddingId: string;
-  /** The embedding vector (768 dimensions) */
+  /** The embedding vector (1536 dimensions for OpenAI text-embedding-3-small) */
   vector: number[];
 }
 
@@ -56,13 +54,13 @@ interface EmbeddingResponse {
   };
 }
 
-/** Default LM Studio endpoint when not configured in DB */
-const DEFAULT_LM_STUDIO_ENDPOINT = 'http://127.0.0.1:1234';
+/** OpenAI API endpoint for embeddings */
+const OPENAI_EMBEDDINGS_URL = 'https://api.openai.com/v1/embeddings';
 
 /**
- * Embedding service using LM Studio nomic-embed-text (768-dim) + Qdrant Cloud.
+ * Embedding service using OpenAI text-embedding-3-small (1536-dim) + Qdrant Cloud.
  *
- * - embed(): Calls LM Studio local API to generate 768-dim embeddings
+ * - embed(): Calls OpenAI API to generate 1536-dim embeddings
  * - store(): Upserts embedding vector to Qdrant 'concepts' collection
  * - search(): Cosine similarity search via Qdrant
  * - delete(): Removes point from Qdrant collection
@@ -70,13 +68,12 @@ const DEFAULT_LM_STUDIO_ENDPOINT = 'http://127.0.0.1:1234';
 @Injectable()
 export class EmbeddingService implements IEmbeddingService, OnModuleInit {
   private readonly logger = new Logger(EmbeddingService.name);
-  private readonly EMBEDDING_MODEL = 'text-embedding-nomic-embed-text-v1.5';
-  private readonly EMBEDDING_DIMENSIONS = 768;
+  private readonly EMBEDDING_MODEL = 'text-embedding-3-small';
+  private readonly EMBEDDING_DIMENSIONS = 1536;
   private readonly COLLECTION_NAME = 'concepts';
 
   constructor(
     private readonly prisma: PlatformPrismaService,
-    private readonly llmConfigService: LlmConfigService,
     private readonly qdrantClient: QdrantClientService
   ) {}
 
@@ -96,18 +93,24 @@ export class EmbeddingService implements IEmbeddingService, OnModuleInit {
   }
 
   /**
-   * Generates an embedding for text content using LM Studio local API.
+   * Generates an embedding for text content using OpenAI API.
    */
   async embed(text: string): Promise<EmbeddingResult> {
-    const endpoint =
-      (await this.llmConfigService.getProviderEndpoint(LlmProviderType.LM_STUDIO)) ??
-      DEFAULT_LM_STUDIO_ENDPOINT;
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      this.logger.error('OPENAI_API_KEY not set — cannot generate embeddings');
+      return {
+        embeddingId: `emb_error_${Date.now()}`,
+        vector: new Array(this.EMBEDDING_DIMENSIONS).fill(0),
+      };
+    }
 
     try {
-      const response = await fetch(`${endpoint}/v1/embeddings`, {
+      const response = await fetch(OPENAI_EMBEDDINGS_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
           model: this.EMBEDDING_MODEL,
@@ -118,7 +121,7 @@ export class EmbeddingService implements IEmbeddingService, OnModuleInit {
       if (!response.ok) {
         const errorText = await response.text();
         this.logger.error({
-          message: 'LM Studio embedding API error',
+          message: 'OpenAI embedding API error',
           status: response.status,
           error: errorText,
         });
@@ -139,7 +142,7 @@ export class EmbeddingService implements IEmbeddingService, OnModuleInit {
       const vector = first.embedding;
 
       this.logger.debug({
-        message: 'Embedding generated via LM Studio',
+        message: 'Embedding generated via OpenAI',
         model: data.model,
         dimensions: vector.length,
         tokensUsed: data.usage?.total_tokens,
@@ -151,7 +154,7 @@ export class EmbeddingService implements IEmbeddingService, OnModuleInit {
       };
     } catch (error) {
       this.logger.error({
-        message: 'Failed to generate embedding via LM Studio',
+        message: 'Failed to generate embedding via OpenAI',
         error: error instanceof Error ? error.message : 'Unknown error',
       });
       return {

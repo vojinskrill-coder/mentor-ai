@@ -57,17 +57,13 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
               this.logger.debug(`Dev mode: authenticated real user ${request.user.email}`);
               return true;
             }
-            // User deleted from DB — reject so frontend clears stale token
+            // User deleted from DB — fall through to dev user instead of rejecting
             this.logger.warn({
-              message: 'JWT valid but user not found in DB — rejecting stale token',
+              message: 'JWT valid but user not found in DB — falling back to dev user',
               userId: request.user.userId,
             });
-            throw new UnauthorizedException({
-              type: 'user_not_found',
-              title: 'Session Expired',
-              status: 401,
-              detail: 'Your session is no longer valid. Please log in again.',
-            });
+            // Clear cached dev user so it re-resolves from current DB state
+            this.resolvedDevUser = null;
           }
         } catch (err) {
           if (err instanceof UnauthorizedException) throw err;

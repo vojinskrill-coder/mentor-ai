@@ -10,6 +10,7 @@ import { ConceptMatchingService } from '../knowledge/services/concept-matching.s
 import { ConversationService } from '../conversation/conversation.service';
 import { WebSearchService } from '../web-search/web-search.service';
 import { BrainSeedingService } from '../knowledge/services/brain-seeding.service';
+import { WorkflowService } from '../workflow/workflow.service';
 import { TenantStatus, NoteSource } from '@mentor-ai/shared/prisma';
 
 describe('OnboardingService', () => {
@@ -25,6 +26,9 @@ describe('OnboardingService', () => {
     },
     user: {
       findUnique: jest.fn().mockResolvedValue({ department: null, role: 'MEMBER' }),
+    },
+    concept: {
+      findMany: jest.fn().mockResolvedValue([]),
     },
   };
 
@@ -42,6 +46,7 @@ describe('OnboardingService', () => {
   const mockNotesService = {
     createNote: jest.fn(),
     linkNotesToConversation: jest.fn(),
+    findExistingTask: jest.fn().mockResolvedValue(null),
   };
 
   const mockConceptService = {
@@ -81,6 +86,14 @@ describe('OnboardingService', () => {
         {
           provide: BrainSeedingService,
           useValue: { seedPendingTasksForUser: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: WorkflowService,
+          useValue: {
+            buildExecutionPlan: jest
+              .fn()
+              .mockResolvedValue({ planId: 'ep_test', steps: [], taskIds: [] }),
+          },
         },
       ],
     }).compile();

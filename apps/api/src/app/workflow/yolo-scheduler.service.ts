@@ -34,6 +34,8 @@ interface YoloCallbacks {
   saveMessage: (role: string, content: string, conceptId?: string) => Promise<string>;
   createConversationForConcept?: (conceptId: string, conceptName: string) => Promise<string | null>;
   onConceptDiscovered?: (conceptId: string, conceptName: string, conversationId: string) => void;
+  /** Called after each task completes — used for auto AI popuni (synthesize + score) */
+  onTaskCompleted?: (taskId: string, conversationId: string) => void;
 }
 
 interface YoloRunState {
@@ -396,6 +398,13 @@ export class YoloSchedulerService {
                   error: err instanceof Error ? err.message : 'Unknown',
                 });
               });
+
+            // Notify gateway for auto AI popuni (synthesize report + score)
+            const taskConvId =
+              state.conceptConversations.get(task.conceptId) ?? state.conversationId;
+            if (callbacks.onTaskCompleted) {
+              callbacks.onTaskCompleted(task.taskId, taskConvId);
+            }
 
             // Extract and create new concepts from AI output (Story 2.15)
             // Runs BEFORE discovery so new concepts have graph edges for traversal

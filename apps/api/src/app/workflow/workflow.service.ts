@@ -24,22 +24,29 @@ import { getVisibleCategories } from '../knowledge/config/department-categories'
 
 const MAX_RECURSION_DEPTH = 10;
 
-const WORKFLOW_GENERATION_SYSTEM_PROMPT = `Ti si dizajner poslovnih radnih tokova. Kreiraj strukturirane, sekvencijalne radne tokove gde svaki korak PROIZVODI konkretan poslovni dokument.
+const WORKFLOW_GENERATION_SYSTEM_PROMPT = `Ti si iskusan dizajner poslovnih radnih tokova za srpska preduzeća. Kreiraj strukturirane, sekvencijalne radne tokove gde svaki korak PROIZVODI konkretan poslovni dokument.
 
 Svaki radni tok mora:
-1. Početi sa analizom/procenom pre strateških preporuka
-2. Uključiti promptove koji instruiraju AI da IZVRŠI posao i PROIZVEDE rezultate
+1. Početi sa dijagnostikom/procenom pre strateških preporuka — NIKADA ne preskoči analizu trenutnog stanja
+2. Uključiti promptove koji instruiraju AI da IZVRŠI posao i PROIZVEDE rezultate — NE da objašnjava korisniku
 3. Svaki korak proizvodi upotrebljiv izlaz (analizu, plan, matricu, strategiju, profil, itd.)
 4. Koristiti odgovarajući departmanski okvir kada je departmentTag specificiran
+5. Biti SPECIFIČAN za datu kompaniju i industriju — NE generički
 
 KRITIČNO za promptTemplate polje:
 - Prompt MORA instruirati AI da URADI posao, NE da objašnjava korisniku kako da ga uradi
 - Prompt je INTERNI — korisnik ga NIKADA ne vidi. Korisnik vidi samo proizveden dokument.
 - UVEK koristi imperativne glagole: "Izvrši", "Kreiraj", "Analiziraj", "Razvij", "Mapiraj", "Proizvedi"
 - NIKADA ne koristi: "Objasnite", "Razmotrite", "Trebalo bi da", "Preporučuje se"
+- UVEK koristi placeholder {{businessContext}} za ime kompanije i industrije
+- UVEK koristi placeholder {{conceptName}} za naziv koncepta
+- SVAKI prompt MORA tražiti minimum 800 reči izlaza sa strukturiranim zaglavljima i konkretnim primerima
 
-Primer DOBAR promptTemplate: "Izvrši kompletnu SWOT analizu za {{businessContext}} koristeći {{conceptName}} framework. Proizvedi strukturiranu matricu sa specifičnim nalazima za svaku kategoriju. Minimum 3 stavke po kategoriji sa konkretnim obrazloženjem."
-Primer LOŠ promptTemplate: "Objasnite šta je SWOT analiza i kako je primeniti na poslovanje"
+Primer DOBAR promptTemplate:
+"Izvrši kompletnu SWOT analizu za {{businessContext}} koristeći {{conceptName}} framework. Proizvedi strukturiranu matricu sa minimum 5 stavki po kategoriji. Za svaku stavku napiši: nalaz, dokaz/obrazloženje, preporuka za akciju. Koristi tabele gde je moguće. Minimum 1000 reči."
+
+Primer LOŠ promptTemplate:
+"Objasnite šta je SWOT analiza i kako je primeniti na poslovanje"
 
 VAŽNO: Sav tekst MORA biti na SRPSKOM JEZIKU.
 Vrati SAMO validan JSON niz bez markdown formatiranja.`;
@@ -124,9 +131,21 @@ export class WorkflowService {
   ): Promise<{ conceptName: string; steps: WorkflowStep[] }> {
     const concept = await this.conceptService.findById(conceptId);
 
+    // Load tenant for business context injection
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true, industry: true, description: true },
+    });
+
     // Gather prerequisite names
     const prerequisites = concept.relatedConcepts
       .filter((r) => r.relationshipType === 'PREREQUISITE' && r.direction === 'outgoing')
+      .map((r) => r.concept.name);
+
+    // Gather related concept names for context
+    const relatedConcepts = concept.relatedConcepts
+      .filter((r) => r.relationshipType === 'RELATED')
+      .slice(0, 5)
       .map((r) => r.concept.name);
 
     const prompt = this.buildGenerationPrompt(
@@ -134,7 +153,9 @@ export class WorkflowService {
       concept.definition,
       concept.extendedDescription,
       prerequisites,
-      concept.departmentTags
+      concept.departmentTags,
+      tenant,
+      relatedConcepts
     );
 
     // LLM call to generate workflow steps
@@ -176,30 +197,153 @@ export class WorkflowService {
     return { conceptName: concept.name, steps };
   }
 
-  private buildGenerationPrompt(
-    name: string,
-    definition: string,
-    extendedDescription: string | undefined,
-    prerequisites: string[],
-    departmentTags: string[]
-  ): string {
-    return `Generiši radni tok za IZVRŠAVANJE poslovne analize i PROIZVODNJU rezultata koristeći koncept "${name}".
+  /**
+   * Generates workflow steps specific to a task's content and conversation context.
+   * Unlike getOrGenerateWorkflow() which generates generic concept workflows,
+   * this produces steps tailored to what the user actually discussed in chat.
+   * These are NOT cached — each task gets unique steps.
+   */
+  async generateTaskSpecificWorkflow(
+    task: {
+      title: string;
+      content: string;
+      conversationId: string | null;
+      conceptId: string | null;
+    },
+    tenantId: string,
+    userId: string
+  ): Promise<{ conceptName: string; steps: WorkflowStep[] }> {
+    // Load concept name if available
+    let conceptName = 'Poslovni zadatak';
+    let conceptContext = '';
+    if (task.conceptId) {
+      try {
+        const concept = await this.conceptService.findById(task.conceptId);
+        conceptName = concept.name;
+        conceptContext = `\nKoncept: ${concept.name} — ${concept.definition}`;
+      } catch {
+        /* concept not found */
+      }
+    }
 
-Definicija: ${definition}
-${extendedDescription ? `Prošireni opis: ${extendedDescription}` : ''}
-${prerequisites.length > 0 ? `Preduslovi: ${prerequisites.join(', ')}` : 'Nema preduslova.'}
-${departmentTags.length > 0 ? `Relevantni departmani: ${departmentTags.join(', ')}` : ''}
+    // Load conversation messages for context
+    let conversationContext = '';
+    if (task.conversationId) {
+      try {
+        const messages = await this.prisma.message.findMany({
+          where: { conversationId: task.conversationId },
+          orderBy: { createdAt: 'desc' },
+          take: 15,
+          select: { role: true, content: true },
+        });
+        if (messages.length > 0) {
+          conversationContext =
+            '\n\nKONVERZACIJA KORISNIKA (ovo je kontekst iz kojeg je nastao zadatak):';
+          for (const msg of messages.reverse()) {
+            const role = msg.role === 'USER' ? 'KORISNIK' : 'AI';
+            const content =
+              msg.content.length > 1000 ? msg.content.substring(0, 1000) + '...' : msg.content;
+            conversationContext += `\n${role}: ${content}`;
+          }
+        }
+      } catch {
+        /* conversation not found */
+      }
+    }
+
+    const prompt = `Generiši radni tok za IZVRŠAVANJE konkretnog poslovnog zadatka.
+
+ZADATAK: ${task.title}
+${task.content ? `OPIS ZADATKA: ${task.content}` : ''}${conceptContext}${conversationContext}
+
+KRITIČNO: Koraci MORAJU biti direktno povezani sa ZADATKOM iznad i sa KONVERZACIJOM korisnika.
+NE generiši generičke korake za koncept. Generiši korake koji rešavaju KONKRETAN problem korisnika.
 
 Vrati JSON niz koraka. Svaki korak mora imati:
 - stepNumber (celobrojna vrednost počevši od 1)
 - title (koncizan naslov akcije, max 60 karaktera, na srpskom)
 - description (šta ovaj korak postiže, max 200 karaktera, na srpskom)
-- promptTemplate (INTERNI prompt koji instruiše AI da IZVRŠI korak i PROIZVEDE konkretan rezultat — NE da objašnjava kako se radi. Koristi akcione glagole: "Izvrši", "Kreiraj", "Analiziraj", "Mapiraj". NIKADA "Objasnite" ili "Trebalo bi". MORA sadržati {{conceptName}} i {{businessContext}} placeholdere)
+- promptTemplate (INTERNI prompt koji instruiše AI da IZVRŠI korak. Koristi {{conceptName}} i {{businessContext}} placeholdere. Akcioni glagoli: "Izvrši", "Kreiraj", "Analiziraj". NIKADA "Objasnite" ili "Trebalo bi".)
 - expectedOutcome (konkretan deliverable, max 100 karaktera, na srpskom)
 - estimatedMinutes (celobrojna vrednost)
 - departmentTag (opciono: "CFO", "CMO", "CTO", "OPERATIONS", "LEGAL", "CREATIVE")
 
-Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
+Generiši 3-6 koraka. Poredaj logički prema zadatku.`;
+
+    let responseContent = '';
+    await this.aiGatewayService.streamCompletionWithContext(
+      [
+        { role: 'system', content: WORKFLOW_GENERATION_SYSTEM_PROMPT } as ChatMessage,
+        { role: 'user', content: prompt } as ChatMessage,
+      ],
+      { tenantId, userId, skipRateLimit: true, skipQuotaCheck: true },
+      (chunk: string) => {
+        responseContent += chunk;
+      }
+    );
+
+    const steps = this.parseWorkflowSteps(responseContent);
+
+    this.logger.log({
+      message: 'Task-specific workflow generated',
+      taskTitle: task.title,
+      conceptName,
+      stepCount: steps.length,
+    });
+
+    return { conceptName, steps };
+  }
+
+  private buildGenerationPrompt(
+    name: string,
+    definition: string,
+    extendedDescription: string | undefined,
+    prerequisites: string[],
+    departmentTags: string[],
+    tenant?: { name: string | null; industry: string | null; description: string | null } | null,
+    relatedConcepts?: string[]
+  ): string {
+    let prompt = `Generiši radni tok za IZVRŠAVANJE poslovne analize i PROIZVODNJU konkretnih rezultata koristeći koncept "${name}".
+
+--- KONCEPT ---
+Naziv: ${name}
+Definicija: ${definition}
+${extendedDescription ? `Prošireni opis: ${extendedDescription}` : ''}
+${prerequisites.length > 0 ? `Preduslovi (koncept se gradi na njima): ${prerequisites.join(', ')}` : 'Nema preduslova — ovo je fundamentalni koncept.'}
+${relatedConcepts && relatedConcepts.length > 0 ? `Povezani koncepti: ${relatedConcepts.join(', ')}` : ''}
+${departmentTags.length > 0 ? `Relevantni departmani: ${departmentTags.join(', ')}` : ''}`;
+
+    if (tenant) {
+      prompt += `
+
+--- POSLOVNI KONTEKST ---
+Kompanija: ${tenant.name ?? 'Nepoznata'}
+Industrija: ${tenant.industry ?? 'Opšta'}
+${tenant.description ? `Opis: ${tenant.description}` : ''}
+KRITIČNO: Koraci MORAJU biti prilagođeni ovoj kompaniji i industriji. NE generiši generičke korake.`;
+    }
+
+    prompt += `
+
+--- FORMAT ODGOVORA ---
+Vrati JSON niz koraka. Svaki korak mora imati:
+- stepNumber (celobrojna vrednost počevši od 1)
+- title (koncizan naslov akcije, max 60 karaktera, na srpskom, akcioni glagol: "Analizirajte...", "Kreirajte...", "Mapirajte...")
+- description (šta ovaj korak postiže i ZAŠTO je važan, max 200 karaktera, na srpskom)
+- promptTemplate (INTERNI prompt koji instruiše AI da IZVRŠI korak i PROIZVEDE konkretan dokument. Mora sadržati {{conceptName}} i {{businessContext}} placeholdere. Zahtevaj minimum 800 reči izlaza, strukturu sa zaglavljima, tabele gde je moguće, konkretne primere i preporuke.)
+- expectedOutcome (konkretan deliverable koji klijent može odmah koristiti, max 100 karaktera, na srpskom)
+- estimatedMinutes (celobrojna vrednost, realna procena)
+- departmentTag (opciono: "CFO", "CMO", "CTO", "OPERATIONS", "LEGAL", "CREATIVE")
+
+Generiši 4-6 koraka. Redosled:
+1. Dijagnostika/analiza trenutnog stanja
+2. Istraživanje tržišta/konkurencije (ako je relevantno)
+3. Strateško planiranje
+4. Akcioni plan sa konkretnim koracima
+5. KPI i sistem merenja (ako je relevantno)
+6. Implementacioni roadmap`;
+
+    return prompt;
   }
 
   private parseWorkflowSteps(response: string): WorkflowStep[] {
@@ -220,7 +364,7 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
         description: (step.description as string) || '',
         promptTemplate:
           (step.promptTemplate as string) ||
-          `Perform a comprehensive analysis of "{{conceptName}}" applied specifically to this business. {{businessContext}}. Produce a structured deliverable with concrete findings and recommendations.`,
+          `Izvrši sveobuhvatnu analizu koncepta "{{conceptName}}" primenjenu na {{businessContext}}. Proizvedi strukturiran dokument sa konkretnim nalazima, tabelarnim prikazom i akcionim preporukama. Minimum 800 reči.`,
         expectedOutcome: (step.expectedOutcome as string) || '',
         estimatedMinutes: (step.estimatedMinutes as number) ?? 5,
         departmentTag: (step.departmentTag as string) || undefined,
@@ -233,11 +377,11 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
       return [
         {
           stepNumber: 1,
-          title: 'Apply concept to business',
-          description: 'Perform analysis using this concept for the specific business',
+          title: 'Analizirajte trenutno stanje',
+          description: 'Dijagnostika i analiza primenom ovog koncepta na konkretno poslovanje',
           promptTemplate:
-            'Apply the "{{conceptName}}" framework to this specific business. {{businessContext}}. Produce a structured analysis with actionable recommendations.',
-          expectedOutcome: 'Concrete analysis deliverable with recommendations',
+            'Izvrši detaljnu analizu koncepta "{{conceptName}}" primenjenu na {{businessContext}}. Dijagnostikuj trenutno stanje, identifikuj ključne oblasti za poboljšanje. Proizvedi strukturiran dokument sa zaglavljima, tabelama i konkretnim preporukama za akciju. Minimum 1000 reči.',
+          expectedOutcome: 'Kompletan analitički izveštaj sa akcionim preporukama',
           estimatedMinutes: 10,
         },
       ];
@@ -253,23 +397,34 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
   async resolveConceptOrder(conceptIds: string[]): Promise<string[]> {
     if (conceptIds.length <= 1) return conceptIds;
 
-    const allIds = new Set(conceptIds);
     const graph = new Map<string, string[]>();
 
-    // Build adjacency: for each concept, find its prerequisites within our set
-    for (const id of conceptIds) {
-      try {
-        const concept = await this.conceptService.findById(id);
-        const prereqs = concept.relatedConcepts
-          .filter(
-            (r) =>
-              r.relationshipType === 'PREREQUISITE' &&
-              r.direction === 'outgoing' &&
-              allIds.has(r.concept.id)
-          )
-          .map((r) => r.concept.id);
-        graph.set(id, prereqs);
-      } catch {
+    // Batch load all prerequisite relationships in a single query instead of N findById calls
+    try {
+      const relationships = await this.prisma.conceptRelationship.findMany({
+        where: {
+          sourceConceptId: { in: conceptIds },
+          relationshipType: 'PREREQUISITE',
+          targetConceptId: { in: conceptIds },
+        },
+        select: { sourceConceptId: true, targetConceptId: true },
+      });
+
+      // Initialize graph nodes
+      for (const id of conceptIds) {
+        graph.set(id, []);
+      }
+
+      // Build adjacency from batch results
+      for (const rel of relationships) {
+        const prereqs = graph.get(rel.sourceConceptId);
+        if (prereqs) {
+          prereqs.push(rel.targetConceptId);
+        }
+      }
+    } catch {
+      // Fallback: return original order if query fails
+      for (const id of conceptIds) {
         graph.set(id, []);
       }
     }
@@ -337,10 +492,23 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
     }
 
     // Collect concept IDs directly linked to tasks (no semantic expansion)
+    // Also build a map from conceptId → task context for injection into steps
     const conceptIdSet = new Set<string>();
+    const conceptTaskContext = new Map<
+      string,
+      { taskTitle: string; taskContent: string; taskConversationId: string | null }
+    >();
     for (const task of tasks) {
       if (task.conceptId) {
         conceptIdSet.add(task.conceptId);
+        // Keep the first task's context per concept (most relevant)
+        if (!conceptTaskContext.has(task.conceptId)) {
+          conceptTaskContext.set(task.conceptId, {
+            taskTitle: task.title,
+            taskContent: task.content ?? '',
+            taskConversationId: task.conversationId,
+          });
+        }
       }
     }
     const conceptIds = [...conceptIdSet];
@@ -361,16 +529,36 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
     // Resolve ordering
     const orderedConceptIds = await this.resolveConceptOrder(conceptIds);
 
-    // Generate/load workflows in parallel (cached = instant, uncached = LLM call)
-    const workflows = await Promise.all(
-      orderedConceptIds.map(async (conceptId) => ({
-        conceptId,
-        workflow: await this.getOrGenerateWorkflow(conceptId, tenantId, userId),
-      }))
-    );
-
+    // Generate workflows — task-specific ONLY when a real conversation exists,
+    // otherwise use cached generic workflow (much faster, avoids 10+ serial LLM calls)
     const planSteps: ExecutionPlanStep[] = [];
-    for (const { conceptId, workflow } of workflows) {
+
+    for (const conceptId of orderedConceptIds) {
+      const taskCtx = conceptTaskContext.get(conceptId);
+
+      // Use task-specific workflow when:
+      // 1. Task has a real conversation with user dialogue, OR
+      // 2. Task has rich content (>200 chars = enriched by LLM, not a one-liner)
+      // Otherwise use cached generic workflow.
+      const hasRealConversation = taskCtx && taskCtx.taskConversationId;
+      const hasRichContent = taskCtx && taskCtx.taskContent && taskCtx.taskContent.length > 200;
+
+      let workflow: { conceptName: string; steps: WorkflowStep[] };
+      if (hasRealConversation || hasRichContent) {
+        workflow = await this.generateTaskSpecificWorkflow(
+          {
+            title: taskCtx?.taskTitle ?? '',
+            content: taskCtx?.taskContent ?? '',
+            conversationId: taskCtx?.taskConversationId ?? null,
+            conceptId,
+          },
+          tenantId,
+          userId
+        );
+      } else {
+        workflow = await this.getOrGenerateWorkflow(conceptId, tenantId, userId);
+      }
+
       for (const step of workflow.steps) {
         planSteps.push({
           stepId: `step_${createId()}`,
@@ -382,6 +570,9 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
           estimatedMinutes: step.estimatedMinutes,
           departmentTag: step.departmentTag,
           status: 'pending',
+          taskTitle: taskCtx?.taskTitle,
+          taskContent: taskCtx?.taskContent,
+          taskConversationId: taskCtx?.taskConversationId ?? undefined,
         });
       }
     }
@@ -581,12 +772,28 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
     for (const taskId of plan.taskIds) {
       try {
         await this.notesService.updateStatus(taskId, NoteStatus.COMPLETED, tenantId);
+        this.logger.log({ message: 'Task marked COMPLETED', taskId, tenantId });
       } catch (error) {
-        this.logger.warn({
-          message: 'Failed to mark task complete',
+        // Fallback: try direct DB update bypassing tenant check
+        this.logger.error({
+          message: 'Failed to mark task complete via service, trying direct update',
           taskId,
+          tenantId,
           error: error instanceof Error ? error.message : 'Unknown',
         });
+        try {
+          await this.prisma.note.update({
+            where: { id: taskId },
+            data: { status: NoteStatus.COMPLETED },
+          });
+          this.logger.log({ message: 'Task marked COMPLETED via direct update', taskId });
+        } catch (directError) {
+          this.logger.error({
+            message: 'Direct task update also failed',
+            taskId,
+            error: directError instanceof Error ? directError.message : 'Unknown',
+          });
+        }
       }
     }
 
@@ -653,24 +860,24 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
     // 2. Load ALL matched concepts and build rich knowledge block
     const loadedConcepts: import('@mentor-ai/shared/types').ConceptWithRelations[] = [];
     const citationCandidates: import('@mentor-ai/shared/types').ConceptMatch[] = [];
-    let conceptKnowledge = '\n\n--- CONCEPT KNOWLEDGE (use this to perform the task) ---';
+    let conceptKnowledge = '\n\n--- BAZA ZNANJA (koristi ovo za izradu zadatka) ---';
 
     for (const conceptId of conceptIdsToLoad) {
       try {
         const concept = await this.conceptService.findById(conceptId);
         loadedConcepts.push(concept);
 
-        conceptKnowledge += `\n\nCONCEPT: ${concept.name} (${concept.category})`;
-        conceptKnowledge += `\nDEFINITION: ${concept.definition}`;
+        conceptKnowledge += `\n\nKONCEPT: ${concept.name} (${concept.category})`;
+        conceptKnowledge += `\nDEFINICIJA: ${concept.definition}`;
         if (concept.extendedDescription) {
-          conceptKnowledge += `\nDETAILED KNOWLEDGE: ${concept.extendedDescription}`;
+          conceptKnowledge += `\nDETALJNO ZNANJE: ${concept.extendedDescription}`;
         }
         if (concept.relatedConcepts && concept.relatedConcepts.length > 0) {
           const related = concept.relatedConcepts
-            .slice(0, 3)
+            .slice(0, 5)
             .map((r) => `${r.concept.name} (${r.relationshipType})`)
             .join(', ');
-          conceptKnowledge += `\nRELATED: ${related}`;
+          conceptKnowledge += `\nPOVEZANI KONCEPTI: ${related}`;
         }
 
         citationCandidates.push({
@@ -684,7 +891,7 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
         // Concept not found — skip
       }
     }
-    conceptKnowledge += '\n--- END CONCEPT KNOWLEDGE ---';
+    conceptKnowledge += '\n--- KRAJ BAZE ZNANJA ---';
 
     // 3. Load business context
     const tenant = await this.prisma.tenant.findUnique({
@@ -693,10 +900,10 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
     });
     let businessInfo = '';
     if (tenant) {
-      businessInfo = `\n\n--- BUSINESS CONTEXT ---\nCompany: ${tenant.name}`;
-      if (tenant.industry) businessInfo += `\nIndustry: ${tenant.industry}`;
-      if (tenant.description) businessInfo += `\nDescription: ${tenant.description}`;
-      businessInfo += '\n--- END BUSINESS CONTEXT ---';
+      businessInfo = `\n\n--- POSLOVNI KONTEKST ---\nKompanija: ${tenant.name}`;
+      if (tenant.industry) businessInfo += `\nIndustrija: ${tenant.industry}`;
+      if (tenant.description) businessInfo += `\nOpis: ${tenant.description}`;
+      businessInfo += '\n--- KRAJ POSLOVNOG KONTEKSTA ---';
     }
 
     // 3.2 Story 3.2: Load tenant-wide Business Brain context (all memories)
@@ -709,6 +916,49 @@ Generiši 3-6 koraka. Poredaj od procene/analize ka strateškim preporukama.`;
         tenantId,
         error: err instanceof Error ? err.message : 'Unknown',
       });
+    }
+
+    // 3.3 Load originating conversation messages for task-specific context
+    let conversationContext = '';
+    if (step.taskConversationId) {
+      try {
+        const recentMessages = await this.prisma.message.findMany({
+          where: { conversationId: step.taskConversationId },
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          select: { role: true, content: true },
+        });
+        if (recentMessages.length > 0) {
+          conversationContext =
+            '\n\n--- KONTEKST KONVERZACIJE (korisnikov zahtev koji je pokrenuo ovaj zadatak) ---';
+          for (const msg of recentMessages.reverse()) {
+            const role = msg.role === 'USER' ? 'KORISNIK' : 'AI';
+            // Truncate long messages to keep prompt focused
+            const content =
+              msg.content.length > 500 ? msg.content.substring(0, 500) + '...' : msg.content;
+            conversationContext += `\n${role}: ${content}`;
+          }
+          conversationContext += '\n--- KRAJ KONTEKSTA KONVERZACIJE ---';
+        }
+      } catch (err) {
+        this.logger.warn({
+          message: 'Failed to load conversation context for step (non-blocking)',
+          stepId: step.stepId,
+          conversationId: step.taskConversationId,
+          error: err instanceof Error ? err.message : 'Unknown',
+        });
+      }
+    }
+
+    // 3.4 Build task-specific context from originating task
+    let taskSpecificContext = '';
+    if (step.taskTitle || step.taskContent) {
+      taskSpecificContext = '\n\n--- SPECIFIČAN ZAHTEV KORISNIKA ---';
+      if (step.taskTitle) taskSpecificContext += `\nZADATAK: ${step.taskTitle}`;
+      if (step.taskContent) taskSpecificContext += `\nOPIS: ${step.taskContent}`;
+      taskSpecificContext +=
+        '\nKRITIČNO: Tvoj odgovor MORA biti direktno relevantan za ovaj konkretan zahtev korisnika. Ne pravi generičku analizu — fokusiraj se na ono što je korisnik tražio.';
+      taskSpecificContext += '\n--- KRAJ SPECIFIČNOG ZAHTEVA ---';
     }
 
     // 3.5. Web search: enrich with real-time data (always when available)
@@ -743,13 +993,21 @@ PRAVILA:
 7. Strukturiraj sa zaglavljima, tabelama, nabrajanjima i konkretnim preporukama
 8. Odgovaraj ISKLJUČIVO na srpskom jeziku
 
+RAZLIKUJ DVA TIPA ZADATAKA:
+A) DIGITALNI (sadržaj, planovi, analize, mejlovi, kampanje, budžeti, šabloni, procedure):
+   → PROIZVEDI GOTOV REZULTAT. Ne daj instrukcije — URADI posao i prikaži gotov dokument.
+B) FIZIČKI (odlazak negde, naručivanje, pozivi, instalacija, sastanci):
+   → NE simuliraj da si obavio fizičku radnju. Napiši KO treba ŠTA da uradi sa svim detaljima.
+   → Označi sa "⚠ ZAHTEVA LJUDSKU AKCIJU:" ispred svakog koraka koji AI ne može izvršiti.
+
 ZABRANJENO (nikada ne radi ovo):
-- NE piši "trebalo bi da analizirate..." ili "preporučuje se da razmotrite..."
+- NE piši "trebalo bi da analizirate..." ili "preporučuje se da razmotrite..." za digitalne zadatke
 - NE piši "potrebno je da razmotrite..." ili "razmislite o sledećem..."
 - NE objašnjavaj šta je koncept ili framework — PRIMENI ga
 - NE daj generičke savete — daj SPECIFIČNE nalaze za ovu kompaniju
-- NE opisuj korake koje klijent treba da preduzme — TI ih preduzmi i predstavi rezultate
+- NE opisuj korake koje klijent treba da preduzme za digitalni rad — TI ih izvrši i predstavi rezultate
 - NE piši uvode tipa "U ovom dokumentu ćemo..." — odmah počni sa sadržajem
+- NE izmišljaj podatke — ako nemaš konkretan podatak, naznači [POPUNITI: ...]
 
 PRIMER DOBROG ODGOVORA (SWOT analiza za "LuxVino", luksuzna vina):
 ---
@@ -770,7 +1028,7 @@ PRIMER LOŠEG ODGOVORA (ZABRANJENO):
 Da biste je primenili na vaše poslovanje, trebalo bi da:
 1. Identifikujete vaše ključne snage..."
 ---
-Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}${businessInfo}${brainContext}${webSearchContext}`;
+Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${taskSpecificContext}${conversationContext}${conceptKnowledge}${businessInfo}${brainContext}${webSearchContext}`;
 
     if (step.departmentTag) {
       const personaPrompt = generateSystemPrompt(step.departmentTag);
@@ -796,7 +1054,9 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}$
       .replace(/\{\{conceptName\}\}/g, step.conceptName)
       .replace(
         /\{\{businessContext\}\}/g,
-        tenant ? `for ${tenant.name} (${tenant.industry ?? 'business'})` : 'for this business'
+        tenant
+          ? `za kompaniju "${tenant.name}" u industriji ${tenant.industry ?? 'opšte poslovanje'}`
+          : 'za ovo poslovanje'
       );
 
     // 6. Stream AI response
@@ -901,11 +1161,34 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${conceptKnowledge}$
       'perform',
       'run',
       'kreiraj',
+      'kreirajte',
       'izradi',
+      'izradite',
       'napravi',
+      'napravite',
       'izvrši',
+      'izvršite',
       'uradi',
+      'uradite',
+      'analizirajte',
+      'analiziraj',
+      'definišite',
+      'definiši',
+      'razvijte',
+      'razvij',
+      'primenite',
+      'primeni',
+      'optimizujte',
+      'optimizuj',
+      'uspostavite',
+      'uspostavi',
+      'implementirajte',
+      'mapirajte',
+      'mapiraj',
       'za',
+      'vaše',
+      'vaš',
+      'ovo',
     ]);
     const titleWords = step.title
       .split(/\s+/)

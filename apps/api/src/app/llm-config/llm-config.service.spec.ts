@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { BadRequestException } from '@nestjs/common';
 import { LlmConfigService } from './llm-config.service';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { LlmProviderType } from '@mentor-ai/shared/types';
@@ -9,9 +8,11 @@ import { LlmProviderType } from '@mentor-ai/shared/types';
 jest.mock('./providers/openrouter.provider', () => ({
   OpenRouterProvider: jest.fn().mockImplementation(() => ({
     validateCredentials: jest.fn().mockResolvedValue(true),
-    fetchModels: jest.fn().mockResolvedValue([
-      { id: 'meta-llama/llama-3.1-70b', name: 'Llama 3.1 70B', costPer1kTokens: 0.0009 },
-    ]),
+    fetchModels: jest
+      .fn()
+      .mockResolvedValue([
+        { id: 'meta-llama/llama-3.1-70b', name: 'Llama 3.1 70B', costPer1kTokens: 0.0009 },
+      ]),
     getResourceInfo: jest.fn().mockResolvedValue(null),
   })),
 }));
@@ -19,9 +20,9 @@ jest.mock('./providers/openrouter.provider', () => ({
 jest.mock('./providers/local-llama.provider', () => ({
   LocalLlamaProvider: jest.fn().mockImplementation(() => ({
     validateCredentials: jest.fn().mockResolvedValue(true),
-    fetchModels: jest.fn().mockResolvedValue([
-      { id: 'llama3.1:8b', name: 'Llama 3.1 8B', costPer1kTokens: null },
-    ]),
+    fetchModels: jest
+      .fn()
+      .mockResolvedValue([{ id: 'llama3.1:8b', name: 'Llama 3.1 8B', costPer1kTokens: null }]),
     getResourceInfo: jest.fn().mockResolvedValue({
       gpuRequired: true,
       gpuMemoryGb: 8,
@@ -147,14 +148,11 @@ describe('LlmConfigService', () => {
       });
       mockPrisma.llmConfigAuditLog.create.mockResolvedValue({});
 
-      const result = await service.updateConfig(
-        'usr_123',
-        {
-          type: LlmProviderType.OPENROUTER,
-          apiKey: 'sk-or-test-key',
-          modelId: 'meta-llama/llama-3.1-70b',
-        }
-      );
+      const result = await service.updateConfig('usr_123', {
+        type: LlmProviderType.OPENROUTER,
+        apiKey: 'sk-or-test-key',
+        modelId: 'meta-llama/llama-3.1-70b',
+      });
 
       expect(mockPrisma.llmProviderConfig.updateMany).toHaveBeenCalledWith({
         where: { isActive: true },
@@ -198,10 +196,7 @@ describe('LlmConfigService', () => {
 
   describe('validateProvider', () => {
     it('should validate OpenRouter provider with valid API key', async () => {
-      const result = await service.validateProvider(
-        LlmProviderType.OPENROUTER,
-        'sk-or-valid-key'
-      );
+      const result = await service.validateProvider(LlmProviderType.OPENROUTER, 'sk-or-valid-key');
 
       expect(result.valid).toBe(true);
       expect(result.models.length).toBeGreaterThan(0);
@@ -230,6 +225,120 @@ describe('LlmConfigService', () => {
       const result = await service.validateProvider(LlmProviderType.OPENAI, 'test-key');
       expect(result.valid).toBe(false);
       expect(result.errorMessage).toBeDefined();
+    });
+  });
+
+  describe('caching', () => {
+    it('should cache getConfig results and not query DB on second call', async () => {
+      mockPrisma.llmProviderConfig.findMany.mockResolvedValue([
+        {
+          id: 'cfg_1',
+          providerType: 'DEEPSEEK',
+          apiKey: 'enc',
+          endpoint: null,
+          modelId: 'deepseek-chat',
+          isPrimary: true,
+          isFallback: false,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+
+      await service.getConfig();
+      await service.getConfig();
+      await service.getConfig();
+
+      // DB should only be queried ONCE despite 3 calls
+      expect(mockPrisma.llmProviderConfig.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('should cache getDecryptedApiKey and not query DB on second call', async () => {
+      // First encrypt a key so we can decrypt it
+      mockPrisma.llmProviderConfig.findMany.mockResolvedValue([]);
+      mockPrisma.llmProviderConfig.updateMany.mockResolvedValue({ count: 0 });
+      let capturedKey = '';
+      mockPrisma.llmProviderConfig.create.mockImplementation((args) => {
+        capturedKey = args.data.apiKey;
+        return Promise.resolve({
+          id: 'cfg_1',
+          providerType: 'OPENROUTER',
+          apiKey: capturedKey,
+          endpoint: null,
+          modelId: 'test',
+          isPrimary: true,
+          isFallback: false,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      });
+      mockPrisma.llmConfigAuditLog.create.mockResolvedValue({});
+      await service.updateConfig('usr_1', {
+        type: LlmProviderType.OPENROUTER,
+        apiKey: 'test-key',
+        modelId: 'test',
+      });
+
+      mockPrisma.llmProviderConfig.findFirst.mockResolvedValue({
+        id: 'cfg_1',
+        providerType: 'OPENROUTER',
+        apiKey: capturedKey,
+        isActive: true,
+      });
+
+      await service.getDecryptedApiKey(LlmProviderType.OPENROUTER);
+      await service.getDecryptedApiKey(LlmProviderType.OPENROUTER);
+      await service.getDecryptedApiKey(LlmProviderType.OPENROUTER);
+
+      // DB should only be queried ONCE
+      expect(mockPrisma.llmProviderConfig.findFirst).toHaveBeenCalledTimes(1);
+    });
+
+    it('should invalidate cache when updateConfig is called', async () => {
+      mockPrisma.llmProviderConfig.findMany.mockResolvedValue([
+        {
+          id: 'cfg_1',
+          providerType: 'DEEPSEEK',
+          apiKey: 'enc',
+          endpoint: null,
+          modelId: 'deepseek-chat',
+          isPrimary: true,
+          isFallback: false,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+
+      await service.getConfig(); // populates cache
+
+      // Update config — should invalidate
+      mockPrisma.llmProviderConfig.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.llmProviderConfig.create.mockResolvedValue({
+        id: 'cfg_2',
+        providerType: 'OPENAI',
+        apiKey: 'enc2',
+        endpoint: null,
+        modelId: 'gpt-4',
+        isPrimary: true,
+        isFallback: false,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      mockPrisma.llmConfigAuditLog.create.mockResolvedValue({});
+
+      await service.updateConfig('usr_1', {
+        type: LlmProviderType.OPENAI,
+        apiKey: 'new-key',
+        modelId: 'gpt-4',
+      });
+
+      await service.getConfig(); // should query DB again
+
+      // findMany called: once before cache, once after invalidation (updateConfig also calls getConfig internally)
+      expect(mockPrisma.llmProviderConfig.findMany.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
   });
 

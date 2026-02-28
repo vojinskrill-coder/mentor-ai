@@ -306,17 +306,25 @@ export class AiGatewayService {
         outputTokens
       );
 
-      // Track token usage
-      await this.tokenTrackerService.trackUsage(
-        tenantId,
-        userId,
-        inputTokens,
-        outputTokens,
-        costResult.totalCost,
-        modelId,
-        conversationId,
-        providerId
-      );
+      // Track token usage (fire-and-forget — don't block response)
+      this.tokenTrackerService
+        .trackUsage(
+          tenantId,
+          userId,
+          inputTokens,
+          outputTokens,
+          costResult.totalCost,
+          modelId,
+          conversationId,
+          providerId
+        )
+        .catch((err) => {
+          this.logger.warn({
+            message: 'Token usage tracking failed (non-blocking)',
+            correlationId,
+            error: err instanceof Error ? err.message : 'Unknown',
+          });
+        });
 
       // Calculate confidence score (Story 2.5)
       const confidenceContext: ConfidenceContext = {
@@ -396,16 +404,24 @@ export class AiGatewayService {
             outputTokens
           );
 
-          await this.tokenTrackerService.trackUsage(
-            tenantId,
-            userId,
-            inputTokens,
-            outputTokens,
-            costResult.totalCost,
-            fallbackModelId,
-            conversationId,
-            `${config.fallbackProvider.providerType}:${fallbackModelId}`
-          );
+          this.tokenTrackerService
+            .trackUsage(
+              tenantId,
+              userId,
+              inputTokens,
+              outputTokens,
+              costResult.totalCost,
+              fallbackModelId,
+              conversationId,
+              `${config.fallbackProvider.providerType}:${fallbackModelId}`
+            )
+            .catch((err) => {
+              this.logger.warn({
+                message: 'Fallback token tracking failed (non-blocking)',
+                correlationId,
+                error: err instanceof Error ? err.message : 'Unknown',
+              });
+            });
 
           // Calculate confidence score for fallback response (Story 2.5)
           const fallbackConfidenceContext: ConfidenceContext = {

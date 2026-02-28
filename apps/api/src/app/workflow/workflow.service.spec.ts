@@ -334,4 +334,272 @@ describe('WorkflowService', () => {
       expect(result.content).toBe('AI response content');
     });
   });
+
+  // ─── resolveConceptOrder ───────────────────────────────────────
+
+  describe('resolveConceptOrder', () => {
+    it('should return single concept as-is', async () => {
+      const result = await service.resolveConceptOrder(['cpt_1']);
+      expect(result).toEqual(['cpt_1']);
+    });
+
+    it('should return empty array as-is', async () => {
+      const result = await service.resolveConceptOrder([]);
+      expect(result).toEqual([]);
+    });
+
+    it('should use batch query instead of N findById calls', async () => {
+      mockPrisma.conceptRelationship.findMany.mockResolvedValue([
+        { sourceConceptId: 'cpt_2', targetConceptId: 'cpt_1' },
+      ]);
+
+      const result = await service.resolveConceptOrder(['cpt_1', 'cpt_2', 'cpt_3']);
+
+      // Should use single batch query, NOT N findById calls
+      expect(mockPrisma.conceptRelationship.findMany).toHaveBeenCalledTimes(1);
+      expect(mockConceptService.findById).not.toHaveBeenCalled();
+      // cpt_1 is prerequisite of cpt_2, so cpt_1 should come first
+      expect(result.indexOf('cpt_1')).toBeLessThan(result.indexOf('cpt_2'));
+    });
+
+    it('should handle concepts with no relationships', async () => {
+      mockPrisma.conceptRelationship.findMany.mockResolvedValue([]);
+
+      const result = await service.resolveConceptOrder(['cpt_1', 'cpt_2']);
+
+      expect(result).toHaveLength(2);
+      expect(result).toContain('cpt_1');
+      expect(result).toContain('cpt_2');
+    });
+
+    it('should handle DB query failure gracefully', async () => {
+      mockPrisma.conceptRelationship.findMany.mockRejectedValue(new Error('DB down'));
+
+      const result = await service.resolveConceptOrder(['cpt_1', 'cpt_2']);
+
+      // Should still return all concepts in some order
+      expect(result).toHaveLength(2);
+    });
+  });
+
+  // ─── getOrGenerateWorkflow ─────────────────────────────────────
+
+  describe('getOrGenerateWorkflow', () => {
+    it('should return cached workflow when it exists', async () => {
+      mockPrisma.conceptWorkflow.findUnique.mockResolvedValue({
+        conceptId: 'cpt_1',
+        steps: [
+          {
+            stepNumber: 1,
+            title: 'Step 1',
+            description: 'Do it',
+            promptTemplate: '',
+            expectedOutcome: '',
+            estimatedMinutes: 5,
+          },
+        ],
+        concept: { name: 'Test Concept' },
+      });
+
+      const result = await service.getOrGenerateWorkflow('cpt_1', 'tnt_1', 'usr_1');
+
+      expect(result.conceptName).toBe('Test Concept');
+      expect(result.steps).toHaveLength(1);
+      // Should NOT call LLM when cached
+      expect(mockAiGateway.streamCompletionWithContext).not.toHaveBeenCalled();
+    });
+
+    it('should generate and cache workflow when not cached', async () => {
+      mockPrisma.conceptWorkflow.findUnique.mockResolvedValue(null);
+      mockConceptService.findById.mockResolvedValue({
+        id: 'cpt_1',
+        name: 'Test Concept',
+        definition: 'A test concept',
+        extendedDescription: null,
+        departmentTags: [],
+        relatedConcepts: [],
+      });
+      mockAiGateway.streamCompletionWithContext.mockImplementation(
+        async (_msgs: unknown, _opts: unknown, onChunk: (c: string) => void) => {
+          onChunk(
+            '[{"stepNumber":1,"title":"Korak 1","description":"Opis","promptTemplate":"Do {{conceptName}}","expectedOutcome":"Result","estimatedMinutes":10}]'
+          );
+          return { success: true };
+        }
+      );
+      mockPrisma.conceptWorkflow.create.mockResolvedValue({ id: 'wfl_1' });
+
+      const result = await service.getOrGenerateWorkflow('cpt_1', 'tnt_1', 'usr_1');
+
+      expect(result.conceptName).toBe('Test Concept');
+      expect(result.steps.length).toBeGreaterThan(0);
+      // Should call LLM to generate
+      expect(mockAiGateway.streamCompletionWithContext).toHaveBeenCalledTimes(1);
+      // Should cache the result
+      expect(mockPrisma.conceptWorkflow.create).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ─── buildExecutionPlan ────────────────────────────────────────
+
+  describe('buildExecutionPlan', () => {
+    it('should use cached workflows for tasks WITHOUT conversationId', async () => {
+      // Setup: tasks with content but NO conversationId (onboarding pattern)
+      mockPrisma.note.findMany.mockResolvedValue([
+        {
+          id: 'note_1',
+          conceptId: 'cpt_1',
+          title: 'Task 1',
+          content: 'Template content',
+          conversationId: null,
+          noteType: 'TASK',
+          status: 'PENDING',
+          tenantId: 'tnt_1',
+        },
+        {
+          id: 'note_2',
+          conceptId: 'cpt_2',
+          title: 'Task 2',
+          content: 'Template content',
+          conversationId: null,
+          noteType: 'TASK',
+          status: 'PENDING',
+          tenantId: 'tnt_1',
+        },
+      ]);
+      mockPrisma.conceptRelationship.findMany.mockResolvedValue([]);
+      mockPrisma.conceptWorkflow.findUnique.mockResolvedValue({
+        conceptId: 'cpt_1',
+        steps: [
+          {
+            stepNumber: 1,
+            title: 'Step',
+            description: 'Do',
+            promptTemplate: '',
+            expectedOutcome: '',
+            estimatedMinutes: 5,
+          },
+        ],
+        concept: { name: 'Concept' },
+      });
+
+      await service.buildExecutionPlan(['note_1', 'note_2'], 'usr_1', 'tnt_1', 'conv_1');
+
+      // Should use getOrGenerateWorkflow (checks cache), NOT generateTaskSpecificWorkflow
+      expect(mockPrisma.conceptWorkflow.findUnique).toHaveBeenCalled();
+    });
+
+    it('should throw when no pending tasks found', async () => {
+      mockPrisma.note.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.buildExecutionPlan(['note_1'], 'usr_1', 'tnt_1', 'conv_1')
+      ).rejects.toThrow('No pending tasks');
+    });
+
+    it('should throw when no concepts linked to tasks', async () => {
+      mockPrisma.note.findMany.mockResolvedValue([
+        {
+          id: 'note_1',
+          conceptId: null,
+          title: 'Task',
+          content: '',
+          conversationId: null,
+          noteType: 'TASK',
+          status: 'PENDING',
+          tenantId: 'tnt_1',
+        },
+      ]);
+
+      await expect(
+        service.buildExecutionPlan(['note_1'], 'usr_1', 'tnt_1', 'conv_1')
+      ).rejects.toThrow();
+    });
+
+    it('should deduplicate steps with same concept + stepNumber', async () => {
+      mockPrisma.note.findMany.mockResolvedValue([
+        {
+          id: 'note_1',
+          conceptId: 'cpt_1',
+          title: 'Task 1',
+          content: '',
+          conversationId: null,
+          noteType: 'TASK',
+          status: 'PENDING',
+          tenantId: 'tnt_1',
+        },
+      ]);
+      mockPrisma.conceptRelationship.findMany.mockResolvedValue([]);
+      mockPrisma.conceptWorkflow.findUnique.mockResolvedValue({
+        conceptId: 'cpt_1',
+        steps: [
+          {
+            stepNumber: 1,
+            title: 'Step 1',
+            description: 'Do',
+            promptTemplate: '',
+            expectedOutcome: '',
+            estimatedMinutes: 5,
+          },
+          {
+            stepNumber: 1,
+            title: 'Step 1 duplicate',
+            description: 'Do again',
+            promptTemplate: '',
+            expectedOutcome: '',
+            estimatedMinutes: 5,
+          },
+        ],
+        concept: { name: 'Concept' },
+      });
+
+      const plan = await service.buildExecutionPlan(['note_1'], 'usr_1', 'tnt_1', 'conv_1');
+
+      // Only one step with stepNumber 1 should exist per concept
+      const conceptSteps = plan.steps.filter(
+        (s) => s.conceptId === 'cpt_1' && s.workflowStepNumber === 1
+      );
+      expect(conceptSteps).toHaveLength(1);
+    });
+
+    it('should count LLM calls — 0 when all workflows are cached', async () => {
+      mockPrisma.note.findMany.mockResolvedValue(
+        Array.from({ length: 10 }, (_, i) => ({
+          id: `note_${i}`,
+          conceptId: `cpt_${i}`,
+          title: `Task ${i}`,
+          content: 'Template content',
+          conversationId: null,
+          noteType: 'TASK',
+          status: 'PENDING',
+          tenantId: 'tnt_1',
+        }))
+      );
+      mockPrisma.conceptRelationship.findMany.mockResolvedValue([]);
+      mockPrisma.conceptWorkflow.findUnique.mockResolvedValue({
+        conceptId: 'cpt_any',
+        steps: [
+          {
+            stepNumber: 1,
+            title: 'Step',
+            description: 'Do',
+            promptTemplate: '',
+            expectedOutcome: '',
+            estimatedMinutes: 5,
+          },
+        ],
+        concept: { name: 'Concept' },
+      });
+
+      await service.buildExecutionPlan(
+        Array.from({ length: 10 }, (_, i) => `note_${i}`),
+        'usr_1',
+        'tnt_1',
+        'conv_1'
+      );
+
+      // With all cached workflows, LLM should NOT be called
+      expect(mockAiGateway.streamCompletionWithContext).not.toHaveBeenCalled();
+    });
+  });
 });

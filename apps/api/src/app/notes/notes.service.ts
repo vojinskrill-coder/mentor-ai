@@ -237,8 +237,9 @@ export class NotesService {
   }
 
   /**
-   * Checks if a task already exists tenant-wide by conceptId and/or title (Story 3.4 AC3).
-   * Used for tenant-wide task deduplication across all generation paths.
+   * Checks if a task already exists tenant-wide by title (Story 3.4 AC3).
+   * Multiple tasks per concept are allowed — dedup is by title match only.
+   * When both conceptId and title are provided, requires BOTH to match for strongest dedup.
    *
    * @returns The existing task ID if found, null otherwise
    */
@@ -251,34 +252,32 @@ export class NotesService {
     // Must provide at least one search criterion
     if (!conceptId && !title) return null;
 
-    // Strategy: if conceptId is provided, check by conceptId first (stronger dedup)
-    if (conceptId) {
-      const existing = await this.prisma.note.findFirst({
-        where: {
-          tenantId,
-          conceptId,
-          noteType: NoteType.TASK,
-          status: { in: [NoteStatus.PENDING, NoteStatus.COMPLETED, NoteStatus.READY_FOR_REVIEW] },
-        },
-        select: { id: true },
-      });
-      if (existing) return existing.id;
+    // Load all existing tasks once for both checks (efficient single query)
+    const candidates = await this.prisma.note.findMany({
+      where: {
+        tenantId,
+        noteType: NoteType.TASK,
+        status: { in: [NoteStatus.PENDING, NoteStatus.COMPLETED, NoteStatus.READY_FOR_REVIEW] },
+        parentNoteId: null, // Only top-level tasks, not workflow step children
+      },
+      select: { id: true, title: true, conceptId: true },
+      take: 500,
+    });
+
+    // Check 1: exact conceptId + title match (same concept AND same title = true duplicate)
+    if (conceptId && title) {
+      const normalizedTitle = title.toLowerCase().trim();
+      const byBoth = candidates.find(
+        (c) => c.conceptId === conceptId && c.title.toLowerCase().trim() === normalizedTitle
+      );
+      if (byBoth) return byBoth.id;
     }
 
-    // Fallback: check by title (case-insensitive, for non-concept-linked tasks)
+    // Check 2: title-only match (catches duplicates across conversations with different/null conceptIds)
     if (title) {
       const normalizedTitle = title.toLowerCase().trim();
-      const candidates = await this.prisma.note.findMany({
-        where: {
-          tenantId,
-          noteType: NoteType.TASK,
-          status: { in: [NoteStatus.PENDING, NoteStatus.COMPLETED, NoteStatus.READY_FOR_REVIEW] },
-        },
-        select: { id: true, title: true },
-        take: 200,
-      });
-      const match = candidates.find((c) => c.title.toLowerCase().trim() === normalizedTitle);
-      if (match) return match.id;
+      const byTitle = candidates.find((c) => c.title.toLowerCase().trim() === normalizedTitle);
+      if (byTitle) return byTitle.id;
     }
 
     return null;
@@ -453,36 +452,69 @@ export class NotesService {
       throw new NotFoundException(`Note ${noteId} not found`);
     }
 
-    // Fetch child notes (workflow steps) for context
+    // Fetch child notes (workflow step outputs) — full content, no truncation
     const children = await this.prisma.note.findMany({
       where: { parentNoteId: noteId, tenantId },
       orderBy: { workflowStepNumber: 'asc' },
     });
 
-    let childContext = '';
+    let prompt: string;
+
     if (children.length > 0) {
-      childContext = '\n\nREZULTATI WORKFLOW KORAKA:\n';
-      for (const child of children) {
-        childContext += `- Korak ${child.workflowStepNumber ?? '?'}: ${child.title}`;
-        if (child.status === 'COMPLETED') childContext += ' (završen)';
-        if (child.content) childContext += `\n  Rezultat: ${child.content.substring(0, 500)}`;
-        childContext += '\n';
-      }
+      // Workflow steps exist — synthesize into FINAL DELIVERABLE
+      const workflowResults = children
+        .map((child, i) => {
+          const stepNum = child.workflowStepNumber ?? i + 1;
+          return `--- KORAK ${stepNum}: ${child.title} ---\n${child.content}`;
+        })
+        .join('\n\n');
+
+      prompt = `Ti si vrhunski poslovni stručnjak. Tvoj tim je završio detaljnu analizu i istraživanje kroz ${children.length} koraka workflow-a. Sintetiši SVE rezultate u FINALNI DOKUMENT koji vlasnik poslovanja može odmah da koristi.
+
+ZADATAK: ${note.title}
+${note.expectedOutcome ? `OČEKIVANI REZULTAT: ${note.expectedOutcome}` : ''}
+
+REZULTATI ISTRAŽIVANJA I ANALIZE (ovo je tvoj ulazni materijal — koristi SVE podatke):
+${workflowResults}
+
+KRITIČNO — RAZLIKUJ DVA TIPA ZADATAKA:
+A) DIGITALNI (sadržaj, planovi, analize, mejlovi, kampanje, budžeti, šabloni, procedure):
+   → PROIZVEDI GOTOV REZULTAT. Ne daj instrukcije — NAPIŠI sam dokument/sadržaj/plan.
+B) FIZIČKI (odlazak negde, naručivanje, pozivi, instalacija, sastanci):
+   → NE simuliraj da si obavio fizičku radnju. Napiši KO treba ŠTA da uradi sa detaljima.
+   → Označi sa "⚠ ZAHTEVA LJUDSKU AKCIJU:" ispred svakog fizičkog koraka.
+
+INSTRUKCIJE:
+1. Ovo NIJE izveštaj o tome šta je urađeno. Ovo je FINALNI DELIVERABLE — gotov dokument koji vlasnik koristi.
+2. Ako su koraci proizveli analizu → sintetiši u GOTOV AKCIONI PLAN sa preporukama, rokovima, odgovornim osobama
+3. Ako su koraci definisali strategiju → napravi KOMPLETNU STRATEGIJU sa koracima implementacije i metrikama
+4. Ako su koraci istražili vrednost → definiši KONKRETNE OBLIKE VREDNOSTI sa cenovnom strategijom
+5. Ako su koraci kreirali sadržaj → napravi GOTOV SADRŽAJ spreman za objavljivanje
+6. NIKADA ne piši "trebalo bi da..." za digitalne zadatke — NAPRAVI to sam
+7. NIKADA ne izmišljaj podatke — ako nemaš konkretan podatak, naznači [POPUNITI: ...]
+8. Koristi specifične podatke, brojke i nalaze iz koraka — nemoj generalizovati
+9. Strukturiraj sa jasnim zaglavljima, tabelama, nabrajanjima
+10. NIKADA ne piši "u prethodnim koracima smo..." — PRIKAŽI gotov rezultat
+11. Dodaj "Sledeći koraci" SAMO za stavke koje zahtevaju LJUDSKU intervenciju
+
+Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
+    } else {
+      // No workflow steps — simple task, do the work directly
+      prompt = `Ti si poslovni stručnjak. IZVRŠI sledeći zadatak u potpunosti.
+
+ZADATAK: ${note.title}
+${note.content ? `OPIS: ${note.content}` : ''}
+${note.expectedOutcome ? `OČEKIVANI REZULTAT: ${note.expectedOutcome}` : ''}
+
+KRITIČNO — RAZLIKUJ:
+A) DIGITALNI ZADACI (sadržaj, planovi, analize, mejlovi, kampanje, budžeti, šabloni):
+   → PROIZVEDI GOTOV REZULTAT. Ne piši instrukcije — NAPIŠI sam dokument.
+B) FIZIČKI ZADACI (odlazak, naručivanje, pozivi, instalacija):
+   → NE simuliraj fizičku radnju. Napiši ko treba šta da uradi sa detaljima.
+   → Označi: "⚠ ZAHTEVA LJUDSKU AKCIJU:" ispred fizičkih koraka.
+
+Proizvedi kompletan, profesionalan rezultat. NIKADA ne piši "trebalo bi da..." za digitalne zadatke. Ako nemaš podatak, naznači [POPUNITI: ...]. Odgovaraj na srpskom jeziku.`;
     }
-
-    const prompt = `Ti si AI asistent za poslovanje. Generiši izveštaj o završenom zadatku na srpskom jeziku.
-
-ZADATAK:
-Naslov: ${note.title}
-Opis: ${note.content ?? 'Nema opisa'}
-${note.expectedOutcome ? `Očekivani ishod: ${note.expectedOutcome}` : ''}${childContext}
-
-Na osnovu konteksta zadatka i rezultata, napiši koncizan izveštaj (3-5 rečenica) koji:
-- Opisuje šta je urađeno
-- Navodi ključne rezultate i zaključke
-- Predlaže sledeće korake ako je relevantno
-
-Piši kao da si korisnik koji izveštava o svom radu. Koristi srpski jezik. Odgovori SAMO tekstom izveštaja, bez naslova ili formatiranja.`;
 
     let fullResponse = '';
     await this.aiGateway.streamCompletionWithContext(
@@ -493,7 +525,18 @@ Piši kao da si korisnik koji izveštava o svom radu. Koristi srpski jezik. Odgo
       }
     );
 
-    return fullResponse.trim() || 'Generisanje izveštaja nije uspelo. Pokušajte ponovo.';
+    const result = fullResponse.trim() || 'Generisanje nije uspelo. Pokušajte ponovo.';
+
+    // Auto-save as userReport and mark as COMPLETED
+    await this.prisma.note.update({
+      where: { id: noteId },
+      data: {
+        userReport: result,
+        status: 'COMPLETED',
+      },
+    });
+
+    return result;
   }
 
   /**

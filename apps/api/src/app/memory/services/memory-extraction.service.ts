@@ -30,29 +30,35 @@ export class MemoryExtractionService {
   private readonly DEDUP_THRESHOLD = 0.9;
 
   /** Extraction prompt template */
-  private readonly EXTRACTION_PROMPT = `Analyze the following conversation and extract memorable facts.
-Return a JSON array of extracted memories with this structure:
+  private readonly EXTRACTION_PROMPT = `Analiziraj sledeći razgovor i ekstrahuj ključne poslovne činjenice koje treba zapamtiti.
+Vrati JSON niz ekstrahovanih memorija sa sledećom strukturom:
 { "type": "CLIENT_CONTEXT" | "PROJECT_CONTEXT" | "USER_PREFERENCE" | "FACTUAL_STATEMENT",
-  "content": "the specific fact",
-  "subject": "client/project name if applicable",
+  "content": "konkretna činjenica na srpskom jeziku",
+  "subject": "naziv klijenta/projekta/koncepta ako je primenjivo",
   "confidence": 0.0-1.0 }
 
-Focus on:
-- Client names and their characteristics (industry, size, constraints, budget)
-- Project details (timeline, budget, requirements, deadlines)
-- User preferences (communication style, priorities, working hours)
-- Business facts explicitly stated by the user
+Fokusiraj se na:
+- Poslovne odluke i strateške pravce (investicije, ekspanzija, pivotiranje)
+- Tržišne podatke (konkurencija, ciljno tržište, cene, trendovi)
+- Klijente i partnere (imena, industrija, veličina, budžet, specifični zahtevi)
+- Projekte i rokove (timeline, budžet, zahtevi, milestones, KPI)
+- Prioritete i preferencije vlasnika (stil komunikacije, fokus oblasti, radni model)
+- Finansijske podatke (prihodi, troškovi, marže, targeti)
+- Probleme i izazove koje je korisnik eksplicitno naveo
+- Resurse i kapacitete (tim, tehnologija, infrastruktura)
 
-Rules:
-- Only extract factual information, not opinions or speculation
-- Be specific and concise
-- Subject should be the client/project name when applicable
-- Confidence should be high (0.8+) for explicit statements, lower for inferred
+Pravila:
+- Ekstrahuj SAMO činjenične informacije, ne mišljenja ili spekulacije AI-a
+- Budi specifičan i koncizan — svaka memorija max 2 rečenice
+- Subject treba da bude naziv klijenta, projekta ili poslovnog koncepta
+- Confidence 0.9+ za eksplicitne izjave korisnika, 0.7-0.8 za implicirane činjenice
+- NE ekstrahuj generičke poslovne savete — samo činjenice specifične za OVO poslovanje
+- Piši content na srpskom jeziku
 
-Conversation:
+Razgovor:
 {messages}
 
-Extracted memories (JSON array only, no other text):`;
+Ekstrahovane memorije (SAMO JSON niz, bez dodatnog teksta):`;
 
   constructor(
     private readonly memoryService: MemoryService,
@@ -93,7 +99,7 @@ Extracted memories (JSON array only, no other text):`;
 
       // Story 3.3: Add concept context for better tagging
       if (options?.conceptName) {
-        prompt += `\n\nContext: This conversation is about the business concept "${options.conceptName}". Use this as the subject for extracted memories when relevant.`;
+        prompt += `\n\nKontekst: Ovaj razgovor se odnosi na poslovni koncept "${options.conceptName}". Koristi ovo kao subject za ekstrahovane memorije kada je relevantno.`;
       }
 
       // Call LLM for extraction
@@ -201,29 +207,51 @@ Extracted memories (JSON array only, no other text):`;
         return [];
       }
 
+      // Route to correct provider endpoint
+      const providerType = config.primaryProvider.providerType as LlmProviderType;
+      const endpointMap: Record<string, string> = {
+        [LlmProviderType.OPENROUTER]: 'https://openrouter.ai/api/v1/chat/completions',
+        [LlmProviderType.DEEPSEEK]: 'https://api.deepseek.com/v1/chat/completions',
+        [LlmProviderType.OPENAI]: 'https://api.openai.com/v1/chat/completions',
+        [LlmProviderType.ANTHROPIC]: 'https://api.anthropic.com/v1/messages',
+        [LlmProviderType.LM_STUDIO]: `${config.primaryProvider.endpoint || 'http://localhost:1234'}/v1/chat/completions`,
+        [LlmProviderType.LOCAL_LLAMA]: `${config.primaryProvider.endpoint || 'http://localhost:11434'}/v1/chat/completions`,
+      };
+      const url = endpointMap[providerType];
+      if (!url) {
+        this.logger.warn({ message: `Unsupported provider for extraction: ${providerType}` });
+        return [];
+      }
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      };
+      // OpenRouter requires extra headers
+      if (providerType === LlmProviderType.OPENROUTER) {
+        headers['HTTP-Referer'] =
+          this.configService.get<string>('APP_URL') ?? 'http://localhost:4200';
+        headers['X-Title'] = 'Mentor AI - Memory Extraction';
+      }
+
       // Use non-streaming completion for extraction
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-          'HTTP-Referer': this.configService.get<string>('APP_URL') ?? 'http://localhost:4200',
-          'X-Title': 'Mentor AI - Memory Extraction',
-        },
+        headers,
         body: JSON.stringify({
           model: config.primaryProvider.modelId,
           messages: [
             {
               role: 'system',
               content:
-                'You are a memory extraction assistant. Extract factual information from conversations and return JSON only.',
+                'Ti si asistent za ekstrakciju poslovnih memorija. Ekstrahuj činjenične informacije iz razgovora i vrati ISKLJUČIVO JSON.',
             },
             {
               role: 'user',
               content: prompt,
             },
           ],
-          temperature: 0.1, // Low temperature for consistent extraction
+          temperature: 0.1,
           max_tokens: 1000,
         }),
       });
@@ -372,7 +400,7 @@ Extracted memories (JSON array only, no other text):`;
    */
   private formatMessages(messages: Message[]): string {
     return messages
-      .map((m) => `${m.role === 'USER' ? 'User' : 'Assistant'}: ${m.content}`)
+      .map((m) => `${m.role === 'USER' ? 'KORISNIK' : 'AI'}: ${m.content}`)
       .join('\n\n');
   }
 }

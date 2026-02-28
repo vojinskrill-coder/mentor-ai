@@ -73,7 +73,7 @@ describe('QuotaService', () => {
       const result = await service.checkQuota('tnt_123');
 
       expect(result.allowed).toBe(true);
-      expect(result.limit).toBe(1000000); // default quota
+      expect(result.limit).toBe(10000000); // default quota
     });
 
     it('should calculate percentage correctly at boundary', async () => {
@@ -128,7 +128,7 @@ describe('QuotaService', () => {
 
       const result = await service.getQuotaLimit('tnt_123');
 
-      expect(result).toBe(1000000);
+      expect(result).toBe(10000000);
     });
   });
 

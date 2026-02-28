@@ -5,16 +5,24 @@
  * Story 2.13: Dynamic Concept Relationship Creation
  */
 
-/** Category adjacency map for pre-filtering candidates */
+/** Category adjacency map for pre-filtering candidates — uses actual Serbian DB categories */
 export const CATEGORY_ADJACENCY: Record<string, string[]> = {
-  Finance: ['Strategy', 'Operations'],
-  Marketing: ['Sales', 'Creative', 'Strategy'],
-  Strategy: ['Finance', 'Marketing', 'Sales', 'Operations'],
-  Sales: ['Marketing', 'Strategy'],
-  Operations: ['Strategy', 'Finance', 'Technology'],
-  Technology: ['Operations', 'Creative'],
-  Creative: ['Marketing', 'Technology'],
-  Legal: ['Finance', 'Operations'],
+  'Uvod u Poslovanje': ['Vrednost', 'Preduzetništvo', 'Poslovni Modeli'],
+  Marketing: ['Prodaja', 'Digitalni Marketing', 'Odnosi sa Klijentima', 'Strategija'],
+  Prodaja: ['Marketing', 'Odnosi sa Klijentima', 'Strategija'],
+  Vrednost: ['Uvod u Poslovanje', 'Strategija', 'Poslovni Modeli'],
+  Finansije: ['Računovodstvo', 'Strategija', 'Operacije'],
+  Operacije: ['Menadžment', 'Tehnologija', 'Finansije'],
+  Menadžment: ['Liderstvo', 'Operacije', 'Strategija'],
+  Preduzetništvo: ['Uvod u Poslovanje', 'Inovacije', 'Poslovni Modeli'],
+  'Digitalni Marketing': ['Marketing', 'Tehnologija', 'Prodaja'],
+  'Odnosi sa Klijentima': ['Prodaja', 'Marketing', 'Menadžment'],
+  Računovodstvo: ['Finansije', 'Operacije'],
+  Tehnologija: ['Inovacije', 'Operacije', 'Digitalni Marketing'],
+  Inovacije: ['Tehnologija', 'Preduzetništvo', 'Strategija'],
+  Liderstvo: ['Menadžment', 'Strategija'],
+  Strategija: ['Poslovni Modeli', 'Finansije', 'Marketing', 'Liderstvo'],
+  'Poslovni Modeli': ['Strategija', 'Vrednost', 'Preduzetništvo'],
 };
 
 export interface CandidateConcept {
@@ -47,7 +55,7 @@ export function buildRelationshipClassificationPrompt(
   conceptName: string,
   conceptCategory: string,
   conceptDefinition: string,
-  candidates: CandidateConcept[],
+  candidates: CandidateConcept[]
 ): string {
   const limitedCandidates = candidates.slice(0, MAX_CANDIDATES);
 
@@ -55,29 +63,29 @@ export function buildRelationshipClassificationPrompt(
     .map((c, i) => `${i + 1}. ${c.name} (${c.category}) [slug: ${c.slug}] - "${c.definition}"`)
     .join('\n');
 
-  return `You are a business knowledge graph expert. Analyze the relationships between a NEW concept and existing concepts.
+  return `Ti si ekspert za poslovne baze znanja. Analiziraj odnose između NOVOG koncepta i postojećih koncepata.
 
-NEW CONCEPT: "${conceptName}"
-CATEGORY: ${conceptCategory}
-DEFINITION: "${conceptDefinition}"
+NOVI KONCEPT: "${conceptName}"
+KATEGORIJA: ${conceptCategory}
+DEFINICIJA: "${conceptDefinition}"
 
-EXISTING CONCEPTS TO EVALUATE:
+POSTOJEĆI KONCEPTI ZA EVALUACIJU:
 ${candidateList}
 
-For each existing concept, classify the relationship FROM the new concept TO the existing concept:
-- PREREQUISITE: The existing concept must be understood BEFORE the new concept (the existing concept is a foundation for the new one)
-- RELATED: The concepts are in the same business domain and complement each other
-- ADVANCED: The existing concept is a deeper/more specialized version of the new concept
-- NONE: No meaningful relationship
+Za svaki postojeći koncept, klasifikuj odnos OD novog koncepta KA postojećem:
+- PREREQUISITE: Postojeći koncept mora biti shvaćen PRE novog koncepta (postojeći je temelj za novi)
+- RELATED: Koncepti su u istom poslovnom domenu i dopunjuju se međusobno
+- ADVANCED: Postojeći koncept je dublja/specijalizovanija verzija novog koncepta
+- NONE: Nema smislenog odnosa
 
-RULES:
-- Only include concepts with PREREQUISITE, RELATED, or ADVANCED relationships. Omit NONE.
-- Be selective: only create relationships where there is a genuine business logic connection.
-- Aim for 3-8 relationships per concept. Quality over quantity.
-- Cross-category relationships are valuable when they reflect real business connections.
+PRAVILA:
+- Uključi SAMO koncepte sa PREREQUISITE, RELATED ili ADVANCED odnosom. Izostavi NONE.
+- Budi selektivan: kreiraj odnose samo tamo gde postoji stvarna poslovna logička veza.
+- Ciljaj na 3-8 odnosa po konceptu. Kvalitet iznad kvantiteta.
+- Odnosi između različitih kategorija su vredni kada odražavaju stvarne poslovne veze.
 
-Return ONLY a valid JSON array (no markdown, no explanation):
+Vrati SAMO validan JSON niz (bez markdown-a, bez objašnjenja):
 [{"slug": "concept-slug", "type": "RELATED"}, {"slug": "another-slug", "type": "PREREQUISITE"}]
 
-If no meaningful relationships exist, return an empty array: []`;
+Ako ne postoje smisleni odnosi, vrati prazan niz: []`;
 }

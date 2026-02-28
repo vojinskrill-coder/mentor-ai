@@ -21,6 +21,13 @@
     "test:api": "nx test api",
     "test:web": "nx test web",
     "e2e": "npx playwright test",
+    "e2e:ui": "npx playwright test --ui",
+    "test": "nx run-many -t test",
+    "test:affected": "nx affected -t test",
+    "test:coverage": "nx run-many -t test -- --coverage",
+    "test:api": "nx test api",
+    "test:web": "nx test web",
+    "e2e": "npx playwright test",
     "e2e:ui": "npx playwright test --ui"
   },
   "lint-staged": {

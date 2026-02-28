@@ -1186,6 +1186,12 @@ export interface ExecutionPlanStep {
     estimatedMinutes: number;
     departmentTag?: string;
     status: 'pending' | 'in_progress' | 'completed' | 'failed';
+    /** The originating task's title — injected as user-specific context during execution */
+    taskTitle?: string;
+    /** The originating task's content/description */
+    taskContent?: string;
+    /** The conversation where the task was created — used to load chat context */
+    taskConversationId?: string;
 }
 /** Full execution plan for a set of selected tasks */
 export interface ExecutionPlan {

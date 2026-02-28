@@ -4,16 +4,24 @@
  * Story 2.15: AI-Driven Concept Discovery and Creation
  */
 
-/** Valid concept categories (must match ConceptCategory enum) */
+/** Valid concept categories — must match actual DB values from Obsidian vault */
 const VALID_CATEGORIES = [
-  'Finance',
+  'Uvod u Poslovanje',
   'Marketing',
-  'Technology',
-  'Operations',
-  'Legal',
-  'Creative',
-  'Strategy',
-  'Sales',
+  'Prodaja',
+  'Vrednost',
+  'Finansije',
+  'Operacije',
+  'Menadžment',
+  'Preduzetništvo',
+  'Digitalni Marketing',
+  'Odnosi sa Klijentima',
+  'Računovodstvo',
+  'Tehnologija',
+  'Inovacije',
+  'Liderstvo',
+  'Strategija',
+  'Poslovni Modeli',
 ] as const;
 
 /** Candidate concept extracted by the LLM */
@@ -34,44 +42,45 @@ export interface ExtractedConceptCandidate {
 export function buildConceptExtractionPrompt(
   aiOutput: string,
   existingNames: string[],
-  maxConcepts = 5,
+  maxConcepts = 5
 ): string {
-  const existingList = existingNames.length > 0
-    ? `\nEXISTING CONCEPTS (DO NOT extract these):\n${existingNames.join(', ')}\n`
-    : '';
+  const existingList =
+    existingNames.length > 0
+      ? `\nPOSTOJEĆI KONCEPTI (NE ekstrahuj ove):\n${existingNames.join(', ')}\n`
+      : '';
 
-  return `You are a business knowledge graph curator. Analyze the following AI-generated text and identify distinct business concepts that are NOT already in the knowledge base.
+  return `Ti si kurator baze poslovnog znanja. Analiziraj sledeći AI-generisani tekst i identifikuj nove poslovne koncepte koji NISU već u bazi znanja.
 
-TEXT TO ANALYZE:
+TEKST ZA ANALIZU:
 """
 ${aiOutput}
 """
 ${existingList}
-VALID CATEGORIES: ${VALID_CATEGORIES.join(', ')}
+VALIDNE KATEGORIJE: ${VALID_CATEGORIES.join(', ')}
 
-RULES:
-- Extract only well-defined business concepts (frameworks, methodologies, strategies, tools, processes).
-- Do NOT extract generic terms (e.g., "business", "growth", "success") or proper nouns (company names, people).
-- Do NOT extract concepts that are already in the existing concepts list above.
-- Each concept must have a clear, specific definition of at least 10 words.
-- Assign the most appropriate category from the valid categories list.
-- Department tags should match the relevant departments: FINANCE, MARKETING, TECHNOLOGY, OPERATIONS, LEGAL, CREATIVE, STRATEGY, SALES.
-- Extract at most ${maxConcepts} concepts. Prioritize the most specific and actionable ones.
-- If no new concepts are found, return an empty array.
+PRAVILA:
+- Ekstrahuj samo jasno definisane poslovne koncepte (okviri, metodologije, strategije, alati, procesi, metrike).
+- NE ekstrahuj generičke pojmove (npr. "poslovanje", "rast", "uspeh") ili vlastita imena (firme, osobe).
+- NE ekstrahuj koncepte koji već postoje u listi iznad.
+- Svaki koncept mora imati jasnu, specifičnu definiciju od minimum 15 reči na srpskom jeziku.
+- Dodeli najadekvatniju kategoriju iz liste validnih kategorija.
+- Department tags treba da odgovaraju relevantnim odeljenjima: FINANCE, MARKETING, TECHNOLOGY, OPERATIONS, LEGAL, CREATIVE, STRATEGY, SALES.
+- Ekstrahuj najviše ${maxConcepts} konceptata. Prioritizuj najspecifičnije i najkorisnije.
+- Ako nema novih koncepata, vrati prazan niz.
+- Naziv koncepta piši na srpskom (ili engleski ako je to ustaljen termin, npr. "Lean Startup", "OKR").
+- Definiciju UVEK piši na srpskom jeziku.
 
-Return ONLY a valid JSON array (no markdown, no explanation):
-[{"name": "Concept Name", "category": "Category", "definition": "A clear definition of the concept.", "departmentTags": ["STRATEGY", "FINANCE"]}]
+Vrati SAMO validan JSON niz (bez markdown-a, bez objašnjenja):
+[{"name": "Naziv Koncepta", "category": "Kategorija", "definition": "Jasna definicija koncepta na srpskom jeziku.", "departmentTags": ["STRATEGY", "FINANCE"]}]
 
-If no new concepts found, return: []`;
+Ako nema novih koncepata, vrati: []`;
 }
 
 /**
  * Parses the LLM response into extracted concept candidates.
  * Validates each candidate against known categories and minimum quality.
  */
-export function parseExtractionResponse(
-  response: string,
-): ExtractedConceptCandidate[] {
+export function parseExtractionResponse(response: string): ExtractedConceptCandidate[] {
   try {
     // Extract outermost JSON array from response (greedy: first '[' to last ']')
     const jsonMatch = response.match(/\[[\s\S]*\]/);
@@ -83,12 +92,13 @@ export function parseExtractionResponse(
     const validCategorySet = new Set<string>(VALID_CATEGORIES);
 
     return parsed
-      .filter((item): item is Record<string, unknown> =>
-        typeof item === 'object' &&
-        item !== null &&
-        typeof (item as Record<string, unknown>).name === 'string' &&
-        typeof (item as Record<string, unknown>).category === 'string' &&
-        typeof (item as Record<string, unknown>).definition === 'string',
+      .filter(
+        (item): item is Record<string, unknown> =>
+          typeof item === 'object' &&
+          item !== null &&
+          typeof (item as Record<string, unknown>).name === 'string' &&
+          typeof (item as Record<string, unknown>).category === 'string' &&
+          typeof (item as Record<string, unknown>).definition === 'string'
       )
       .filter((item) => {
         const name = item.name as string;

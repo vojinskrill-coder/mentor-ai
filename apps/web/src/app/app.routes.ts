@@ -7,73 +7,56 @@ export const appRoutes: Route[] = [
   // Public routes
   {
     path: 'login',
-    loadComponent: () =>
-      import('./login/login.component').then((m) => m.LoginComponent),
+    loadComponent: () => import('./login/login.component').then((m) => m.LoginComponent),
   },
   {
     path: 'callback',
-    loadComponent: () =>
-      import('./login/callback.component').then((m) => m.CallbackComponent),
+    loadComponent: () => import('./login/callback.component').then((m) => m.CallbackComponent),
   },
   {
     path: 'register',
     loadComponent: () =>
-      import('./registration/registration.component').then(
-        (m) => m.RegistrationComponent
-      ),
+      import('./registration/registration.component').then((m) => m.RegistrationComponent),
   },
   {
     path: 'oauth-pending',
     loadComponent: () =>
-      import('./registration/oauth-pending.component').then(
-        (m) => m.OAuthPendingComponent
-      ),
+      import('./registration/oauth-pending.component').then((m) => m.OAuthPendingComponent),
   },
   {
     path: 'invite/:token',
     loadComponent: () =>
-      import('./invite/invite-accept.component').then(
-        (m) => m.InviteAcceptComponent
-      ),
+      import('./invite/invite-accept.component').then((m) => m.InviteAcceptComponent),
   },
   // 2FA routes (require authentication but not MFA completion)
   {
     path: '2fa-setup',
     loadComponent: () =>
-      import('./two-factor/setup.component').then(
-        (m) => m.TwoFactorSetupComponent
-      ),
+      import('./two-factor/setup.component').then((m) => m.TwoFactorSetupComponent),
     canActivate: [authGuard],
   },
   {
     path: 'verify-2fa',
     loadComponent: () =>
-      import('./two-factor/verify.component').then(
-        (m) => m.TwoFactorVerifyComponent
-      ),
+      import('./two-factor/verify.component').then((m) => m.TwoFactorVerifyComponent),
   },
   // Onboarding route (requires auth)
   {
     path: 'onboarding',
     loadComponent: () =>
-      import('./onboarding/onboarding-wizard.component').then(
-        (m) => m.OnboardingWizardComponent
-      ),
+      import('./onboarding/onboarding-wizard.component').then((m) => m.OnboardingWizardComponent),
     canActivate: [authGuard, onboardingPageGuard],
   },
   // Protected routes (require auth + completed onboarding)
   {
     path: 'dashboard',
     loadComponent: () =>
-      import('./dashboard/dashboard.component').then(
-        (m) => m.DashboardComponent
-      ),
+      import('./dashboard/dashboard.component').then((m) => m.DashboardComponent),
     canActivate: [authGuard, onboardingGuard],
   },
   {
     path: 'team',
-    loadComponent: () =>
-      import('./team/team.component').then((m) => m.TeamComponent),
+    loadComponent: () => import('./team/team.component').then((m) => m.TeamComponent),
     canActivate: [authGuard, rolesGuard(['TENANT_OWNER', 'ADMIN'])],
   },
   {
@@ -96,28 +79,29 @@ export const appRoutes: Route[] = [
   {
     path: 'admin/llm-config',
     loadComponent: () =>
-      import('./platform-admin/llm-config/llm-config.component').then(
-        (m) => m.LlmConfigComponent
-      ),
+      import('./platform-admin/llm-config/llm-config.component').then((m) => m.LlmConfigComponent),
     canActivate: [authGuard, rolesGuard(['PLATFORM_OWNER'])],
   },
   // Chat routes
   {
     path: 'chat',
-    loadComponent: () =>
-      import('./features/chat/chat.component').then((m) => m.ChatComponent),
+    loadComponent: () => import('./features/chat/chat.component').then((m) => m.ChatComponent),
     canActivate: [authGuard, onboardingGuard],
   },
   {
     path: 'chat/:conversationId',
-    loadComponent: () =>
-      import('./features/chat/chat.component').then((m) => m.ChatComponent),
+    loadComponent: () => import('./features/chat/chat.component').then((m) => m.ChatComponent),
     canActivate: [authGuard, onboardingGuard],
   },
   // Default route
   {
     path: '',
-    redirectTo: 'login',
+    redirectTo: 'dashboard',
     pathMatch: 'full',
+  },
+  // Catch-all: redirect unknown routes to dashboard
+  {
+    path: '**',
+    redirectTo: 'dashboard',
   },
 ];

@@ -1,9 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
-import { MemoryEmbeddingService, MemorySearchResult } from './memory-embedding.service';
+import { MemoryEmbeddingService } from './memory-embedding.service';
 import { MemoryService } from './memory.service';
 import { QdrantClientService } from '../../qdrant/qdrant-client.service';
-import { LlmConfigService } from '../../llm-config/llm-config.service';
 import { MemoryType } from '@mentor-ai/shared/types';
 
 describe('MemoryEmbeddingService', () => {
@@ -12,10 +10,6 @@ describe('MemoryEmbeddingService', () => {
     findRelevantMemories: jest.Mock;
     updateEmbeddingId: jest.Mock;
   };
-  let mockConfigService: {
-    get: jest.Mock;
-  };
-
   const mockTenantId = 'tnt_test123';
   const mockUserId = 'usr_test456';
   const mockMemoryId = 'mem_test789';
@@ -41,17 +35,14 @@ describe('MemoryEmbeddingService', () => {
       updateEmbeddingId: jest.fn().mockResolvedValue(undefined),
     };
 
-    mockConfigService = {
-      get: jest.fn().mockReturnValue('http://localhost:4200'),
-    };
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MemoryEmbeddingService,
         { provide: MemoryService, useValue: mockMemoryService },
-        { provide: ConfigService, useValue: mockConfigService },
-        { provide: QdrantClientService, useValue: { isAvailable: jest.fn().mockReturnValue(false) } },
-        { provide: LlmConfigService, useValue: {} },
+        {
+          provide: QdrantClientService,
+          useValue: { isAvailable: jest.fn().mockReturnValue(false) },
+        },
       ],
     }).compile();
 
@@ -75,15 +66,10 @@ describe('MemoryEmbeddingService', () => {
     });
 
     it('should update memory with embedding ID', async () => {
-      await service.generateAndStoreEmbedding(
-        mockTenantId,
-        mockMemoryId,
-        'Test content',
-        {
-          userId: mockUserId,
-          type: MemoryType.CLIENT_CONTEXT,
-        }
-      );
+      await service.generateAndStoreEmbedding(mockTenantId, mockMemoryId, 'Test content', {
+        userId: mockUserId,
+        type: MemoryType.CLIENT_CONTEXT,
+      });
 
       expect(mockMemoryService.updateEmbeddingId).toHaveBeenCalledWith(
         mockTenantId,
@@ -113,23 +99,13 @@ describe('MemoryEmbeddingService', () => {
     });
 
     it('should return results with decreasing scores', async () => {
-      const results = await service.semanticSearch(
-        mockTenantId,
-        mockUserId,
-        'test query',
-        10
-      );
+      const results = await service.semanticSearch(mockTenantId, mockUserId, 'test query', 10);
 
       expect(results[0]!.score).toBeGreaterThan(results[1]!.score);
     });
 
     it('should map memory fields to search result format', async () => {
-      const results = await service.semanticSearch(
-        mockTenantId,
-        mockUserId,
-        'Acme',
-        10
-      );
+      const results = await service.semanticSearch(mockTenantId, mockUserId, 'Acme', 10);
 
       expect(results[0]).toEqual(
         expect.objectContaining({
@@ -145,12 +121,7 @@ describe('MemoryEmbeddingService', () => {
 
   describe('hybridSearch', () => {
     it('should combine semantic and keyword search results', async () => {
-      const results = await service.hybridSearch(
-        mockTenantId,
-        mockUserId,
-        'Acme Corp budget',
-        10
-      );
+      const results = await service.hybridSearch(mockTenantId, mockUserId, 'Acme Corp budget', 10);
 
       expect(results).toBeDefined();
       expect(Array.isArray(results)).toBe(true);
@@ -184,12 +155,7 @@ describe('MemoryEmbeddingService', () => {
       // Same memory returned from both searches
       mockMemoryService.findRelevantMemories.mockResolvedValue([mockMemories[0]]);
 
-      const results = await service.hybridSearch(
-        mockTenantId,
-        mockUserId,
-        'Acme Corp',
-        10
-      );
+      const results = await service.hybridSearch(mockTenantId, mockUserId, 'Acme Corp', 10);
 
       // Should only have one entry for mem_1, not duplicates
       const mem1Count = results.filter((r) => r.memoryId === 'mem_1').length;
@@ -197,23 +163,13 @@ describe('MemoryEmbeddingService', () => {
     });
 
     it('should limit results to specified count', async () => {
-      const results = await service.hybridSearch(
-        mockTenantId,
-        mockUserId,
-        'test',
-        1
-      );
+      const results = await service.hybridSearch(mockTenantId, mockUserId, 'test', 1);
 
       expect(results.length).toBeLessThanOrEqual(1);
     });
 
     it('should sort results by score descending', async () => {
-      const results = await service.hybridSearch(
-        mockTenantId,
-        mockUserId,
-        'test',
-        10
-      );
+      const results = await service.hybridSearch(mockTenantId, mockUserId, 'test', 10);
 
       for (let i = 1; i < results.length; i++) {
         expect(results[i - 1]!.score).toBeGreaterThanOrEqual(results[i]!.score);
@@ -223,17 +179,13 @@ describe('MemoryEmbeddingService', () => {
 
   describe('deleteEmbedding', () => {
     it('should not throw when deleting embedding (stub)', async () => {
-      await expect(
-        service.deleteEmbedding(mockTenantId, 'emb_test123')
-      ).resolves.not.toThrow();
+      await expect(service.deleteEmbedding(mockTenantId, 'emb_test123')).resolves.not.toThrow();
     });
   });
 
   describe('ensureCollection', () => {
     it('should not throw when ensuring collection exists (stub)', async () => {
-      await expect(
-        service.ensureCollection(mockTenantId)
-      ).resolves.not.toThrow();
+      await expect(service.ensureCollection(mockTenantId)).resolves.not.toThrow();
     });
   });
 });

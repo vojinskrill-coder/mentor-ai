@@ -17,6 +17,7 @@ import { ConceptExtractionService } from '../knowledge/services/concept-extracti
 import { MemoryService } from '../memory/services/memory.service';
 import { WebSearchService } from '../web-search/web-search.service';
 import { BusinessContextService } from '../knowledge/services/business-context.service';
+import { ExecutionStateService } from '../execution/execution-state.service';
 
 describe('ConversationGateway', () => {
   let gateway: ConversationGateway;
@@ -125,6 +126,10 @@ describe('ConversationGateway', () => {
         {
           provide: BusinessContextService,
           useValue: { getBusinessContext: jest.fn().mockResolvedValue('') },
+        },
+        {
+          provide: ExecutionStateService,
+          useValue: { getState: jest.fn(), setState: jest.fn(), deleteState: jest.fn() },
         },
       ],
     }).compile();
@@ -255,20 +260,23 @@ describe('ConversationGateway', () => {
       });
 
       // Should emit complete with confidence metadata
-      expect(mockClient.emit).toHaveBeenCalledWith('chat:complete', {
-        messageId: 'msg_ai1',
-        fullContent: 'Hi there!',
-        metadata: {
-          totalChunks: 2,
-          confidence: {
-            score: 0.75,
-            level: 'MEDIUM',
-            factors: [{ name: 'hedging_language', score: 0.8, weight: 0.35 }],
-          },
-          citations: [],
-          memoryAttributions: [],
-        },
-      });
+      expect(mockClient.emit).toHaveBeenCalledWith(
+        'chat:complete',
+        expect.objectContaining({
+          messageId: 'msg_ai1',
+          fullContent: 'Hi there!',
+          metadata: expect.objectContaining({
+            totalChunks: 2,
+            confidence: {
+              score: 0.75,
+              level: 'MEDIUM',
+              factors: [{ name: 'hedging_language', score: 0.8, weight: 0.35 }],
+            },
+            citations: [],
+            memoryAttributions: [],
+          }),
+        })
+      );
     });
 
     it('should emit error when conversation access denied', async () => {

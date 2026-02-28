@@ -18,6 +18,7 @@ import { combineLatest, firstValueFrom, take } from 'rxjs';
 import { ConversationService } from './services/conversation.service';
 import { ChatWebsocketService } from './services/chat-websocket.service';
 import { NotesApiService } from './services/notes-api.service';
+import { AuthService } from '../../core/auth/auth.service';
 import { ChatMessageComponent } from './components/chat-message.component';
 import { ChatInputComponent } from './components/chat-input.component';
 import { TypingIndicatorComponent } from './components/typing-indicator.component';
@@ -136,8 +137,12 @@ interface WorkflowStatusEntry {
         font-weight: 500;
         cursor: pointer;
       }
-      .new-chat-btn:hover {
-        opacity: 0.9;
+      .new-chat-btn:hover:not(:disabled) {
+        background: #2563eb;
+      }
+      .new-chat-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
       }
       .sidebar-footer {
         padding: 12px;
@@ -194,8 +199,12 @@ interface WorkflowStatusEntry {
         align-items: center;
         gap: 6px;
       }
-      .switch-btn:hover {
+      .switch-btn:hover:not(:disabled) {
         color: #fafafa;
+      }
+      .switch-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
       }
       .header-actions {
         display: flex;
@@ -205,10 +214,24 @@ interface WorkflowStatusEntry {
 
       /* Connection indicator */
       .connection-dot {
-        width: 8px;
-        height: 8px;
+        width: 10px;
+        height: 10px;
         border-radius: 50%;
         flex-shrink: 0;
+      }
+      .connection-label {
+        font-size: 11px;
+        color: #707070;
+        transition: color 0.2s;
+      }
+      .connection-label.connected {
+        color: #22c55e;
+      }
+      .connection-label.disconnected {
+        color: #ef4444;
+      }
+      .connection-label.reconnecting {
+        color: #f59e0b;
       }
       .connection-dot.connected {
         background: #22c55e;
@@ -270,6 +293,7 @@ interface WorkflowStatusEntry {
         flex: 1;
         overflow-y: auto;
         padding: 24px;
+        scroll-behavior: smooth;
       }
       .messages-container {
         max-width: 768px;
@@ -321,7 +345,7 @@ interface WorkflowStatusEntry {
         cursor: pointer;
       }
       .start-btn:hover {
-        opacity: 0.9;
+        background: #2563eb;
       }
       .persona-pills {
         display: flex;
@@ -357,6 +381,21 @@ interface WorkflowStatusEntry {
         padding: 12px 16px;
         border-bottom: 1px solid #2a2a2a;
         background: #1a1a1a;
+        animation: panelSlideDown 0.2s ease;
+      }
+      @keyframes panelSlideDown {
+        from {
+          opacity: 0;
+          max-height: 0;
+          padding-top: 0;
+          padding-bottom: 0;
+        }
+        to {
+          opacity: 1;
+          max-height: 200px;
+          padding-top: 12px;
+          padding-bottom: 12px;
+        }
       }
       .persona-selector-label {
         font-size: 13px;
@@ -411,11 +450,12 @@ interface WorkflowStatusEntry {
         cursor: pointer;
       }
       .tab:hover {
-        color: #a1a1a1;
+        color: #d4d4d4;
       }
       .tab.active {
         color: #fafafa;
         border-bottom-color: #3b82f6;
+        font-weight: 600;
       }
       .notes-view {
         flex: 1;
@@ -460,6 +500,50 @@ interface WorkflowStatusEntry {
       }
       .brain-stat strong {
         color: #fafafa;
+      }
+      .auto-ai-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: auto;
+      }
+      .auto-ai-label {
+        color: #707070;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .toggle-track {
+        width: 36px;
+        height: 20px;
+        border-radius: 10px;
+        background: #2a2a2a;
+        cursor: pointer;
+        position: relative;
+        transition: background 0.2s;
+        border: none;
+        padding: 0;
+      }
+      .toggle-track.active {
+        background: #3b82f6;
+      }
+      .toggle-track:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .toggle-thumb {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #fafafa;
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        transition: transform 0.2s;
+      }
+      .toggle-track.active .toggle-thumb {
+        transform: translateX(16px);
       }
 
       /* Next-step suggestion banner (D4) */
@@ -687,6 +771,10 @@ interface WorkflowStatusEntry {
         max-height: 40vh;
         overflow-y: auto;
         padding: 8px 16px;
+        transition:
+          max-height 0.3s ease,
+          opacity 0.3s ease,
+          padding 0.3s ease;
       }
       .plan-step {
         display: flex;
@@ -776,8 +864,23 @@ interface WorkflowStatusEntry {
         flex-shrink: 0;
         cursor: pointer;
       }
-      .plan-btn-approve:hover {
+      .plan-btn-approve:hover:not(:disabled) {
         background: #2563eb;
+      }
+      .plan-btn-approve:disabled,
+      .plan-btn-cancel:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .btn-spinner {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        vertical-align: middle;
       }
 
       /* Workflow Status Bar (top banner) */
@@ -799,12 +902,6 @@ interface WorkflowStatusEntry {
         padding: 8px 12px;
         border-radius: 6px;
         background: #0d0d0d;
-      }
-      .wse-clickable {
-        cursor: pointer;
-      }
-      .wse-clickable:hover {
-        background: #1a1a1a;
       }
       .ws-detail-row {
         display: flex;
@@ -917,6 +1014,96 @@ interface WorkflowStatusEntry {
         flex-shrink: 0;
       }
 
+      /* Created Task Navigation Card */
+      .task-nav-card {
+        background: #1a1a1a;
+        border: 1px solid #2a2a2a;
+        border-radius: 10px;
+        margin-bottom: 16px;
+        overflow: hidden;
+        animation: cardFadeIn 0.25s ease;
+      }
+      .task-nav-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #a1a1a1;
+        border-bottom: 1px solid #242424;
+      }
+      .task-nav-icon {
+        width: 16px;
+        height: 16px;
+        color: #3b82f6;
+        flex-shrink: 0;
+      }
+      .task-nav-dismiss {
+        margin-left: auto;
+        background: none;
+        border: none;
+        color: #707070;
+        cursor: pointer;
+        padding: 2px;
+        display: flex;
+        align-items: center;
+      }
+      .task-nav-dismiss:hover {
+        color: #a1a1a1;
+      }
+      .task-nav-btn {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 10px 14px;
+        background: none;
+        border: none;
+        border-bottom: 1px solid #1e1e1e;
+        color: #fafafa;
+        font-size: 13px;
+        cursor: pointer;
+        text-align: left;
+        transition: background 0.15s;
+        gap: 12px;
+        font-family: inherit;
+      }
+      .task-nav-btn:last-child {
+        border-bottom: none;
+      }
+      .task-nav-btn:hover {
+        background: #242424;
+      }
+      .task-nav-btn.cross-concept {
+        border-left: 3px solid #3b82f6;
+      }
+      .task-nav-title {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .task-nav-concept {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        color: #3b82f6;
+        flex-shrink: 0;
+        white-space: nowrap;
+      }
+      @keyframes cardFadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
       @keyframes highlightFlash {
         0% {
           outline: 2px solid #3b82f6;
@@ -1025,9 +1212,13 @@ interface WorkflowStatusEntry {
         color: white;
         border-color: #3b82f6;
       }
-      .confirm-btn.primary:hover {
+      .confirm-btn.primary:hover:not(:disabled) {
         background: #2563eb;
         border-color: #2563eb;
+      }
+      .confirm-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
       }
       .confirm-btn.cancel {
         background: transparent;
@@ -1068,9 +1259,9 @@ interface WorkflowStatusEntry {
     `,
   ],
   template: `
-    <!-- Error Toast -->
-    @if (errorMessage$()) {
-      <div class="error-toast" role="alert">
+    <!-- Error Toasts -->
+    @for (err of errorMessages$(); track err.id; let i = $index) {
+      <div class="error-toast" role="alert" [style.top.px]="16 + i * 64">
         <svg
           style="width: 20px; height: 20px; color: #EF4444; flex-shrink: 0;"
           fill="currentColor"
@@ -1082,10 +1273,45 @@ interface WorkflowStatusEntry {
             clip-rule="evenodd"
           />
         </svg>
-        <span style="font-size: 13px; color: #FAFAFA;">{{ errorMessage$() }}</span>
+        <span style="font-size: 13px; color: #FAFAFA;">{{ err.message }}</span>
         <button
-          (click)="dismissError()"
-          style="background: none; border: none; color: #8B8B8B; cursor: pointer; margin-left: auto;"
+          (click)="dismissErrorById(err.id)"
+          style="background: none; border: none; color: #a1a1a1; cursor: pointer; margin-left: auto;"
+          aria-label="Dismiss"
+        >
+          <svg style="width: 16px; height: 16px;" fill="currentColor" viewBox="0 0 20 20">
+            <path
+              fill-rule="evenodd"
+              d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+              clip-rule="evenodd"
+            />
+          </svg>
+        </button>
+      </div>
+    }
+
+    <!-- Info Toast (success/info notifications) -->
+    @for (info of infoMessages$(); track info.id; let i = $index) {
+      <div
+        class="info-toast"
+        role="status"
+        [style.top.px]="16 + (errorMessages$().length + i) * 64"
+      >
+        <svg
+          style="width: 20px; height: 20px; color: #3B82F6; flex-shrink: 0;"
+          fill="currentColor"
+          viewBox="0 0 20 20"
+        >
+          <path
+            fill-rule="evenodd"
+            d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+            clip-rule="evenodd"
+          />
+        </svg>
+        <span style="font-size: 13px; color: #FAFAFA;">{{ info.message }}</span>
+        <button
+          (click)="dismissInfoById(info.id)"
+          style="background: none; border: none; color: #a1a1a1; cursor: pointer; margin-left: auto;"
           aria-label="Zatvori"
         >
           <svg style="width: 16px; height: 16px;" fill="currentColor" viewBox="0 0 20 20">
@@ -1118,7 +1344,11 @@ interface WorkflowStatusEntry {
         </div>
 
         <div class="sidebar-actions">
-          <button class="new-chat-btn" (click)="createNewConversation()">
+          <button
+            class="new-chat-btn"
+            [disabled]="isLoading$() || isCurrentConversationExecuting$()"
+            (click)="createNewConversation()"
+          >
             <svg
               style="width: 16px; height: 16px;"
               fill="none"
@@ -1132,7 +1362,7 @@ interface WorkflowStatusEntry {
                 d="M12 4v16m8-8H4"
               />
             </svg>
-            Nova konverzacija
+            New Conversation
           </button>
         </div>
 
@@ -1167,7 +1397,7 @@ interface WorkflowStatusEntry {
                 d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
               />
             </svg>
-            AI konfiguracija
+            AI Configuration
           </a>
           <a routerLink="/dashboard">
             <svg
@@ -1183,7 +1413,7 @@ interface WorkflowStatusEntry {
                 d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
               />
             </svg>
-            Kontrolna tabla
+            Dashboard
           </a>
         </div>
       </aside>
@@ -1224,7 +1454,7 @@ interface WorkflowStatusEntry {
                 </svg>
                 <h2>{{ folderName$() }}</h2>
               } @else {
-                <h2>{{ activeConversation$()?.title || 'Nova konverzacija' }}</h2>
+                <h2>{{ activeConversation$()?.title || 'New Conversation' }}</h2>
                 @if (currentPersonaType$()) {
                   <app-persona-badge [personaType]="currentPersonaType$()" />
                 }
@@ -1232,32 +1462,27 @@ interface WorkflowStatusEntry {
             </div>
             @if (activeConversation$()) {
               <div class="header-actions">
-                <div
-                  class="tab-bar"
-                  style="border-bottom: none;"
-                  role="tablist"
-                  aria-label="Prikaz konverzacije"
-                >
+                <div class="tab-bar" style="border-bottom: none;">
                   <button
                     class="tab"
                     [class.active]="activeTab$() === 'chat'"
                     (click)="activeTab$.set('chat')"
-                    role="tab"
-                    [attr.aria-selected]="activeTab$() === 'chat'"
                   >
-                    Poruke
+                    Chat
                   </button>
                   <button
                     class="tab"
                     [class.active]="activeTab$() === 'notes'"
                     (click)="activeTab$.set('notes')"
-                    role="tab"
-                    [attr.aria-selected]="activeTab$() === 'notes'"
                   >
-                    Zadaci
+                    Tasks
                   </button>
                 </div>
-                <button class="switch-btn" (click)="togglePersonaSelector()">
+                <button
+                  class="switch-btn"
+                  [disabled]="isCurrentConversationExecuting$()"
+                  (click)="togglePersonaSelector()"
+                >
                   <svg
                     style="width: 16px; height: 16px;"
                     fill="none"
@@ -1271,8 +1496,19 @@ interface WorkflowStatusEntry {
                       d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
                     />
                   </svg>
-                  {{ showPersonaSelector$() ? 'Sakrij persone' : 'Promeni personu' }}
+                  {{ showPersonaSelector$() ? 'Hide Personas' : 'Switch Persona' }}
                 </button>
+                <div class="auto-ai-toggle">
+                  <span class="auto-ai-label">Auto AI</span>
+                  <button
+                    class="toggle-track"
+                    [class.active]="autoAiPopuni$()"
+                    [disabled]="isTogglingAutoPopuni$()"
+                    (click)="toggleAutoAiPopuni()"
+                  >
+                    <span class="toggle-thumb"></span>
+                  </button>
+                </div>
               </div>
             }
           </header>
@@ -1298,7 +1534,7 @@ interface WorkflowStatusEntry {
               @if (showPersonaSelector$()) {
                 <div class="persona-selector-panel">
                   <p class="persona-selector-label">
-                    Izaberite personu odeljenja za specijalizovane AI odgovore:
+                    Select a department persona for specialized AI responses:
                   </p>
                   <app-persona-selector
                     [selectedType]="currentPersonaType$()"
@@ -1327,18 +1563,14 @@ interface WorkflowStatusEntry {
                       />
                     </svg>
                     <h3>
-                      {{
-                        isCurrentConversationExecuting$()
-                          ? 'Izvršavanje plana...'
-                          : 'Plan izvršavanja'
-                      }}
+                      {{ isExecutingWorkflow$() ? 'Izvršavanje plana...' : 'Plan izvršavanja' }}
                     </h3>
                     <div class="plan-meta">
                       <span>{{ currentPlan$()!.steps.length }} koraka</span>
                       <span>~{{ currentPlan$()!.totalEstimatedMinutes }} min</span>
                     </div>
                     @if (!planCollapsed$()) {
-                      @if (isCurrentConversationExecuting$()) {
+                      @if (isExecutingWorkflow$()) {
                         <button
                           class="plan-btn-cancel"
                           (click)="cancelExecution(); $event.stopPropagation()"
@@ -1427,7 +1659,7 @@ interface WorkflowStatusEntry {
               }
 
               <!-- Workflow Status Bar (top of chat area) -->
-              @if (workflowHistory$().length > 0 || (isYoloMode$() && yoloProgress$())) {
+              @if (sortedWorkflowHistory$().length > 0 || (isYoloMode$() && yoloProgress$())) {
                 <div class="workflow-status-bar">
                   @if (isYoloMode$() && yoloProgress$()) {
                     <div
@@ -1472,12 +1704,11 @@ interface WorkflowStatusEntry {
                   }
                   @for (entry of workflowHistory$(); track entry.planId) {
                     <div
-                      class="workflow-status-entry wse-clickable"
+                      class="workflow-status-entry"
                       [class.wse-executing]="entry.status === 'executing'"
                       [class.wse-completed]="entry.status === 'completed'"
                       [class.wse-failed]="entry.status === 'failed'"
                       [class.wse-cancelled]="entry.status === 'cancelled'"
-                      (click)="navigateToWorkflow(entry)"
                     >
                       <span class="ws-title">{{ entry.title }}</span>
                       <div class="ws-detail-row">
@@ -1543,31 +1774,187 @@ interface WorkflowStatusEntry {
                     </div>
                   }
                   @if (isYoloMode$() && yoloProgress$()) {
-                    <div class="step-status-msg" style="border-left-color: #F59E0B;">
-                      <svg
-                        class="step-icon spinner"
-                        fill="none"
-                        stroke="#F59E0B"
-                        viewBox="0 0 24 24"
-                      >
-                        <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
-                      </svg>
-                      YOLO — {{ yoloProgress$()!.completed }}/{{
-                        yoloProgress$()!.executionBudget ?? yoloProgress$()!.total
-                      }}
-                      @if (yoloProgress$()!.currentTasks.length > 0) {
-                        | {{ yoloProgress$()!.currentTasks.length }} aktivn{{
-                          yoloProgress$()!.currentTasks.length > 1 ? 'a' : 'o'
-                        }}
-                      }
-                      @if (yoloProgress$()!.discoveredCount > 0) {
-                        |
-                        <span style="color: #10B981;"
-                          >+{{ yoloProgress$()!.discoveredCount }} otkriveno</span
+                    <div class="yolo-progress">
+                      <div class="yolo-progress-title">
+                        <span class="yolo-spinner"></span>
+                        @if (yoloProgress$()!.currentTasks.length > 0) {
+                          Processing {{ yoloProgress$()!.currentTasks.length }} concept{{
+                            yoloProgress$()!.currentTasks.length > 1 ? 's' : ''
+                          }}
+                        } @else {
+                          YOLO Mode — Autonomous Execution
+                        }
+                      </div>
+                      <div class="yolo-progress-stats">
+                        Executing:
+                        <span
+                          >{{ yoloProgress$()!.completed }}/{{
+                            yoloProgress$()!.executionBudget ?? yoloProgress$()!.total
+                          }}</span
                         >
+                        @if (yoloProgress$()!.failed > 0) {
+                          | Failed: <span class="yolo-failed">{{ yoloProgress$()!.failed }}</span>
+                        }
+                        @if ((yoloProgress$()!.createdOnlyCount ?? 0) > 0) {
+                          |
+                          <span class="yolo-deferred"
+                            >{{ yoloProgress$()!.createdOnlyCount }} queued for next run</span
+                          >
+                        }
+                        @if (yoloProgress$()!.discoveredCount > 0) {
+                          |
+                          <span class="yolo-discovered"
+                            >Discovered: {{ yoloProgress$()!.discoveredCount }}</span
+                          >
+                        }
+                      </div>
+                      <div class="yolo-progress-bar">
+                        <div
+                          class="yolo-progress-fill"
+                          [style.width.%]="
+                            (yoloProgress$()!.executionBudget ?? yoloProgress$()!.total) > 0
+                              ? (yoloProgress$()!.completed /
+                                  (yoloProgress$()!.executionBudget ?? yoloProgress$()!.total)) *
+                                100
+                              : 0
+                          "
+                        ></div>
+                      </div>
+
+                      <!-- Per-worker step detail (Story 2.16 AC3) -->
+                      @if (yoloProgress$()!.currentTasks.length > 0) {
+                        <div class="yolo-workers">
+                          @for (worker of yoloProgress$()!.currentTasks; track worker.conceptName) {
+                            <div class="yolo-worker-item">
+                              <span class="yolo-worker-spinner"></span>
+                              <span class="yolo-worker-concept">{{ worker.conceptName }}</span>
+                              @if (worker.currentStep) {
+                                <span class="yolo-worker-step">
+                                  Step {{ (worker.currentStepIndex ?? 0) + 1 }}/{{
+                                    worker.totalSteps ?? '?'
+                                  }}: {{ worker.currentStep }}
+                                </span>
+                              }
+                            </div>
+                          }
+                        </div>
+                      }
+
+                      <!-- Activity log toggle (Story 2.16 AC4) -->
+                      @if (yoloProgress$()!.recentLogs && yoloProgress$()!.recentLogs!.length > 0) {
+                        <button class="yolo-activity-toggle" (click)="toggleYoloActivityLog()">
+                          <svg
+                            class="yolo-toggle-icon"
+                            [class.expanded]="showYoloActivityLog$()"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M9 5l7 7-7 7"
+                            />
+                          </svg>
+                          {{ showYoloActivityLog$() ? 'Hide' : 'Show' }} Activity Log ({{
+                            yoloProgress$()!.recentLogs!.length
+                          }})
+                        </button>
+                        @if (showYoloActivityLog$()) {
+                          <div class="yolo-activity-log" #yoloLogContainer>
+                            @for (logEntry of yoloProgress$()!.recentLogs!; track $index) {
+                              <div class="yolo-log-entry">{{ logEntry }}</div>
+                            }
+                          </div>
+                        }
                       }
                     </div>
                   }
+                  <!-- Created Task Navigation Buttons -->
+                  @if (createdTaskNotifications$().length > 0) {
+                    <div class="task-nav-card">
+                      <div class="task-nav-header">
+                        <svg
+                          class="task-nav-icon"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                          />
+                        </svg>
+                        Kreirani zadaci
+                        <button
+                          class="task-nav-dismiss"
+                          (click)="createdTaskNotifications$.set([])"
+                        >
+                          <svg
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            style="width:14px;height:14px;"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M6 18L18 6M6 6l12 12"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                      @for (task of createdTaskNotifications$(); track task.id) {
+                        <button
+                          class="task-nav-btn"
+                          [class.cross-concept]="task.isCrossConversation"
+                          (click)="navigateToCreatedTask(task)"
+                        >
+                          <span class="task-nav-title">{{ task.title }}</span>
+                          @if (task.isCrossConversation && task.conceptName) {
+                            <span class="task-nav-concept">
+                              <svg
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                                style="width:12px;height:12px;"
+                              >
+                                <path
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  stroke-width="2"
+                                  d="M13 7l5 5m0 0l-5 5m5-5H6"
+                                />
+                              </svg>
+                              {{ task.conceptName }}
+                            </span>
+                          } @else {
+                            <span class="task-nav-concept">
+                              <svg
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                                style="width:12px;height:12px;"
+                              >
+                                <path
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  stroke-width="2"
+                                  d="M9 5l7 7-7 7"
+                                />
+                              </svg>
+                              Otvori
+                            </span>
+                          }
+                        </button>
+                      }
+                    </div>
+                  }
+
                   @if (isStreaming$()) {
                     <app-chat-message
                       [message]="streamingMessage$()"
@@ -1576,7 +1963,10 @@ interface WorkflowStatusEntry {
                     />
                   }
                   @if (isLoading$() && !isStreaming$()) {
-                    <app-typing-indicator [personaType]="currentPersonaType$()" />
+                    <app-typing-indicator
+                      [personaType]="currentPersonaType$()"
+                      [phase]="researchPhase$()"
+                    />
                   }
 
                   @if (isGeneratingPlan$()) {
@@ -1618,23 +2008,35 @@ interface WorkflowStatusEntry {
                       <p class="confirmation-desc">{{ stepInput.stepDescription }}</p>
                       @if (stepInput.inputType === 'confirmation') {
                         <div class="confirmation-actions">
-                          <button class="confirm-btn primary" (click)="continueWorkflowStep()">
-                            Nastavi
-                            <svg
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              stroke-width="2"
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                            >
-                              <line x1="5" y1="12" x2="19" y2="12"></line>
-                              <polyline points="12 5 19 12 12 19"></polyline>
-                            </svg>
+                          <button
+                            class="confirm-btn primary"
+                            [disabled]="isProcessingStep$()"
+                            (click)="continueWorkflowStep()"
+                          >
+                            @if (isProcessingStep$()) {
+                              <span class="btn-spinner"></span> Obrađujem...
+                            } @else {
+                              Nastavi
+                              <svg
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                              >
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                <polyline points="12 5 19 12 12 19"></polyline>
+                              </svg>
+                            }
                           </button>
-                          <button class="confirm-btn cancel" (click)="cancelExecution()">
+                          <button
+                            class="confirm-btn cancel"
+                            [disabled]="isProcessingStep$()"
+                            (click)="cancelExecution()"
+                          >
                             Otkaži
                           </button>
                         </div>
@@ -1730,23 +2132,35 @@ interface WorkflowStatusEntry {
                         rows="4"
                       ></textarea>
                       <div class="confirmation-actions">
-                        <button class="confirm-btn primary" (click)="continueWorkflow()">
-                          {{ userStepInput$() ? 'Izvrši sa odgovorom' : 'Preskoči i izvrši' }}
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                          >
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                            <polyline points="12 5 19 12 12 19"></polyline>
-                          </svg>
+                        <button
+                          class="confirm-btn primary"
+                          [disabled]="isProcessingStep$()"
+                          (click)="continueWorkflow()"
+                        >
+                          @if (isProcessingStep$()) {
+                            <span class="btn-spinner"></span> Obrađujem...
+                          } @else {
+                            {{ userStepInput$() ? 'Izvrši sa odgovorom' : 'Preskoči i izvrši' }}
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
+                              <line x1="5" y1="12" x2="19" y2="12"></line>
+                              <polyline points="12 5 19 12 12 19"></polyline>
+                            </svg>
+                          }
                         </button>
-                        <button class="confirm-btn cancel" (click)="cancelExecution()">
+                        <button
+                          class="confirm-btn cancel"
+                          [disabled]="isProcessingStep$()"
+                          (click)="cancelExecution()"
+                        >
                           Otkaži
                         </button>
                       </div>
@@ -1775,6 +2189,19 @@ interface WorkflowStatusEntry {
                     <span class="brain-stat" style="color: #F59E0B;"
                       ><strong>{{ brainStats$().pendingTasks }}</strong> na čekanju</span
                     >
+                  }
+                  @if (isPlatformOwner$()) {
+                    <div class="auto-ai-toggle">
+                      <span class="auto-ai-label">Auto AI</span>
+                      <button
+                        class="toggle-track"
+                        [class.active]="autoAiPopuni$()"
+                        [disabled]="isTogglingAutoPopuni$()"
+                        (click)="toggleAutoAiPopuni()"
+                      >
+                        <span class="toggle-thumb"></span>
+                      </button>
+                    </div>
                   }
                 </div>
               }
@@ -1939,6 +2366,17 @@ interface WorkflowStatusEntry {
                     ><strong>{{ brainStats$().pendingTasks }}</strong> na čekanju</span
                   >
                 }
+                <div class="auto-ai-toggle">
+                  <span class="auto-ai-label">Auto AI</span>
+                  <button
+                    class="toggle-track"
+                    [class.active]="autoAiPopuni$()"
+                    [disabled]="isTogglingAutoPopuni$()"
+                    (click)="toggleAutoAiPopuni()"
+                  >
+                    <span class="toggle-thumb"></span>
+                  </button>
+                </div>
               </div>
             }
             <div class="notes-view">
@@ -1981,29 +2419,11 @@ interface WorkflowStatusEntry {
                   />
                 </svg>
               </div>
-              <h2 class="empty-title">Dobrodošli u Business Brain</h2>
+              <h2 class="empty-title">Welcome to Mentor AI</h2>
               <p class="empty-desc">
-                Vaš AI poslovni partner koji misli umesto vas. Izaberite domen za početak:
+                Your AI-powered business partner with expertise in Finance, Marketing, Technology,
+                Operations, Legal, and Creative.
               </p>
-              <div class="persona-pills">
-                <button class="domain-pill" (click)="createNewConversation('Poslovanje')">
-                  Poslovanje
-                </button>
-                <button class="domain-pill" (click)="createNewConversation('Marketing')">
-                  Marketing
-                </button>
-                <button class="domain-pill" (click)="createNewConversation('Prodaja')">
-                  Prodaja
-                </button>
-                <button class="domain-pill" (click)="createNewConversation('Finansije')">
-                  Finansije
-                </button>
-                <button class="domain-pill" (click)="createNewConversation('Operacije')">
-                  Operacije
-                </button>
-                <button class="domain-pill" (click)="createNewConversation('HR')">HR</button>
-              </div>
-              <p class="empty-or">ili</p>
               <button class="start-btn" (click)="createNewConversation()">
                 <svg
                   style="width: 20px; height: 20px;"
@@ -2018,8 +2438,16 @@ interface WorkflowStatusEntry {
                     d="M12 4v16m8-8H4"
                   />
                 </svg>
-                Nova konverzacija
+                Start New Conversation
               </button>
+              <div class="persona-pills">
+                <span class="persona-pill" style="color: #3B82F6;">CFO</span>
+                <span class="persona-pill" style="color: #8B5CF6;">CMO</span>
+                <span class="persona-pill" style="color: #10B981;">CTO</span>
+                <span class="persona-pill" style="color: #F59E0B;">Operations</span>
+                <span class="persona-pill" style="color: #EF4444;">Legal</span>
+                <span class="persona-pill" style="color: #EC4899;">Creative</span>
+              </div>
             </div>
           </div>
         }
@@ -2047,6 +2475,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly authService = inject(AuthService);
   private readonly notesApi = inject(NotesApiService);
 
   @ViewChild(ConceptTreeComponent) conceptTree?: ConceptTreeComponent;
@@ -2077,7 +2506,13 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   readonly currentPersonaType$ = computed(() => this.activeConversation$()?.personaType ?? null);
 
   // Error state for user feedback
-  readonly errorMessage$ = signal<string | null>(null);
+  readonly errorMessages$ = signal<{ id: string; message: string }[]>([]);
+  // Info/success notifications (blue border, checkmark icon)
+  readonly infoMessages$ = signal<{ id: string; message: string }[]>([]);
+
+  // Busy/processing guards (prevent double-clicks)
+  readonly isApprovingPlan$ = signal(false);
+  readonly isProcessingStep$ = signal(false);
 
   // Concept panel state (Story 2.6)
   readonly selectedConceptId$ = signal<string | null>(null);
@@ -2121,6 +2556,18 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   readonly folderName$ = signal<string | null>(null);
   readonly autoSelectTaskIds$ = signal<string[]>([]);
 
+  // Created task navigation buttons (shown inline in chat)
+  readonly createdTaskNotifications$ = signal<
+    Array<{
+      id: string;
+      title: string;
+      conceptId: string | null;
+      conceptName: string | null;
+      conversationId: string;
+      isCrossConversation: boolean;
+    }>
+  >([]);
+
   // Story 3.2: Domain dashboard stats
   readonly domainCompletedCount$ = signal(0);
   readonly domainPendingCount$ = signal(0);
@@ -2160,9 +2607,37 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   readonly showYoloActivityLog$ = signal(false);
   private yoloPending = false;
   private pendingPlanId: string | null = null;
+  private streamBuffer = '';
+  private streamRafId: number | null = null;
 
   // Workflow status bar: tracks all active/recent workflow executions
   readonly workflowHistory$ = signal<WorkflowStatusEntry[]>([]);
+
+  // Per-plan data maps for click-to-expand workflow navigation
+  readonly workflowPlans$ = signal<Map<string, ExecutionPlan>>(new Map());
+  readonly workflowProgressMaps$ = signal<Map<string, Map<string, ExecutionPlanStep['status']>>>(
+    new Map()
+  );
+  readonly selectedWorkflowPlanId$ = signal<string | null>(null);
+
+  // Sorted workflow entries: executing first, then completed, failed, cancelled
+  readonly sortedWorkflowHistory$ = computed(() => {
+    const order: Record<string, number> = { executing: 0, completed: 1, failed: 2, cancelled: 3 };
+    return [...this.workflowHistory$()].sort(
+      (a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9)
+    );
+  });
+
+  // Multi-step orchestration: research phase indicator
+  readonly researchPhase$ = signal<'thinking' | 'researching'>('thinking');
+
+  // Auto AI Popuni toggle (brain config)
+  readonly autoAiPopuni$ = signal(false);
+  readonly isTogglingAutoPopuni$ = signal(false);
+  readonly autoPopuniTaskIds$ = signal<string[]>([]);
+  readonly isPlatformOwner$ = computed(
+    () => this.authService.currentUser()?.role === 'PLATFORM_OWNER'
+  );
 
   // Trigger for brainStats$ to re-evaluate after ViewChild is set
   private readonly viewInit$ = signal(false);
@@ -2225,6 +2700,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   ngOnInit(): void {
     document.addEventListener('keydown', this.keyboardHandler);
     this.setupWebSocket();
+    this.loadBrainConfig();
 
     // Use combineLatest so both params and queryParams resolve before acting.
     // This prevents a race condition where loadConversation() runs before
@@ -2275,7 +2751,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       if (this.showPlanOverlay$()) {
         this.rejectPlan();
       }
-      this.errorMessage$.set(null);
+      this.errorMessages$.set([]);
     }
     // Ctrl+Shift+T → Tasks tab
     if (e.ctrlKey && e.shiftKey && e.key === 'T') {
@@ -2291,6 +2767,13 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
   async loadConversation(conversationId: string): Promise<void> {
     try {
+      // Clear plan state from previous conversation (unless this conversation has its own active workflow or a workflow is selected in status bar)
+      if (
+        !this.executingWorkflowConversationIds$().has(conversationId) &&
+        !this.selectedWorkflowPlanId$()
+      ) {
+        this.closePlanOverlay();
+      }
       const conversation = await this.conversationService.getConversation(conversationId);
       this.activeConversation$.set(conversation);
       this.activeTab$.set('chat');
@@ -2298,6 +2781,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       this.isLoading$.set(false);
       this.isStreaming$.set(false);
       this.streamingContent$.set('');
+      this.createdTaskNotifications$.set([]);
       // Start YOLO execution if flagged from onboarding redirect
       if (this.yoloPending) {
         this.yoloPending = false;
@@ -2403,6 +2887,29 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /**
+   * Navigate to a created task — switches to its conversation and opens the notes tab with the task selected.
+   */
+  navigateToCreatedTask(task: {
+    id: string;
+    conversationId: string;
+    isCrossConversation: boolean;
+  }): void {
+    // Clear the notification for this task
+    this.createdTaskNotifications$.update((list) => list.filter((t) => t.id !== task.id));
+
+    // Set auto-select so the task is highlighted in notes
+    this.autoSelectTaskIds$.set([task.id]);
+    this.activeTab$.set('notes');
+
+    if (task.isCrossConversation) {
+      // Navigate to the new conversation under the correct concept
+      this.router.navigate(['/chat', task.conversationId]);
+    }
+    // If same conversation, just switch to notes tab (already done above)
+    this.conversationNotes?.loadNotes();
+  }
+
+  /**
    * Toggles the persona selector visibility.
    */
   togglePersonaSelector(): void {
@@ -2410,18 +2917,75 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /**
-   * Shows an error message to the user with auto-dismiss after 5 seconds.
+   * Shows an error message to the user with auto-dismiss after 8 seconds.
    */
   private showError(message: string): void {
-    this.errorMessage$.set(message);
-    setTimeout(() => this.dismissError(), 5000);
+    const id = crypto.randomUUID();
+    this.errorMessages$.update((list) => [...list, { id, message }]);
+    setTimeout(() => this.dismissErrorById(id), 8000);
   }
 
   /**
-   * Dismisses the current error message.
+   * Dismisses a specific error message by id.
    */
-  dismissError(): void {
-    this.errorMessage$.set(null);
+  dismissErrorById(id: string): void {
+    this.errorMessages$.update((list) => list.filter((e) => e.id !== id));
+  }
+
+  /**
+   * Loads brain config from API and sets autoAiPopuni toggle state.
+   */
+  private loadBrainConfig(): void {
+    this.http.get<{ data: { autoAiPopuni: boolean } }>('/api/admin/brain-config').subscribe({
+      next: (res) => this.autoAiPopuni$.set(res.data.autoAiPopuni),
+      error: () => {
+        /* ignore — not critical */
+      },
+    });
+  }
+
+  /**
+   * Toggles the Auto AI Popuni brain config setting.
+   */
+  toggleAutoAiPopuni(): void {
+    if (this.isTogglingAutoPopuni$()) return;
+    this.isTogglingAutoPopuni$.set(true);
+    const newValue = !this.autoAiPopuni$();
+    this.http
+      .patch<{
+        data: { autoAiPopuni: boolean };
+      }>('/api/admin/brain-config', { autoAiPopuni: newValue })
+      .subscribe({
+        next: (res) => {
+          this.autoAiPopuni$.set(res.data.autoAiPopuni);
+          this.isTogglingAutoPopuni$.set(false);
+        },
+        error: () => {
+          this.isTogglingAutoPopuni$.set(false);
+          this.showError('Greška pri promeni Auto AI podešavanja');
+        },
+      });
+  }
+
+  /**
+   * Shows an info/success message to the user with auto-dismiss after 10 seconds.
+   */
+  private showInfo(message: string): void {
+    const id = crypto.randomUUID();
+    this.infoMessages$.update((list) => [...list, { id, message }]);
+    setTimeout(() => this.dismissInfoById(id), 10000);
+  }
+
+  /**
+   * Dismisses a specific info message by id.
+   */
+  dismissInfoById(id: string): void {
+    this.infoMessages$.update((list) => list.filter((e) => e.id !== id));
+  }
+
+  manualReconnect(): void {
+    this.chatWsService.disconnect();
+    setTimeout(() => this.chatWsService.connect(), 500);
   }
 
   /**
@@ -2432,7 +2996,8 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   onSuggestedAction(action: SuggestedAction): void {
     switch (action.type) {
       case 'create_tasks':
-        // Switch to tasks tab
+        // Send explicit task creation request so backend generates tasks from conversation
+        this.sendMessage('Kreiraj zadatke na osnovu prethodne analize.');
         this.activeTab$.set('notes');
         break;
       case 'view_tasks':
@@ -2649,13 +3214,40 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private planGenerationTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  onRunAgents(taskIds: string[]): void {
-    const conversationId = this.activeConversationId$();
-    if (!conversationId) {
-      this.showError('Nema aktivne konverzacije za pokretanje zadatka.');
-      return;
-    }
+  async onRunAgents(taskIds: string[]): Promise<void> {
     if (taskIds.length === 0) return;
+
+    let conversationId = this.activeConversationId$();
+
+    // If no active conversation, try to resolve one from the task or create a new one
+    if (!conversationId) {
+      const task = this.conversationNotes?.notes()?.find((n) => taskIds.includes(n.id));
+      if (task?.conversationId) {
+        // Task already belongs to a conversation — navigate to it
+        conversationId = task.conversationId;
+        await this.loadConversation(conversationId);
+        this.router.navigate(['/chat', conversationId]);
+      } else {
+        // No conversation exists — create one under the task's concept
+        try {
+          const conceptId = task?.conceptId ?? undefined;
+          const title = task?.title ? `${task.title}` : 'Izvršavanje zadatka';
+          const conversation = await this.conversationService.createConversation(
+            title,
+            undefined,
+            conceptId
+          );
+          conversationId = conversation.id;
+          await this.loadConversation(conversationId);
+          this.router.navigate(['/chat', conversationId]);
+          this.conceptTree?.loadTree();
+        } catch {
+          this.showError('Greška pri kreiranju konverzacije za zadatak.');
+          return;
+        }
+      }
+    }
+
     this.isGeneratingPlan$.set(true);
     this.chatWsService.emitRunAgents(taskIds, conversationId);
     // Safety timeout: clear generating state after 90s if server never responds
@@ -2744,14 +3336,36 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   navigateToWorkflow(entry: WorkflowStatusEntry): void {
-    // Navigate to conversation, switch to notes tab, highlight the tasks
-    this.folderConceptIds$.set([]);
-    this.folderConversationIds$.set([]);
-    this.folderName$.set(null);
+    const currentlySelected = this.selectedWorkflowPlanId$();
+
+    // Toggle: clicking same entry collapses overlay
+    if (currentlySelected === entry.planId && this.showPlanOverlay$()) {
+      this.showPlanOverlay$.set(false);
+      this.selectedWorkflowPlanId$.set(null);
+      return;
+    }
+
+    // Navigate to different conversation if needed
+    if (entry.conversationId !== this.activeConversationId$()) {
+      this.folderConceptIds$.set([]);
+      this.folderConversationIds$.set([]);
+      this.folderName$.set(null);
+      this.router.navigate(['/chat', entry.conversationId]);
+    }
+
+    // Restore plan data from maps and show overlay
+    const plan = this.workflowPlans$().get(entry.planId);
+    if (plan) {
+      this.currentPlan$.set(plan);
+      this.executionProgress$.set(this.workflowProgressMaps$().get(entry.planId) ?? new Map());
+      this.activePlanId$.set(entry.planId);
+      this.selectedWorkflowPlanId$.set(entry.planId);
+      this.showPlanOverlay$.set(true);
+      this.planCollapsed$.set(false);
+    }
+
     this.activeTab$.set('notes');
-    // Set task highlight AFTER clearing (selectConversation would reset it)
     this.autoSelectTaskIds$.set(entry.taskIds.length > 0 ? entry.taskIds : []);
-    this.router.navigate(['/chat', entry.conversationId]);
   }
 
   getStepStatus(stepId: string): ExecutionPlanStep['status'] {
@@ -2773,7 +3387,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       {
         planId: plan.planId,
         conversationId,
-        taskIds: plan.taskIds ?? [],
+        taskIds: plan.steps.map((s: any) => s.taskId).filter(Boolean),
         title:
           plan.conceptOrder.length > 1
             ? `${firstConcept} (+${plan.conceptOrder.length - 1})`
@@ -2791,6 +3405,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     const conversationId = this.activeConversationId$();
     if (!plan || !conversationId) return;
     this.chatWsService.emitWorkflowApproval(plan.planId, false, conversationId);
+    this.isApprovingPlan$.set(false);
     this.closePlanOverlay();
   }
 
@@ -2810,6 +3425,8 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     this.currentPlan$.set(null);
     this.activePlanId$.set(null);
     this.executionProgress$.set(new Map());
+    this.selectedWorkflowPlanId$.set(null);
+    this.isApprovingPlan$.set(false);
     // NOTE: execution state is managed per-conversation by callers, not here
     this.currentStepTitle$.set(null);
     this.currentStepIndex$.set(0);
@@ -2910,7 +3527,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         } else {
           this.disconnectToast$.set('Veza obnovljena.');
         }
-        setTimeout(() => this.disconnectToast$.set(null), 5000);
+        setTimeout(() => {
+          if (this.connectionState$() === 'connected') this.disconnectToast$.set(null);
+        }, 3000);
       }
       wasConnected = state === 'connected';
       // Keep workflow running state in sync
@@ -2957,7 +3576,18 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     this.chatWsService.onMessageChunk((data) => {
-      this.streamingContent$.update((content) => content + data.content);
+      this.streamBuffer += data.content;
+      if (!this.streamRafId) {
+        this.streamRafId = requestAnimationFrame(() => {
+          this.streamingContent$.update((c) => c + this.streamBuffer);
+          this.streamBuffer = '';
+          this.streamRafId = null;
+        });
+      }
+    });
+
+    this.chatWsService.onResearchPhase((data) => {
+      this.researchPhase$.set(data.phase === 'researching' ? 'researching' : 'thinking');
     });
 
     this.chatWsService.onComplete((data) => {
@@ -3001,11 +3631,13 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       this.isLoading$.set(false);
       this.isStreaming$.set(false);
       this.streamingContent$.set('');
+      this.researchPhase$.set('thinking');
     });
 
     this.chatWsService.onError((error) => {
       this.isLoading$.set(false);
       this.isStreaming$.set(false);
+      this.researchPhase$.set('thinking');
       const errorType = error.type ? `[${error.type}] ` : '';
       this.showError(errorType + (error.message || 'Poruka nije poslata. Pokušajte ponovo.'));
     });
@@ -3017,18 +3649,26 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
     this.chatWsService.onTasksCreatedForExecution((data) => {
       if (data.conversationId !== this.activeConversationId$()) return;
-      // Auto-select created tasks, switch to notes tab, and reload
-      this.autoSelectTaskIds$.set(data.taskIds);
-      this.activeTab$.set('notes');
+
+      // Auto-select created tasks in notes tab
+      if (data.taskIds.length > 0) {
+        this.autoSelectTaskIds$.set(data.taskIds);
+      }
       this.conversationNotes?.loadNotes();
 
-      // Show visible feedback in chat
+      // Refresh concept tree (new conversations may have been created)
+      this.conceptTree?.loadTree();
+
+      // Show visible feedback in chat with navigation instructions
       const count = data.taskCount ?? data.taskIds.length;
+      let content = `**Kreirano ${count} ${count === 1 ? 'zadatak' : 'zadataka'}!**`;
+      content += ' Kliknite na dugme ispod da biste prešli na zadatak.';
+
       const taskMsg: Message = {
         id: `tasks_created_${Date.now()}`,
         conversationId: data.conversationId,
         role: MessageRole.ASSISTANT,
-        content: `**Kreirano ${count} ${count === 1 ? 'zadatak' : 'zadataka'}!** Pogledajte tab Zadaci za detalje i pokretanje.`,
+        content,
         confidenceScore: null,
         confidenceFactors: null,
         createdAt: new Date().toISOString(),
@@ -3037,6 +3677,18 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         if (!conv) return conv;
         return { ...conv, messages: [...conv.messages, taskMsg] };
       });
+
+      // Auto AI Popuni: if toggle is ON, automatically execute all created tasks
+      // Uses direct task:execute-ai path (skips plan approval) for each task sequentially
+      if (this.autoAiPopuni$() && data.taskIds.length > 0) {
+        setTimeout(() => {
+          const convId = data.conversationId;
+          // Execute tasks sequentially via direct AI path
+          for (const taskId of data.taskIds) {
+            this.chatWsService.emitExecuteTaskAi(taskId, convId);
+          }
+        }, 1500);
+      }
     });
 
     this.chatWsService.onConceptDetected((data) => {
@@ -3083,8 +3735,21 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     this.chatWsService.onStepProgress((payload) => {
-      // Global updates: status bar + executing set (must work for ALL conversations)
+      if (payload.conversationId !== this.activeConversationId$()) return;
+
+      // Auto-execute path: mark this conversation as executing on first step-progress
       this.executingWorkflowConversationIds$.update((s) => new Set([...s, payload.conversationId]));
+      if (!this.activePlanId$() && payload.planId) {
+        this.activePlanId$.set(payload.planId);
+      }
+
+      this.executionProgress$.update((map) => {
+        const next = new Map(map);
+        next.set(payload.stepId, payload.status);
+        return next;
+      });
+
+      // Update workflow status bar entry
       if (payload.planId) {
         this.workflowHistory$.update((entries) =>
           entries.map((e) =>
@@ -3104,19 +3769,6 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           )
         );
       }
-
-      // Per-conversation UI updates: only for the active conversation
-      if (payload.conversationId !== this.activeConversationId$()) return;
-
-      if (!this.activePlanId$() && payload.planId) {
-        this.activePlanId$.set(payload.planId);
-      }
-
-      this.executionProgress$.update((map) => {
-        const next = new Map(map);
-        next.set(payload.stepId, payload.status);
-        return next;
-      });
 
       // Update inline progress indicator
       if (payload.totalSteps != null) {
@@ -3184,36 +3836,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     this.chatWsService.onWorkflowComplete((payload) => {
-      // Global updates: executing set + status bar (must work for ALL conversations)
-      this.executingWorkflowConversationIds$.update((s) => {
-        const next = new Set(s);
-        next.delete(payload.conversationId);
-        return next;
-      });
-      if (payload.planId) {
-        const finalStatus =
-          payload.status === 'completed'
-            ? ('completed' as const)
-            : payload.status === 'cancelled'
-              ? ('cancelled' as const)
-              : ('failed' as const);
-        this.workflowHistory$.update((entries) =>
-          entries.map((e) =>
-            e.planId === payload.planId
-              ? { ...e, status: finalStatus, completedSteps: payload.completedSteps }
-              : e
-          )
-        );
-        setTimeout(() => {
-          this.workflowHistory$.update((entries) =>
-            entries.filter((e) => e.planId !== payload.planId)
-          );
-        }, 30000);
-      }
-
-      // Per-conversation UI updates: only for the active conversation
       if (payload.conversationId !== this.activeConversationId$()) return;
 
+      // Build completion summary with links to concept conversations
       const statusLabel =
         payload.status === 'completed'
           ? 'Završeno'
@@ -3246,15 +3871,47 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         return { ...conv, messages: [...conv.messages, summaryMessage] };
       });
 
+      // Reset inline progress
       this.currentStepTitle$.set(null);
       this.currentStepIndex$.set(0);
       this.totalStepsCount$.set(0);
       this.completedStepsCount$.set(0);
 
+      // Remove this conversation from executing set (allows parallel workflows)
+      this.executingWorkflowConversationIds$.update((s) => {
+        const next = new Set(s);
+        next.delete(payload.conversationId);
+        return next;
+      });
       this.closePlanOverlay();
       this.conversationNotes?.loadNotes();
       this.conceptTree?.loadTree();
 
+      // Update workflow status bar entry
+      if (payload.planId) {
+        const finalStatus =
+          payload.status === 'completed'
+            ? ('completed' as const)
+            : payload.status === 'cancelled'
+              ? ('cancelled' as const)
+              : ('failed' as const);
+        this.workflowHistory$.update((entries) =>
+          entries.map((e) =>
+            e.planId === payload.planId
+              ? { ...e, status: finalStatus, completedSteps: payload.completedSteps }
+              : e
+          )
+        );
+
+        // Auto-clear completed/cancelled entries after 30 seconds (gives user time to click)
+        setTimeout(() => {
+          this.workflowHistory$.update((entries) =>
+            entries.filter((e) => e.planId !== payload.planId)
+          );
+        }, 30000);
+      }
+
+      // D4: Suggest next step after successful workflow
       if (payload.status === 'completed') {
         setTimeout(() => this.suggestNextStep(), 1500);
       }
@@ -3287,18 +3944,24 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           this.planGenerationTimeout = null;
         }
       }
-      // Confirm execution state — ensure executingTaskId is set even if click handler missed
-      if (!this.executingTaskId$()) {
-        this.executingTaskId$.set(data.taskId);
-        this.isStreaming$.set(true);
-        this.streamingContent$.set('');
-      }
+      // Set execution state — track which task is currently executing
+      this.executingTaskId$.set(data.taskId);
+      this.taskExecutionStreamContent$.set('');
+      this.isStreaming$.set(true);
+      this.streamingContent$.set('');
     });
 
     this.chatWsService.onTaskAiChunk((data) => {
       if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
-      this.streamingContent$.update((content) => content + data.content);
-      this.taskExecutionStreamContent$.update((content) => content + data.content);
+      this.streamBuffer += data.content;
+      if (!this.streamRafId) {
+        this.streamRafId = requestAnimationFrame(() => {
+          this.streamingContent$.update((c) => c + this.streamBuffer);
+          this.taskExecutionStreamContent$.update((c) => c + this.streamBuffer);
+          this.streamBuffer = '';
+          this.streamRafId = null;
+        });
+      }
     });
 
     this.chatWsService.onTaskAiComplete((data) => {
@@ -3351,6 +4014,131 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       this.submittingResultId$.set(null);
       this.taskResultStreamContent$.set('');
       this.showError(data.message ?? 'Slanje rezultata neuspešno');
+    });
+
+    // ─── Auto AI Popuni Events ─────────────────────────────────
+    this.chatWsService.onAutoPopuniStart((data) => {
+      this.autoPopuniTaskIds$.set(data.taskIds);
+    });
+
+    this.chatWsService.onAutoPopuniComplete(() => {
+      this.autoPopuniTaskIds$.set([]);
+      this.conversationNotes?.loadNotes();
+      this.conceptTree?.loadTree();
+    });
+
+    this.chatWsService.onAutoPopuniTaskError(() => {
+      // Individual task errors — the complete event will have the final count
+    });
+
+    // ─── Execution Persistence: State Restoration on Reconnect ─────
+    this.chatWsService.onExecutionActiveState((data) => {
+      // M1: Track whether we've already restored a YOLO/workflow to avoid overwrites
+      let yoloRestored = false;
+      let workflowRestored = false;
+
+      // Restore active executions
+      for (const exec of data.active) {
+        if ((exec.type === 'yolo' || exec.type === 'domain-yolo') && !yoloRestored) {
+          yoloRestored = true;
+          // Restore YOLO overlay with checkpoint data
+          this.isYoloMode$.set(true);
+          if (exec.conversationId) {
+            this.executingWorkflowConversationIds$.update((s) => {
+              const next = new Set(s);
+              next.add(exec.conversationId!);
+              return next;
+            });
+          }
+          const cp = exec.checkpoint as {
+            planId?: string;
+            running?: number;
+            maxConcurrency?: number;
+            completed?: number;
+            completedCount?: number;
+            failed?: number;
+            failedCount?: number;
+            total?: number;
+            discoveredCount?: number;
+            conversationId?: string;
+            currentTasks?: YoloProgressPayload['currentTasks'];
+          };
+          const completedVal = cp.completed ?? cp.completedCount ?? 0;
+          const failedVal = cp.failed ?? cp.failedCount ?? 0;
+          this.yoloProgress$.set({
+            planId: cp.planId ?? exec.planId ?? 'resume',
+            running: cp.running ?? 0,
+            maxConcurrency: cp.maxConcurrency ?? 3,
+            completed: completedVal,
+            failed: failedVal,
+            total: cp.total ?? 0,
+            discoveredCount: cp.discoveredCount ?? 0,
+            currentTasks: cp.currentTasks ?? [],
+            conversationId: cp.conversationId ?? exec.conversationId ?? '',
+          });
+          // M2: Replay only events since the execution was created (avoid stale replays)
+          this.chatWsService.replayEvents(exec.id, exec.createdAt);
+        }
+
+        if (exec.type === 'workflow' && !workflowRestored) {
+          workflowRestored = true;
+          // Restore workflow execution indicator
+          if (exec.conversationId) {
+            this.executingWorkflowConversationIds$.update((s) => {
+              const next = new Set(s);
+              next.add(exec.conversationId!);
+              return next;
+            });
+          }
+          if (exec.planId) {
+            this.activePlanId$.set(exec.planId);
+            this.showPlanOverlay$.set(true);
+          }
+          // Restore step progress from checkpoint
+          const wfCp = exec.checkpoint as {
+            lastCompletedStepIndex?: number;
+            totalSteps?: number;
+            currentStepTitle?: string;
+          };
+          if (wfCp.lastCompletedStepIndex != null) {
+            this.completedStepsCount$.set(wfCp.lastCompletedStepIndex + 1);
+            this.currentStepIndex$.set(wfCp.lastCompletedStepIndex + 1);
+          }
+          if (wfCp.totalSteps != null) {
+            this.totalStepsCount$.set(wfCp.totalSteps);
+          }
+          if (wfCp.currentStepTitle) {
+            this.currentStepTitle$.set(wfCp.currentStepTitle);
+          }
+          // M2: Replay only events since the execution was created
+          this.chatWsService.replayEvents(exec.id, exec.createdAt);
+        }
+
+        if (exec.type === 'auto-popuni') {
+          const meta = exec.metadata as { taskIds?: string[] };
+          if (Array.isArray(meta?.taskIds)) {
+            this.autoPopuniTaskIds$.set(meta.taskIds);
+          }
+        }
+      }
+
+      // Show summary for recently completed executions (completed while user was away)
+      let needsRefresh = false;
+      for (const exec of data.recentlyCompleted) {
+        const typeLabel =
+          exec.type === 'yolo' || exec.type === 'domain-yolo'
+            ? 'YOLO'
+            : exec.type === 'workflow'
+              ? 'Workflow'
+              : 'Auto AI';
+        this.showError(`Brain je radio dok ste bili odsutni: ${typeLabel} završen`);
+        needsRefresh = true;
+      }
+      // Refresh tree and notes once (not per-completion)
+      if (needsRefresh) {
+        this.conceptTree?.loadTree();
+        this.conversationNotes?.loadNotes();
+      }
     });
 
     this.chatWsService.onStepAwaitingConfirmation((payload) => {
@@ -3439,28 +4227,163 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     this.chatWsService.onTasksDiscovered(() => {
       this.conceptTree?.loadTree();
     });
+
+    // ─── Auto AI Popuni Events ───────────────────────────────
+    this.chatWsService.onAutoPopuniStart((data) => {
+      this.autoPopuniTaskIds$.set(data.taskIds);
+    });
+
+    this.chatWsService.onAutoPopuniComplete((data) => {
+      this.autoPopuniTaskIds$.set([]);
+      this.conversationNotes?.loadNotes();
+      this.conceptTree?.loadTree();
+      if (data.completedTasks < data.totalTasks) {
+        this.showError(
+          `Auto AI: ${data.completedTasks}/${data.totalTasks} zadataka uspešno popunjeno`
+        );
+      }
+    });
+
+    this.chatWsService.onAutoPopuniTaskError(() => {
+      // Individual task errors — the complete event will have the final count
+    });
+
+    // ─── Execution Persistence: State Restoration on Reconnect ─────
+    this.chatWsService.onExecutionActiveState((data) => {
+      // M1: Track whether we've already restored a YOLO/workflow to avoid overwrites
+      let yoloRestored = false;
+      let workflowRestored = false;
+
+      // Restore active executions
+      for (const exec of data.active) {
+        if ((exec.type === 'yolo' || exec.type === 'domain-yolo') && !yoloRestored) {
+          yoloRestored = true;
+          // Restore YOLO overlay with checkpoint data
+          this.isYoloMode$.set(true);
+          if (exec.conversationId) {
+            this.executingWorkflowConversationIds$.update((s) => {
+              const next = new Set(s);
+              next.add(exec.conversationId!);
+              return next;
+            });
+          }
+          const cp = exec.checkpoint as {
+            planId?: string;
+            running?: number;
+            maxConcurrency?: number;
+            completed?: number;
+            completedCount?: number;
+            failed?: number;
+            failedCount?: number;
+            total?: number;
+            discoveredCount?: number;
+            conversationId?: string;
+            currentTasks?: YoloProgressPayload['currentTasks'];
+          };
+          const completedVal = cp.completed ?? cp.completedCount ?? 0;
+          const failedVal = cp.failed ?? cp.failedCount ?? 0;
+          this.yoloProgress$.set({
+            planId: cp.planId ?? exec.planId ?? 'resume',
+            running: cp.running ?? 0,
+            maxConcurrency: cp.maxConcurrency ?? 3,
+            completed: completedVal,
+            failed: failedVal,
+            total: cp.total ?? 0,
+            discoveredCount: cp.discoveredCount ?? 0,
+            currentTasks: cp.currentTasks ?? [],
+            conversationId: cp.conversationId ?? exec.conversationId ?? '',
+          });
+          // M2: Replay only events since the execution was created (avoid stale replays)
+          this.chatWsService.replayEvents(exec.id, exec.createdAt);
+        }
+
+        if (exec.type === 'workflow' && !workflowRestored) {
+          workflowRestored = true;
+          // Restore workflow execution indicator
+          if (exec.conversationId) {
+            this.executingWorkflowConversationIds$.update((s) => {
+              const next = new Set(s);
+              next.add(exec.conversationId!);
+              return next;
+            });
+          }
+          if (exec.planId) {
+            this.activePlanId$.set(exec.planId);
+            this.showPlanOverlay$.set(true);
+          }
+          // Restore step progress from checkpoint
+          const wfCp = exec.checkpoint as {
+            lastCompletedStepIndex?: number;
+            totalSteps?: number;
+            currentStepTitle?: string;
+          };
+          if (wfCp.lastCompletedStepIndex != null) {
+            this.completedStepsCount$.set(wfCp.lastCompletedStepIndex + 1);
+            this.currentStepIndex$.set(wfCp.lastCompletedStepIndex + 1);
+          }
+          if (wfCp.totalSteps != null) {
+            this.totalStepsCount$.set(wfCp.totalSteps);
+          }
+          if (wfCp.currentStepTitle) {
+            this.currentStepTitle$.set(wfCp.currentStepTitle);
+          }
+          // M2: Replay only events since the execution was created
+          this.chatWsService.replayEvents(exec.id, exec.createdAt);
+        }
+
+        if (exec.type === 'auto-popuni') {
+          const meta = exec.metadata as { taskIds?: string[] };
+          if (Array.isArray(meta?.taskIds)) {
+            this.autoPopuniTaskIds$.set(meta.taskIds);
+          }
+        }
+      }
+
+      // Show summary for recently completed executions (completed while user was away)
+      let needsRefresh = false;
+      for (const exec of data.recentlyCompleted) {
+        const typeLabel =
+          exec.type === 'yolo' || exec.type === 'domain-yolo'
+            ? 'YOLO'
+            : exec.type === 'workflow'
+              ? 'Workflow'
+              : 'Auto AI';
+        this.showInfo(`Brain je radio dok ste bili odsutni: ${typeLabel} završen`);
+        needsRefresh = true;
+      }
+      // Refresh tree and notes once (not per-completion)
+      if (needsRefresh) {
+        this.conceptTree?.loadTree();
+        this.conversationNotes?.loadNotes();
+      }
+    });
   }
 
   continueWorkflow(): void {
     const planId = this.activePlanId$();
     const convId = this.activeConversationId$();
-    if (!planId || !convId) return;
+    if (!planId || !convId || this.isProcessingStep$()) return;
+    this.isProcessingStep$.set(true);
 
     const input = this.userStepInput$().trim() || undefined;
     this.chatWsService.emitStepContinue(planId, convId, input);
     this.awaitingConfirmation$.set(false);
     this.nextStepInfo$.set(null);
     this.userStepInput$.set('');
+    // Reset after emission (backend takes over)
+    setTimeout(() => this.isProcessingStep$.set(false), 1000);
   }
 
   continueWorkflowStep(): void {
     const stepInput = this.currentWorkflowStepInput$();
     const convId = this.activeConversationId$();
-    if (!stepInput || !convId) return;
+    if (!stepInput || !convId || this.isProcessingStep$()) return;
+    this.isProcessingStep$.set(true);
 
     this.chatWsService.emitStepContinue(stepInput.planId, convId);
     this.currentWorkflowStepInput$.set(null);
     this.allowWorkflowInput$.set(false);
+    setTimeout(() => this.isProcessingStep$.set(false), 1000);
   }
 
   returnToPreviousConversation(): void {

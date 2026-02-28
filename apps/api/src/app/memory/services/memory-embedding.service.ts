@@ -1,9 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { MemoryService } from './memory.service';
 import { QdrantClientService } from '../../qdrant/qdrant-client.service';
-import { LlmConfigService } from '../../llm-config/llm-config.service';
-import { LlmProviderType } from '@mentor-ai/shared/types';
 import type { MemoryType } from '@mentor-ai/shared/types';
 
 /**
@@ -17,15 +14,15 @@ export interface MemorySearchResult {
   type: MemoryType;
 }
 
-/** Default LM Studio endpoint when not configured in DB */
-const DEFAULT_LM_STUDIO_ENDPOINT = 'http://127.0.0.1:1234';
+/** OpenAI API endpoint for embeddings */
+const OPENAI_EMBEDDINGS_URL = 'https://api.openai.com/v1/embeddings';
 
 /**
  * Service for generating and managing memory embeddings.
  * Integrates with Qdrant Cloud for vector storage and semantic search.
  *
  * Collections are per-tenant: `memories_${tenantId}`
- * Dimensions: 768 (nomic-embed-text-v1.5)
+ * Dimensions: 1536 (OpenAI text-embedding-3-small)
  *
  * Story 2.7: Persistent Memory Across Conversations
  */
@@ -36,17 +33,15 @@ export class MemoryEmbeddingService {
   /** Default similarity threshold for semantic search */
   private readonly DEFAULT_THRESHOLD = 0.7;
 
-  /** Embedding dimension (768 for nomic-embed-text-v1.5) */
-  private readonly EMBEDDING_DIMENSION = 768;
+  /** Embedding dimension (1536 for OpenAI text-embedding-3-small) */
+  private readonly EMBEDDING_DIMENSION = 1536;
 
-  /** LM Studio model for embedding generation */
-  private readonly EMBEDDING_MODEL = 'text-embedding-nomic-embed-text-v1.5';
+  /** OpenAI model for embedding generation */
+  private readonly EMBEDDING_MODEL = 'text-embedding-3-small';
 
   constructor(
     private readonly memoryService: MemoryService,
-    private readonly configService: ConfigService,
-    private readonly qdrantClient: QdrantClientService,
-    private readonly llmConfigService: LlmConfigService
+    private readonly qdrantClient: QdrantClientService
   ) {}
 
   /**
@@ -282,18 +277,21 @@ export class MemoryEmbeddingService {
   }
 
   /**
-   * Generates an embedding vector using LM Studio nomic-embed-text (768-dim).
+   * Generates an embedding vector using OpenAI text-embedding-3-small (1536-dim).
    */
   private async embedText(text: string): Promise<number[] | null> {
-    const endpoint =
-      (await this.llmConfigService.getProviderEndpoint(LlmProviderType.LM_STUDIO)) ??
-      DEFAULT_LM_STUDIO_ENDPOINT;
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      this.logger.error('OPENAI_API_KEY not set — cannot generate memory embeddings');
+      return null;
+    }
 
     try {
-      const response = await fetch(`${endpoint}/v1/embeddings`, {
+      const response = await fetch(OPENAI_EMBEDDINGS_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
           model: this.EMBEDDING_MODEL,
@@ -303,7 +301,7 @@ export class MemoryEmbeddingService {
 
       if (!response.ok) {
         this.logger.error({
-          message: 'LM Studio embedding API error',
+          message: 'OpenAI embedding API error',
           status: response.status,
         });
         return null;
@@ -315,7 +313,7 @@ export class MemoryEmbeddingService {
       return data.data[0]?.embedding ?? null;
     } catch (error) {
       this.logger.error({
-        message: 'Failed to generate embedding via LM Studio',
+        message: 'Failed to generate embedding via OpenAI',
         error: error instanceof Error ? error.message : 'Unknown',
       });
       return null;
