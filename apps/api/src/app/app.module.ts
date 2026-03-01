@@ -31,7 +31,7 @@ const serveStaticImports = existsSync(staticPath)
   ? [
       ServeStaticModule.forRoot({
         rootPath: staticPath,
-        exclude: ['/api/(.*)', '/ws/(.*)'],
+        exclude: ['/api{/*path}', '/ws{/*path}'],
       }),
     ]
   : [];

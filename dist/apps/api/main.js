@@ -53,7 +53,7 @@ const serveStaticImports = (0, fs_1.existsSync)(staticPath)
     ? [
         serve_static_1.ServeStaticModule.forRoot({
             rootPath: staticPath,
-            exclude: ['/api/(.*)', '/ws/(.*)'],
+            exclude: ['/api{/*path}', '/ws{/*path}'],
         }),
     ]
     : [];
@@ -5325,8 +5325,8 @@ let AiGatewayService = AiGatewayService_1 = class AiGatewayService {
         this.costCalculatorService = costCalculatorService;
         this.confidenceService = confidenceService;
         this.logger = new common_1.Logger(AiGatewayService_1.name);
-        /** Request timeout in milliseconds (1 hour — large models like 72B can be slow) */
-        this.requestTimeoutMs = 3600 * 1000;
+        /** Request timeout in milliseconds (3 min — balanced for DeepSeek latency) */
+        this.requestTimeoutMs = 180 * 1000;
     }
     /**
      * Streams a completion with full context including rate limiting, quota, and tracking.
@@ -9014,6 +9014,8 @@ const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
 const ai_gateway_service_1 = __webpack_require__(88);
 const relationship_prompt_1 = __webpack_require__(105);
+/** Max entries in the findById LRU cache */
+const CONCEPT_CACHE_MAX = 500;
 /**
  * Service for querying and managing business concepts.
  * Provides read-only access to the platform's knowledge base.
@@ -9023,6 +9025,12 @@ let ConceptService = ConceptService_1 = class ConceptService {
         this.prisma = prisma;
         this.aiGateway = aiGateway;
         this.logger = new common_1.Logger(ConceptService_1.name);
+        /** LRU cache for findById — concepts are immutable between seeds */
+        this.conceptCache = new Map();
+    }
+    /** Clear the concept cache (call after re-seeding) */
+    clearCache() {
+        this.conceptCache.clear();
     }
     /**
      * Finds concepts with optional filtering and pagination.
@@ -9093,10 +9101,19 @@ let ConceptService = ConceptService_1 = class ConceptService {
      * @throws NotFoundException if concept doesn't exist
      */
     async findById(id) {
+        // Check LRU cache
+        const cached = this.conceptCache.get(id);
+        if (cached) {
+            // Move to end for LRU ordering (delete + re-set)
+            this.conceptCache.delete(id);
+            this.conceptCache.set(id, cached);
+            return cached;
+        }
         const concept = await this.prisma.concept.findUnique({
             where: { id },
             include: {
                 relatedTo: {
+                    take: 5,
                     include: {
                         targetConcept: {
                             select: {
@@ -9116,6 +9133,7 @@ let ConceptService = ConceptService_1 = class ConceptService {
                     },
                 },
                 relatedFrom: {
+                    take: 5,
                     include: {
                         sourceConcept: {
                             select: {
@@ -9164,7 +9182,7 @@ let ConceptService = ConceptService_1 = class ConceptService {
                 direction: 'incoming',
             })),
         ];
-        return {
+        const result = {
             id: concept.id,
             name: concept.name,
             slug: concept.slug,
@@ -9178,6 +9196,14 @@ let ConceptService = ConceptService_1 = class ConceptService {
             updatedAt: concept.updatedAt.toISOString(),
             relatedConcepts,
         };
+        // Store in LRU cache, evict oldest if full
+        this.conceptCache.set(id, result);
+        if (this.conceptCache.size > CONCEPT_CACHE_MAX) {
+            const oldest = this.conceptCache.keys().next().value;
+            if (oldest)
+                this.conceptCache.delete(oldest);
+        }
+        return result;
     }
     /**
      * Finds a single concept by slug.
@@ -11708,10 +11734,17 @@ const CHARS_PER_TOKEN = 4;
 /** Max tokens for the business context section in the system prompt.
  *  Reduced from 4000 to 1500 to fit within 8K context window models. */
 const MAX_CONTEXT_TOKENS = 1500;
+/** Cache TTL: 5 minutes */
+const CACHE_TTL_MS = 5 * 60 * 1000;
 let BusinessContextService = BusinessContextService_1 = class BusinessContextService {
     constructor(prisma) {
         this.prisma = prisma;
         this.logger = new common_1.Logger(BusinessContextService_1.name);
+        this.cache = new Map();
+    }
+    /** Invalidate cache for a tenant (call after memory write) */
+    invalidateCache(tenantId) {
+        this.cache.delete(tenantId);
     }
     /**
      * Loads and formats all business memories for a tenant.
@@ -11721,6 +11754,12 @@ let BusinessContextService = BusinessContextService_1 = class BusinessContextSer
      * Truncates to ~4000 tokens.
      */
     async getBusinessContext(tenantId) {
+        // Check cache first
+        const cached = this.cache.get(tenantId);
+        if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+            this.logger.debug({ message: 'Business context cache hit', tenantId });
+            return cached.value;
+        }
         const memories = await this.prisma.memory.findMany({
             where: {
                 tenantId,
@@ -11785,6 +11824,8 @@ let BusinessContextService = BusinessContextService_1 = class BusinessContextSer
             memoriesIncluded: memories.length,
             estimatedTokens: this.estimateTokens(context),
         });
+        // Store in cache
+        this.cache.set(tenantId, { value: context, cachedAt: Date.now() });
         return context;
     }
     estimateTokens(text) {
@@ -13530,8 +13571,12 @@ let NotesService = NotesService_1 = class NotesService {
             },
             orderBy: { aiScore: 'desc' },
             select: {
-                id: true, title: true, content: true,
-                userReport: true, aiScore: true, aiFeedback: true,
+                id: true,
+                title: true,
+                content: true,
+                userReport: true,
+                aiScore: true,
+                aiFeedback: true,
             },
         });
         if (!existing?.userReport || !existing?.aiScore)
@@ -18291,7 +18336,10 @@ let AttachmentsService = AttachmentsService_1 = class AttachmentsService {
             throw new common_1.BadRequestException(`File too large. Maximum size: 10MB`);
         }
         // Save to disk
-        const ext = path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/gi, '') || '.bin';
+        const ext = path
+            .extname(file.originalname)
+            .toLowerCase()
+            .replace(/[^a-z0-9.]/gi, '') || '.bin';
         const filename = `${(0, cuid2_1.createId)()}${ext.startsWith('.') ? ext : `.${ext}`}`;
         const filePath = path.join(this.uploadDir, filename);
         await fs.promises.writeFile(filePath, file.buffer);
@@ -18402,7 +18450,6 @@ let AttachmentsService = AttachmentsService_1 = class AttachmentsService {
         let text = null;
         switch (mimeType) {
             case 'application/pdf': {
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const pdfParse = __webpack_require__(153);
                 const result = await pdfParse(buffer);
                 text = result.text;
@@ -18414,7 +18461,6 @@ let AttachmentsService = AttachmentsService_1 = class AttachmentsService {
                 break;
             }
             case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': {
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const XLSX = __webpack_require__(154);
                 const workbook = XLSX.read(buffer, { type: 'buffer' });
                 const sheets = [];
@@ -18426,7 +18472,6 @@ let AttachmentsService = AttachmentsService_1 = class AttachmentsService {
                 break;
             }
             case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': {
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const mammoth = __webpack_require__(155);
                 const result = await mammoth.extractRawText({ buffer });
                 text = result.value;
@@ -19599,9 +19644,7 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
             completedSoFar: checkpoint.completedCount ?? 0,
         });
         // M3: Mark as 'pending' while waiting for resume to prevent duplicate scheduling
-        this.executionStateService
-            .updateStatus(exec.id, 'pending')
-            .catch((err) => this.logger.warn({
+        this.executionStateService.updateStatus(exec.id, 'pending').catch((err) => this.logger.warn({
             message: 'Failed to mark execution as pending for resume',
             error: err?.message,
         }));
@@ -19629,7 +19672,6 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
      * Leverages the fact that completed tasks are already COMPLETED in DB —
      * the scheduler naturally picks up only PENDING tasks.
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async resumeYoloExecution(exec) {
         const tenantId = exec.tenantId;
         const userId = exec.userId;
@@ -19708,7 +19750,6 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
      * Broadcast an event to all connected sockets belonging to a tenant.
      * Also journals the event for replay on reconnect.
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     emitToTenant(tenantId, executionId, eventName, payload) {
         // Journal the event for replay
         this.executionStateService
@@ -19986,17 +20027,20 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
             // Format messages for AI (inject attachment context into last user message)
             const messages = conversation.messages.map((m, i, arr) => {
                 const isLastUserMsg = i === arr.length - 1 && m.role.toLowerCase() === 'user';
-                const msgContent = isLastUserMsg && attachmentContext
-                    ? `${attachmentContext}\n\n${m.content}`
-                    : m.content;
+                const msgContent = isLastUserMsg && attachmentContext ? `${attachmentContext}\n\n${m.content}` : m.content;
                 return {
                     role: m.role.toLowerCase(),
                     content: msgContent,
                 };
             });
+            // === PERFORMANCE TIMING ===
+            const perfStart = Date.now();
+            const perf = {};
             // Build business context from tenant profile + onboarding notes
             const businessContext = await this.buildBusinessContext(authenticatedClient.tenantId, authenticatedClient.userId);
+            perf.businessContext = Date.now() - perfStart;
             // Pre-AI enrichment: concept search + memory context + web search + business brain context in parallel
+            const enrichmentStart = Date.now();
             const webSearchEnabled = payload.webSearchEnabled !== false;
             const [relevantConcepts, memoryContext, webSearchResults, businessBrainContext] = await Promise.all([
                 this.conceptMatchingService
@@ -20022,7 +20066,9 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
                     .getBusinessContext(authenticatedClient.tenantId)
                     .catch(() => ''),
             ]);
+            perf.enrichmentParallel = Date.now() - enrichmentStart;
             // Build enriched context with curriculum concepts + memory + business brain
+            const conceptLoadStart = Date.now();
             let enrichedContext = businessContext;
             // Append tenant-wide business brain memories (Story 3.3 AC3)
             if (businessBrainContext) {
@@ -20036,7 +20082,13 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
                     try {
                         const full = await this.conceptService.findById(concept.conceptId);
                         if (full.extendedDescription) {
-                            enrichedContext += `\nDETALJNO: ${full.extendedDescription}`;
+                            // Trim to first paragraph or 800 chars to reduce context bloat
+                            const desc = full.extendedDescription;
+                            const firstParagraphEnd = desc.indexOf('\n\n');
+                            const trimmed = firstParagraphEnd > 0 && firstParagraphEnd < 800
+                                ? desc.substring(0, firstParagraphEnd)
+                                : desc.substring(0, 800);
+                            enrichedContext += `\nDETALJNO: ${trimmed}`;
                         }
                         if (full.relatedConcepts && full.relatedConcepts.length > 0) {
                             const related = full.relatedConcepts
@@ -20062,20 +20114,26 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
             if (webSearchResults.length > 0) {
                 enrichedContext += this.webSearchService.formatSourcesAsObsidian(webSearchResults);
             }
+            perf.conceptLoading = Date.now() - conceptLoadStart;
+            perf.contextChars = enrichedContext.length;
             // === MULTI-STEP ORCHESTRATION ===
             const isComplex = this.isComplexQuery(content);
             let researchBrief = '';
             if (isComplex) {
+                const researchStart = Date.now();
                 client.emit('chat:research-phase', { phase: 'researching' });
                 researchBrief = await this.buildResearchBrief(content, enrichedContext, relevantConcepts, webSearchEnabled, conversation.personaType ?? undefined, authenticatedClient.tenantId, authenticatedClient.userId);
                 client.emit('chat:research-phase', { phase: 'responding' });
+                perf.researchBrief = Date.now() - researchStart;
             }
             const finalContext = researchBrief
                 ? `${enrichedContext}\n\n--- ISTRAŽIVAČKI BRIEF ---\n${researchBrief}\n--- KRAJ BRIEFA ---\nKoristi brief kao osnovu za stručan odgovor. Ne pominjaj brief — samo daj sveobuhvatan odgovor.`
                 : enrichedContext;
+            perf.finalContextChars = finalContext.length;
             // Stream AI response with confidence calculation (Story 2.5)
             let fullContent = '';
             let chunkIndex = 0;
+            const aiCallStart = Date.now();
             const completionResult = await this.aiGatewayService.streamCompletionWithContext(messages, {
                 tenantId: authenticatedClient.tenantId,
                 userId: authenticatedClient.userId,
@@ -20092,6 +20150,22 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
                     content: chunk,
                     index: chunkIndex++,
                 });
+            });
+            perf.aiCall = Date.now() - aiCallStart;
+            perf.totalMs = Date.now() - perfStart;
+            // === LOG PERFORMANCE BREAKDOWN ===
+            this.logger.log({
+                message: '⏱ PERF BREAKDOWN',
+                businessContextMs: perf.businessContext,
+                enrichmentParallelMs: perf.enrichmentParallel,
+                conceptLoadingMs: perf.conceptLoading,
+                researchBriefMs: perf.researchBrief ?? 0,
+                aiCallMs: perf.aiCall,
+                totalMs: perf.totalMs,
+                contextChars: perf.contextChars,
+                finalContextChars: perf.finalContextChars,
+                isComplex,
+                conceptsMatched: relevantConcepts.length,
             });
             // Extract confidence from result
             const confidence = completionResult.confidence;
@@ -20542,7 +20616,7 @@ Ako nema zadataka: []`;
     isComplexQuery(content) {
         const lower = content.toLowerCase().trim();
         // Skip short messages (greetings, yes/no)
-        if (lower.length < 15)
+        if (lower.length < 30)
             return false;
         // Skip simple patterns
         if (/^(šta je|što je|what is|objasni|explain|zdravo|hej|ćao|hi|hello|da|ne|ok|važi|hvala)\b/.test(lower))
@@ -20553,7 +20627,9 @@ Ako nema zadataka: []`;
         const complexNouns = /\b(strategij|analiz|konkurencij|tržišt|market|poslovni model|finansijsk|budžet|budget|roi|plan rasta|growth|scaling|skaliranj|optimizacij|swot|pest|porter|canvas|due diligence|rizik|pricing|cenovna|revenue|prihod|forecast|prognoz|roadmap)/;
         // Multi-clause (comma + action verb = multiple asks)
         const multiClause = /,\s*(i\s+)?(predloži|analiziraj|napravi|razvij|osmisli|kreiraj)/.test(lower);
-        return complexVerbs.test(lower) || complexNouns.test(lower) || multiClause;
+        // Require BOTH a complex verb AND a complex noun, or multi-clause
+        // (previously triggered on verb OR noun alone, causing too many double-calls)
+        return (complexVerbs.test(lower) && complexNouns.test(lower)) || multiClause;
     }
     // ─── Explicit Task Creation ─────────────────────────────────────
     hasRedoIntent(content) {

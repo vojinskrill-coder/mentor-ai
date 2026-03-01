@@ -107,8 +107,8 @@ export interface CompletionResult {
 @Injectable()
 export class AiGatewayService {
   private readonly logger = new Logger(AiGatewayService.name);
-  /** Request timeout in milliseconds (1 hour — large models like 72B can be slow) */
-  private readonly requestTimeoutMs = 3600 * 1000;
+  /** Request timeout in milliseconds (3 min — balanced for DeepSeek latency) */
+  private readonly requestTimeoutMs = 180 * 1000;
 
   constructor(
     private readonly llmConfigService: LlmConfigService,

@@ -31,6 +31,9 @@ export interface ConceptQueryOptions {
   limit?: number;
 }
 
+/** Max entries in the findById LRU cache */
+const CONCEPT_CACHE_MAX = 500;
+
 /**
  * Service for querying and managing business concepts.
  * Provides read-only access to the platform's knowledge base.
@@ -38,11 +41,18 @@ export interface ConceptQueryOptions {
 @Injectable()
 export class ConceptService {
   private readonly logger = new Logger(ConceptService.name);
+  /** LRU cache for findById — concepts are immutable between seeds */
+  private readonly conceptCache = new Map<string, ConceptWithRelations>();
 
   constructor(
     private readonly prisma: PlatformPrismaService,
     private readonly aiGateway: AiGatewayService
   ) {}
+
+  /** Clear the concept cache (call after re-seeding) */
+  clearCache(): void {
+    this.conceptCache.clear();
+  }
 
   /**
    * Finds concepts with optional filtering and pagination.
@@ -122,10 +132,20 @@ export class ConceptService {
    * @throws NotFoundException if concept doesn't exist
    */
   async findById(id: string): Promise<ConceptWithRelations> {
+    // Check LRU cache
+    const cached = this.conceptCache.get(id);
+    if (cached) {
+      // Move to end for LRU ordering (delete + re-set)
+      this.conceptCache.delete(id);
+      this.conceptCache.set(id, cached);
+      return cached;
+    }
+
     const concept = await this.prisma.concept.findUnique({
       where: { id },
       include: {
         relatedTo: {
+          take: 5,
           include: {
             targetConcept: {
               select: {
@@ -145,6 +165,7 @@ export class ConceptService {
           },
         },
         relatedFrom: {
+          take: 5,
           include: {
             sourceConcept: {
               select: {
@@ -197,7 +218,7 @@ export class ConceptService {
       })),
     ];
 
-    return {
+    const result: ConceptWithRelations = {
       id: concept.id,
       name: concept.name,
       slug: concept.slug,
@@ -211,6 +232,15 @@ export class ConceptService {
       updatedAt: concept.updatedAt.toISOString(),
       relatedConcepts,
     };
+
+    // Store in LRU cache, evict oldest if full
+    this.conceptCache.set(id, result);
+    if (this.conceptCache.size > CONCEPT_CACHE_MAX) {
+      const oldest = this.conceptCache.keys().next().value;
+      if (oldest) this.conceptCache.delete(oldest);
+    }
+
+    return result;
   }
 
   /**
@@ -306,9 +336,7 @@ export class ConceptService {
    * Batch lookup of concepts by IDs.
    * Used by ConversationService to resolve concept details for tree display.
    */
-  async findByIds(
-    ids: string[]
-  ): Promise<
+  async findByIds(ids: string[]): Promise<
     Map<
       string,
       {

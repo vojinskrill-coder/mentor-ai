@@ -723,13 +723,19 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
         };
       });
 
+      // === PERFORMANCE TIMING ===
+      const perfStart = Date.now();
+      const perf: Record<string, number> = {};
+
       // Build business context from tenant profile + onboarding notes
       const businessContext = await this.buildBusinessContext(
         authenticatedClient.tenantId,
         authenticatedClient.userId
       );
+      perf.businessContext = Date.now() - perfStart;
 
       // Pre-AI enrichment: concept search + memory context + web search + business brain context in parallel
+      const enrichmentStart = Date.now();
       const webSearchEnabled = (payload as any).webSearchEnabled !== false;
       const [relevantConcepts, memoryContext, webSearchResults, businessBrainContext] =
         await Promise.all([
@@ -757,7 +763,10 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
             .catch(() => ''),
         ]);
 
+      perf.enrichmentParallel = Date.now() - enrichmentStart;
+
       // Build enriched context with curriculum concepts + memory + business brain
+      const conceptLoadStart = Date.now();
       let enrichedContext = businessContext;
 
       // Append tenant-wide business brain memories (Story 3.3 AC3)
@@ -773,7 +782,14 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
           try {
             const full = await this.conceptService.findById(concept.conceptId);
             if (full.extendedDescription) {
-              enrichedContext += `\nDETALJNO: ${full.extendedDescription}`;
+              // Trim to first paragraph or 800 chars to reduce context bloat
+              const desc = full.extendedDescription;
+              const firstParagraphEnd = desc.indexOf('\n\n');
+              const trimmed =
+                firstParagraphEnd > 0 && firstParagraphEnd < 800
+                  ? desc.substring(0, firstParagraphEnd)
+                  : desc.substring(0, 800);
+              enrichedContext += `\nDETALJNO: ${trimmed}`;
             }
             if (full.relatedConcepts && full.relatedConcepts.length > 0) {
               const related = full.relatedConcepts
@@ -804,11 +820,15 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
         enrichedContext += this.webSearchService.formatSourcesAsObsidian(webSearchResults);
       }
 
+      perf.conceptLoading = Date.now() - conceptLoadStart;
+      perf.contextChars = enrichedContext.length;
+
       // === MULTI-STEP ORCHESTRATION ===
       const isComplex = this.isComplexQuery(content);
       let researchBrief = '';
 
       if (isComplex) {
+        const researchStart = Date.now();
         client.emit('chat:research-phase', { phase: 'researching' });
         researchBrief = await this.buildResearchBrief(
           content,
@@ -820,15 +840,19 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
           authenticatedClient.userId
         );
         client.emit('chat:research-phase', { phase: 'responding' });
+        perf.researchBrief = Date.now() - researchStart;
       }
 
       const finalContext = researchBrief
         ? `${enrichedContext}\n\n--- ISTRAŽIVAČKI BRIEF ---\n${researchBrief}\n--- KRAJ BRIEFA ---\nKoristi brief kao osnovu za stručan odgovor. Ne pominjaj brief — samo daj sveobuhvatan odgovor.`
         : enrichedContext;
 
+      perf.finalContextChars = finalContext.length;
+
       // Stream AI response with confidence calculation (Story 2.5)
       let fullContent = '';
       let chunkIndex = 0;
+      const aiCallStart = Date.now();
 
       const completionResult = await this.aiGatewayService.streamCompletionWithContext(
         messages,
@@ -851,6 +875,24 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
           });
         }
       );
+
+      perf.aiCall = Date.now() - aiCallStart;
+      perf.totalMs = Date.now() - perfStart;
+
+      // === LOG PERFORMANCE BREAKDOWN ===
+      this.logger.log({
+        message: '⏱ PERF BREAKDOWN',
+        businessContextMs: perf.businessContext,
+        enrichmentParallelMs: perf.enrichmentParallel,
+        conceptLoadingMs: perf.conceptLoading,
+        researchBriefMs: perf.researchBrief ?? 0,
+        aiCallMs: perf.aiCall,
+        totalMs: perf.totalMs,
+        contextChars: perf.contextChars,
+        finalContextChars: perf.finalContextChars,
+        isComplex,
+        conceptsMatched: relevantConcepts.length,
+      });
 
       // Extract confidence from result
       const confidence = completionResult.confidence;
@@ -1420,7 +1462,7 @@ Ako nema zadataka: []`;
     const lower = content.toLowerCase().trim();
 
     // Skip short messages (greetings, yes/no)
-    if (lower.length < 15) return false;
+    if (lower.length < 30) return false;
 
     // Skip simple patterns
     if (
@@ -1443,7 +1485,9 @@ Ako nema zadataka: []`;
       lower
     );
 
-    return complexVerbs.test(lower) || complexNouns.test(lower) || multiClause;
+    // Require BOTH a complex verb AND a complex noun, or multi-clause
+    // (previously triggered on verb OR noun alone, causing too many double-calls)
+    return (complexVerbs.test(lower) && complexNouns.test(lower)) || multiClause;
   }
 
   // ─── Explicit Task Creation ─────────────────────────────────────
