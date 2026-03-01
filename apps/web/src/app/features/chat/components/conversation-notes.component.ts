@@ -1,5 +1,6 @@
 import {
   Component,
+  computed,
   inject,
   signal,
   input,
@@ -13,7 +14,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NotesApiService } from '../services/notes-api.service';
 import { NoteType, NoteStatus } from '@mentor-ai/shared/types';
-import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
+import type { NoteItem, CommentItem, ParallelPopuniTaskState } from '@mentor-ai/shared/types';
 // eslint-disable-next-line @nx/enforce-module-boundaries
 import { MarkdownPipe } from '@mentor-ai/shared/ui';
 
@@ -656,6 +657,135 @@ import { MarkdownPipe } from '@mentor-ai/shared/ui';
         }
       }
 
+      /* ── Mission Control (Parallel Popuni) ── */
+      .mission-control {
+        background: #1a1a1a;
+        border: 1px solid #2a2a2a;
+        border-radius: 10px;
+        margin: 12px;
+        overflow: hidden;
+      }
+      .mission-control-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        border-bottom: 1px solid #2a2a2a;
+      }
+      .mission-control-icon {
+        color: #3b82f6;
+        display: flex;
+        flex-shrink: 0;
+      }
+      .mission-control-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: #fafafa;
+      }
+      .mission-control-count {
+        margin-left: auto;
+        font-size: 12px;
+        color: #a1a1a1;
+      }
+      .mission-control-progress-bar {
+        height: 3px;
+        background: #242424;
+      }
+      .mission-control-progress-fill {
+        height: 100%;
+        background: #3b82f6;
+        transition: width 0.4s ease;
+      }
+      .mission-control-tasks {
+        padding: 8px 0;
+      }
+      .mission-task-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 16px;
+        font-size: 13px;
+      }
+      .mission-task-row:hover {
+        background: #242424;
+      }
+      .mission-task-done {
+        opacity: 0.7;
+      }
+      .mission-task-failed {
+        opacity: 0.8;
+      }
+      .mission-task-icon {
+        width: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .mission-spinner {
+        width: 14px;
+        height: 14px;
+        border: 2px solid #2a2a2a;
+        border-top-color: #3b82f6;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      .status-queued {
+        color: #a1a1a1;
+        font-size: 10px;
+      }
+      .status-completed {
+        color: #22c55e;
+        font-weight: bold;
+        font-size: 14px;
+      }
+      .status-failed {
+        color: #ef4444;
+        font-weight: bold;
+        font-size: 14px;
+      }
+      .mission-task-title {
+        color: #fafafa;
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .mission-task-status {
+        color: #a1a1a1;
+        font-size: 12px;
+        flex-shrink: 0;
+        text-align: right;
+        min-width: 80px;
+      }
+      .mission-score {
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+      }
+      .score-high {
+        color: #22c55e;
+        background: rgba(34, 197, 94, 0.1);
+      }
+      .score-mid {
+        color: #eab308;
+        background: rgba(234, 179, 8, 0.1);
+      }
+      .score-low {
+        color: #ef4444;
+        background: rgba(239, 68, 68, 0.1);
+      }
+      .mission-error {
+        color: #ef4444;
+        font-size: 11px;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
       /* ── Comments Section ── */
       .comments-section {
         margin-top: 12px;
@@ -1153,7 +1283,113 @@ import { MarkdownPipe } from '@mentor-ai/shared/ui';
     `,
   ],
   template: `
-    @if (isGeneratingPlan()) {
+    @if (isParallelExecuting()) {
+      <div class="mission-control">
+        <div class="mission-control-header">
+          <span class="mission-control-icon">
+            <svg
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              style="width:18px;height:18px"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M13 10V3L4 14h7v7l9-11h-7z"
+              />
+            </svg>
+          </span>
+          <span class="mission-control-title">Paralelno izvršavanje</span>
+          <span class="mission-control-count">
+            {{ parallelCompletedCount() }}/{{ parallelTaskStates().length }} završeno
+          </span>
+        </div>
+        <div class="mission-control-progress-bar">
+          <div
+            class="mission-control-progress-fill"
+            [style.width.%]="
+              parallelTaskStates().length
+                ? (parallelCompletedCount() / parallelTaskStates().length) * 100
+                : 0
+            "
+          ></div>
+        </div>
+        <div class="mission-control-tasks">
+          @for (task of parallelTaskStates(); track task.taskId) {
+            <div
+              class="mission-task-row"
+              [class.mission-task-done]="task.status === 'completed'"
+              [class.mission-task-failed]="task.status === 'failed'"
+            >
+              <span class="mission-task-icon">
+                @switch (task.status) {
+                  @case ('queued') {
+                    <span class="status-queued">&#9679;</span>
+                  }
+                  @case ('running-workflow') {
+                    <span class="mission-spinner"></span>
+                  }
+                  @case ('running-steps') {
+                    <span class="mission-spinner"></span>
+                  }
+                  @case ('synthesizing') {
+                    <span class="mission-spinner"></span>
+                  }
+                  @case ('scoring') {
+                    <span class="mission-spinner"></span>
+                  }
+                  @case ('completed') {
+                    <span class="status-completed">&#10003;</span>
+                  }
+                  @case ('failed') {
+                    <span class="status-failed">&#10007;</span>
+                  }
+                }
+              </span>
+              <span class="mission-task-title">{{ task.title }}</span>
+              <span class="mission-task-status">
+                @switch (task.status) {
+                  @case ('queued') {
+                    U redu...
+                  }
+                  @case ('running-workflow') {
+                    Generisanje plana...
+                  }
+                  @case ('running-steps') {
+                    Korak {{ task.currentStep }}/{{ task.totalSteps }}
+                  }
+                  @case ('synthesizing') {
+                    Sinteza...
+                  }
+                  @case ('scoring') {
+                    Ocenjivanje...
+                  }
+                  @case ('completed') {
+                    @if (task.score != null) {
+                      <span
+                        class="mission-score"
+                        [class.score-high]="task.score! >= 80"
+                        [class.score-mid]="task.score! >= 50 && task.score! < 80"
+                        [class.score-low]="task.score! < 50"
+                      >
+                        {{ task.score }}
+                      </span>
+                    } @else {
+                      Gotovo
+                    }
+                  }
+                  @case ('failed') {
+                    <span class="mission-error">{{ task.error ?? 'Greška' }}</span>
+                  }
+                }
+              </span>
+            </div>
+          }
+        </div>
+      </div>
+    } @else if (isGeneratingPlan()) {
       <div class="executing-bar">
         <span class="executing-spinner"></span>
         Generisanje plana...
@@ -1239,7 +1475,7 @@ import { MarkdownPipe } from '@mentor-ai/shared/ui';
           <button class="select-link" (click)="deselectAll()">Poništi izbor</button>
           <button
             class="run-agents-btn"
-            [disabled]="isExecuting() || isGeneratingPlan()"
+            [disabled]="isExecuting() || isGeneratingPlan() || isParallelExecuting()"
             (click)="onRunAgents()"
           >
             Pokreni agente
@@ -1897,6 +2133,8 @@ export class ConversationNotesComponent {
   submittingResultId = input<string | null>(null);
   taskResultContent = input<string>('');
   isGeneratingPlan = input(false);
+  parallelTaskStates = input<ParallelPopuniTaskState[]>([]);
+  isParallelExecuting = input(false);
   viewMessage = output<{ conversationId: string; messageId: string }>();
   runAgents = output<string[]>();
   executeTask = output<string>();
@@ -1916,6 +2154,12 @@ export class ConversationNotesComponent {
   readonly expandedSubtasks = signal<Set<string>>(new Set());
   readonly reportTexts = signal<Map<string, string>>(new Map());
   readonly scoringInProgress = signal<Set<string>>(new Set());
+  readonly parallelCompletedCount = computed(
+    () =>
+      this.parallelTaskStates().filter((t) => t.status === 'completed' || t.status === 'failed')
+        .length
+  );
+
   readonly deletingInProgress = signal<Set<string>>(new Set());
   readonly submittingInProgress = signal<Set<string>>(new Set());
   readonly generatingReportId = signal<string | null>(null);

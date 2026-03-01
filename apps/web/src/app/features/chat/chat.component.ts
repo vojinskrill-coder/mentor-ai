@@ -41,6 +41,7 @@ import {
   type WorkflowNavigatePayload,
   type YoloProgressPayload,
   type SuggestedAction,
+  type ParallelPopuniTaskState,
 } from '@mentor-ai/shared/types';
 import { PersonaSelectorComponent } from '../personas/persona-selector.component';
 import { PersonaBadgeComponent } from '../personas/persona-badge.component';
@@ -2597,6 +2598,8 @@ interface WorkflowStatusEntry {
                   [submittingResultId]="submittingResultId$()"
                   [taskResultContent]="taskResultStreamContent$()"
                   [isGeneratingPlan]="isGeneratingPlan$()"
+                  [parallelTaskStates]="parallelTaskStates$()"
+                  [isParallelExecuting]="isParallelExecuting$()"
                   (viewMessage)="onViewMessage($event)"
                   (runAgents)="onRunAgents($event)"
                   (executeTask)="onExecuteSingleTask($event)"
@@ -2773,6 +2776,8 @@ interface WorkflowStatusEntry {
                 [submittingResultId]="submittingResultId$()"
                 [taskResultContent]="taskResultStreamContent$()"
                 [isGeneratingPlan]="isGeneratingPlan$()"
+                [parallelTaskStates]="parallelTaskStates$()"
+                [isParallelExecuting]="isParallelExecuting$()"
                 (viewMessage)="onViewMessage($event)"
                 (runAgents)="onRunAgents($event)"
                 (executeTask)="onExecuteSingleTask($event)"
@@ -3057,6 +3062,12 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   readonly autoAiPopuni$ = signal(false);
   readonly isTogglingAutoPopuni$ = signal(false);
   readonly autoPopuniTaskIds$ = signal<string[]>([]);
+
+  // Parallel Popuni (Manual Mode)
+  readonly parallelBatchId$ = signal<string | null>(null);
+  readonly parallelTaskStates$ = signal<ParallelPopuniTaskState[]>([]);
+  readonly isParallelExecuting$ = computed(() => this.parallelBatchId$() !== null);
+
   readonly isPlatformOwner$ = computed(
     () => this.authService.currentUser()?.role === 'PLATFORM_OWNER'
   );
@@ -3677,21 +3688,8 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     }
 
-    this.isGeneratingPlan$.set(true);
-    this.chatWsService.emitRunAgents(taskIds, conversationId);
-    // Safety timeout: clear generating state after 90s if server never responds
-    if (this.planGenerationTimeout) clearTimeout(this.planGenerationTimeout);
-    this.planGenerationTimeout = setTimeout(() => {
-      if (this.isGeneratingPlan$()) {
-        this.isGeneratingPlan$.set(false);
-        this.showError('Generisanje plana je trajalo predugo — pokušajte ponovo.');
-      }
-    }, 90_000);
-    // Auto-scroll so the loading indicator is visible
-    setTimeout(() => {
-      const el = this.messagesContainer?.nativeElement;
-      if (el) el.scrollTop = el.scrollHeight;
-    });
+    // Use parallel popuni — all tasks execute simultaneously
+    this.chatWsService.emitParallelPopuni(taskIds, conversationId, this.autoAiPopuni$());
   }
 
   onExecuteSingleTask(taskId: string): void {
@@ -4505,6 +4503,49 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       // Individual task errors — the complete event will have the final count
     });
 
+    // ─── Parallel Popuni Events ─────────────────────────────────
+    this.chatWsService.onParallelPopuniStart((data) => {
+      this.parallelBatchId$.set(data.batchId);
+      this.parallelTaskStates$.set(data.tasks);
+    });
+
+    this.chatWsService.onParallelPopuniProgress((data) => {
+      this.parallelTaskStates$.update((states) =>
+        states.map((s) =>
+          s.taskId === data.taskId
+            ? {
+                ...s,
+                status: data.status,
+                currentStep: data.currentStep ?? s.currentStep,
+                totalSteps: data.totalSteps ?? s.totalSteps,
+                stepLabel: data.stepLabel ?? s.stepLabel,
+              }
+            : s
+        )
+      );
+    });
+
+    this.chatWsService.onParallelPopuniTaskDone((data) => {
+      this.parallelTaskStates$.update((states) =>
+        states.map((s) =>
+          s.taskId === data.taskId
+            ? {
+                ...s,
+                status: data.status,
+                score: data.score ?? s.score,
+                error: data.error,
+              }
+            : s
+        )
+      );
+    });
+
+    this.chatWsService.onParallelPopuniBatchDone(() => {
+      this.parallelBatchId$.set(null);
+      this.conversationNotes?.loadNotes();
+      this.conceptTree?.loadTree();
+    });
+
     // ─── Execution Persistence: State Restoration on Reconnect ─────
     this.chatWsService.onExecutionActiveState((data) => {
       // M1: Track whether we've already restored a YOLO/workflow to avoid overwrites
@@ -4720,6 +4761,49 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
     this.chatWsService.onAutoPopuniTaskError(() => {
       // Individual task errors — the complete event will have the final count
+    });
+
+    // ─── Parallel Popuni Events (reconnect) ────────────────────
+    this.chatWsService.onParallelPopuniStart((data) => {
+      this.parallelBatchId$.set(data.batchId);
+      this.parallelTaskStates$.set(data.tasks);
+    });
+
+    this.chatWsService.onParallelPopuniProgress((data) => {
+      this.parallelTaskStates$.update((states) =>
+        states.map((s) =>
+          s.taskId === data.taskId
+            ? {
+                ...s,
+                status: data.status,
+                currentStep: data.currentStep ?? s.currentStep,
+                totalSteps: data.totalSteps ?? s.totalSteps,
+                stepLabel: data.stepLabel ?? s.stepLabel,
+              }
+            : s
+        )
+      );
+    });
+
+    this.chatWsService.onParallelPopuniTaskDone((data) => {
+      this.parallelTaskStates$.update((states) =>
+        states.map((s) =>
+          s.taskId === data.taskId
+            ? {
+                ...s,
+                status: data.status,
+                score: data.score ?? s.score,
+                error: data.error,
+              }
+            : s
+        )
+      );
+    });
+
+    this.chatWsService.onParallelPopuniBatchDone(() => {
+      this.parallelBatchId$.set(null);
+      this.conversationNotes?.loadNotes();
+      this.conceptTree?.loadTree();
     });
 
     // ─── Execution Persistence: State Restoration on Reconnect ─────

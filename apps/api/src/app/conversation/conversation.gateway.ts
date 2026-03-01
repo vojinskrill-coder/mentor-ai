@@ -49,6 +49,12 @@ import {
   type WorkflowNavigatePayload,
   type YoloProgressPayload,
   type YoloCompletePayload,
+  type ParallelPopuniTaskState,
+  type ParallelPopuniStartPayload,
+  type ParallelPopuniProgressPayload,
+  type ParallelPopuniTaskDonePayload,
+  type ParallelPopuniBatchDonePayload,
+  type ParallelTaskStatus,
 } from '@mentor-ai/shared/types';
 
 interface AuthenticatedSocket extends Socket {
@@ -2568,6 +2574,658 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
         message: error instanceof Error ? error.message : 'Failed to build plan',
         conversationId: payload.conversationId,
       });
+    }
+  }
+
+  // ─── Parallel Popuni (Manual Mode) ─────────────────────────────
+
+  /** Active batch cancellation flags — set batchId → true to cancel */
+  private parallelPopuniCancelled = new Map<string, boolean>();
+
+  @SubscribeMessage('workflow:parallel-popuni')
+  async handleParallelPopuni(
+    @ConnectedSocket() client: Socket,
+    @MessageBody()
+    payload: { taskIds: string[]; conversationId: string; autoPopuni?: boolean }
+  ): Promise<void> {
+    const auth = client as AuthenticatedSocket;
+    const { userId, tenantId } = auth;
+
+    try {
+      if (!payload.taskIds?.length) {
+        client.emit('workflow:error', {
+          message: 'Nema izabranih zadataka',
+          conversationId: payload.conversationId,
+        });
+        return;
+      }
+
+      const batchId = createId();
+      this.parallelPopuniCancelled.set(batchId, false);
+
+      this.logger.log({
+        message: 'Parallel Popuni requested',
+        batchId,
+        userId,
+        taskCount: payload.taskIds.length,
+      });
+
+      // Load tasks
+      const tasks = await this.prisma.note.findMany({
+        where: {
+          id: { in: payload.taskIds },
+          tenantId,
+          noteType: 'TASK',
+        },
+        select: {
+          id: true,
+          title: true,
+          content: true,
+          conceptId: true,
+          conversationId: true,
+          status: true,
+          expectedOutcome: true,
+        },
+      });
+
+      if (tasks.length === 0) {
+        client.emit('workflow:error', {
+          message: 'Zadaci nisu pronađeni',
+          conversationId: payload.conversationId,
+        });
+        return;
+      }
+
+      // Determine auto-popuni: use payload flag, or fall back to tenant setting
+      let autoPopuni = payload.autoPopuni;
+      if (autoPopuni === undefined) {
+        const tenant = await this.prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { autoAiPopuni: true },
+        });
+        autoPopuni = tenant?.autoAiPopuni ?? false;
+      }
+
+      // Resolve PREREQUISITE dependency layers
+      const layers = await this.resolveParallelDependencies(tasks);
+
+      // Build initial task states
+      const initialStates: ParallelPopuniTaskState[] = tasks.map((t) => ({
+        taskId: t.id,
+        title: t.title,
+        status: 'queued' as ParallelTaskStatus,
+      }));
+
+      // Emit start
+      const startPayload: ParallelPopuniStartPayload = {
+        batchId,
+        tasks: initialStates,
+      };
+      client.emit('parallel-popuni:start', startPayload);
+
+      // Run the parallel loop (fire-and-forget with error handling)
+      this.runParallelPopuniLoop(
+        client,
+        layers,
+        batchId,
+        tenantId,
+        userId,
+        payload.conversationId,
+        autoPopuni
+      ).catch((err) => {
+        this.logger.error({
+          message: 'Parallel Popuni loop crashed',
+          batchId,
+          error: err instanceof Error ? err.message : 'Unknown',
+        });
+      });
+    } catch (error) {
+      this.logger.error({
+        message: 'Parallel Popuni handler failed',
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+      client.emit('workflow:error', {
+        message: error instanceof Error ? error.message : 'Greška pri pokretanju',
+        conversationId: payload.conversationId,
+      });
+    }
+  }
+
+  @SubscribeMessage('parallel-popuni:cancel')
+  handleParallelPopuniCancel(
+    @ConnectedSocket() _client: Socket,
+    @MessageBody() payload: { batchId: string }
+  ): void {
+    if (payload.batchId && this.parallelPopuniCancelled.has(payload.batchId)) {
+      this.parallelPopuniCancelled.set(payload.batchId, true);
+      this.logger.log({ message: 'Parallel Popuni cancelled', batchId: payload.batchId });
+    }
+  }
+
+  /**
+   * Resolve PREREQUISITE dependency layers among selected tasks.
+   * Returns array of layers — each layer's tasks can run simultaneously.
+   * Layer N+1 depends on Layer N.
+   */
+  private async resolveParallelDependencies(
+    tasks: Array<{ id: string; conceptId: string | null }>
+  ): Promise<Array<Array<{ id: string; conceptId: string | null }>>> {
+    const conceptIds = tasks.filter((t) => t.conceptId).map((t) => t.conceptId!);
+
+    if (conceptIds.length === 0) {
+      // No concepts → all tasks in one layer (all parallel)
+      return [tasks];
+    }
+
+    // Load PREREQUISITE edges between selected task concepts
+    const relationships = await this.prisma.conceptRelationship.findMany({
+      where: {
+        relationshipType: 'PREREQUISITE',
+        sourceConceptId: { in: conceptIds },
+        targetConceptId: { in: conceptIds },
+      },
+      select: { sourceConceptId: true, targetConceptId: true },
+    });
+
+    // Build in-degree map (conceptId → count of prerequisites among selected)
+    const conceptToTask = new Map<string, string[]>();
+    for (const t of tasks) {
+      if (t.conceptId) {
+        const existing = conceptToTask.get(t.conceptId) ?? [];
+        existing.push(t.id);
+        conceptToTask.set(t.conceptId, existing);
+      }
+    }
+
+    // taskId → set of prerequisite taskIds (among selected)
+    const prereqs = new Map<string, Set<string>>();
+    for (const t of tasks) prereqs.set(t.id, new Set());
+
+    for (const rel of relationships) {
+      // source is PREREQUISITE of target → target depends on source
+      const dependentTaskIds = conceptToTask.get(rel.targetConceptId) ?? [];
+      const prereqTaskIds = conceptToTask.get(rel.sourceConceptId) ?? [];
+      for (const depId of dependentTaskIds) {
+        for (const preId of prereqTaskIds) {
+          if (depId !== preId) {
+            prereqs.get(depId)?.add(preId);
+          }
+        }
+      }
+    }
+
+    // Topological sort into layers (Kahn's algorithm)
+    const layers: Array<Array<{ id: string; conceptId: string | null }>> = [];
+    const taskMap = new Map(tasks.map((t) => [t.id, t]));
+    const remaining = new Set(tasks.map((t) => t.id));
+
+    while (remaining.size > 0) {
+      // Find all tasks with no unresolved prerequisites
+      const layer: Array<{ id: string; conceptId: string | null }> = [];
+      for (const taskId of remaining) {
+        const deps = prereqs.get(taskId)!;
+        const unresolvedDeps = [...deps].filter((d) => remaining.has(d));
+        if (unresolvedDeps.length === 0) {
+          layer.push(taskMap.get(taskId)!);
+        }
+      }
+
+      if (layer.length === 0) {
+        // Circular dependency — dump remaining into one layer
+        for (const taskId of remaining) {
+          layer.push(taskMap.get(taskId)!);
+        }
+        layers.push(layer);
+        break;
+      }
+
+      for (const t of layer) remaining.delete(t.id);
+      layers.push(layer);
+    }
+
+    this.logger.log({
+      message: 'Parallel dependency resolution',
+      layerCount: layers.length,
+      layerSizes: layers.map((l) => l.length),
+    });
+
+    return layers;
+  }
+
+  /**
+   * Execute all dependency layers, running all tasks within a layer simultaneously.
+   */
+  private async runParallelPopuniLoop(
+    client: Socket,
+    layers: Array<Array<{ id: string; conceptId: string | null }>>,
+    batchId: string,
+    tenantId: string,
+    userId: string,
+    conversationId: string,
+    autoPopuni: boolean
+  ): Promise<void> {
+    // Cache business context once for all tasks
+    const businessContext = await this.buildBusinessContext(tenantId, userId);
+    const completedSummaries = new Map<string, string>();
+    let completedCount = 0;
+    let failedCount = 0;
+
+    for (let layerIdx = 0; layerIdx < layers.length; layerIdx++) {
+      if (this.parallelPopuniCancelled.get(batchId)) break;
+
+      const layer = layers[layerIdx]!;
+      this.logger.log({
+        message: `Parallel Popuni: executing layer ${layerIdx + 1}/${layers.length}`,
+        batchId,
+        taskCount: layer.length,
+      });
+
+      // Run ALL tasks in this layer simultaneously
+      const results = await Promise.allSettled(
+        layer.map((task) =>
+          this.executeParallelPopuniWorker(
+            client,
+            task,
+            batchId,
+            tenantId,
+            userId,
+            businessContext,
+            completedSummaries,
+            autoPopuni
+          )
+        )
+      );
+
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          completedCount++;
+        } else {
+          failedCount++;
+        }
+      }
+    }
+
+    // Clean up cancellation flag
+    this.parallelPopuniCancelled.delete(batchId);
+
+    // Emit batch done
+    const batchDone: ParallelPopuniBatchDonePayload = {
+      batchId,
+      completedCount,
+      failedCount,
+    };
+    client.emit('parallel-popuni:batch-done', batchDone);
+
+    this.logger.log({
+      message: 'Parallel Popuni batch complete',
+      batchId,
+      completedCount,
+      failedCount,
+    });
+  }
+
+  /**
+   * Execute a single task in the parallel popuni batch.
+   * Full lifecycle: workflow → steps → synthesis → scoring (if autoPopuni).
+   * Modeled after autoPopuniSingleTask but emits parallel-popuni events.
+   */
+  private async executeParallelPopuniWorker(
+    client: Socket,
+    task: { id: string; conceptId: string | null },
+    batchId: string,
+    tenantId: string,
+    userId: string,
+    businessContext: string,
+    completedSummaries: Map<string, string>,
+    autoPopuni: boolean
+  ): Promise<void> {
+    const taskNote = await this.prisma.note.findUnique({ where: { id: task.id } });
+    if (!taskNote) throw new Error(`Task ${task.id} not found`);
+
+    // Skip already completed tasks
+    if (taskNote.status === 'COMPLETED' && taskNote.userReport) {
+      const donePayload: ParallelPopuniTaskDonePayload = {
+        batchId,
+        taskId: task.id,
+        status: 'completed',
+        score: taskNote.aiScore,
+      };
+      client.emit('parallel-popuni:task-done', donePayload);
+      completedSummaries.set(task.id, (taskNote.userReport ?? '').substring(0, 500));
+      return;
+    }
+
+    const convId = taskNote.conversationId ?? '';
+
+    try {
+      // ── Phase 1: Generate workflow ──
+      const progressWorkflow: ParallelPopuniProgressPayload = {
+        batchId,
+        taskId: task.id,
+        status: 'running-workflow',
+      };
+      client.emit('parallel-popuni:task-progress', progressWorkflow);
+
+      let childNotes = await this.prisma.note.findMany({
+        where: { parentNoteId: task.id },
+        select: { title: true, content: true, workflowStepNumber: true, status: true },
+        orderBy: { workflowStepNumber: 'asc' },
+      });
+
+      if (childNotes.length === 0) {
+        const isMinimalContent = !taskNote.content || taskNote.content.length < 200;
+        const hasConcept = !!taskNote.conceptId;
+
+        let workflow: {
+          conceptName: string;
+          steps: import('@mentor-ai/shared/types').WorkflowStep[];
+        };
+        if (hasConcept && isMinimalContent) {
+          workflow = await this.workflowService.getOrGenerateWorkflow(
+            taskNote.conceptId!,
+            tenantId,
+            userId
+          );
+        } else {
+          workflow = await this.workflowService.generateTaskSpecificWorkflow(
+            {
+              title: taskNote.title,
+              content: taskNote.content ?? '',
+              conversationId: convId || null,
+              conceptId: taskNote.conceptId,
+            },
+            tenantId,
+            userId
+          );
+        }
+
+        // ── Phase 2: Execute steps ──
+        const progressSteps: ParallelPopuniProgressPayload = {
+          batchId,
+          taskId: task.id,
+          status: 'running-steps',
+          currentStep: 0,
+          totalSteps: workflow.steps.length,
+        };
+        client.emit('parallel-popuni:task-progress', progressSteps);
+
+        const stepSummaries: Array<{ title: string; conceptName: string; summary: string }> = [];
+
+        for (let stepIdx = 0; stepIdx < workflow.steps.length; stepIdx++) {
+          if (this.parallelPopuniCancelled.get(batchId)) {
+            throw new Error('Batch cancelled');
+          }
+
+          const workflowStep = workflow.steps[stepIdx]!;
+
+          const stepProgress: ParallelPopuniProgressPayload = {
+            batchId,
+            taskId: task.id,
+            status: 'running-steps',
+            currentStep: stepIdx + 1,
+            totalSteps: workflow.steps.length,
+            stepLabel: workflowStep.title,
+          };
+          client.emit('parallel-popuni:task-progress', stepProgress);
+
+          const step: ExecutionPlanStep = {
+            stepId: `parallel_step_${createId()}`,
+            conceptId: taskNote.conceptId ?? '',
+            conceptName: workflow.conceptName,
+            workflowStepNumber: workflowStep.stepNumber,
+            title: workflowStep.title,
+            description: workflowStep.description,
+            estimatedMinutes: workflowStep.estimatedMinutes,
+            departmentTag: workflowStep.departmentTag,
+            status: 'in_progress',
+            taskTitle: taskNote.title,
+            taskContent: taskNote.content ?? undefined,
+            taskConversationId: convId || undefined,
+          };
+
+          // Inject cross-task context from completed siblings
+          const crossTaskContext =
+            completedSummaries.size > 0
+              ? Array.from(completedSummaries.entries())
+                  .map(([, summary]) => summary)
+                  .join('\n\n')
+              : '';
+
+          const result = await this.workflowService.executeStepAutonomous(
+            step,
+            convId,
+            userId,
+            tenantId,
+            () => {
+              /* parallel: collect silently */
+            },
+            [
+              ...stepSummaries,
+              ...(crossTaskContext
+                ? [
+                    {
+                      title: 'Kontekst završenih zadataka',
+                      conceptName: '',
+                      summary: crossTaskContext,
+                    },
+                  ]
+                : []),
+            ]
+          );
+
+          // Dedup: check if child note already exists
+          const existingSubTask = await this.notesService.findExistingSubTask(
+            tenantId,
+            task.id,
+            workflowStep.stepNumber
+          );
+
+          if (!existingSubTask) {
+            await this.notesService.createNote({
+              title: workflowStep.title,
+              content: result.content,
+              source: NoteSource.CONVERSATION,
+              noteType: NoteType.TASK,
+              status: NoteStatus.READY_FOR_REVIEW,
+              userId,
+              tenantId,
+              conversationId: convId || undefined,
+              conceptId: taskNote.conceptId ?? undefined,
+              parentNoteId: task.id,
+              expectedOutcome: workflowStep.expectedOutcome?.substring(0, 500),
+              workflowStepNumber: workflowStep.stepNumber,
+            });
+          }
+
+          stepSummaries.push({
+            title: workflowStep.title,
+            conceptName: workflow.conceptName,
+            summary: result.content.substring(0, 500),
+          });
+        }
+
+        // Re-load children after step execution
+        childNotes = await this.prisma.note.findMany({
+          where: { parentNoteId: task.id },
+          select: { title: true, content: true, workflowStepNumber: true, status: true },
+          orderBy: { workflowStepNumber: 'asc' },
+        });
+      }
+
+      // ── Phase 3: Synthesis ──
+      const synthProgress: ParallelPopuniProgressPayload = {
+        batchId,
+        taskId: task.id,
+        status: 'synthesizing',
+      };
+      client.emit('parallel-popuni:task-progress', synthProgress);
+
+      // Load concept knowledge
+      let conceptKnowledge = '';
+      if (taskNote.conceptId) {
+        try {
+          const concept = await this.conceptService.findById(taskNote.conceptId);
+          conceptKnowledge = `\n\n--- BAZA ZNANJA ---`;
+          conceptKnowledge += `\nKONCEPT: ${concept.name} (${concept.category})`;
+          conceptKnowledge += `\nDEFINICIJA: ${concept.definition}`;
+          if (concept.extendedDescription) {
+            conceptKnowledge += `\nDETALJNO: ${concept.extendedDescription}`;
+          }
+          conceptKnowledge += '\n--- KRAJ BAZE ZNANJA ---';
+        } catch {
+          /* concept not found */
+        }
+      }
+
+      // Cross-task context for synthesis
+      let crossTaskSynthesis = '';
+      if (completedSummaries.size > 0) {
+        crossTaskSynthesis = '\n\n--- KONTEKST ZAVRŠENIH ZADATAKA ---';
+        for (const [, summary] of completedSummaries) {
+          crossTaskSynthesis += `\n${summary.substring(0, 300)}`;
+        }
+        crossTaskSynthesis += '\n--- KRAJ KONTEKSTA ---';
+      }
+
+      let prompt: string;
+      if (childNotes.length > 0) {
+        const workflowResults = childNotes
+          .map((note, i) => {
+            const stepNum = note.workflowStepNumber ?? i + 1;
+            return `--- KORAK ${stepNum}: ${note.title} ---\n${note.content}`;
+          })
+          .join('\n\n');
+
+        prompt = `Ti si vrhunski poslovni stručnjak. Tvoj tim je završio detaljnu analizu kroz ${childNotes.length} koraka workflow-a. Sintetiši SVE rezultate u FINALNI DOKUMENT koji vlasnik može odmah koristiti.
+
+ZADATAK: ${taskNote.title}
+${taskNote.content ? `OPIS ZADATKA: ${taskNote.content}` : ''}
+${taskNote.expectedOutcome ? `OČEKIVANI REZULTAT: ${taskNote.expectedOutcome}` : ''}
+
+REZULTATI ISTRAŽIVANJA I ANALIZE (koristi SVE podatke iz svih koraka):
+${workflowResults}
+${conceptKnowledge}${crossTaskSynthesis}
+
+KRITIČNO — RAZLIKUJ DVA TIPA ZADATAKA:
+
+A) DIGITALNI ZADACI (sadržaj, planovi, kampanje, mejlovi, strategije, analize, dokumenti, budžeti, prezentacije):
+   → PROIZVEDI GOTOV REZULTAT. Ne piši instrukcije — NAPIŠI sam dokument/sadržaj/plan.
+
+B) FIZIČKI ZADACI (odlazak u prodavnicu, naručivanje, pozivanje klijenta, fizička instalacija):
+   → NE simuliraj da si uradio fizičku radnju.
+   → UMESTO TOGA: napiši TAČNO šta treba uraditi, ko treba da uradi, sa svim detaljima
+   → Označi sa "⚠ ZAHTEVA LJUDSKU AKCIJU:"
+
+PRAVILA ZA FINALNI DOKUMENT:
+1. Ovo je FINALNI DELIVERABLE — gotov dokument, NE izveštaj o radu
+2. Sintetiši rezultate iz koraka u koherentan, upotrebljiv dokument
+3. NIKADA ne piši "trebalo bi da...", "preporučuje se..." za digitalne zadatke — URADI to
+4. Koristi SPECIFIČNE podatke, brojke i nalaze iz koraka — ne generalizuj
+5. Strukturiraj sa ## zaglavljima, tabelama, nabrajanjima
+6. Minimum 1000 reči — ovo je sveobuhvatan dokument
+7. Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
+      } else {
+        // Fallback: direct execution (no workflow steps)
+        let conversationContext = '';
+        try {
+          if (convId) {
+            const conv = await this.conversationService.getConversation(tenantId, convId, userId);
+            const recentMessages = conv.messages.slice(-10);
+            conversationContext = recentMessages
+              .map((m) => {
+                const role = m.role === 'USER' ? 'KORISNIK' : 'AI';
+                const content =
+                  m.content.length > 800 ? m.content.substring(0, 800) + '...' : m.content;
+                return `${role}: ${content}`;
+              })
+              .join('\n\n');
+          }
+        } catch {
+          /* no context available */
+        }
+
+        prompt = `Ti si poslovni stručnjak. IZVRŠI sledeći zadatak u potpunosti.
+
+ZADATAK: ${taskNote.title}
+${taskNote.content ? `OPIS:\n${taskNote.content}` : ''}
+${taskNote.expectedOutcome ? `OČEKIVANI REZULTAT: ${taskNote.expectedOutcome}` : ''}
+${conceptKnowledge}${crossTaskSynthesis}
+${conversationContext ? `\nKONTEKST IZ KONVERZACIJE:\n${conversationContext}` : ''}
+
+PRAVILA:
+1. Proizvedi KOMPLETAN, GOTOV dokument
+2. NIKADA ne piši "trebalo bi da..." za digitalne zadatke — NAPRAVI to sam
+3. Strukturiraj sa ## zaglavljima, tabelama, nabrajanjima
+4. Minimum 800 reči za analitičke zadatke
+5. Odgovaraj ISKLJUČIVO na srpskom jeziku`;
+      }
+
+      let fullContent = '';
+      await this.aiGatewayService.streamCompletionWithContext(
+        [{ role: 'user', content: prompt }],
+        { tenantId, userId, conversationId: convId, businessContext },
+        (chunk: string) => {
+          fullContent += chunk;
+        }
+      );
+
+      // Save synthesis result
+      if (convId) {
+        await this.conversationService.addMessage(
+          tenantId,
+          convId,
+          MessageRole.ASSISTANT,
+          fullContent
+        );
+      }
+      await this.prisma.note.update({
+        where: { id: task.id },
+        data: { status: 'COMPLETED', userReport: fullContent },
+      });
+
+      // Add to shared summaries for sibling tasks
+      completedSummaries.set(task.id, fullContent.substring(0, 500));
+
+      client.emit('chat:notes-updated', { conversationId: convId, count: 0 });
+
+      // ── Phase 4: Scoring (if autoPopuni) ──
+      let score: number | null = null;
+      if (autoPopuni) {
+        const scoreProgress: ParallelPopuniProgressPayload = {
+          batchId,
+          taskId: task.id,
+          status: 'scoring',
+        };
+        client.emit('parallel-popuni:task-progress', scoreProgress);
+
+        const scoreResult = await this.scoreTaskInternal(client, task.id, tenantId, userId);
+        score = scoreResult.score;
+      }
+
+      // Emit task done
+      const donePayload: ParallelPopuniTaskDonePayload = {
+        batchId,
+        taskId: task.id,
+        status: 'completed',
+        score,
+      };
+      client.emit('parallel-popuni:task-done', donePayload);
+    } catch (err) {
+      this.logger.warn({
+        message: 'Parallel Popuni worker failed',
+        batchId,
+        taskId: task.id,
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+
+      const errorPayload: ParallelPopuniTaskDonePayload = {
+        batchId,
+        taskId: task.id,
+        status: 'failed',
+        error: err instanceof Error ? err.message : 'Nepoznata greška',
+      };
+      client.emit('parallel-popuni:task-done', errorPayload);
+      throw err; // Let Promise.allSettled catch it
     }
   }
 

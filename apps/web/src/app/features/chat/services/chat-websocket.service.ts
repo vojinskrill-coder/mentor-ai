@@ -17,6 +17,10 @@ import type {
   WorkflowNavigatePayload,
   YoloProgressPayload,
   YoloCompletePayload,
+  ParallelPopuniStartPayload,
+  ParallelPopuniProgressPayload,
+  ParallelPopuniTaskDonePayload,
+  ParallelPopuniBatchDonePayload,
 } from '@mentor-ai/shared/types';
 
 interface MessageReceivedData {
@@ -94,6 +98,10 @@ type ResearchPhaseCallback = (data: { phase: 'researching' | 'responding' }) => 
 type AutoPopuniStartCallback = (data: { taskIds: string[]; taskCount: number }) => void;
 type AutoPopuniCompleteCallback = (data: { totalTasks: number; completedTasks: number }) => void;
 type AutoPopuniTaskErrorCallback = (data: { taskId: string; message: string }) => void;
+type ParallelPopuniStartCallback = (data: ParallelPopuniStartPayload) => void;
+type ParallelPopuniProgressCallback = (data: ParallelPopuniProgressPayload) => void;
+type ParallelPopuniTaskDoneCallback = (data: ParallelPopuniTaskDonePayload) => void;
+type ParallelPopuniBatchDoneCallback = (data: ParallelPopuniBatchDonePayload) => void;
 
 /** Execution persistence types for reconnect resilience */
 export interface ActiveExecution {
@@ -187,6 +195,10 @@ export class ChatWebsocketService {
   private autoPopuniCompleteCallbacks: AutoPopuniCompleteCallback[] = [];
   private autoPopuniTaskErrorCallbacks: AutoPopuniTaskErrorCallback[] = [];
   private executionActiveStateCallbacks: ExecutionActiveStateCallback[] = [];
+  private parallelPopuniStartCallbacks: ParallelPopuniStartCallback[] = [];
+  private parallelPopuniProgressCallbacks: ParallelPopuniProgressCallback[] = [];
+  private parallelPopuniTaskDoneCallbacks: ParallelPopuniTaskDoneCallback[] = [];
+  private parallelPopuniBatchDoneCallbacks: ParallelPopuniBatchDoneCallback[] = [];
 
   /**
    * Connects to the WebSocket server.
@@ -440,6 +452,23 @@ export class ChatWebsocketService {
       this.autoPopuniTaskErrorCallbacks.forEach((cb) => cb(data));
     });
 
+    // Parallel Popuni events
+    this.socket.on('parallel-popuni:start', (data: ParallelPopuniStartPayload) => {
+      this.parallelPopuniStartCallbacks.forEach((cb) => cb(data));
+    });
+
+    this.socket.on('parallel-popuni:task-progress', (data: ParallelPopuniProgressPayload) => {
+      this.parallelPopuniProgressCallbacks.forEach((cb) => cb(data));
+    });
+
+    this.socket.on('parallel-popuni:task-done', (data: ParallelPopuniTaskDonePayload) => {
+      this.parallelPopuniTaskDoneCallbacks.forEach((cb) => cb(data));
+    });
+
+    this.socket.on('parallel-popuni:batch-done', (data: ParallelPopuniBatchDonePayload) => {
+      this.parallelPopuniBatchDoneCallbacks.forEach((cb) => cb(data));
+    });
+
     // Execution persistence: active state response
     this.socket.on('execution:active-state', (data: ExecutionActiveState) => {
       this.executionActiveStateCallbacks.forEach((cb) => cb(data));
@@ -505,6 +534,16 @@ export class ChatWebsocketService {
   emitRunAgents(taskIds: string[], conversationId: string): void {
     if (!this.checkConnected('pokretanje agenata')) return;
     this.socket!.emit('workflow:run-agents', { taskIds, conversationId });
+  }
+
+  emitParallelPopuni(taskIds: string[], conversationId: string, autoPopuni?: boolean): void {
+    if (!this.checkConnected('paralelno izvršavanje')) return;
+    this.socket!.emit('workflow:parallel-popuni', { taskIds, conversationId, autoPopuni });
+  }
+
+  emitParallelPopuniCancel(batchId: string): void {
+    if (!this.checkConnected('otkazivanje')) return;
+    this.socket!.emit('parallel-popuni:cancel', { batchId });
   }
 
   emitGetPlan(planId: string, conversationId: string): void {
@@ -877,6 +916,38 @@ export class ChatWebsocketService {
     };
   }
 
+  onParallelPopuniStart(callback: ParallelPopuniStartCallback): () => void {
+    this.parallelPopuniStartCallbacks.push(callback);
+    return () => {
+      const index = this.parallelPopuniStartCallbacks.indexOf(callback);
+      if (index > -1) this.parallelPopuniStartCallbacks.splice(index, 1);
+    };
+  }
+
+  onParallelPopuniProgress(callback: ParallelPopuniProgressCallback): () => void {
+    this.parallelPopuniProgressCallbacks.push(callback);
+    return () => {
+      const index = this.parallelPopuniProgressCallbacks.indexOf(callback);
+      if (index > -1) this.parallelPopuniProgressCallbacks.splice(index, 1);
+    };
+  }
+
+  onParallelPopuniTaskDone(callback: ParallelPopuniTaskDoneCallback): () => void {
+    this.parallelPopuniTaskDoneCallbacks.push(callback);
+    return () => {
+      const index = this.parallelPopuniTaskDoneCallbacks.indexOf(callback);
+      if (index > -1) this.parallelPopuniTaskDoneCallbacks.splice(index, 1);
+    };
+  }
+
+  onParallelPopuniBatchDone(callback: ParallelPopuniBatchDoneCallback): () => void {
+    this.parallelPopuniBatchDoneCallbacks.push(callback);
+    return () => {
+      const index = this.parallelPopuniBatchDoneCallbacks.indexOf(callback);
+      if (index > -1) this.parallelPopuniBatchDoneCallbacks.splice(index, 1);
+    };
+  }
+
   clearCallbacks(): void {
     this.messageReceivedCallbacks = [];
     this.messageChunkCallbacks = [];
@@ -913,5 +984,9 @@ export class ChatWebsocketService {
     this.autoPopuniCompleteCallbacks = [];
     this.autoPopuniTaskErrorCallbacks = [];
     this.executionActiveStateCallbacks = [];
+    this.parallelPopuniStartCallbacks = [];
+    this.parallelPopuniProgressCallbacks = [];
+    this.parallelPopuniTaskDoneCallbacks = [];
+    this.parallelPopuniBatchDoneCallbacks = [];
   }
 }

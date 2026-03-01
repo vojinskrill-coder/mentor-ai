@@ -1564,6 +1564,62 @@ export interface WorkflowNavigatePayload {
   conceptName: string;
 }
 
+// ─── Parallel Popuni (Manual Mode) ─────────────────────────────
+
+/** Per-task execution status during parallel popuni */
+export type ParallelTaskStatus =
+  | 'queued'
+  | 'running-workflow'
+  | 'running-steps'
+  | 'synthesizing'
+  | 'scoring'
+  | 'completed'
+  | 'failed';
+
+/** Per-task state tracked during a parallel popuni batch */
+export interface ParallelPopuniTaskState {
+  taskId: string;
+  title: string;
+  status: ParallelTaskStatus;
+  currentStep?: number;
+  totalSteps?: number;
+  stepLabel?: string;
+  score?: number | null;
+  error?: string;
+}
+
+/** WS payload: batch started with initial task states */
+export interface ParallelPopuniStartPayload {
+  batchId: string;
+  tasks: ParallelPopuniTaskState[];
+}
+
+/** WS payload: single task progress update */
+export interface ParallelPopuniProgressPayload {
+  batchId: string;
+  taskId: string;
+  status: ParallelTaskStatus;
+  currentStep?: number;
+  totalSteps?: number;
+  stepLabel?: string;
+}
+
+/** WS payload: single task completed or failed */
+export interface ParallelPopuniTaskDonePayload {
+  batchId: string;
+  taskId: string;
+  status: 'completed' | 'failed';
+  score?: number | null;
+  error?: string;
+}
+
+/** WS payload: entire batch finished */
+export interface ParallelPopuniBatchDonePayload {
+  batchId: string;
+  completedCount: number;
+  failedCount: number;
+}
+
 // ─── YOLO Autonomous Execution ──────────────────────────────────
 
 export type ExecutionMode = 'MANUAL' | 'YOLO';
