@@ -1,19 +1,8 @@
 import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import {
-  FormBuilder,
-  ReactiveFormsModule,
-  Validators,
-} from '@angular/forms';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
-import { BrnButton } from '@spartan-ng/brain/button';
-import { NgIcon, provideIcons } from '@ng-icons/core';
-import {
-  lucideX,
-  lucideBuilding2,
-  lucideLoader2,
-} from '@ng-icons/lucide';
 import { INDUSTRIES, Industry } from '@mentor-ai/shared/utils';
 import { IndustrySelectComponent } from './components/industry-select.component';
 import { FileUploadPreviewComponent } from './components/file-upload-preview.component';
@@ -26,46 +15,190 @@ import { RegistrationService } from '../services/registration.service';
     CommonModule,
     ReactiveFormsModule,
     RouterLink,
-    BrnButton,
-    NgIcon,
     IndustrySelectComponent,
     FileUploadPreviewComponent,
   ],
-  providers: [
-    provideIcons({ lucideX, lucideBuilding2, lucideLoader2 }),
+  styles: [
+    `
+      :host {
+        display: block;
+      }
+      .page {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0d0d0d;
+        padding: 16px;
+        font-family: 'Inter', system-ui, sans-serif;
+        color: #fafafa;
+      }
+      .container {
+        width: 100%;
+        max-width: 440px;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 32px;
+      }
+      .header-icon {
+        width: 48px;
+        height: 48px;
+        margin: 0 auto 16px;
+        color: #3b82f6;
+      }
+      .header h1 {
+        font-size: 28px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .header p {
+        font-size: 15px;
+        color: #a1a1a1;
+      }
+      .error-box {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 16px;
+        font-size: 13px;
+        color: #ef4444;
+      }
+      .field-group {
+        margin-bottom: 20px;
+      }
+      .field-label {
+        display: block;
+        font-size: 13px;
+        font-weight: 500;
+        margin-bottom: 8px;
+      }
+      .field-label .optional {
+        color: #9e9e9e;
+        font-weight: 400;
+      }
+      .field-input {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid #2a2a2a;
+        background: #1a1a1a;
+        padding: 10px 12px;
+        font-size: 14px;
+        color: #fafafa;
+        outline: none;
+        font-family: inherit;
+        transition: border-color 0.2s;
+      }
+      .field-input:focus {
+        border-color: #3b82f6;
+      }
+      .field-input::placeholder {
+        color: #707070;
+      }
+      textarea.field-input {
+        resize: none;
+      }
+      .field-error {
+        font-size: 12px;
+        color: #ef4444;
+        margin-top: 4px;
+      }
+      .char-count {
+        font-size: 11px;
+        color: #9e9e9e;
+        text-align: right;
+        margin-top: 4px;
+      }
+      .submit-btn {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 12px;
+        background: #3b82f6;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 15px;
+        font-weight: 500;
+        cursor: pointer;
+        font-family: inherit;
+        margin-top: 24px;
+      }
+      .submit-btn:hover:not(:disabled) {
+        background: #2563eb;
+      }
+      .submit-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      @keyframes spin {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .btn-spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      .footer {
+        text-align: center;
+        margin-top: 24px;
+        font-size: 13px;
+        color: #9e9e9e;
+      }
+      .footer a {
+        color: #3b82f6;
+        font-weight: 500;
+        text-decoration: none;
+        margin-left: 4px;
+      }
+      .footer a:hover {
+        text-decoration: underline;
+      }
+    `,
   ],
   template: `
-    <div class="min-h-screen flex items-center justify-center bg-background p-4">
-      <div class="w-full max-w-md space-y-8">
-        <div class="text-center">
-          <ng-icon name="lucideBuilding2" class="mx-auto h-12 w-12 text-primary" />
-          <h1 class="mt-4 text-3xl font-bold text-foreground">Create your workspace</h1>
-          <p class="mt-2 text-muted-foreground">
-            Get started with Mentor AI for your company
-          </p>
+    <div class="page">
+      <div class="container">
+        <div class="header">
+          <svg class="header-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.5"
+              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+            />
+          </svg>
+          <h1>Create your workspace</h1>
+          <p>Get started with Mentor AI for your company</p>
         </div>
 
-        <form [formGroup]="form" (ngSubmit)="onSubmit()" class="space-y-6">
+        <form [formGroup]="form" (ngSubmit)="onSubmit()">
           @if (serverError()) {
-            <div class="rounded-md bg-destructive/10 p-4 text-destructive text-sm">
-              {{ serverError() }}
-            </div>
+            <div class="error-box">{{ serverError() }}</div>
           }
 
-          <!-- Email -->
-          <div class="space-y-2">
-            <label for="email" class="text-sm font-medium text-foreground">
-              Email address
-            </label>
+          <div class="field-group">
+            <label for="email" class="field-label">Email address</label>
             <input
               id="email"
               type="email"
+              class="field-input"
               formControlName="email"
-              class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               placeholder="you@company.com"
             />
             @if (form.controls.email.touched && form.controls.email.errors) {
-              <p class="text-sm text-destructive">
+              <p class="field-error">
                 @if (form.controls.email.errors['required']) {
                   Email is required
                 } @else if (form.controls.email.errors['email']) {
@@ -75,20 +208,17 @@ import { RegistrationService } from '../services/registration.service';
             }
           </div>
 
-          <!-- Company Name -->
-          <div class="space-y-2">
-            <label for="companyName" class="text-sm font-medium text-foreground">
-              Company name
-            </label>
+          <div class="field-group">
+            <label for="companyName" class="field-label">Company name</label>
             <input
               id="companyName"
               type="text"
+              class="field-input"
               formControlName="companyName"
-              class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               placeholder="Acme Inc."
             />
             @if (form.controls.companyName.touched && form.controls.companyName.errors) {
-              <p class="text-sm text-destructive">
+              <p class="field-error">
                 @if (form.controls.companyName.errors['required']) {
                   Company name is required
                 } @else if (form.controls.companyName.errors['minlength']) {
@@ -100,50 +230,36 @@ import { RegistrationService } from '../services/registration.service';
             }
           </div>
 
-          <!-- Industry -->
-          <div class="space-y-2">
-            <label for="industry" class="text-sm font-medium text-foreground">
-              Industry
-            </label>
-            <app-industry-select
-              [industries]="industries"
-              formControlName="industry"
-            />
+          <div class="field-group">
+            <label for="industry" class="field-label">Industry</label>
+            <app-industry-select [industries]="industries" formControlName="industry" />
             @if (form.controls.industry.touched && form.controls.industry.errors) {
-              <p class="text-sm text-destructive">
-                Please select an industry
-              </p>
+              <p class="field-error">Please select an industry</p>
             }
           </div>
 
-          <!-- Description -->
-          <div class="space-y-2">
-            <label for="description" class="text-sm font-medium text-foreground">
+          <div class="field-group">
+            <label for="description" class="field-label">
               Business description
-              <span class="text-muted-foreground font-normal">(optional)</span>
+              <span class="optional">(optional)</span>
             </label>
             <textarea
               id="description"
+              class="field-input"
               formControlName="description"
               rows="3"
-              class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
               placeholder="Tell us about your business..."
             ></textarea>
             @if (form.controls.description.errors?.['maxlength']) {
-              <p class="text-sm text-destructive">
-                Description cannot exceed 500 characters
-              </p>
+              <p class="field-error">Description cannot exceed 500 characters</p>
             }
-            <p class="text-xs text-muted-foreground text-right">
-              {{ form.controls.description.value?.length || 0 }}/500
-            </p>
+            <p class="char-count">{{ form.controls.description.value?.length || 0 }}/500</p>
           </div>
 
-          <!-- Company Icon -->
-          <div class="space-y-2">
-            <label class="text-sm font-medium text-foreground">
+          <div class="field-group">
+            <label class="field-label">
               Company icon
-              <span class="text-muted-foreground font-normal">(optional)</span>
+              <span class="optional">(optional)</span>
             </label>
             <app-file-upload-preview
               (fileSelected)="onFileSelected($event)"
@@ -153,27 +269,18 @@ import { RegistrationService } from '../services/registration.service';
             />
           </div>
 
-          <!-- Submit Button -->
-          <button
-            brnButton
-            type="submit"
-            [disabled]="isSubmitting() || form.invalid"
-            class="w-full inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <button type="submit" class="submit-btn" [disabled]="isSubmitting() || form.invalid">
             @if (isSubmitting()) {
-              <ng-icon name="lucideLoader2" class="mr-2 h-4 w-4 animate-spin" />
-              Creating workspace...
+              <span class="btn-spinner"></span> Creating workspace...
             } @else {
               Create workspace
             }
           </button>
         </form>
 
-        <p class="text-center text-sm text-muted-foreground">
+        <p class="footer">
           Already have an account?
-          <a routerLink="/login" class="font-medium text-primary hover:underline">
-            Sign in
-          </a>
+          <a routerLink="/login">Sign in</a>
         </p>
       </div>
     </div>
@@ -195,23 +302,18 @@ export class RegistrationComponent {
 
   readonly form = this.fb.group({
     email: ['', [Validators.required, Validators.email]],
-    companyName: [
-      '',
-      [Validators.required, Validators.minLength(2), Validators.maxLength(100)],
-    ],
+    companyName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]],
     industry: ['', Validators.required],
     description: ['', Validators.maxLength(500)],
   });
 
   onFileSelected(file: File): void {
-    // Validate file size (2MB max)
     const maxSize = 2 * 1024 * 1024;
     if (file.size > maxSize) {
       this.fileError.set('Please upload a PNG or JPG image under 2MB');
       return;
     }
 
-    // Validate file type
     const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg'];
     if (!allowedTypes.includes(file.type)) {
       this.fileError.set('Please upload a PNG or JPG image under 2MB');
@@ -221,7 +323,6 @@ export class RegistrationComponent {
     this.fileError.set(null);
     this.selectedFile = file;
 
-    // Create preview URL
     const reader = new FileReader();
     reader.onload = (e) => {
       this.iconPreview.set(e.target?.result as string);
@@ -258,7 +359,6 @@ export class RegistrationComponent {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
-          // Redirect to OAuth flow placeholder
           this.router.navigate(['/oauth-pending']);
         },
         error: (error: Error) => {

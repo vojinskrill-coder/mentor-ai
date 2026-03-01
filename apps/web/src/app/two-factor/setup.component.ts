@@ -3,156 +3,402 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { BrnButton } from '@spartan-ng/brain/button';
-import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideLoader2, lucideCopy, lucideDownload, lucideCheck } from '@ng-icons/lucide';
 import { AuthService } from '../core/auth/auth.service';
 
 @Component({
   selector: 'app-two-factor-setup',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, BrnButton, NgIcon],
-  providers: [provideIcons({ lucideLoader2, lucideCopy, lucideDownload, lucideCheck })],
+  imports: [CommonModule, ReactiveFormsModule],
+  styles: [
+    `
+      :host {
+        display: block;
+      }
+      .page {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0d0d0d;
+        padding: 16px;
+        font-family: 'Inter', system-ui, sans-serif;
+        color: #fafafa;
+      }
+      .container {
+        width: 100%;
+        max-width: 520px;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 32px;
+      }
+      .header h1 {
+        font-size: 24px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .header p {
+        font-size: 15px;
+        color: #a1a1a1;
+      }
+      .error-box {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 16px;
+        font-size: 13px;
+        color: #ef4444;
+      }
+      .loading-state {
+        text-align: center;
+        padding: 32px 0;
+      }
+      @keyframes spin {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .load-spinner {
+        width: 32px;
+        height: 32px;
+        border: 3px solid #2a2a2a;
+        border-top-color: #3b82f6;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin: 0 auto 12px;
+      }
+      .load-text {
+        font-size: 14px;
+        color: #a1a1a1;
+      }
+      .card {
+        background: #1a1a1a;
+        border: 1px solid #2a2a2a;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 16px;
+      }
+      .card h2 {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 16px;
+      }
+      .card-desc {
+        font-size: 13px;
+        color: #a1a1a1;
+        margin-bottom: 16px;
+        line-height: 1.5;
+      }
+      .qr-container {
+        display: flex;
+        justify-content: center;
+        padding: 16px;
+        background: white;
+        border-radius: 8px;
+        margin-bottom: 16px;
+      }
+      .qr-placeholder {
+        width: 192px;
+        height: 192px;
+        border: 2px dashed #d1d5db;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+      }
+      .qr-placeholder p {
+        font-family: monospace;
+        font-size: 11px;
+        color: #666;
+        word-break: break-all;
+      }
+      .qr-placeholder .hint {
+        margin-top: 8px;
+        font-family: inherit;
+      }
+      .manual-code {
+        text-align: center;
+        font-size: 12px;
+        color: #9e9e9e;
+      }
+      .manual-code code {
+        background: #242424;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-family: monospace;
+      }
+      .field-label {
+        font-size: 13px;
+        font-weight: 500;
+        margin-bottom: 8px;
+        display: block;
+      }
+      .code-input {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid #2a2a2a;
+        background: #0d0d0d;
+        padding: 10px;
+        text-align: center;
+        font-size: 22px;
+        letter-spacing: 0.3em;
+        font-family: monospace;
+        color: #fafafa;
+        outline: none;
+      }
+      .code-input:focus {
+        border-color: #3b82f6;
+      }
+      .field-error {
+        font-size: 12px;
+        color: #ef4444;
+        margin-top: 4px;
+      }
+      .submit-btn {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 16px;
+        padding: 12px;
+        background: #3b82f6;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 15px;
+        font-weight: 500;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .submit-btn:hover:not(:disabled) {
+        background: #2563eb;
+      }
+      .submit-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .btn-spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      .success-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #22c55e;
+        margin-bottom: 16px;
+      }
+      .success-header svg {
+        width: 20px;
+        height: 20px;
+      }
+      .success-header h2 {
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .warn-box {
+        background: rgba(245, 158, 11, 0.1);
+        border: 1px solid rgba(245, 158, 11, 0.2);
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 16px;
+      }
+      .warn-box p {
+        font-size: 13px;
+        font-weight: 500;
+        color: #f59e0b;
+      }
+      .warn-box .sub {
+        font-size: 12px;
+        color: #fbbf24;
+        margin-top: 4px;
+        font-weight: 400;
+      }
+      .codes-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+      .code-box {
+        font-family: monospace;
+        font-size: 13px;
+        background: #242424;
+        padding: 8px 12px;
+        border-radius: 6px;
+        text-align: center;
+      }
+      .action-row {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+      .action-btn {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px;
+        background: #242424;
+        border: 1px solid #2a2a2a;
+        border-radius: 8px;
+        color: #fafafa;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .action-btn:hover {
+        background: #2a2a2a;
+      }
+      .action-btn svg {
+        width: 16px;
+        height: 16px;
+      }
+      .action-btn .check-icon {
+        color: #22c55e;
+      }
+    `,
+  ],
   template: `
-    <div class="min-h-screen flex items-center justify-center bg-background p-4">
-      <div class="w-full max-w-lg space-y-8">
-        <div class="text-center">
-          <h1 class="text-2xl font-bold text-foreground">Set up Two-Factor Authentication</h1>
-          <p class="mt-2 text-muted-foreground">
-            Secure your account with an authenticator app
-          </p>
+    <div class="page">
+      <div class="container">
+        <div class="header">
+          <h1>Set up Two-Factor Authentication</h1>
+          <p>Secure your account with an authenticator app</p>
         </div>
 
         @if (error()) {
-          <div class="rounded-md bg-destructive/10 p-4 text-destructive text-sm">
-            {{ error() }}
-          </div>
+          <div class="error-box">{{ error() }}</div>
         }
 
         @if (isLoading()) {
-          <div class="text-center py-8">
-            <ng-icon name="lucideLoader2" class="h-8 w-8 animate-spin text-primary mx-auto" />
-            <p class="mt-2 text-muted-foreground">Loading 2FA setup...</p>
+          <div class="loading-state">
+            <div class="load-spinner"></div>
+            <p class="load-text">Loading 2FA setup...</p>
           </div>
         } @else if (step() === 'qr') {
-          <!-- Step 1: Scan QR Code -->
-          <div class="space-y-6">
-            <div class="rounded-lg border p-6 bg-card">
-              <h2 class="font-semibold text-lg mb-4">Step 1: Scan QR Code</h2>
-              <p class="text-sm text-muted-foreground mb-4">
-                Open your authenticator app (Google Authenticator, Authy, etc.) and scan this QR code:
-              </p>
-
-              <div class="flex justify-center p-4 bg-white rounded-lg">
-                <!-- QR Code placeholder - in production, render actual QR -->
-                <div class="w-48 h-48 border-2 border-dashed border-gray-300 flex items-center justify-center text-center text-sm text-gray-500">
-                  <div>
-                    <p class="font-mono text-xs break-all">{{ secret() }}</p>
-                    <p class="mt-2">Scan with authenticator app</p>
-                  </div>
+          <div class="card">
+            <h2>Step 1: Scan QR Code</h2>
+            <p class="card-desc">
+              Open your authenticator app (Google Authenticator, Authy, etc.) and scan this QR code:
+            </p>
+            <div class="qr-container">
+              <div class="qr-placeholder">
+                <div>
+                  <p>{{ secret() }}</p>
+                  <p class="hint">Scan with authenticator app</p>
                 </div>
               </div>
-
-              <p class="text-xs text-muted-foreground mt-4 text-center">
-                Manual entry code: <code class="bg-muted px-2 py-1 rounded">{{ secret() }}</code>
-              </p>
             </div>
+            <p class="manual-code">
+              Manual entry code: <code>{{ secret() }}</code>
+            </p>
+          </div>
 
-            <div class="rounded-lg border p-6 bg-card">
-              <h2 class="font-semibold text-lg mb-4">Step 2: Enter Verification Code</h2>
-              <form [formGroup]="verifyForm" (ngSubmit)="verifyCode()" class="space-y-4">
-                <div>
-                  <label class="text-sm font-medium text-foreground">6-digit code</label>
-                  <input
-                    type="text"
-                    formControlName="code"
-                    maxlength="6"
-                    class="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-center text-2xl tracking-widest font-mono focus:outline-none focus:ring-2 focus:ring-ring"
-                    placeholder="000000"
-                    inputmode="numeric"
-                    pattern="[0-9]*"
-                  />
-                  @if (verifyForm.controls.code.touched && verifyForm.controls.code.errors) {
-                    <p class="text-sm text-destructive mt-1">
-                      Please enter a valid 6-digit code
-                    </p>
-                  }
-                </div>
-
-                <button
-                  brnButton
-                  type="submit"
-                  [disabled]="isVerifying() || verifyForm.invalid"
-                  class="w-full inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                >
-                  @if (isVerifying()) {
-                    <ng-icon name="lucideLoader2" class="mr-2 h-4 w-4 animate-spin" />
-                    Verifying...
-                  } @else {
-                    Verify and Enable 2FA
-                  }
-                </button>
-              </form>
-            </div>
+          <div class="card">
+            <h2>Step 2: Enter Verification Code</h2>
+            <form [formGroup]="verifyForm" (ngSubmit)="verifyCode()">
+              <label class="field-label">6-digit code</label>
+              <input
+                type="text"
+                class="code-input"
+                formControlName="code"
+                maxlength="6"
+                placeholder="000000"
+                inputmode="numeric"
+                pattern="[0-9]*"
+              />
+              @if (verifyForm.controls.code.touched && verifyForm.controls.code.errors) {
+                <p class="field-error">Please enter a valid 6-digit code</p>
+              }
+              <button
+                type="submit"
+                class="submit-btn"
+                [disabled]="isVerifying() || verifyForm.invalid"
+              >
+                @if (isVerifying()) {
+                  <span class="btn-spinner"></span> Verifying...
+                } @else {
+                  Verify and Enable 2FA
+                }
+              </button>
+            </form>
           </div>
         } @else if (step() === 'recovery') {
-          <!-- Step 3: Save Recovery Codes -->
-          <div class="rounded-lg border p-6 bg-card space-y-6">
-            <div class="flex items-center gap-2 text-green-600">
-              <ng-icon name="lucideCheck" class="h-5 w-5" />
-              <h2 class="font-semibold text-lg">2FA Enabled Successfully!</h2>
+          <div class="card">
+            <div class="success-header">
+              <svg fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fill-rule="evenodd"
+                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+              <h2>2FA Enabled Successfully!</h2>
             </div>
 
-            <div class="bg-amber-50 border border-amber-200 rounded-lg p-4">
-              <p class="text-sm text-amber-800 font-medium mb-2">
-                Save your recovery codes
-              </p>
-              <p class="text-xs text-amber-700">
-                If you lose access to your authenticator app, you can use these codes to access your account.
-                Each code can only be used once.
+            <div class="warn-box">
+              <p>Save your recovery codes</p>
+              <p class="sub">
+                If you lose access to your authenticator app, you can use these codes. Each code can
+                only be used once.
               </p>
             </div>
 
-            <div class="grid grid-cols-2 gap-2">
+            <div class="codes-grid">
               @for (code of recoveryCodes(); track code) {
-                <div class="font-mono text-sm bg-muted px-3 py-2 rounded text-center">
-                  {{ code }}
-                </div>
+                <div class="code-box">{{ code }}</div>
               }
             </div>
 
-            <div class="flex gap-2">
-              <button
-                brnButton
-                type="button"
-                (click)="copyRecoveryCodes()"
-                class="flex-1 inline-flex items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
-              >
+            <div class="action-row">
+              <button type="button" class="action-btn" (click)="copyRecoveryCodes()">
                 @if (copied()) {
-                  <ng-icon name="lucideCheck" class="h-4 w-4 text-green-600" />
+                  <svg class="check-icon" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                      fill-rule="evenodd"
+                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                      clip-rule="evenodd"
+                    />
+                  </svg>
                   Copied!
                 } @else {
-                  <ng-icon name="lucideCopy" class="h-4 w-4" />
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    />
+                  </svg>
                   Copy Codes
                 }
               </button>
-              <button
-                brnButton
-                type="button"
-                (click)="downloadRecoveryCodes()"
-                class="flex-1 inline-flex items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
-              >
-                <ng-icon name="lucideDownload" class="h-4 w-4" />
+              <button type="button" class="action-btn" (click)="downloadRecoveryCodes()">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                  />
+                </svg>
                 Download
               </button>
             </div>
 
-            <button
-              brnButton
-              type="button"
-              (click)="complete()"
-              class="w-full inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-            >
+            <button type="button" class="submit-btn" (click)="complete()">
               Continue to Dashboard
             </button>
           </div>
@@ -236,9 +482,14 @@ export class TwoFactorSetupComponent implements OnInit {
 
   downloadRecoveryCodes(): void {
     const codes = this.recoveryCodes().join('\n');
-    const blob = new Blob([`Mentor AI Recovery Codes\n\n${codes}\n\nStore these codes safely. Each code can only be used once.`], {
-      type: 'text/plain',
-    });
+    const blob = new Blob(
+      [
+        `Mentor AI Recovery Codes\n\n${codes}\n\nStore these codes safely. Each code can only be used once.`,
+      ],
+      {
+        type: 'text/plain',
+      }
+    );
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

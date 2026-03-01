@@ -158,7 +158,7 @@ export class WorkflowService {
       relatedConcepts
     );
 
-    // LLM call to generate workflow steps
+    // LLM call to generate workflow steps (use fallback/GPT for speed)
     let responseContent = '';
     await this.aiGatewayService.streamCompletionWithContext(
       [
@@ -170,6 +170,7 @@ export class WorkflowService {
         userId,
         skipRateLimit: true,
         skipQuotaCheck: true,
+        useFallback: true,
       },
       (chunk: string) => {
         responseContent += chunk;
@@ -276,7 +277,7 @@ Generiši 3-6 koraka. Poredaj logički prema zadatku.`;
         { role: 'system', content: WORKFLOW_GENERATION_SYSTEM_PROMPT } as ChatMessage,
         { role: 'user', content: prompt } as ChatMessage,
       ],
-      { tenantId, userId, skipRateLimit: true, skipQuotaCheck: true },
+      { tenantId, userId, skipRateLimit: true, skipQuotaCheck: true, useFallback: true },
       (chunk: string) => {
         responseContent += chunk;
       }

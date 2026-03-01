@@ -145,7 +145,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         border-color: #3b82f6;
       }
       .form-input::placeholder {
-        color: #666;
+        color: #9e9e9e;
       }
       .form-textarea {
         width: 100%;
@@ -165,11 +165,11 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         border-color: #3b82f6;
       }
       .form-textarea::placeholder {
-        color: #666;
+        color: #9e9e9e;
       }
       .form-hint {
         font-size: 12px;
-        color: #666;
+        color: #9e9e9e;
         margin-top: 6px;
       }
 
@@ -229,7 +229,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         border-color: #3b82f6;
       }
       .other-input::placeholder {
-        color: #666;
+        color: #9e9e9e;
       }
 
       /* Strategy cards */
@@ -350,7 +350,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       }
       .role-hint {
         font-size: 12px;
-        color: #666;
+        color: #9e9e9e;
         margin-top: 8px;
         line-height: 1.4;
       }
@@ -540,7 +540,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       }
       .pdf-hint {
         font-size: 12px;
-        color: #666;
+        color: #9e9e9e;
         margin-top: 6px;
       }
 
@@ -585,7 +585,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       }
       .mode-hint {
         font-size: 12px;
-        color: #666;
+        color: #9e9e9e;
         margin-top: 8px;
         line-height: 1.4;
       }
@@ -765,7 +765,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
             <div class="form-group">
               <label class="form-label"
                 >Opis poslovanja
-                <span style="color:#666; text-transform:none; letter-spacing:0"
+                <span style="color:#9e9e9e; text-transform:none; letter-spacing:0"
                   >(opciono ali preporučeno)</span
                 ></label
               >
@@ -783,7 +783,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
             <div class="form-group">
               <label class="form-label"
                 >URL sajta
-                <span style="color:#666; text-transform:none; letter-spacing:0"
+                <span style="color:#9e9e9e; text-transform:none; letter-spacing:0"
                   >(opciono — AI će analizirati vaš sajt za bolje preporuke)</span
                 ></label
               >
@@ -800,7 +800,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
             <div class="form-group">
               <label class="form-label"
                 >PDF brošura
-                <span style="color:#666; text-transform:none; letter-spacing:0"
+                <span style="color:#9e9e9e; text-transform:none; letter-spacing:0"
                   >(opciono)</span
                 ></label
               >

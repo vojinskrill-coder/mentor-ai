@@ -41,6 +41,14 @@ export interface CreateNoteDto {
   expectedOutcome?: string;
   /** Workflow step number */
   workflowStepNumber?: number;
+  /** ID of the original note this was reused from */
+  reusedFromNoteId?: string;
+  /** Pre-populated user report (for reused tasks) */
+  userReport?: string;
+  /** Pre-populated AI score (for reused tasks) */
+  aiScore?: number;
+  /** Pre-populated AI feedback (for reused tasks) */
+  aiFeedback?: string;
 }
 
 /**
@@ -91,6 +99,10 @@ export class NotesService {
         parentNoteId: dto.parentNoteId ?? null,
         expectedOutcome: dto.expectedOutcome ?? null,
         workflowStepNumber: dto.workflowStepNumber ?? null,
+        reusedFromNoteId: dto.reusedFromNoteId ?? null,
+        userReport: dto.userReport ?? null,
+        aiScore: dto.aiScore ?? null,
+        aiFeedback: dto.aiFeedback ?? null,
       },
     });
 
@@ -281,6 +293,66 @@ export class NotesService {
     }
 
     return null;
+  }
+
+  /**
+   * Finds a reusable completed task for the same concept with high score.
+   * Used to skip redundant AI execution when prior high-quality work exists.
+   *
+   * @param tenantId - Tenant for isolation
+   * @param conceptId - Concept to match
+   * @param options - Score threshold (default 85) and max age in days (default 30)
+   * @returns The reusable task data or null if none qualifies
+   */
+  async findReusableTask(
+    tenantId: string,
+    conceptId: string,
+    options: { scoreThreshold?: number; maxAgeDays?: number } = {}
+  ): Promise<{
+    id: string;
+    title: string;
+    content: string;
+    userReport: string;
+    aiScore: number;
+    aiFeedback: string | null;
+  } | null> {
+    const threshold = options.scoreThreshold ?? 85;
+    const maxAge = options.maxAgeDays ?? 30;
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - maxAge);
+
+    const existing = await this.prisma.note.findFirst({
+      where: {
+        tenantId,
+        conceptId,
+        noteType: NoteType.TASK,
+        status: NoteStatus.COMPLETED,
+        aiScore: { gte: threshold },
+        createdAt: { gte: cutoffDate },
+        parentNoteId: null,
+        userReport: { not: null },
+      },
+      orderBy: { aiScore: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        userReport: true,
+        aiScore: true,
+        aiFeedback: true,
+      },
+    });
+
+    if (!existing?.userReport || !existing?.aiScore) return null;
+
+    return {
+      id: existing.id,
+      title: existing.title,
+      content: existing.content,
+      userReport: existing.userReport,
+      aiScore: existing.aiScore,
+      aiFeedback: existing.aiFeedback,
+    };
   }
 
   /**
@@ -820,6 +892,7 @@ Odgovori ISKLJUČIVO u JSON formatu:
     aiFeedback?: string | null;
     expectedOutcome?: string | null;
     workflowStepNumber?: number | null;
+    reusedFromNoteId?: string | null;
     createdAt: Date;
     updatedAt: Date;
   }): NoteItem {
@@ -841,6 +914,7 @@ Odgovori ISKLJUČIVO u JSON formatu:
       aiFeedback: note.aiFeedback ?? null,
       expectedOutcome: note.expectedOutcome ?? null,
       workflowStepNumber: note.workflowStepNumber ?? null,
+      reusedFromNoteId: note.reusedFromNoteId ?? null,
     };
   }
 

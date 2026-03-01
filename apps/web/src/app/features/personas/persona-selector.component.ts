@@ -170,7 +170,7 @@ import type { Persona, PersonaType } from '@mentor-ai/shared/types';
       }
       .persona-desc {
         font-size: 11px;
-        color: #8b8b8b;
+        color: #9e9e9e;
         text-align: center;
         margin-top: 4px;
         display: -webkit-box;
@@ -186,7 +186,7 @@ import type { Persona, PersonaType } from '@mentor-ai/shared/types';
       .clear-btn {
         margin-top: 12px;
         font-size: 13px;
-        color: #8b8b8b;
+        color: #9e9e9e;
         background: none;
         border: none;
         cursor: pointer;

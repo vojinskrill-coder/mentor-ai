@@ -28,6 +28,17 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
     `
       :host {
         display: block;
+        animation: msgFadeIn 0.3s ease-out;
+      }
+      @keyframes msgFadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
       .msg-user-row {
         display: flex;
@@ -191,7 +202,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         color: #e0e0e0;
       }
       .ai-content li::marker {
-        color: #8b8b8b;
+        color: #9e9e9e;
       }
       .ai-content li > ul,
       .ai-content li > ol {
@@ -339,7 +350,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
 
       /* Strikethrough */
       .ai-content del {
-        color: #8b8b8b;
+        color: #9e9e9e;
         text-decoration: line-through;
       }
 
@@ -349,7 +360,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
       }
       .ai-time {
         font-size: 11px;
-        color: #8b8b8b;
+        color: #9e9e9e;
       }
       .improvement-row {
         display: flex;
@@ -395,66 +406,6 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
       .memory-section {
         margin-bottom: 12px;
       }
-      .sources-section {
-        padding: 12px 20px;
-        border-top: 1px solid #2a2a2a;
-        background: rgba(59, 130, 246, 0.03);
-      }
-      .sources-label {
-        font-size: 11px;
-        font-weight: 600;
-        color: #60a5fa;
-        text-transform: uppercase;
-        margin-bottom: 10px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-      .sources-label svg {
-        width: 14px;
-        height: 14px;
-      }
-      .sources-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-      }
-      .source-card {
-        display: block;
-        text-decoration: none;
-        background: #0d0d0d;
-        border: 1px solid #2a2a2a;
-        border-radius: 8px;
-        padding: 10px 12px;
-        transition: all 0.15s;
-      }
-      .source-card:hover {
-        border-color: #3b82f6;
-        background: #1a1a1a;
-      }
-      .source-domain {
-        font-size: 10px;
-        color: #707070;
-        margin-bottom: 4px;
-        display: flex;
-        align-items: center;
-        gap: 4px;
-      }
-      .source-domain-icon {
-        width: 12px;
-        height: 12px;
-        flex-shrink: 0;
-      }
-      .source-title {
-        font-size: 12px;
-        color: #a1a1a1;
-        line-height: 1.4;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-      }
-
       /* Suggested action buttons (D1) */
       .actions-section {
         padding: 10px 20px 14px;
@@ -508,7 +459,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         border: 1px solid #2a2a2a;
         border-radius: 6px;
         background: transparent;
-        color: #8b8b8b;
+        color: #9e9e9e;
         font-size: 12px;
         cursor: pointer;
         transition: all 0.15s ease;
@@ -535,7 +486,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
       .chart-bar-label {
         width: 100px;
         font-size: 11px;
-        color: #8b8b8b;
+        color: #9e9e9e;
         text-align: right;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -562,6 +513,52 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         font-weight: 500;
         flex-shrink: 0;
       }
+      /* Message attachments */
+      .message-attachments {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .attachment-image {
+        display: block;
+        border-radius: 8px;
+        overflow: hidden;
+        cursor: pointer;
+      }
+      .attachment-image img {
+        max-width: 300px;
+        max-height: 200px;
+        display: block;
+        border-radius: 8px;
+        object-fit: cover;
+      }
+      .attachment-file {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid #2a2a2a;
+        border-radius: 6px;
+        font-size: 12px;
+        color: #e0e0e0;
+      }
+      .attachment-icon {
+        font-size: 16px;
+        flex-shrink: 0;
+      }
+      .attachment-name {
+        max-width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .attachment-size {
+        color: #9e9e9e;
+        font-size: 11px;
+        flex-shrink: 0;
+      }
     `,
   ],
   template: `
@@ -569,6 +566,23 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
     @if (message().role === 'USER') {
       <div class="msg-user-row">
         <div class="msg-user">
+          @if (message().attachments?.length) {
+            <div class="message-attachments">
+              @for (att of message().attachments; track att.id) {
+                @if (isImage(att.mimeType)) {
+                  <a [href]="getAttachmentUrl(att.id)" target="_blank" class="attachment-image">
+                    <img [src]="getAttachmentUrl(att.id)" [alt]="att.originalName" />
+                  </a>
+                } @else {
+                  <div class="attachment-file">
+                    <span class="attachment-icon">{{ getFileIcon(att.mimeType) }}</span>
+                    <span class="attachment-name">{{ att.originalName }}</span>
+                    <span class="attachment-size">{{ formatFileSize(att.size) }}</span>
+                  </div>
+                }
+              }
+            </div>
+          }
           <div class="msg-user-text">{{ message().content }}</div>
           @if (message().createdAt) {
             <p class="msg-user-time">{{ formatTime(message().createdAt) }}</p>
@@ -648,51 +662,6 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
             <span class="cursor-blink">&nbsp;</span>
           }
         </div>
-
-        <!-- Web Search Sources (D3: rich cards) -->
-        @if (!isStreaming() && hasWebSearchSources$()) {
-          <div class="sources-section">
-            <div class="sources-label">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
-                />
-              </svg>
-              Web izvori
-            </div>
-            <div class="sources-grid">
-              @for (source of message().webSearchSources ?? []; track $index) {
-                <a
-                  class="source-card"
-                  [href]="source.link"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <div class="source-domain">
-                    <svg
-                      class="source-domain-icon"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                      />
-                    </svg>
-                    {{ extractDomain(source.link) }}
-                  </div>
-                  <div class="source-title">{{ source.title }}</div>
-                </a>
-              }
-            </div>
-          </div>
-        }
 
         <!-- Suggested Actions (D1) -->
         @if (!isStreaming() && hasSuggestedActions$()) {
@@ -956,11 +925,6 @@ export class ChatMessageComponent {
     return score !== null && score !== undefined;
   });
 
-  readonly hasWebSearchSources$ = computed(() => {
-    const sources = this.message().webSearchSources;
-    return sources !== null && sources !== undefined && sources.length > 0;
-  });
-
   readonly hasMemoryAttributions$ = computed(() => {
     const attributions = this.message().memoryAttributions;
     return attributions !== null && attributions !== undefined && attributions.length > 0;
@@ -995,14 +959,6 @@ export class ChatMessageComponent {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
-  extractDomain(url: string): string {
-    try {
-      return new URL(url).hostname.replace(/^www\./, '');
-    } catch {
-      return url;
-    }
-  }
-
   getPersonaColor(): string {
     const type = this.personaType();
     return type ? (PERSONA_COLORS[type as PersonaTypeEnum] ?? '#3B82F6') : '#3B82F6';
@@ -1017,5 +973,26 @@ export class ChatMessageComponent {
   getPersonaLabel(): string {
     const type = this.personaType();
     return type ? (PERSONA_NAMES[type as PersonaTypeEnum] ?? 'AI Asistent') : 'AI Asistent';
+  }
+
+  isImage(mimeType: string): boolean {
+    return mimeType.startsWith('image/');
+  }
+
+  getAttachmentUrl(attachmentId: string): string {
+    return `/api/v1/attachments/${attachmentId}/file`;
+  }
+
+  getFileIcon(mimeType: string): string {
+    if (mimeType === 'application/pdf') return '\u{1F4C4}';
+    if (mimeType.includes('spreadsheet') || mimeType === 'text/csv') return '\u{1F4CA}';
+    if (mimeType.includes('wordprocessing')) return '\u{1F4DD}';
+    return '\u{1F4CE}';
+  }
+
+  formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 }

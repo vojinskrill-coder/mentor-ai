@@ -28,6 +28,7 @@
     "json2md": "2.0.3",
     "jsonwebtoken": "9.0.3",
     "jwks-rsa": "3.2.2",
+    "mammoth": "1.11.0",
     "nodemailer": "8.0.0",
     "passport": "0.7.0",
     "passport-jwt": "4.0.1",
@@ -36,7 +37,8 @@
     "prisma": "5.22.0",
     "reflect-metadata": "0.1.14",
     "rxjs": "7.8.2",
-    "socket.io": "4.8.3"
+    "socket.io": "4.8.3",
+    "xlsx": "0.18.5"
   },
   "main": "main.js"
 }

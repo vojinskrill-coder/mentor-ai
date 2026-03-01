@@ -72,6 +72,8 @@ export interface StreamCompletionOptions {
   userQuestion?: string;
   /** Pre-built business context string to prepend to system prompt */
   businessContext?: string;
+  /** Force use of fallback provider (e.g. GPT for fast plan generation) */
+  useFallback?: boolean;
 }
 
 /**
@@ -268,10 +270,12 @@ export class AiGatewayService {
         onChunk(chunk);
       };
 
-      // Use circuit breaker status to decide provider
-      if (!isAllowed && config.fallbackProvider) {
+      // Use fallback provider when explicitly requested or circuit is open
+      if ((options.useFallback || !isAllowed) && config.fallbackProvider) {
         this.logger.warn({
-          message: 'Primary provider circuit open, using fallback',
+          message: options.useFallback
+            ? 'Using fallback provider (explicitly requested)'
+            : 'Primary provider circuit open, using fallback',
           correlationId,
           primaryProvider: providerId,
           fallbackProvider: config.fallbackProvider.providerType,

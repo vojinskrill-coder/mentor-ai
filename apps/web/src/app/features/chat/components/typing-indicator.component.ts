@@ -47,7 +47,7 @@ import type { PersonaType } from '@mentor-ai/shared/types';
       }
       .typing-status {
         font-size: 11px;
-        color: #8b8b8b;
+        color: #9e9e9e;
       }
       .typing-content {
         padding: 16px;

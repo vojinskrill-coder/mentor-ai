@@ -96,7 +96,7 @@ interface TreeRow {
         padding: 24px 12px;
         text-align: center;
         font-size: 12px;
-        color: #8b8b8b;
+        color: #9e9e9e;
       }
 
       .tree-container {
@@ -131,7 +131,7 @@ interface TreeRow {
       .tree-node.root-node {
         font-size: 11px;
         font-weight: 600;
-        color: #8b8b8b;
+        color: #9e9e9e;
         text-transform: uppercase;
         letter-spacing: 0.5px;
       }
@@ -235,7 +235,7 @@ interface TreeRow {
         cursor: pointer;
         font-size: 11px;
         font-weight: 600;
-        color: #8b8b8b;
+        color: #9e9e9e;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         background: none;
@@ -310,7 +310,7 @@ interface TreeRow {
 
       .attribution {
         font-size: 9px;
-        color: #8b8b8b;
+        color: #9e9e9e;
         margin-left: 4px;
         flex-shrink: 0;
         max-width: 60px;
@@ -615,7 +615,7 @@ interface TreeRow {
           <div class="empty-state">
             <div class="empty-icon">
               <svg
-                style="width: 24px; height: 24px; color: #8B8B8B;"
+                style="width: 24px; height: 24px; color: #9e9e9e;"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -628,8 +628,8 @@ interface TreeRow {
                 />
               </svg>
             </div>
-            <p style="font-size: 13px; color: #8B8B8B;">Još nema konverzacija</p>
-            <p style="font-size: 11px; color: #8B8B8B; margin-top: 4px;">
+            <p style="font-size: 13px; color: #9e9e9e;">Još nema konverzacija</p>
+            <p style="font-size: 11px; color: #9e9e9e; margin-top: 4px;">
               Započnite novu konverzaciju iznad
             </p>
           </div>

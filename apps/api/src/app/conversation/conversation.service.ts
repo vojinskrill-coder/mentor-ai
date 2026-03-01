@@ -464,12 +464,20 @@ export class ConversationService {
     const conceptToCurriculum = new Map<string, string>(); // conceptId → curriculumId
 
     for (const [conceptId, info] of conceptMap) {
-      // Filter by visible categories
-      if (visibleCategories && !visibleCategories.includes(info.category)) {
+      // Filter by visible categories (strip number prefix from DB category for comparison)
+      const normalizedCategory = info.category.replace(/^\d+(\.\d+)*\.?\s+/, '');
+      if (visibleCategories && !visibleCategories.includes(normalizedCategory)) {
         continue;
       }
 
-      const curriculumId = info.curriculumId ?? info.slug;
+      // Resolve curriculum ID — fall back to slug, stripping number prefix if needed
+      let curriculumId = info.curriculumId ?? info.slug;
+      if (!this.curriculumService.findNode(curriculumId)) {
+        const stripped = curriculumId.replace(/^\d+-/, '');
+        if (this.curriculumService.findNode(stripped)) {
+          curriculumId = stripped;
+        }
+      }
       conceptToCurriculum.set(conceptId, curriculumId);
 
       // Add this node and all its ancestors to the needed set
@@ -638,6 +646,18 @@ export class ConversationService {
       include: {
         messages: {
           orderBy: { createdAt: 'asc' },
+          include: {
+            attachments: {
+              select: {
+                id: true,
+                filename: true,
+                originalName: true,
+                mimeType: true,
+                size: true,
+                createdAt: true,
+              },
+            },
+          },
         },
       },
     });
@@ -846,8 +866,16 @@ export class ConversationService {
     confidenceScore?: number | null;
     confidenceFactors?: unknown;
     createdAt: Date;
+    attachments?: Array<{
+      id: string;
+      filename: string;
+      originalName: string;
+      mimeType: string;
+      size: number;
+      createdAt: Date;
+    }>;
   }): Message {
-    return {
+    const mapped: Message = {
       id: message.id,
       conversationId: message.conversationId,
       role: message.role as MessageRole,
@@ -856,6 +884,17 @@ export class ConversationService {
       confidenceFactors: (message.confidenceFactors as ConfidenceFactor[]) ?? null,
       createdAt: message.createdAt.toISOString(),
     };
+    if (message.attachments && message.attachments.length > 0) {
+      mapped.attachments = message.attachments.map((a) => ({
+        id: a.id,
+        filename: a.filename,
+        originalName: a.originalName,
+        mimeType: a.mimeType,
+        size: a.size,
+        createdAt: a.createdAt.toISOString(),
+      }));
+    }
+    return mapped;
   }
 
   private mapConversationWithMessages(conversation: {
@@ -874,6 +913,14 @@ export class ConversationService {
       confidenceScore?: number | null;
       confidenceFactors?: unknown;
       createdAt: Date;
+      attachments?: Array<{
+        id: string;
+        filename: string;
+        originalName: string;
+        mimeType: string;
+        size: number;
+        createdAt: Date;
+      }>;
     }>;
   }): ConversationWithMessages {
     return {

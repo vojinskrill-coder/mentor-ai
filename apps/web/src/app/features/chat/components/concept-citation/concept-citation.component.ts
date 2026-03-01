@@ -1,4 +1,11 @@
-import { Component, input, output, computed, ChangeDetectionStrategy } from '@angular/core';
+import {
+  Component,
+  input,
+  output,
+  computed,
+  ChangeDetectionStrategy,
+  ViewEncapsulation,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { marked, type Tokens } from 'marked';
 import DOMPurify from 'dompurify';
@@ -75,11 +82,12 @@ interface ContentSegment {
   standalone: true,
   imports: [CommonModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  encapsulation: ViewEncapsulation.None,
   template: `
     <div class="content-with-citations">
       @for (segment of segments$(); track $index) {
         @if (segment.type === 'text') {
-          <span [innerHTML]="segment.content"></span>
+          <div class="markdown-segment" [innerHTML]="segment.content"></div>
         } @else {
           <button
             type="button"
@@ -110,25 +118,31 @@ interface ContentSegment {
     `
       .content-with-citations {
         display: block;
-        line-height: 1.6;
+        line-height: 1.75;
+      }
+
+      .markdown-segment {
+        display: contents;
       }
 
       .citation-badge {
         display: inline-flex;
         align-items: center;
-        padding: 0.125rem 0.5rem;
-        margin: 0 0.125rem;
-        font-size: 0.875rem;
+        gap: 4px;
+        padding: 1px 8px;
+        margin: 0 2px;
+        font-size: 0.8rem;
         font-weight: 500;
-        font-family: 'Inter', system-ui, sans-serif;
-        border-radius: 0.375rem;
-        background-color: #1a1a1a;
-        border: 1px solid #333;
-        color: #a3a3a3;
+        font-family: inherit;
+        border-radius: 4px;
+        background: rgba(59, 130, 246, 0.08);
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        color: #60a5fa;
         cursor: pointer;
         transition: all 0.15s ease;
         vertical-align: baseline;
         text-decoration: none;
+        line-height: 1.4;
       }
 
       .citation-badge:hover,
@@ -202,6 +216,209 @@ interface ContentSegment {
       .citation-badge.creative:hover {
         background-color: #ec489920;
         border-color: #ec4899;
+      }
+
+      /* ── Chat markdown rendering ── */
+      .content-with-citations > :first-child {
+        margin-top: 0 !important;
+      }
+      .content-with-citations > :last-child {
+        margin-bottom: 0 !important;
+      }
+
+      .content-with-citations h1 {
+        font-size: 1.5em;
+        font-weight: 700;
+        color: #fafafa;
+        margin: 24px 0 8px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid #2a2a2a;
+      }
+      .content-with-citations h2 {
+        font-size: 1.3em;
+        font-weight: 600;
+        color: #fafafa;
+        margin: 20px 0 6px;
+        padding-bottom: 4px;
+        border-bottom: 1px solid rgba(42, 42, 42, 0.5);
+      }
+      .content-with-citations h3 {
+        font-size: 1.15em;
+        font-weight: 600;
+        color: #f0f0f0;
+        margin: 18px 0 6px;
+      }
+      .content-with-citations h4,
+      .content-with-citations h5,
+      .content-with-citations h6 {
+        font-size: 1em;
+        font-weight: 600;
+        color: #e5e5e5;
+        margin: 16px 0 4px;
+      }
+
+      .content-with-citations p {
+        margin: 10px 0;
+        line-height: 1.7;
+      }
+      .content-with-citations strong {
+        color: #fafafa;
+        font-weight: 600;
+      }
+      .content-with-citations em {
+        color: #d4d4d4;
+        font-style: italic;
+      }
+
+      .content-with-citations ul,
+      .content-with-citations ol {
+        margin: 8px 0;
+        padding-left: 1.5em;
+        list-style-position: outside;
+      }
+      .content-with-citations ul {
+        list-style-type: disc;
+      }
+      .content-with-citations ol {
+        list-style-type: decimal;
+      }
+      .content-with-citations li {
+        margin: 4px 0;
+        line-height: 1.7;
+        color: #e0e0e0;
+      }
+      .content-with-citations li::marker {
+        color: #9e9e9e;
+      }
+      .content-with-citations li > ul,
+      .content-with-citations li > ol {
+        margin: 4px 0;
+      }
+      .content-with-citations li > p {
+        margin: 4px 0;
+      }
+      .content-with-citations ul ul {
+        list-style-type: circle;
+      }
+      .content-with-citations ul ul ul {
+        list-style-type: square;
+      }
+
+      .content-with-citations table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 16px 0;
+        font-size: 0.9em;
+        border-radius: 6px;
+        overflow: hidden;
+        border: 1px solid #2a2a2a;
+      }
+      .content-with-citations thead th {
+        background: #1a1a1a;
+        color: #fafafa;
+        font-weight: 600;
+        text-align: left;
+        padding: 10px 14px;
+        border-bottom: 2px solid #333;
+      }
+      .content-with-citations tbody td {
+        padding: 9px 14px;
+        border-bottom: 1px solid #1e1e1e;
+        color: #d4d4d4;
+      }
+      .content-with-citations tbody tr:hover {
+        background: rgba(59, 130, 246, 0.04);
+      }
+      .content-with-citations tbody tr:last-child td {
+        border-bottom: none;
+      }
+
+      .content-with-citations code {
+        background: rgba(255, 255, 255, 0.06);
+        color: #e5e5e5;
+        padding: 0.15em 0.4em;
+        border-radius: 4px;
+        font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+        font-size: 0.875em;
+      }
+      .content-with-citations pre {
+        background: #111;
+        border: 1px solid #2a2a2a;
+        border-radius: 8px;
+        padding: 14px 18px;
+        overflow-x: auto;
+        margin: 16px 0;
+      }
+      .content-with-citations pre code {
+        background: none;
+        padding: 0;
+        border-radius: 0;
+        font-size: 0.85em;
+        line-height: 1.6;
+      }
+
+      .content-with-citations blockquote {
+        border-left: 3px solid #3b82f6;
+        margin: 16px 0;
+        padding: 8px 16px;
+        color: #b0b0b0;
+        background: rgba(59, 130, 246, 0.04);
+        border-radius: 0 6px 6px 0;
+      }
+      .content-with-citations blockquote p {
+        margin: 4px 0;
+      }
+
+      .content-with-citations blockquote.callout {
+        padding: 12px 16px;
+        border-radius: 0 8px 8px 0;
+      }
+      .content-with-citations .callout-insight {
+        border-left-color: #3b82f6;
+        background: rgba(59, 130, 246, 0.06);
+      }
+      .content-with-citations .callout-insight strong {
+        color: #60a5fa;
+      }
+      .content-with-citations .callout-warning {
+        border-left-color: #f59e0b;
+        background: rgba(245, 158, 11, 0.06);
+      }
+      .content-with-citations .callout-warning strong {
+        color: #fbbf24;
+      }
+      .content-with-citations .callout-metric {
+        border-left-color: #10b981;
+        background: rgba(16, 185, 129, 0.06);
+      }
+      .content-with-citations .callout-metric strong {
+        color: #34d399;
+      }
+      .content-with-citations .callout-summary {
+        border-left-color: #8b5cf6;
+        background: rgba(139, 92, 246, 0.06);
+      }
+      .content-with-citations .callout-summary strong {
+        color: #a78bfa;
+      }
+
+      .content-with-citations a {
+        color: #60a5fa;
+        text-decoration: none;
+      }
+      .content-with-citations a:hover {
+        color: #93c5fd;
+        text-decoration: underline;
+      }
+
+      .content-with-citations hr {
+        border: none;
+        border-top: 1px solid #2a2a2a;
+        margin: 20px 0;
+      }
+      .content-with-citations del {
+        color: #9e9e9e;
+        text-decoration: line-through;
       }
     `,
   ],

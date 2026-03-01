@@ -74,7 +74,7 @@ interface DiscoveryMessage {
       .toggle-icon {
         width: 14px;
         height: 14px;
-        color: #8b8b8b;
+        color: #9e9e9e;
         transition: transform 0.2s;
         flex-shrink: 0;
       }

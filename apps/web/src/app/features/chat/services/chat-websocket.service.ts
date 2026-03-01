@@ -46,6 +46,7 @@ type NavigateToConversationCallback = (data: WorkflowNavigatePayload) => void;
 type TasksCreatedForExecutionCallback = (data: {
   conversationId: string;
   taskIds: string[];
+  reusedTaskIds?: string[];
   taskCount: number;
 }) => void;
 type YoloProgressCallback = (data: YoloProgressPayload) => void;
@@ -328,7 +329,12 @@ export class ChatWebsocketService {
 
     this.socket.on(
       'chat:tasks-created-for-execution',
-      (data: { conversationId: string; taskIds: string[]; taskCount: number }) => {
+      (data: {
+        conversationId: string;
+        taskIds: string[];
+        reusedTaskIds?: string[];
+        taskCount: number;
+      }) => {
         this.tasksCreatedForExecutionCallbacks.forEach((cb) => cb(data));
       }
     );
@@ -483,12 +489,16 @@ export class ChatWebsocketService {
    * @param content - Message content
    * @returns true if message was sent, false if WebSocket not connected
    */
-  sendMessage(conversationId: string, content: string): boolean {
+  sendMessage(conversationId: string, content: string, attachmentIds?: string[]): boolean {
     if (!this.checkConnected('slanje poruke')) {
       return false;
     }
 
-    this.socket!.emit('chat:message-send', { conversationId, content });
+    const payload: Record<string, unknown> = { conversationId, content };
+    if (attachmentIds && attachmentIds.length > 0) {
+      payload['attachmentIds'] = attachmentIds;
+    }
+    this.socket!.emit('chat:message-send', payload);
     return true;
   }
 

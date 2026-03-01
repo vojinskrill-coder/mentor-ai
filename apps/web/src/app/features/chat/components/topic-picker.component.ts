@@ -135,7 +135,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
       .cancel-btn {
         background: none;
         border: none;
-        color: #8b8b8b;
+        color: #9e9e9e;
         font-size: 13px;
         cursor: pointer;
       }
@@ -146,14 +146,14 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
       .empty-results {
         text-align: center;
         padding: 24px;
-        color: #8b8b8b;
+        color: #9e9e9e;
         font-size: 13px;
       }
 
       .loading-text {
         text-align: center;
         padding: 24px;
-        color: #8b8b8b;
+        color: #9e9e9e;
         font-size: 13px;
       }
     `,

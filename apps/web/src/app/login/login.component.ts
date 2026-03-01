@@ -170,7 +170,7 @@ import { AuthService } from '../core/auth/auth.service';
         text-align: center;
         margin-top: 24px;
         font-size: 13px;
-        color: #8b8b8b;
+        color: #9e9e9e;
       }
       .footer a {
         color: #3b82f6;

@@ -664,7 +664,8 @@ ZA SVAKI ZADATAK OBAVEZNO NAVEDI:
 - **Zavisi od:** [Koji prethodni zadaci moraju biti završeni pre ovog — ili "Nezavisan"]
 
 REDOSLED ZADATAKA:
-- Počni sa DIJAGNOSTIČKIM zadacima (analiza, mapiranje, audit) — vlasnik prvo mora da RAZUME gde je
+- PRVI zadatak MORA biti vezan za koncept "Uvod u Poslovanje" / "Poslovanje" — ovo je TEMELJ na kom se gradi sve ostalo
+- Zatim DIJAGNOSTIČKI zadaci (analiza, mapiranje, audit) — vlasnik prvo mora da RAZUME gde je
 - Zatim STRATEŠKI zadaci (definisanje pozicije, ciljeva, plana)
 - Zatim OPERATIVNI zadaci (implementacija, kreiranje procesa)
 - Na kraju OPTIMIZACIONI zadaci (merenje, poboljšanje, skaliranje)
@@ -1050,8 +1051,14 @@ Kreiraj personalizovani Poslovni Mozak sa tačno 10 prioritizovanih zadataka.`;
       return { conversationId: null, taskIds: [] };
     }
 
-    // Ensure "Poslovanje" concept is first (foundational starting point)
-    const poslovanjeIdx = diversified.findIndex((m) => m.conceptName === 'Poslovanje');
+    // Ensure "Uvod u Poslovanje" foundation concept is first (foundational starting point)
+    // Concept names may have number prefixes (e.g., "1. Poslovanje")
+    const poslovanjeIdx = diversified.findIndex(
+      (m) =>
+        m.conceptName === 'Poslovanje' ||
+        m.conceptName === '1. Poslovanje' ||
+        (m.category as string)?.endsWith('Uvod u Poslovanje')
+    );
     if (poslovanjeIdx > 0) {
       const removed = diversified.splice(poslovanjeIdx, 1);
       diversified.unshift(removed[0]!);

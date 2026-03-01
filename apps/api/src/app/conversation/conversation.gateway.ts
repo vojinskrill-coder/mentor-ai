@@ -28,6 +28,7 @@ import { YoloSchedulerService } from '../workflow/yolo-scheduler.service';
 import { WebSearchService } from '../web-search/web-search.service';
 import { BusinessContextService } from '../knowledge/services/business-context.service';
 import { ExecutionStateService } from '../execution/execution-state.service';
+import { AttachmentsService } from '../attachments/attachments.service';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { createId } from '@paralleldrive/cuid2';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
@@ -101,7 +102,8 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     private readonly yoloScheduler: YoloSchedulerService,
     private readonly webSearchService: WebSearchService,
     private readonly businessContextService: BusinessContextService,
-    private readonly executionStateService: ExecutionStateService
+    private readonly executionStateService: ExecutionStateService,
+    private readonly attachmentsService: AttachmentsService
   ) {
     this.auth0Domain = this.configService.get<string>('AUTH0_DOMAIN') ?? '';
     this.auth0Audience = this.configService.get<string>('AUTH0_AUDIENCE') ?? '';
@@ -218,14 +220,12 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     });
 
     // M3: Mark as 'pending' while waiting for resume to prevent duplicate scheduling
-    this.executionStateService
-      .updateStatus(exec.id, 'pending')
-      .catch((err) =>
-        this.logger.warn({
-          message: 'Failed to mark execution as pending for resume',
-          error: err?.message,
-        })
-      );
+    this.executionStateService.updateStatus(exec.id, 'pending').catch((err) =>
+      this.logger.warn({
+        message: 'Failed to mark execution as pending for resume',
+        error: err?.message,
+      })
+    );
 
     // Delay to let server fully initialize (WebSocket server, DB pool, etc.)
     setTimeout(() => {
@@ -252,7 +252,7 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
    * Leverages the fact that completed tasks are already COMPLETED in DB —
    * the scheduler naturally picks up only PENDING tasks.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   private async resumeYoloExecution(exec: {
     id: string;
     tenantId: string;
@@ -370,7 +370,7 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
    * Broadcast an event to all connected sockets belonging to a tenant.
    * Also journals the event for replay on reconnect.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   private emitToTenant(
     tenantId: string,
     executionId: string,
@@ -618,9 +618,21 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
    * Saves user message, streams AI response, and saves AI message.
    */
   @SubscribeMessage('chat:message-send')
-  async handleMessage(@ConnectedSocket() client: Socket, @MessageBody() payload: ChatMessageSend) {
+  async handleMessage(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: ChatMessageSend & { attachmentIds?: string[] }
+  ) {
     const authenticatedClient = client as AuthenticatedSocket;
-    const { conversationId, content } = payload;
+    const { conversationId, content, attachmentIds: rawAttachmentIds } = payload;
+
+    // Validate and sanitize attachmentIds
+    const attachmentIds: string[] | undefined =
+      Array.isArray(rawAttachmentIds) &&
+      rawAttachmentIds.length > 0 &&
+      rawAttachmentIds.length <= 5 &&
+      rawAttachmentIds.every((id) => typeof id === 'string' && id.length > 0 && id.length < 50)
+        ? rawAttachmentIds
+        : undefined;
 
     // Validate payload
     if (!conversationId || !content) {
@@ -658,6 +670,14 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
         authenticatedClient.userId
       );
 
+      // Extract text from attachments if provided
+      let attachmentContext = '';
+      if (attachmentIds && attachmentIds.length > 0) {
+        attachmentContext = await this.attachmentsService
+          .getExtractedText(attachmentIds, authenticatedClient.tenantId)
+          .catch(() => '');
+      }
+
       // Save user message
       const userMessage = await this.conversationService.addMessage(
         authenticatedClient.tenantId,
@@ -665,6 +685,19 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
         MessageRole.USER,
         content
       );
+
+      // Link attachments to the saved message
+      if (attachmentIds && attachmentIds.length > 0) {
+        await Promise.all(
+          attachmentIds.map((attId) =>
+            this.attachmentsService
+              .linkToMessage(attId, userMessage.id, authenticatedClient.tenantId)
+              .catch((err) => {
+                this.logger.warn(`Failed to link attachment ${attId}: ${err}`);
+              })
+          )
+        );
+      }
 
       // Emit confirmation of user message received
       client.emit('chat:message-received', {
@@ -679,11 +712,16 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
         authenticatedClient.userId
       );
 
-      // Format messages for AI
-      const messages = conversation.messages.map((m) => ({
-        role: m.role.toLowerCase() as 'user' | 'assistant',
-        content: m.content,
-      }));
+      // Format messages for AI (inject attachment context into last user message)
+      const messages = conversation.messages.map((m, i, arr) => {
+        const isLastUserMsg = i === arr.length - 1 && m.role.toLowerCase() === 'user';
+        const msgContent =
+          isLastUserMsg && attachmentContext ? `${attachmentContext}\n\n${m.content}` : m.content;
+        return {
+          role: m.role.toLowerCase() as 'user' | 'assistant',
+          content: msgContent,
+        };
+      });
 
       // Build business context from tenant profile + onboarding notes
       const businessContext = await this.buildBusinessContext(
@@ -920,6 +958,7 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
       });
 
       // Fire-and-forget: detect explicit task creation or auto-generate tasks
+      const forceRedo = this.hasRedoIntent(content);
       if (this.hasExplicitTaskIntent(content)) {
         this.detectAndCreateExplicitTasks(
           client,
@@ -929,7 +968,8 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
           conversation.conceptId ?? null,
           content,
           fullContent,
-          relevantConcepts
+          relevantConcepts,
+          forceRedo
         ).catch((err: unknown) => {
           this.logger.warn({
             message: 'Explicit task creation failed (non-blocking)',
@@ -948,7 +988,8 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
           fullContent,
           messages,
           aiMessage.id,
-          relevantConcepts
+          relevantConcepts,
+          forceRedo
         ).catch((err: unknown) => {
           this.logger.warn({
             message: 'Auto-task generation failed (non-blocking)',
@@ -1142,7 +1183,8 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     aiResponse: string,
     conversationHistory: ChatMessage[],
     messageId: string,
-    relevantConcepts?: import('@mentor-ai/shared/types').ConceptMatch[]
+    relevantConcepts?: import('@mentor-ai/shared/types').ConceptMatch[],
+    forceRedo = false
   ): Promise<void> {
     // Only generate tasks every 2nd AI response to avoid excessive LLM calls
     const messageCount = conversationHistory.length;
@@ -1232,6 +1274,7 @@ Ako nema zadataka: []`;
 
       // Tenant-wide dedup (Story 3.4 AC3)
       let createdCount = 0;
+      let reusedCount = 0;
       for (const task of tasksToCreate) {
         if (!task.title) continue;
         const existingId = await this.notesService.findExistingTask(tenantId, {
@@ -1247,6 +1290,38 @@ Ako nema zadataka: []`;
           });
           continue;
         }
+
+        // Prior work reuse for auto-tasks
+        if (!forceRedo && effectiveConceptId) {
+          const reusable = await this.notesService.findReusableTask(tenantId, effectiveConceptId);
+          if (reusable) {
+            await this.notesService.createNote({
+              title: task.title,
+              content: reusable.content,
+              source: NoteSource.CONVERSATION,
+              noteType: NoteType.TASK,
+              status: NoteStatus.COMPLETED,
+              conversationId,
+              conceptId: effectiveConceptId,
+              messageId,
+              userId,
+              tenantId,
+              reusedFromNoteId: reusable.id,
+              userReport: reusable.userReport,
+              aiScore: reusable.aiScore,
+              aiFeedback: reusable.aiFeedback ?? undefined,
+            });
+            reusedCount++;
+            this.logger.log({
+              message: 'Reused prior work for auto-task',
+              title: task.title,
+              reusedFrom: reusable.id,
+              score: reusable.aiScore,
+            });
+            continue;
+          }
+        }
+
         await this.notesService.createNote({
           title: task.title,
           content:
@@ -1265,15 +1340,16 @@ Ako nema zadataka: []`;
         createdCount++;
       }
 
-      if (createdCount === 0) return;
+      if (createdCount === 0 && reusedCount === 0) return;
 
       // Notify frontend that new notes are available
-      client.emit('chat:notes-updated', { conversationId, count: createdCount });
+      client.emit('chat:notes-updated', { conversationId, count: createdCount + reusedCount });
 
       this.logger.log({
         message: 'Auto-tasks generated',
         conversationId,
-        taskCount: createdCount,
+        freshCount: createdCount,
+        reusedCount,
       });
     } catch (error: unknown) {
       this.logger.warn({
@@ -1372,6 +1448,13 @@ Ako nema zadataka: []`;
 
   // ─── Explicit Task Creation ─────────────────────────────────────
 
+  private hasRedoIntent(content: string): boolean {
+    const lower = content.toLowerCase();
+    return /\b(ponovo|iznova|opet|redo|ponoviti|again|refresh|ažuriraj|azuriraj|osvezi|osveži)\b/.test(
+      lower
+    );
+  }
+
   private hasExplicitTaskIntent(userMessage: string): boolean {
     const lowerMsg = userMessage.toLowerCase();
 
@@ -1394,7 +1477,8 @@ Ako nema zadataka: []`;
     conceptId: string | null,
     userMessage: string,
     aiResponse: string,
-    relevantConcepts?: import('@mentor-ai/shared/types').ConceptMatch[]
+    relevantConcepts?: import('@mentor-ai/shared/types').ConceptMatch[],
+    forceRedo = false
   ): Promise<void> {
     this.logger.log({
       message: 'Explicit task creation intent detected',
@@ -1514,9 +1598,15 @@ Odgovori SAMO sa validnim JSON nizom:
         }
       }
 
-      // Create task notes in DB (with duplicate prevention)
+      // Create task notes in DB (with duplicate prevention + prior work reuse)
       const fallbackConceptId = conceptId ?? relevantConcepts?.[0]?.conceptId ?? undefined;
       const createdTasks: Array<{
+        id: string;
+        title: string;
+        conceptId: string | null;
+        conversationId: string;
+      }> = [];
+      const reusedTasks: Array<{
         id: string;
         title: string;
         conceptId: string | null;
@@ -1548,6 +1638,42 @@ Odgovori SAMO sa validnim JSON nizom:
           continue;
         }
 
+        // Prior work reuse: check for high-quality completed task on same concept
+        if (!forceRedo && taskConceptId) {
+          const reusable = await this.notesService.findReusableTask(tenantId, taskConceptId);
+          if (reusable) {
+            const result = await this.notesService.createNote({
+              title: task.title,
+              content: reusable.content,
+              source: NoteSource.CONVERSATION,
+              noteType: NoteType.TASK,
+              status: NoteStatus.COMPLETED,
+              conversationId,
+              conceptId: taskConceptId,
+              userId,
+              tenantId,
+              reusedFromNoteId: reusable.id,
+              userReport: reusable.userReport,
+              aiScore: reusable.aiScore,
+              aiFeedback: reusable.aiFeedback ?? undefined,
+            });
+            reusedTasks.push({
+              id: result.id,
+              title: task.title,
+              conceptId: taskConceptId ?? null,
+              conversationId,
+            });
+            this.logger.log({
+              message: 'Reused prior work for task',
+              title: task.title,
+              reusedFrom: reusable.id,
+              score: reusable.aiScore,
+              tenantId,
+            });
+            continue;
+          }
+        }
+
         const result = await this.notesService.createNote({
           title: task.title,
           content:
@@ -1570,22 +1696,26 @@ Odgovori SAMO sa validnim JSON nizom:
         });
       }
 
-      if (createdTasks.length === 0) return;
+      const totalCreated = createdTasks.length + reusedTasks.length;
+      if (totalCreated === 0) return;
 
       // Emit event so frontend shows tasks with execute option
+      // reusedTaskIds tells frontend to skip auto-execution for these
       client.emit('chat:tasks-created-for-execution', {
         conversationId,
         taskIds: createdTasks.map((t) => t.id),
-        taskCount: createdTasks.length,
+        reusedTaskIds: reusedTasks.map((t) => t.id),
+        taskCount: totalCreated,
       });
 
       // Also notify notes updated
-      client.emit('chat:notes-updated', { conversationId, count: createdTasks.length });
+      client.emit('chat:notes-updated', { conversationId, count: totalCreated });
 
       this.logger.log({
         message: 'Explicit tasks created',
         conversationId,
-        taskCount: createdTasks.length,
+        freshCount: createdTasks.length,
+        reusedCount: reusedTasks.length,
         conceptsLinked: createdTasks.filter((t) => t.conceptId !== null).length,
       });
 
@@ -4010,7 +4140,16 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
       }
 
       const systemPrompt = `Ti si poslovni asistent koji pomaže korisniku da istraži i razume poslovne teme.
-Odgovaraj precizno i koncizno na srpskom jeziku.
+Odgovaraj precizno na srpskom jeziku.
+
+FORMATIRANJE (OBAVEZNO):
+- Organizuj odgovor sa ## naslovom za svaku sekciju
+- Koristi **bold** za ključne termine
+- Koristi bullet liste za nabrajanje
+- Koristi tabele za numeričke podatke ili poređenja
+- Koristi callout blokove: > **Ključni uvid:** ... ili > **Rezime:** ...
+- Ako imaš web izvore, citiraj INLINE: ([Naziv](URL))
+
 ${businessContext}${brainMemoryContext ? '\n' + brainMemoryContext : ''}${webContext}`;
 
       // Stream response via discovery-specific events (no persistence)
@@ -4095,19 +4234,39 @@ Kompanija: ${tenant.name}`;
 
       context += '\n--- KRAJ POSLOVNOG KONTEKSTA ---';
 
-      // Output quality rules
+      // Output quality rules + mandatory formatting
       context += `
 
 --- PRAVILA ZA ODGOVARANJE ---
 1. UVEK personalizuj odgovore za "${tenant.name}" (${tenant.industry ?? 'opšte poslovanje'}) — ne daj generičke savete
 2. Koristi podatke iz POSLOVNOG KONTEKSTA, BAZE ZNANJA i MEMORIJE za konkretne preporuke
 3. Kada koristiš znanje iz koncepta, označi ga kao [[Naziv Koncepta]]
-4. Strukturiraj odgovore sa ## zaglavljima, bullet listama i tabelama gde je korisno
-5. Budi konkretan: umesto "trebalo bi da razmotrite..." reci šta tačno treba uraditi i zašto
-6. Ako imaš web izvore, citiraj INLINE: ([Naziv izvora](URL))
-7. Odgovaraj ISKLJUČIVO na srpskom jeziku
-8. Minimum 300 reči za pitanja koja zahtevaju analizu — ne daj površne odgovore
---- KRAJ PRAVILA ---`;
+4. Budi konkretan: umesto "trebalo bi da razmotrite..." reci šta tačno treba uraditi i zašto
+5. Ako imaš web izvore, citiraj INLINE: ([Naziv izvora](URL))
+6. Odgovaraj ISKLJUČIVO na srpskom jeziku
+7. Minimum 300 reči za pitanja koja zahtevaju analizu — ne daj površne odgovore
+--- KRAJ PRAVILA ---
+
+--- FORMATIRANJE (STROGO OBAVEZNO — svaki odgovor MORA koristiti ove formate) ---
+1. SEKCIJE: Organizuj svaki odgovor sa ## naslovom za svaku sekciju.
+
+2. CALLOUT BLOKOVI (koristi MINIMUM 2 različita tipa po odgovoru):
+> **Ključni uvid:** Ovde ide najvažniji zaključak ili preporuka.
+> **Upozorenje:** Ovde ide rizik, opasnost ili problem.
+> **Metrika:** Relevantni brojevi i KPI za datu oblast.
+> **Rezime:** Kratki zaključak sa konkretnom preporukom.
+
+3. TABELE SA BROJEVIMA (OBAVEZNO kad god imaš numeričke podatke):
+| Kategorija | Vrednost | Promena |
+|------------|----------|---------|
+| Primer     | 100.000€ | +15%    |
+
+4. OSTALA PRAVILA:
+- Koristi **bold** za sve ključne termine
+- Koristi bullet liste za nabrajanje, NE dugačke paragrafe
+- NIKADA ne piši odgovor bez bar jednog callout bloka
+- Koristi tabele kada god imaš numeričke podatke ili poređenja
+--- KRAJ FORMATIRANJA ---`;
 
       this.logger.log({
         message: 'Business context built for chat',

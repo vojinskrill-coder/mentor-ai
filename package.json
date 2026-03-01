@@ -21,13 +21,6 @@
     "test:api": "nx test api",
     "test:web": "nx test web",
     "e2e": "npx playwright test",
-    "e2e:ui": "npx playwright test --ui",
-    "test": "nx run-many -t test",
-    "test:affected": "nx affected -t test",
-    "test:coverage": "nx run-many -t test -- --coverage",
-    "test:api": "nx test api",
-    "test:web": "nx test web",
-    "e2e": "npx playwright test",
     "e2e:ui": "npx playwright test --ui"
   },
   "lint-staged": {
@@ -81,7 +74,8 @@
     "json2md": "^2.0.3",
     "jsonwebtoken": "^9.0.3",
     "jwks-rsa": "^3.2.2",
-    "marked": "^17.0.1",
+    "mammoth": "^1.11.0",
+    "marked": "^17.0.3",
     "multer": "^2.0.2",
     "nodemailer": "^8.0.0",
     "passport": "^0.7.0",
@@ -93,7 +87,8 @@
     "rxjs": "^7.8.0",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
-    "tailwindcss": "^4.1.18"
+    "tailwindcss": "^4.1.18",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@analogjs/vite-plugin-angular": "~2.1.2",

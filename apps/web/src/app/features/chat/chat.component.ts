@@ -20,7 +20,7 @@ import { ChatWebsocketService } from './services/chat-websocket.service';
 import { NotesApiService } from './services/notes-api.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { ChatMessageComponent } from './components/chat-message.component';
-import { ChatInputComponent } from './components/chat-input.component';
+import { ChatInputComponent, ChatMessagePayload } from './components/chat-input.component';
 import { TypingIndicatorComponent } from './components/typing-indicator.component';
 import {
   MessageRole,
@@ -48,6 +48,7 @@ import { ConceptPanelComponent } from '../knowledge/concept-panel/concept-panel.
 import { ConceptTreeComponent } from './components/concept-tree.component';
 import { ConversationNotesComponent } from './components/conversation-notes.component';
 import { TopicPickerComponent } from './components/topic-picker.component';
+import { FeatureTourComponent } from './components/feature-tour.component';
 import type { CurriculumNode } from '@mentor-ai/shared/types';
 
 interface WorkflowStatusEntry {
@@ -80,6 +81,7 @@ interface WorkflowStatusEntry {
     ConceptTreeComponent,
     ConversationNotesComponent,
     TopicPickerComponent,
+    FeatureTourComponent,
   ],
   styles: [
     `
@@ -107,11 +109,94 @@ interface WorkflowStatusEntry {
         border-right: 1px solid #2a2a2a;
         display: flex;
         flex-direction: column;
+        transition:
+          width 0.25s ease,
+          min-width 0.25s ease;
+        overflow: hidden;
+      }
+      .sidebar.collapsed {
+        width: 0;
+        min-width: 0;
+        border-right: none;
+      }
+      .sidebar-toggle {
+        background: none;
+        border: none;
+        color: #9e9e9e;
+        cursor: pointer;
+        padding: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        flex-shrink: 0;
+      }
+      .sidebar-toggle:hover {
+        color: #fafafa;
+        background: #1a1a1a;
+      }
+      .sidebar-toggle svg {
+        width: 20px;
+        height: 20px;
+      }
+      .sidebar-expand-btn {
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        z-index: 50;
+        background: #1a1a1a;
+        border: 1px solid #2a2a2a;
+        color: #9e9e9e;
+        cursor: pointer;
+        padding: 8px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        transition: all 0.2s;
+      }
+      .sidebar-expand-btn:hover {
+        color: #fafafa;
+        background: #242424;
+        border-color: #3b82f6;
+      }
+      .sidebar-expand-btn svg {
+        width: 20px;
+        height: 20px;
+      }
+      .sidebar-overlay {
+        display: none;
+      }
+      @media (max-width: 768px) {
+        .sidebar {
+          position: fixed;
+          top: 0;
+          left: 0;
+          height: 100vh;
+          z-index: 100;
+          box-shadow: 4px 0 16px rgba(0, 0, 0, 0.4);
+        }
+        .sidebar.collapsed {
+          width: 0;
+          box-shadow: none;
+        }
+        .sidebar-overlay {
+          display: block;
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.5);
+          z-index: 99;
+        }
+        .chat-main {
+          min-width: 0 !important;
+        }
       }
       .sidebar-header {
         height: 48px;
         display: flex;
         align-items: center;
+        justify-content: space-between;
         padding: 0 16px;
         border-bottom: 1px solid #2a2a2a;
       }
@@ -156,7 +241,7 @@ interface WorkflowStatusEntry {
         align-items: center;
         gap: 8px;
         font-size: 13px;
-        color: #8b8b8b;
+        color: #9e9e9e;
         text-decoration: none;
         padding: 6px 4px;
         border-radius: 4px;
@@ -192,7 +277,7 @@ interface WorkflowStatusEntry {
       .switch-btn {
         background: none;
         border: none;
-        color: #8b8b8b;
+        color: #9e9e9e;
         font-size: 13px;
         cursor: pointer;
         display: flex;
@@ -289,6 +374,13 @@ interface WorkflowStatusEntry {
         color: #fafafa;
       }
 
+      .chat-messages-wrapper {
+        position: relative;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
       .chat-messages {
         flex: 1;
         overflow-y: auto;
@@ -299,15 +391,94 @@ interface WorkflowStatusEntry {
         max-width: 768px;
         margin: 0 auto;
       }
+      .scroll-to-bottom {
+        position: absolute;
+        bottom: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: #242424;
+        border: 1px solid #3a3a3a;
+        color: #fafafa;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        transition: all 0.2s;
+        z-index: 10;
+        animation: scrollBtnFadeIn 0.2s ease-out;
+      }
+      @keyframes scrollBtnFadeIn {
+        from {
+          opacity: 0;
+          transform: translateX(-50%) translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(-50%) translateY(0);
+        }
+      }
+      .scroll-to-bottom:hover {
+        background: #3a3a3a;
+        border-color: #3b82f6;
+      }
+      .scroll-to-bottom svg {
+        width: 18px;
+        height: 18px;
+      }
+      .stop-generation-btn {
+        position: absolute;
+        bottom: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        background: #242424;
+        border: 1px solid #3a3a3a;
+        border-radius: 20px;
+        color: #fafafa;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        font-family: inherit;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        transition: all 0.2s;
+        z-index: 10;
+        animation: scrollBtnFadeIn 0.2s ease-out;
+      }
+      .stop-generation-btn:hover {
+        background: #3a3a3a;
+        border-color: #ef4444;
+      }
+      .stop-generation-btn svg {
+        width: 14px;
+        height: 14px;
+      }
       .empty-state {
         flex: 1;
         display: flex;
         align-items: center;
         justify-content: center;
+        animation: emptyFadeIn 0.5s ease-out;
+      }
+      @keyframes emptyFadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(16px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
       .empty-content {
         text-align: center;
-        max-width: 400px;
+        max-width: 560px;
         padding: 24px;
       }
       .empty-icon {
@@ -346,6 +517,42 @@ interface WorkflowStatusEntry {
       }
       .start-btn:hover {
         background: #2563eb;
+      }
+      .suggestion-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-top: 24px;
+      }
+      .suggestion-card {
+        background: #1a1a1a;
+        border: 1px solid #2a2a2a;
+        border-radius: 12px;
+        padding: 16px;
+        text-align: left;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all 0.2s;
+      }
+      .suggestion-card:hover {
+        background: #242424;
+        border-color: #3b82f6;
+        transform: translateY(-2px);
+      }
+      .suggestion-card-icon {
+        font-size: 20px;
+        margin-bottom: 8px;
+      }
+      .suggestion-card-title {
+        font-size: 13px;
+        font-weight: 500;
+        color: #fafafa;
+        margin-bottom: 4px;
+      }
+      .suggestion-card-desc {
+        font-size: 12px;
+        color: #9e9e9e;
+        line-height: 1.4;
       }
       .persona-pills {
         display: flex;
@@ -409,13 +616,79 @@ interface WorkflowStatusEntry {
         z-index: 9999;
         background: #1a1a1a;
         border: 1px solid #ef4444;
+        border-left: 3px solid #ef4444;
         padding: 12px 16px;
         border-radius: 8px;
         display: flex;
         align-items: center;
         gap: 12px;
         max-width: 400px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+        animation: toastSlideIn 0.3s ease-out;
+        font-size: 13px;
+        color: #fca5a5;
+      }
+      .info-toast {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        z-index: 9999;
+        background: #1a1a1a;
+        border: 1px solid #3b82f6;
+        border-left: 3px solid #3b82f6;
+        padding: 12px 16px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        max-width: 400px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+        animation: toastSlideIn 0.3s ease-out;
+        font-size: 13px;
+        color: #93c5fd;
+      }
+      .success-toast {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        z-index: 9999;
+        background: #1a1a1a;
+        border: 1px solid #22c55e;
+        border-left: 3px solid #22c55e;
+        padding: 12px 16px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        max-width: 400px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+        animation: toastSlideIn 0.3s ease-out;
+        font-size: 13px;
+        color: #86efac;
+      }
+      @keyframes toastSlideIn {
+        from {
+          opacity: 0;
+          transform: translateX(100%);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      .toast-dismiss {
+        background: none;
+        border: none;
+        color: #707070;
+        cursor: pointer;
+        padding: 2px;
+        font-size: 16px;
+        line-height: 1;
+        margin-left: auto;
+        flex-shrink: 0;
+      }
+      .toast-dismiss:hover {
+        color: #fafafa;
       }
       .right-panel {
         width: 360px;
@@ -430,7 +703,7 @@ interface WorkflowStatusEntry {
         border-bottom: 1px solid #2a2a2a;
         font-size: 11px;
         font-weight: 600;
-        color: #8b8b8b;
+        color: #9e9e9e;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         flex-shrink: 0;
@@ -445,7 +718,7 @@ interface WorkflowStatusEntry {
         background: none;
         border: none;
         border-bottom: 2px solid transparent;
-        color: #8b8b8b;
+        color: #9e9e9e;
         font-size: 13px;
         cursor: pointer;
       }
@@ -495,7 +768,7 @@ interface WorkflowStatusEntry {
         transition: width 0.5s;
       }
       .brain-stat {
-        color: #8b8b8b;
+        color: #9e9e9e;
         white-space: nowrap;
       }
       .brain-stat strong {
@@ -592,7 +865,7 @@ interface WorkflowStatusEntry {
       }
       .next-step-btn.secondary {
         background: transparent;
-        color: #8b8b8b;
+        color: #9e9e9e;
         border: 1px solid #2a2a2a;
       }
       .next-step-btn.secondary:hover {
@@ -640,7 +913,7 @@ interface WorkflowStatusEntry {
       }
       .stat-label {
         font-size: 11px;
-        color: #8b8b8b;
+        color: #9e9e9e;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         margin-bottom: 4px;
@@ -704,7 +977,7 @@ interface WorkflowStatusEntry {
         border-radius: 8px;
         border: 1px solid #2a2a2a;
         background: none;
-        color: #8b8b8b;
+        color: #9e9e9e;
         cursor: pointer;
       }
       .yolo-btn:hover {
@@ -749,7 +1022,7 @@ interface WorkflowStatusEntry {
       .plan-collapse-icon {
         width: 16px;
         height: 16px;
-        color: #8b8b8b;
+        color: #9e9e9e;
         transition: transform 0.2s;
         flex-shrink: 0;
       }
@@ -798,7 +1071,7 @@ interface WorkflowStatusEntry {
       }
       .step-pending {
         background: #242424;
-        color: #8b8b8b;
+        color: #9e9e9e;
       }
       .step-in-progress {
         background: #1e3a5f;
@@ -835,7 +1108,7 @@ interface WorkflowStatusEntry {
         padding: 1px 6px;
         border-radius: 4px;
         background: #242424;
-        color: #8b8b8b;
+        color: #9e9e9e;
       }
       .plan-btn-cancel {
         background: none;
@@ -963,7 +1236,7 @@ interface WorkflowStatusEntry {
         transition: width 0.3s;
       }
       .ws-count {
-        color: #8b8b8b;
+        color: #9e9e9e;
         flex-shrink: 0;
       }
       .ws-current {
@@ -993,6 +1266,46 @@ interface WorkflowStatusEntry {
       }
       .spinner {
         animation: spin 1s linear infinite;
+      }
+
+      /* Skeleton loading screens */
+      @keyframes shimmer {
+        0% {
+          background-position: -200% 0;
+        }
+        100% {
+          background-position: 200% 0;
+        }
+      }
+      .skeleton-messages {
+        max-width: 768px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      .skeleton-msg {
+        margin-bottom: 20px;
+        display: flex;
+      }
+      .skeleton-msg.user {
+        justify-content: flex-end;
+      }
+      .skeleton-bubble {
+        border-radius: 12px;
+        background: linear-gradient(90deg, #1a1a1a 25%, #242424 50%, #1a1a1a 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.5s ease-in-out infinite;
+      }
+      .skeleton-bubble.user {
+        width: 40%;
+        height: 48px;
+      }
+      .skeleton-bubble.ai {
+        width: 70%;
+        height: 80px;
+      }
+      .skeleton-bubble.ai-short {
+        width: 55%;
+        height: 56px;
       }
 
       .step-status-msg {
@@ -1337,10 +1650,37 @@ interface WorkflowStatusEntry {
 
     <!-- Three-Panel Layout -->
     <div class="layout">
+      <!-- Sidebar expand button (visible when collapsed) -->
+      @if (sidebarCollapsed$()) {
+        <button class="sidebar-expand-btn" (click)="toggleSidebar()">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 6h16M4 12h16M4 18h16"
+            />
+          </svg>
+        </button>
+      }
+      <!-- Mobile overlay -->
+      @if (!sidebarCollapsed$()) {
+        <div class="sidebar-overlay" (click)="toggleSidebar()"></div>
+      }
       <!-- Left Sidebar -->
-      <aside class="sidebar">
+      <aside class="sidebar" [class.collapsed]="sidebarCollapsed$()">
         <div class="sidebar-header">
           <h1>Mentor AI</h1>
+          <button class="sidebar-toggle" (click)="toggleSidebar()">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+              />
+            </svg>
+          </button>
         </div>
 
         <div class="sidebar-actions">
@@ -1420,7 +1760,17 @@ interface WorkflowStatusEntry {
 
       <!-- Main Chat Area -->
       <main class="chat-main">
-        @if (activeConversation$() || folderName$()) {
+        @if (isLoadingConversation$() && !activeConversation$()) {
+          <!-- Skeleton loading state -->
+          <div class="skeleton-messages">
+            <div class="skeleton-msg user"><div class="skeleton-bubble user"></div></div>
+            <div class="skeleton-msg"><div class="skeleton-bubble ai"></div></div>
+            <div class="skeleton-msg user"><div class="skeleton-bubble user"></div></div>
+            <div class="skeleton-msg"><div class="skeleton-bubble ai-short"></div></div>
+            <div class="skeleton-msg user"><div class="skeleton-bubble user"></div></div>
+            <div class="skeleton-msg"><div class="skeleton-bubble ai"></div></div>
+          </div>
+        } @else if (activeConversation$() || folderName$()) {
           <!-- Chat Header -->
           <header class="chat-header">
             <div class="chat-header-left">
@@ -1744,279 +2094,411 @@ interface WorkflowStatusEntry {
               }
 
               <!-- Messages Container -->
-              <div class="chat-messages" #messagesContainer>
-                <div class="messages-container">
-                  @for (message of messages$(); track message.id) {
-                    <app-chat-message
-                      [message]="message"
-                      [personaType]="message.role === 'ASSISTANT' ? currentPersonaType$() : null"
-                      (citationClick)="onCitationClick($event)"
-                      (actionClick)="onSuggestedAction($event)"
-                      style="display: block; margin-bottom: 16px;"
-                    />
-                  }
-                  @if (isCurrentConversationExecuting$() && !showPlanOverlay$()) {
-                    <div class="step-status-msg">
-                      <svg
-                        class="step-icon spinner"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
-                      </svg>
-                      @if (currentStepTitle$()) {
-                        Korak {{ currentStepIndex$() + 1 }}/{{ totalStepsCount$() }}:
-                        {{ currentStepTitle$() }}
-                      } @else {
-                        Pripremam izvršavanje...
-                      }
-                    </div>
-                  }
-                  @if (isYoloMode$() && yoloProgress$()) {
-                    <div class="yolo-progress">
-                      <div class="yolo-progress-title">
-                        <span class="yolo-spinner"></span>
-                        @if (yoloProgress$()!.currentTasks.length > 0) {
-                          Processing {{ yoloProgress$()!.currentTasks.length }} concept{{
-                            yoloProgress$()!.currentTasks.length > 1 ? 's' : ''
-                          }}
-                        } @else {
-                          YOLO Mode — Autonomous Execution
-                        }
-                      </div>
-                      <div class="yolo-progress-stats">
-                        Executing:
-                        <span
-                          >{{ yoloProgress$()!.completed }}/{{
-                            yoloProgress$()!.executionBudget ?? yoloProgress$()!.total
-                          }}</span
-                        >
-                        @if (yoloProgress$()!.failed > 0) {
-                          | Failed: <span class="yolo-failed">{{ yoloProgress$()!.failed }}</span>
-                        }
-                        @if ((yoloProgress$()!.createdOnlyCount ?? 0) > 0) {
-                          |
-                          <span class="yolo-deferred"
-                            >{{ yoloProgress$()!.createdOnlyCount }} queued for next run</span
-                          >
-                        }
-                        @if (yoloProgress$()!.discoveredCount > 0) {
-                          |
-                          <span class="yolo-discovered"
-                            >Discovered: {{ yoloProgress$()!.discoveredCount }}</span
-                          >
-                        }
-                      </div>
-                      <div class="yolo-progress-bar">
-                        <div
-                          class="yolo-progress-fill"
-                          [style.width.%]="
-                            (yoloProgress$()!.executionBudget ?? yoloProgress$()!.total) > 0
-                              ? (yoloProgress$()!.completed /
-                                  (yoloProgress$()!.executionBudget ?? yoloProgress$()!.total)) *
-                                100
-                              : 0
-                          "
-                        ></div>
-                      </div>
-
-                      <!-- Per-worker step detail (Story 2.16 AC3) -->
-                      @if (yoloProgress$()!.currentTasks.length > 0) {
-                        <div class="yolo-workers">
-                          @for (worker of yoloProgress$()!.currentTasks; track worker.conceptName) {
-                            <div class="yolo-worker-item">
-                              <span class="yolo-worker-spinner"></span>
-                              <span class="yolo-worker-concept">{{ worker.conceptName }}</span>
-                              @if (worker.currentStep) {
-                                <span class="yolo-worker-step">
-                                  Step {{ (worker.currentStepIndex ?? 0) + 1 }}/{{
-                                    worker.totalSteps ?? '?'
-                                  }}: {{ worker.currentStep }}
-                                </span>
-                              }
-                            </div>
-                          }
-                        </div>
-                      }
-
-                      <!-- Activity log toggle (Story 2.16 AC4) -->
-                      @if (yoloProgress$()!.recentLogs && yoloProgress$()!.recentLogs!.length > 0) {
-                        <button class="yolo-activity-toggle" (click)="toggleYoloActivityLog()">
-                          <svg
-                            class="yolo-toggle-icon"
-                            [class.expanded]="showYoloActivityLog$()"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M9 5l7 7-7 7"
-                            />
-                          </svg>
-                          {{ showYoloActivityLog$() ? 'Hide' : 'Show' }} Activity Log ({{
-                            yoloProgress$()!.recentLogs!.length
-                          }})
-                        </button>
-                        @if (showYoloActivityLog$()) {
-                          <div class="yolo-activity-log" #yoloLogContainer>
-                            @for (logEntry of yoloProgress$()!.recentLogs!; track $index) {
-                              <div class="yolo-log-entry">{{ logEntry }}</div>
-                            }
-                          </div>
-                        }
-                      }
-                    </div>
-                  }
-                  <!-- Created Task Navigation Buttons -->
-                  @if (createdTaskNotifications$().length > 0) {
-                    <div class="task-nav-card">
-                      <div class="task-nav-header">
+              <div class="chat-messages-wrapper">
+                <div class="chat-messages" #messagesContainer (scroll)="onMessagesScroll()">
+                  <div class="messages-container">
+                    @for (message of messages$(); track message.id) {
+                      <app-chat-message
+                        [message]="message"
+                        [personaType]="message.role === 'ASSISTANT' ? currentPersonaType$() : null"
+                        (citationClick)="onCitationClick($event)"
+                        (actionClick)="onSuggestedAction($event)"
+                        style="display: block; margin-bottom: 16px;"
+                      />
+                    }
+                    @if (isCurrentConversationExecuting$() && !showPlanOverlay$()) {
+                      <div class="step-status-msg">
                         <svg
-                          class="task-nav-icon"
+                          class="step-icon spinner"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
                         >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
-                          />
+                          <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
                         </svg>
-                        Kreirani zadaci
-                        <button
-                          class="task-nav-dismiss"
-                          (click)="createdTaskNotifications$.set([])"
-                        >
+                        @if (currentStepTitle$()) {
+                          Korak {{ currentStepIndex$() + 1 }}/{{ totalStepsCount$() }}:
+                          {{ currentStepTitle$() }}
+                        } @else {
+                          Pripremam izvršavanje...
+                        }
+                      </div>
+                    }
+                    @if (isYoloMode$() && yoloProgress$()) {
+                      <div class="yolo-progress">
+                        <div class="yolo-progress-title">
+                          <span class="yolo-spinner"></span>
+                          @if (yoloProgress$()!.currentTasks.length > 0) {
+                            Processing {{ yoloProgress$()!.currentTasks.length }} concept{{
+                              yoloProgress$()!.currentTasks.length > 1 ? 's' : ''
+                            }}
+                          } @else {
+                            YOLO Mode — Autonomous Execution
+                          }
+                        </div>
+                        <div class="yolo-progress-stats">
+                          Executing:
+                          <span
+                            >{{ yoloProgress$()!.completed }}/{{
+                              yoloProgress$()!.executionBudget ?? yoloProgress$()!.total
+                            }}</span
+                          >
+                          @if (yoloProgress$()!.failed > 0) {
+                            | Failed: <span class="yolo-failed">{{ yoloProgress$()!.failed }}</span>
+                          }
+                          @if ((yoloProgress$()!.createdOnlyCount ?? 0) > 0) {
+                            |
+                            <span class="yolo-deferred"
+                              >{{ yoloProgress$()!.createdOnlyCount }} queued for next run</span
+                            >
+                          }
+                          @if (yoloProgress$()!.discoveredCount > 0) {
+                            |
+                            <span class="yolo-discovered"
+                              >Discovered: {{ yoloProgress$()!.discoveredCount }}</span
+                            >
+                          }
+                        </div>
+                        <div class="yolo-progress-bar">
+                          <div
+                            class="yolo-progress-fill"
+                            [style.width.%]="
+                              (yoloProgress$()!.executionBudget ?? yoloProgress$()!.total) > 0
+                                ? (yoloProgress$()!.completed /
+                                    (yoloProgress$()!.executionBudget ?? yoloProgress$()!.total)) *
+                                  100
+                                : 0
+                            "
+                          ></div>
+                        </div>
+
+                        <!-- Per-worker step detail (Story 2.16 AC3) -->
+                        @if (yoloProgress$()!.currentTasks.length > 0) {
+                          <div class="yolo-workers">
+                            @for (
+                              worker of yoloProgress$()!.currentTasks;
+                              track worker.conceptName
+                            ) {
+                              <div class="yolo-worker-item">
+                                <span class="yolo-worker-spinner"></span>
+                                <span class="yolo-worker-concept">{{ worker.conceptName }}</span>
+                                @if (worker.currentStep) {
+                                  <span class="yolo-worker-step">
+                                    Step {{ (worker.currentStepIndex ?? 0) + 1 }}/{{
+                                      worker.totalSteps ?? '?'
+                                    }}: {{ worker.currentStep }}
+                                  </span>
+                                }
+                              </div>
+                            }
+                          </div>
+                        }
+
+                        <!-- Activity log toggle (Story 2.16 AC4) -->
+                        @if (
+                          yoloProgress$()!.recentLogs && yoloProgress$()!.recentLogs!.length > 0
+                        ) {
+                          <button class="yolo-activity-toggle" (click)="toggleYoloActivityLog()">
+                            <svg
+                              class="yolo-toggle-icon"
+                              [class.expanded]="showYoloActivityLog$()"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M9 5l7 7-7 7"
+                              />
+                            </svg>
+                            {{ showYoloActivityLog$() ? 'Hide' : 'Show' }} Activity Log ({{
+                              yoloProgress$()!.recentLogs!.length
+                            }})
+                          </button>
+                          @if (showYoloActivityLog$()) {
+                            <div class="yolo-activity-log" #yoloLogContainer>
+                              @for (logEntry of yoloProgress$()!.recentLogs!; track $index) {
+                                <div class="yolo-log-entry">{{ logEntry }}</div>
+                              }
+                            </div>
+                          }
+                        }
+                      </div>
+                    }
+                    <!-- Created Task Navigation Buttons -->
+                    @if (createdTaskNotifications$().length > 0) {
+                      <div class="task-nav-card">
+                        <div class="task-nav-header">
                           <svg
+                            class="task-nav-icon"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
-                            style="width:14px;height:14px;"
                           >
                             <path
                               stroke-linecap="round"
                               stroke-linejoin="round"
                               stroke-width="2"
-                              d="M6 18L18 6M6 6l12 12"
+                              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
                             />
                           </svg>
-                        </button>
+                          Kreirani zadaci
+                          <button
+                            class="task-nav-dismiss"
+                            (click)="createdTaskNotifications$.set([])"
+                          >
+                            <svg
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                              style="width:14px;height:14px;"
+                            >
+                              <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                        @for (task of createdTaskNotifications$(); track task.id) {
+                          <button
+                            class="task-nav-btn"
+                            [class.cross-concept]="task.isCrossConversation"
+                            (click)="navigateToCreatedTask(task)"
+                          >
+                            <span class="task-nav-title">{{ task.title }}</span>
+                            @if (task.isCrossConversation && task.conceptName) {
+                              <span class="task-nav-concept">
+                                <svg
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                  style="width:12px;height:12px;"
+                                >
+                                  <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M13 7l5 5m0 0l-5 5m5-5H6"
+                                  />
+                                </svg>
+                                {{ task.conceptName }}
+                              </span>
+                            } @else {
+                              <span class="task-nav-concept">
+                                <svg
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                  style="width:12px;height:12px;"
+                                >
+                                  <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M9 5l7 7-7 7"
+                                  />
+                                </svg>
+                                Otvori
+                              </span>
+                            }
+                          </button>
+                        }
                       </div>
-                      @for (task of createdTaskNotifications$(); track task.id) {
-                        <button
-                          class="task-nav-btn"
-                          [class.cross-concept]="task.isCrossConversation"
-                          (click)="navigateToCreatedTask(task)"
-                        >
-                          <span class="task-nav-title">{{ task.title }}</span>
-                          @if (task.isCrossConversation && task.conceptName) {
-                            <span class="task-nav-concept">
-                              <svg
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                                style="width:12px;height:12px;"
-                              >
-                                <path
-                                  stroke-linecap="round"
-                                  stroke-linejoin="round"
-                                  stroke-width="2"
-                                  d="M13 7l5 5m0 0l-5 5m5-5H6"
-                                />
-                              </svg>
-                              {{ task.conceptName }}
-                            </span>
-                          } @else {
-                            <span class="task-nav-concept">
-                              <svg
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                                style="width:12px;height:12px;"
-                              >
-                                <path
-                                  stroke-linecap="round"
-                                  stroke-linejoin="round"
-                                  stroke-width="2"
-                                  d="M9 5l7 7-7 7"
-                                />
-                              </svg>
-                              Otvori
-                            </span>
-                          }
-                        </button>
-                      }
-                    </div>
-                  }
+                    }
 
-                  @if (isStreaming$()) {
-                    <app-chat-message
-                      [message]="streamingMessage$()"
-                      [isStreaming]="true"
-                      [personaType]="currentPersonaType$()"
-                    />
-                  }
-                  @if (isLoading$() && !isStreaming$()) {
-                    <app-typing-indicator
-                      [personaType]="currentPersonaType$()"
-                      [phase]="researchPhase$()"
-                    />
-                  }
+                    @if (isStreaming$()) {
+                      <app-chat-message
+                        [message]="streamingMessage$()"
+                        [isStreaming]="true"
+                        [personaType]="currentPersonaType$()"
+                      />
+                    }
+                    @if (isLoading$() && !isStreaming$()) {
+                      <app-typing-indicator
+                        [personaType]="currentPersonaType$()"
+                        [phase]="researchPhase$()"
+                      />
+                    }
 
-                  @if (isGeneratingPlan$()) {
-                    <div class="step-status-msg">
-                      <svg
-                        class="step-icon spinner"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
-                      </svg>
-                      Generišem plan izvršavanja...
-                    </div>
-                  }
-
-                  @if (currentWorkflowStepInput$(); as stepInput) {
-                    <div class="step-confirmation">
-                      <div class="confirmation-header">
+                    @if (isGeneratingPlan$()) {
+                      <div class="step-status-msg">
                         <svg
-                          width="20"
-                          height="20"
-                          viewBox="0 0 24 24"
+                          class="step-icon spinner"
                           fill="none"
-                          stroke="#3B82F6"
-                          stroke-width="2"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
                         >
-                          <circle cx="12" cy="12" r="10"></circle>
-                          <polyline points="12 6 12 12 16 14"></polyline>
+                          <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
                         </svg>
-                        <span class="confirmation-label"
-                          >Korak {{ stepInput.stepIndex + 1 }}/{{ stepInput.totalSteps }}:
-                          {{ stepInput.conceptName }}</span
-                        >
+                        Generišem plan izvršavanja...
                       </div>
-                      <p class="confirmation-title">{{ stepInput.stepTitle }}</p>
-                      <p class="confirmation-desc">{{ stepInput.stepDescription }}</p>
-                      @if (stepInput.inputType === 'confirmation') {
+                    }
+
+                    @if (currentWorkflowStepInput$(); as stepInput) {
+                      <div class="step-confirmation">
+                        <div class="confirmation-header">
+                          <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="#3B82F6"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                          </svg>
+                          <span class="confirmation-label"
+                            >Korak {{ stepInput.stepIndex + 1 }}/{{ stepInput.totalSteps }}:
+                            {{ stepInput.conceptName }}</span
+                          >
+                        </div>
+                        <p class="confirmation-title">{{ stepInput.stepTitle }}</p>
+                        <p class="confirmation-desc">{{ stepInput.stepDescription }}</p>
+                        @if (stepInput.inputType === 'confirmation') {
+                          <div class="confirmation-actions">
+                            <button
+                              class="confirm-btn primary"
+                              [disabled]="isProcessingStep$()"
+                              (click)="continueWorkflowStep()"
+                            >
+                              @if (isProcessingStep$()) {
+                                <span class="btn-spinner"></span> Obrađujem...
+                              } @else {
+                                Nastavi
+                                <svg
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  stroke-width="2"
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                >
+                                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                                  <polyline points="12 5 19 12 12 19"></polyline>
+                                </svg>
+                              }
+                            </button>
+                            <button
+                              class="confirm-btn cancel"
+                              [disabled]="isProcessingStep$()"
+                              (click)="cancelExecution()"
+                            >
+                              Otkaži
+                            </button>
+                          </div>
+                        } @else {
+                          <div class="input-prompt">
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="#F59E0B"
+                              stroke-width="2"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
+                              <path
+                                d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+                              ></path>
+                            </svg>
+                            <span>Unesite odgovor u polje za poruke ispod</span>
+                          </div>
+                        }
+                      </div>
+                    }
+
+                    @if (previousConversationId$()) {
+                      <div class="return-link-container">
+                        <button class="return-link" (click)="returnToPreviousConversation()">
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <line x1="19" y1="12" x2="5" y2="12"></line>
+                            <polyline points="12 19 5 12 12 5"></polyline>
+                          </svg>
+                          Vrati se na prethodnu konverzaciju
+                        </button>
+                      </div>
+                    }
+
+                    @if (
+                      awaitingConfirmation$() && nextStepInfo$() && !currentWorkflowStepInput$()
+                    ) {
+                      <div class="step-confirmation">
+                        <div class="confirmation-header">
+                          <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="#3B82F6"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                          </svg>
+                          <span class="confirmation-label"
+                            >Korak {{ nextStepInfo$()!.stepIndex + 1 }}/{{
+                              nextStepInfo$()!.totalSteps
+                            }}:</span
+                          >
+                        </div>
+                        <p class="confirmation-title">{{ nextStepInfo$()!.title }}</p>
+                        <p class="confirmation-desc">{{ nextStepInfo$()!.description }}</p>
+                        <div class="input-prompt">
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="#F59E0B"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path
+                              d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+                            ></path>
+                          </svg>
+                          <span>Imate li dodatne informacije ili odgovore za ovaj korak?</span>
+                        </div>
+                        <textarea
+                          class="confirmation-input"
+                          [value]="userStepInput$()"
+                          (input)="userStepInput$.set($any($event.target).value)"
+                          placeholder="Unesite vaše odgovore, podatke o kompaniji, specifične zahteve..."
+                          rows="4"
+                        ></textarea>
                         <div class="confirmation-actions">
                           <button
                             class="confirm-btn primary"
                             [disabled]="isProcessingStep$()"
-                            (click)="continueWorkflowStep()"
+                            (click)="continueWorkflow()"
                           >
                             @if (isProcessingStep$()) {
                               <span class="btn-spinner"></span> Obrađujem...
                             } @else {
-                              Nastavi
+                              {{ userStepInput$() ? 'Izvrši sa odgovorom' : 'Preskoči i izvrši' }}
                               <svg
                                 width="16"
                                 height="16"
@@ -2040,133 +2522,31 @@ interface WorkflowStatusEntry {
                             Otkaži
                           </button>
                         </div>
-                      } @else {
-                        <div class="input-prompt">
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="#F59E0B"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                          >
-                            <path
-                              d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
-                            ></path>
-                          </svg>
-                          <span>Unesite odgovor u polje za poruke ispod</span>
-                        </div>
-                      }
-                    </div>
-                  }
-
-                  @if (previousConversationId$()) {
-                    <div class="return-link-container">
-                      <button class="return-link" (click)="returnToPreviousConversation()">
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="2"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        >
-                          <line x1="19" y1="12" x2="5" y2="12"></line>
-                          <polyline points="12 19 5 12 12 5"></polyline>
-                        </svg>
-                        Vrati se na prethodnu konverzaciju
-                      </button>
-                    </div>
-                  }
-
-                  @if (awaitingConfirmation$() && nextStepInfo$() && !currentWorkflowStepInput$()) {
-                    <div class="step-confirmation">
-                      <div class="confirmation-header">
-                        <svg
-                          width="20"
-                          height="20"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="#3B82F6"
-                          stroke-width="2"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        >
-                          <circle cx="12" cy="12" r="10"></circle>
-                          <polyline points="12 6 12 12 16 14"></polyline>
-                        </svg>
-                        <span class="confirmation-label"
-                          >Korak {{ nextStepInfo$()!.stepIndex + 1 }}/{{
-                            nextStepInfo$()!.totalSteps
-                          }}:</span
-                        >
                       </div>
-                      <p class="confirmation-title">{{ nextStepInfo$()!.title }}</p>
-                      <p class="confirmation-desc">{{ nextStepInfo$()!.description }}</p>
-                      <div class="input-prompt">
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="#F59E0B"
-                          stroke-width="2"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        >
-                          <path
-                            d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
-                          ></path>
-                        </svg>
-                        <span>Imate li dodatne informacije ili odgovore za ovaj korak?</span>
-                      </div>
-                      <textarea
-                        class="confirmation-input"
-                        [value]="userStepInput$()"
-                        (input)="userStepInput$.set($any($event.target).value)"
-                        placeholder="Unesite vaše odgovore, podatke o kompaniji, specifične zahteve..."
-                        rows="4"
-                      ></textarea>
-                      <div class="confirmation-actions">
-                        <button
-                          class="confirm-btn primary"
-                          [disabled]="isProcessingStep$()"
-                          (click)="continueWorkflow()"
-                        >
-                          @if (isProcessingStep$()) {
-                            <span class="btn-spinner"></span> Obrađujem...
-                          } @else {
-                            {{ userStepInput$() ? 'Izvrši sa odgovorom' : 'Preskoči i izvrši' }}
-                            <svg
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              stroke-width="2"
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                            >
-                              <line x1="5" y1="12" x2="19" y2="12"></line>
-                              <polyline points="12 5 19 12 12 19"></polyline>
-                            </svg>
-                          }
-                        </button>
-                        <button
-                          class="confirm-btn cancel"
-                          [disabled]="isProcessingStep$()"
-                          (click)="cancelExecution()"
-                        >
-                          Otkaži
-                        </button>
-                      </div>
-                    </div>
-                  }
+                    }
+                  </div>
                 </div>
+                @if (showScrollToBottom$()) {
+                  @if (isStreaming$()) {
+                    <button class="stop-generation-btn" (click)="stopGeneration()">
+                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <rect x="6" y="6" width="12" height="12" rx="2" stroke-width="2" />
+                      </svg>
+                      Zaustavi generisanje
+                    </button>
+                  } @else {
+                    <button class="scroll-to-bottom" (click)="scrollToBottom()">
+                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M19 14l-7 7m0 0l-7-7m7 7V3"
+                        />
+                      </svg>
+                    </button>
+                  }
+                }
               </div>
             } @else {
               <!-- Brain Status Dashboard (D6) -->
@@ -2419,10 +2799,10 @@ interface WorkflowStatusEntry {
                   />
                 </svg>
               </div>
-              <h2 class="empty-title">Welcome to Mentor AI</h2>
+              <h2 class="empty-title">Dobrodošli u Mentor AI</h2>
               <p class="empty-desc">
-                Your AI-powered business partner with expertise in Finance, Marketing, Technology,
-                Operations, Legal, and Creative.
+                Vaš AI poslovni partner sa ekspertizom u finansijama, marketingu, tehnologiji,
+                operacijama, pravu i kreativnom razvoju.
               </p>
               <button class="start-btn" (click)="createNewConversation()">
                 <svg
@@ -2438,15 +2818,51 @@ interface WorkflowStatusEntry {
                     d="M12 4v16m8-8H4"
                   />
                 </svg>
-                Start New Conversation
+                Novi razgovor
               </button>
-              <div class="persona-pills">
-                <span class="persona-pill" style="color: #3B82F6;">CFO</span>
-                <span class="persona-pill" style="color: #8B5CF6;">CMO</span>
-                <span class="persona-pill" style="color: #10B981;">CTO</span>
-                <span class="persona-pill" style="color: #F59E0B;">Operations</span>
-                <span class="persona-pill" style="color: #EF4444;">Legal</span>
-                <span class="persona-pill" style="color: #EC4899;">Creative</span>
+              <div class="suggestion-grid">
+                <button
+                  class="suggestion-card"
+                  (click)="
+                    onSuggestionClick(
+                      'Analiziraj moje tržište i identifikuj ključne prilike za rast'
+                    )
+                  "
+                >
+                  <div class="suggestion-card-icon">📊</div>
+                  <div class="suggestion-card-title">Analiza tržišta</div>
+                  <div class="suggestion-card-desc">
+                    Identifikuj prilike za rast i konkurentsku poziciju
+                  </div>
+                </button>
+                <button
+                  class="suggestion-card"
+                  (click)="onSuggestionClick('Napravi profil idealnog kupca za moj biznis')"
+                >
+                  <div class="suggestion-card-icon">👤</div>
+                  <div class="suggestion-card-title">Profilisanje kupaca</div>
+                  <div class="suggestion-card-desc">Definiši idealnog kupca i segmente</div>
+                </button>
+                <button
+                  class="suggestion-card"
+                  (click)="
+                    onSuggestionClick(
+                      'Pomozi mi da napravim finansijski plan za narednih 12 meseci'
+                    )
+                  "
+                >
+                  <div class="suggestion-card-icon">💰</div>
+                  <div class="suggestion-card-title">Finansijski plan</div>
+                  <div class="suggestion-card-desc">Projekcije prihoda, troškova i budžeta</div>
+                </button>
+                <button
+                  class="suggestion-card"
+                  (click)="onSuggestionClick('Kreiraj marketing strategiju za moj proizvod')"
+                >
+                  <div class="suggestion-card-icon">🚀</div>
+                  <div class="suggestion-card-title">Marketing strategija</div>
+                  <div class="suggestion-card-desc">Plan za promociju i pozicioniranje brenda</div>
+                </button>
               </div>
             </div>
           </div>
@@ -2466,6 +2882,8 @@ interface WorkflowStatusEntry {
         </aside>
       }
     </div>
+
+    <app-feature-tour (tourComplete)="onTourComplete()" />
   `,
 })
 export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
@@ -2478,6 +2896,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   private readonly authService = inject(AuthService);
   private readonly notesApi = inject(NotesApiService);
 
+  @ViewChild(FeatureTourComponent) featureTour?: FeatureTourComponent;
   @ViewChild(ConceptTreeComponent) conceptTree?: ConceptTreeComponent;
   @ViewChild(ConversationNotesComponent) conversationNotes?: ConversationNotesComponent;
   @ViewChild('yoloLogContainer') yoloLogContainer?: ElementRef<HTMLDivElement>;
@@ -2488,6 +2907,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   readonly messages$ = computed(() => this.activeConversation$()?.messages ?? []);
   readonly isLoading$ = signal(false);
   readonly isStreaming$ = signal(false);
+  readonly showScrollToBottom$ = signal(false);
+  readonly sidebarCollapsed$ = signal(false);
+  readonly isLoadingConversation$ = signal(false);
   readonly streamingContent$ = signal('');
   readonly streamingMessage$ = computed(
     (): Message => ({
@@ -2717,6 +3139,10 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           this.pendingPlanId = queryParams['planId'];
         }
 
+        if (queryParams['tour'] === 'true') {
+          setTimeout(() => this.featureTour?.launchTour(), 1000);
+        }
+
         // Now load conversation — yoloPending is already set
         if (params['conversationId']) {
           this.loadConversation(params['conversationId']);
@@ -2766,6 +3192,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   async loadConversation(conversationId: string): Promise<void> {
+    this.isLoadingConversation$.set(true);
     try {
       // Clear plan state from previous conversation (unless this conversation has its own active workflow or a workflow is selected in status bar)
       if (
@@ -2776,6 +3203,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       }
       const conversation = await this.conversationService.getConversation(conversationId);
       this.activeConversation$.set(conversation);
+      this.isLoadingConversation$.set(false);
       this.activeTab$.set('chat');
       // Reset transient UI state from any previous conversation
       this.isLoading$.set(false);
@@ -2805,6 +3233,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     } catch {
       this.activeConversation$.set(null);
+      this.isLoadingConversation$.set(false);
       this.showError('Greška pri učitavanju konverzacije');
     }
   }
@@ -3443,7 +3872,46 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     this.previousConversationId$.set(null);
   }
 
-  async sendMessage(content: string): Promise<void> {
+  /** Toggle sidebar collapsed state */
+  toggleSidebar(): void {
+    this.sidebarCollapsed$.set(!this.sidebarCollapsed$());
+  }
+
+  /** Handle suggestion card click from empty state */
+  async onSuggestionClick(prompt: string): Promise<void> {
+    await this.createNewConversation();
+    // Wait for conversation to be created then send the message
+    setTimeout(() => {
+      if (this.activeConversationId$()) {
+        this.sendMessage(prompt);
+      }
+    }, 500);
+  }
+
+  /** Track scroll position to show/hide scroll-to-bottom button */
+  onMessagesScroll(): void {
+    const el = this.messagesContainer?.nativeElement;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    this.showScrollToBottom$.set(distanceFromBottom > 100);
+  }
+
+  /** Scroll to the bottom of the messages container */
+  scrollToBottom(): void {
+    const el = this.messagesContainer?.nativeElement;
+    if (el) el.scrollTop = el.scrollHeight;
+  }
+
+  /** Stop AI response generation (client-side cancel) */
+  stopGeneration(): void {
+    this.isStreaming$.set(false);
+    this.isLoading$.set(false);
+    this.showScrollToBottom$.set(false);
+  }
+
+  async sendMessage(input: string | ChatMessagePayload): Promise<void> {
+    const content = typeof input === 'string' ? input : input.content;
+    const attachmentIds = typeof input === 'string' ? undefined : input.attachmentIds;
     const conversationId = this.activeConversationId$();
     if (!conversationId || !content.trim()) return;
 
@@ -3500,8 +3968,12 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       };
     });
 
-    // Send via WebSocket
-    const sent = this.chatWsService.sendMessage(conversationId, content);
+    // Send via WebSocket (with optional attachment IDs)
+    const sent = this.chatWsService.sendMessage(
+      conversationId,
+      content,
+      attachmentIds?.length ? attachmentIds : undefined
+    );
     if (!sent) {
       this.isLoading$.set(false);
       this.showError('Konekcija sa serverom nije uspostavljena. Osvežite stranicu.');
@@ -3678,13 +4150,15 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         return { ...conv, messages: [...conv.messages, taskMsg] };
       });
 
-      // Auto AI Popuni: if toggle is ON, automatically execute all created tasks
-      // Uses direct task:execute-ai path (skips plan approval) for each task sequentially
-      if (this.autoAiPopuni$() && data.taskIds.length > 0) {
+      // Auto AI Popuni: if toggle is ON, automatically execute FRESH tasks only
+      // Reused tasks are already COMPLETED — skip AI execution for them
+      const reusedSet = new Set(data.reusedTaskIds ?? []);
+      const freshTaskIds = data.taskIds.filter((id) => !reusedSet.has(id));
+
+      if (this.autoAiPopuni$() && freshTaskIds.length > 0) {
         setTimeout(() => {
           const convId = data.conversationId;
-          // Execute tasks sequentially via direct AI path
-          for (const taskId of data.taskIds) {
+          for (const taskId of freshTaskIds) {
             this.chatWsService.emitExecuteTaskAi(taskId, convId);
           }
         }, 1500);
@@ -4483,5 +4957,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     for (const conv of node.conversations) ids.push(conv.id);
     for (const child of node.children) ids.push(...this.collectAllConversationIds(child));
     return ids;
+  }
+
+  onTourComplete(): void {
+    // Tour finished or skipped — no additional action needed
   }
 }

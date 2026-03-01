@@ -385,6 +385,8 @@ export interface Message {
   webSearchSources?: WebSearchSource[];
   /** Suggested next actions after this AI response (D1) */
   suggestedActions?: SuggestedAction[];
+  /** File attachments on this message */
+  attachments?: AttachmentItem[];
   createdAt: string;
 }
 
@@ -392,6 +394,16 @@ export interface Message {
 export interface WebSearchSource {
   title: string;
   link: string;
+}
+
+/** File attachment metadata for display in chat and tasks */
+export interface AttachmentItem {
+  id: string;
+  filename: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
 }
 
 /** Conversation with messages included */
@@ -1361,6 +1373,9 @@ export interface NoteItem {
   aiFeedback: string | null;
   expectedOutcome: string | null;
   workflowStepNumber: number | null;
+  reusedFromNoteId: string | null;
+  /** File attachments on this note/task */
+  attachments?: AttachmentItem[];
 }
 
 /** Request to create a note */

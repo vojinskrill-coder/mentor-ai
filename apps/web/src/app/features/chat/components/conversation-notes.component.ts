@@ -7,18 +7,22 @@ import {
   effect,
   untracked,
   ChangeDetectionStrategy,
+  ViewEncapsulation,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NotesApiService } from '../services/notes-api.service';
 import { NoteType, NoteStatus } from '@mentor-ai/shared/types';
 import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
+// eslint-disable-next-line @nx/enforce-module-boundaries
+import { MarkdownPipe } from '@mentor-ai/shared/ui';
 
 @Component({
   selector: 'app-conversation-notes',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MarkdownPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  encapsulation: ViewEncapsulation.None,
   styles: [
     `
       :host {
@@ -46,7 +50,7 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
         font-size: 12px;
         background: none;
         border: 1px solid #2a2a2a;
-        color: #8b8b8b;
+        color: #9e9e9e;
         cursor: pointer;
       }
       .filter-btn:hover {
@@ -125,9 +129,14 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
       }
       .task-title.completed {
         text-decoration: line-through;
-        color: #8b8b8b;
+        color: #9e9e9e;
       }
 
+      .reuse-badge {
+        font-size: 13px;
+        flex-shrink: 0;
+        cursor: default;
+      }
       .score-badge {
         font-size: 11px;
         font-weight: 600;
@@ -151,7 +160,7 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
       .expand-icon {
         width: 16px;
         height: 16px;
-        color: #8b8b8b;
+        color: #9e9e9e;
         flex-shrink: 0;
         transition: transform 0.2s;
       }
@@ -225,11 +234,7 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
       }
 
       .task-description {
-        font-size: 12px;
-        color: #a1a1a1;
-        line-height: 1.5;
         padding: 10px 0;
-        white-space: pre-wrap;
         word-break: break-word;
       }
 
@@ -245,7 +250,7 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
       .expected-outcome-label {
         font-size: 11px;
         font-weight: 600;
-        color: #8b8b8b;
+        color: #9e9e9e;
         margin-bottom: 4px;
         text-transform: uppercase;
       }
@@ -265,7 +270,7 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
       .subtasks-label {
         font-size: 11px;
         font-weight: 600;
-        color: #8b8b8b;
+        color: #9e9e9e;
         margin-bottom: 6px;
         text-transform: uppercase;
       }
@@ -320,11 +325,7 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
       }
 
       .subtask-content {
-        font-size: 11px;
-        color: #a1a1a1;
-        line-height: 1.5;
         padding: 8px 8px 8px 32px;
-        white-space: pre-wrap;
         word-break: break-word;
         max-height: 300px;
         overflow-y: auto;
@@ -339,7 +340,7 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
       .report-label {
         font-size: 11px;
         font-weight: 600;
-        color: #8b8b8b;
+        color: #9e9e9e;
         margin-bottom: 6px;
         text-transform: uppercase;
       }
@@ -372,13 +373,9 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
       }
 
       .existing-report {
-        font-size: 12px;
-        color: #a1a1a1;
-        line-height: 1.5;
         padding: 8px;
         background: #0d0d0d;
         border-radius: 6px;
-        white-space: pre-wrap;
       }
 
       /* ── Score Display ── */
@@ -431,9 +428,6 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
       }
 
       .score-feedback {
-        font-size: 12px;
-        color: #a1a1a1;
-        line-height: 1.5;
         padding: 8px;
         background: #0d0d0d;
         border-radius: 6px;
@@ -521,7 +515,7 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
       }
       .empty-notes p {
         font-size: 13px;
-        color: #8b8b8b;
+        color: #9e9e9e;
       }
 
       .add-note-section {
@@ -576,7 +570,7 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
       .loading-spinner {
         text-align: center;
         padding: 24px;
-        color: #8b8b8b;
+        color: #9e9e9e;
         font-size: 13px;
       }
 
@@ -678,7 +672,7 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
       .comments-label {
         font-size: 11px;
         font-weight: 600;
-        color: #8b8b8b;
+        color: #9e9e9e;
         text-transform: uppercase;
       }
       .comments-toggle {
@@ -844,7 +838,7 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
       }
       .folder-count {
         font-size: 12px;
-        color: #8b8b8b;
+        color: #9e9e9e;
       }
 
       .execute-btn {
@@ -907,10 +901,6 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
       .execution-progress-content {
         max-height: 200px;
         overflow-y: auto;
-        font-size: 12px;
-        color: #d1d5db;
-        line-height: 1.5;
-        white-space: pre-wrap;
         word-break: break-word;
         padding: 6px 8px;
         background: #0d0d0d;
@@ -979,14 +969,186 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
       .result-progress-content {
         max-height: 200px;
         overflow-y: auto;
-        font-size: 12px;
-        color: #d1d5db;
-        line-height: 1.5;
-        white-space: pre-wrap;
         word-break: break-word;
         padding: 6px 8px;
         background: #0d0d0d;
         border-radius: 4px;
+      }
+
+      /* ── Chat markdown rendering for task/note panels ── */
+      .ai-content {
+        font-size: 12px;
+        line-height: 1.65;
+        color: #e0e0e0;
+        word-break: break-word;
+      }
+      .ai-content > :first-child {
+        margin-top: 0 !important;
+      }
+      .ai-content > :last-child {
+        margin-bottom: 0 !important;
+      }
+
+      .ai-content h1 {
+        font-size: 1.35em;
+        font-weight: 700;
+        color: #fafafa;
+        margin: 16px 0 6px;
+        padding-bottom: 4px;
+        border-bottom: 1px solid #2a2a2a;
+      }
+      .ai-content h2 {
+        font-size: 1.2em;
+        font-weight: 600;
+        color: #fafafa;
+        margin: 14px 0 5px;
+        padding-bottom: 3px;
+        border-bottom: 1px solid rgba(42, 42, 42, 0.5);
+      }
+      .ai-content h3 {
+        font-size: 1.1em;
+        font-weight: 600;
+        color: #f0f0f0;
+        margin: 12px 0 4px;
+      }
+      .ai-content h4,
+      .ai-content h5,
+      .ai-content h6 {
+        font-size: 1em;
+        font-weight: 600;
+        color: #e5e5e5;
+        margin: 10px 0 3px;
+      }
+
+      .ai-content p {
+        margin: 8px 0;
+        line-height: 1.65;
+      }
+      .ai-content strong {
+        color: #fafafa;
+        font-weight: 600;
+      }
+      .ai-content em {
+        color: #d4d4d4;
+        font-style: italic;
+      }
+
+      .ai-content ul,
+      .ai-content ol {
+        margin: 6px 0;
+        padding-left: 1.5em;
+        list-style-position: outside;
+      }
+      .ai-content ul {
+        list-style-type: disc;
+      }
+      .ai-content ol {
+        list-style-type: decimal;
+      }
+      .ai-content li {
+        margin: 3px 0;
+        line-height: 1.65;
+        color: #e0e0e0;
+      }
+      .ai-content li::marker {
+        color: #9e9e9e;
+      }
+      .ai-content li > ul,
+      .ai-content li > ol {
+        margin: 3px 0;
+      }
+      .ai-content li > p {
+        margin: 3px 0;
+      }
+      .ai-content ul ul {
+        list-style-type: circle;
+      }
+      .ai-content ul ul ul {
+        list-style-type: square;
+      }
+
+      .ai-content table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 10px 0;
+        font-size: 0.9em;
+        border-radius: 6px;
+        overflow: hidden;
+        border: 1px solid #2a2a2a;
+      }
+      .ai-content thead th {
+        background: #1a1a1a;
+        color: #fafafa;
+        font-weight: 600;
+        text-align: left;
+        padding: 7px 10px;
+        border-bottom: 2px solid #333;
+      }
+      .ai-content tbody td {
+        padding: 7px 10px;
+        border-bottom: 1px solid #1e1e1e;
+        color: #d4d4d4;
+      }
+      .ai-content tbody tr:hover {
+        background: rgba(59, 130, 246, 0.04);
+      }
+      .ai-content tbody tr:last-child td {
+        border-bottom: none;
+      }
+
+      .ai-content code {
+        background: rgba(255, 255, 255, 0.06);
+        color: #e5e5e5;
+        padding: 0.1em 0.35em;
+        border-radius: 3px;
+        font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+        font-size: 0.875em;
+      }
+      .ai-content pre {
+        background: #111;
+        border: 1px solid #2a2a2a;
+        border-radius: 6px;
+        padding: 10px 14px;
+        overflow-x: auto;
+        margin: 10px 0;
+      }
+      .ai-content pre code {
+        background: none;
+        padding: 0;
+        border-radius: 0;
+        font-size: 0.85em;
+        line-height: 1.5;
+      }
+
+      .ai-content blockquote {
+        border-left: 3px solid #3b82f6;
+        margin: 10px 0;
+        padding: 6px 12px;
+        color: #b0b0b0;
+        background: rgba(59, 130, 246, 0.04);
+        border-radius: 0 6px 6px 0;
+      }
+      .ai-content blockquote p {
+        margin: 3px 0;
+      }
+
+      .ai-content a {
+        color: #60a5fa;
+        text-decoration: none;
+      }
+      .ai-content a:hover {
+        color: #93c5fd;
+        text-decoration: underline;
+      }
+
+      .ai-content hr {
+        border: none;
+        border-top: 1px solid #2a2a2a;
+        margin: 14px 0;
+      }
+      .ai-content del {
+        color: #9e9e9e;
+        text-decoration: line-through;
       }
     `,
   ],
@@ -1129,6 +1291,9 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
               <span class="task-title" [class.completed]="note.status === 'COMPLETED'">
                 {{ note.title }}
               </span>
+              @if (note.reusedFromNoteId) {
+                <span class="reuse-badge" title="Korišćen postojeći rezultat">♻️</span>
+              }
               @if (note.aiScore !== null && note.aiScore !== undefined) {
                 <span
                   class="score-badge"
@@ -1242,13 +1407,16 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
               }
               <div class="task-card-body">
                 @if (note.content) {
-                  <div class="task-description">{{ note.content }}</div>
+                  <div
+                    class="task-description ai-content"
+                    [innerHTML]="note.content | markdown"
+                  ></div>
                 }
 
                 @if (note.expectedOutcome) {
                   <div class="expected-outcome">
                     <div class="expected-outcome-label">Očekivani ishod</div>
-                    {{ note.expectedOutcome }}
+                    <div class="ai-content" [innerHTML]="note.expectedOutcome | markdown"></div>
                   </div>
                 }
 
@@ -1292,7 +1460,10 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
                       <span class="execution-progress-spinner"></span>
                       AI radi na zadatku...
                     </div>
-                    <div class="execution-progress-content">{{ taskExecutionContent() }}</div>
+                    <div
+                      class="execution-progress-content ai-content"
+                      [innerHTML]="taskExecutionContent() | markdown"
+                    ></div>
                   </div>
                 }
 
@@ -1333,7 +1504,10 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
                       <span class="submit-result-spinner"></span>
                       Optimizujem i ocenjujem...
                     </div>
-                    <div class="result-progress-content">{{ taskResultContent() }}</div>
+                    <div
+                      class="result-progress-content ai-content"
+                      [innerHTML]="taskResultContent() | markdown"
+                    ></div>
                   </div>
                 }
 
@@ -1385,7 +1559,10 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
                           </svg>
                         </div>
                         @if (expandedSubtasks().has(child.id)) {
-                          <div class="subtask-content">{{ child.content }}</div>
+                          <div
+                            class="subtask-content ai-content"
+                            [innerHTML]="child.content | markdown"
+                          ></div>
 
                           <!-- Sub-task report -->
                           @if (child.status === 'COMPLETED' && !child.userReport) {
@@ -1428,7 +1605,10 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
                           @if (child.userReport) {
                             <div class="report-section" style="padding-left: 32px;">
                               <div class="report-label">Vaš izveštaj</div>
-                              <div class="existing-report">{{ child.userReport }}</div>
+                              <div
+                                class="existing-report ai-content"
+                                [innerHTML]="child.userReport | markdown"
+                              ></div>
                               @if (child.aiScore !== null && child.aiScore !== undefined) {
                                 <div class="score-section" style="border: none; padding-top: 8px;">
                                   <div class="score-bar-container">
@@ -1450,7 +1630,10 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
                                     >
                                   </div>
                                   @if (child.aiFeedback) {
-                                    <div class="score-feedback">{{ child.aiFeedback }}</div>
+                                    <div
+                                      class="score-feedback ai-content"
+                                      [innerHTML]="child.aiFeedback | markdown"
+                                    ></div>
                                   }
                                 </div>
                               } @else {
@@ -1508,7 +1691,10 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
                 @if (note.userReport) {
                   <div class="report-section">
                     <div class="report-label">Vaš izveštaj</div>
-                    <div class="existing-report">{{ note.userReport }}</div>
+                    <div
+                      class="existing-report ai-content"
+                      [innerHTML]="note.userReport | markdown"
+                    ></div>
 
                     @if (note.aiScore !== null && note.aiScore !== undefined) {
                       <div class="score-section">
@@ -1531,7 +1717,10 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
                           >
                         </div>
                         @if (note.aiFeedback) {
-                          <div class="score-feedback">{{ note.aiFeedback }}</div>
+                          <div
+                            class="score-feedback ai-content"
+                            [innerHTML]="note.aiFeedback | markdown"
+                          ></div>
                         }
                       </div>
                     } @else {
@@ -1568,7 +1757,7 @@ import type { NoteItem, CommentItem } from '@mentor-ai/shared/types';
                     </div>
                     @if (commentsExpanded().has(note.id)) {
                       @if (loadingComments().has(note.id)) {
-                        <div style="font-size: 11px; color: #8B8B8B; padding: 4px 0;">
+                        <div style="font-size: 11px; color: #9e9e9e; padding: 4px 0;">
                           Učitavanje komentara...
                         </div>
                       } @else {

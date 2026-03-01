@@ -318,6 +318,8 @@ model Message {
   confidenceFactors Json?        @map("confidence_factors") // Array of ConfidenceFactor objects
   createdAt         DateTime     @default(now()) @map("created_at")
 
+  attachments   Attachment[]
+
   @@index([conversationId])
   @@map("messages")
 }
@@ -432,12 +434,19 @@ model Note {
   expectedOutcome    String?  @db.Text @map("expected_outcome")
   workflowStepNumber Int?     @map("workflow_step_number")
 
+  // Prior work reuse
+  reusedFromNoteId   String?  @map("reused_from_note_id")
+
+  // File attachments
+  attachments        Attachment[]
+
   @@index([userId])
   @@index([tenantId])
   @@index([conversationId])
   @@index([conceptId])
   @@index([messageId])
   @@index([parentNoteId])
+  @@index([reusedFromNoteId])
   @@map("notes")
 }
 
@@ -619,5 +628,30 @@ model ExecutionEvent {
 
   @@index([executionId, createdAt])
   @@map("execution_events")
+}
+
+// ── File Attachments ──
+// Uploaded files linked to chat messages or task notes
+model Attachment {
+  id            String   @id @default(cuid()) @map("id")
+  filename      String
+  originalName  String   @map("original_name")
+  mimeType      String   @map("mime_type")
+  size          Int
+  storagePath   String   @map("storage_path")
+  extractedText String?  @map("extracted_text") @db.Text
+  userId        String   @map("user_id")
+  tenantId      String   @map("tenant_id")
+  messageId     String?  @map("message_id")
+  noteId        String?  @map("note_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  message Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  note    Note?    @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([noteId])
+  @@index([userId, tenantId])
+  @@map("attachments")
 }
 

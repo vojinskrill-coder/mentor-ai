@@ -23,6 +23,7 @@ import { QdrantModule } from './qdrant/qdrant.module';
 import { WebSearchModule } from './web-search/web-search.module';
 import { AdminModule } from './admin/admin.module';
 import { ExecutionModule } from './execution/execution.module';
+import { AttachmentsModule } from './attachments/attachments.module';
 
 // Serve Angular static files in production (combined deploy)
 const staticPath = join(__dirname, '..', '..', 'web', 'browser');
@@ -62,6 +63,7 @@ const serveStaticImports = existsSync(staticPath)
     WebSearchModule,
     AdminModule,
     ExecutionModule,
+    AttachmentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

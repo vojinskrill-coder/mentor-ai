@@ -51,7 +51,7 @@ import { AuthService } from '../core/auth/auth.service';
       .nav-links a {
         font-size: 13px;
         font-weight: 500;
-        color: #8b8b8b;
+        color: #9e9e9e;
         text-decoration: none;
       }
       .nav-links a:hover {
@@ -182,7 +182,7 @@ import { AuthService } from '../core/auth/auth.service';
       }
       .persona-role {
         font-size: 11px;
-        color: #8b8b8b;
+        color: #9e9e9e;
         margin-top: 4px;
       }
 
@@ -278,7 +278,11 @@ import { AuthService } from '../core/auth/auth.service';
               </svg>
               Započni razgovor
             </a>
-            <a routerLink="/onboarding" class="action-btn action-btn-secondary">
+            <a
+              routerLink="/chat"
+              [queryParams]="{ tour: 'true' }"
+              class="action-btn action-btn-secondary"
+            >
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   stroke-linecap="round"

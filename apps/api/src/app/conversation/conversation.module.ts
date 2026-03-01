@@ -9,6 +9,7 @@ import { MemoryModule } from '../memory/memory.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { WebSearchModule } from '../web-search/web-search.module';
 import { ExecutionModule } from '../execution/execution.module';
+import { AttachmentsModule } from '../attachments/attachments.module';
 import { ConversationController } from './conversation.controller';
 import { ConversationService } from './conversation.service';
 import { ConversationGateway } from './conversation.gateway';
@@ -25,6 +26,7 @@ import { ConversationGateway } from './conversation.gateway';
     WorkflowModule,
     WebSearchModule,
     ExecutionModule,
+    AttachmentsModule,
   ],
   controllers: [ConversationController],
   providers: [ConversationService, ConversationGateway],

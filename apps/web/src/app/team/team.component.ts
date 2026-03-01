@@ -3,20 +3,12 @@ import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { forkJoin } from 'rxjs';
-import { BrnButton } from '@spartan-ng/brain/button';
-import { NgIcon, provideIcons } from '@ng-icons/core';
-import {
-  lucideUserPlus,
-  lucideLoader2,
-  lucideUsers,
-  lucideClock,
-  lucideMail,
-  lucideUserMinus,
-  lucideShield,
-  lucideSettings,
-} from '@ng-icons/lucide';
 import { InvitationService, InvitationResponse } from './services/invitation.service';
-import { TeamMembersService, TeamMemberResponse, RemovalStrategy } from './services/team-members.service';
+import {
+  TeamMembersService,
+  TeamMemberResponse,
+  RemovalStrategy,
+} from './services/team-members.service';
 import { InviteDialogComponent } from './invite-dialog/invite-dialog.component';
 import { RemoveDialogComponent } from './remove-dialog/remove-dialog.component';
 import { AuthService } from '../core/auth/auth.service';
@@ -24,88 +16,494 @@ import { AuthService } from '../core/auth/auth.service';
 @Component({
   selector: 'app-team',
   standalone: true,
-  imports: [CommonModule, RouterLink, BrnButton, NgIcon, InviteDialogComponent, RemoveDialogComponent],
-  providers: [
-    provideIcons({ lucideUserPlus, lucideLoader2, lucideUsers, lucideClock, lucideMail, lucideUserMinus, lucideShield, lucideSettings }),
+  imports: [CommonModule, RouterLink, InviteDialogComponent, RemoveDialogComponent],
+  styles: [
+    `
+      :host {
+        display: block;
+      }
+      .page {
+        min-height: 100vh;
+        background: #0d0d0d;
+        color: #fafafa;
+        font-family: 'Inter', system-ui, sans-serif;
+      }
+
+      /* Header */
+      .top-header {
+        border-bottom: 1px solid #2a2a2a;
+        background: #1a1a1a;
+      }
+      .header-inner {
+        max-width: 1024px;
+        margin: 0 auto;
+        padding: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .header-left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .header-left h1 {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .header-left svg {
+        width: 24px;
+        height: 24px;
+        color: #3b82f6;
+      }
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .settings-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        border-radius: 6px;
+        border: 1px solid #2a2a2a;
+        background: transparent;
+        color: #fafafa;
+        font-size: 13px;
+        font-weight: 500;
+        text-decoration: none;
+        font-family: inherit;
+        cursor: pointer;
+      }
+      .settings-link:hover {
+        background: #242424;
+      }
+      .settings-link svg {
+        width: 16px;
+        height: 16px;
+      }
+      .invite-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        border-radius: 6px;
+        border: none;
+        background: #3b82f6;
+        color: white;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .invite-btn:hover {
+        background: #2563eb;
+      }
+      .invite-btn svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      /* Main */
+      .main-content {
+        max-width: 1024px;
+        margin: 0 auto;
+        padding: 32px 16px;
+      }
+
+      /* Loading */
+      .loading-state {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 48px 0;
+      }
+      @keyframes spin {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .load-spinner {
+        width: 32px;
+        height: 32px;
+        border: 3px solid #2a2a2a;
+        border-top-color: #3b82f6;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+
+      /* Section */
+      .section {
+        margin-bottom: 32px;
+      }
+      .section-title {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 16px;
+      }
+      .member-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      /* Member Card */
+      .member-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-radius: 8px;
+        border: 1px solid #2a2a2a;
+        background: #1a1a1a;
+        padding: 16px;
+      }
+      .member-left {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .member-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(59, 130, 246, 0.1);
+        color: #3b82f6;
+        font-size: 13px;
+        font-weight: 600;
+        flex-shrink: 0;
+      }
+      .member-name {
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .member-email {
+        font-size: 13px;
+        color: #9e9e9e;
+        margin-top: 2px;
+      }
+      .member-right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      /* Badges */
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .badge svg {
+        width: 12px;
+        height: 12px;
+      }
+      .badge-owner {
+        background: rgba(139, 92, 246, 0.15);
+        color: #a78bfa;
+      }
+      .badge-admin {
+        background: rgba(59, 130, 246, 0.15);
+        color: #60a5fa;
+      }
+      .badge-member {
+        background: #242424;
+        color: #9e9e9e;
+      }
+      .badge-dept {
+        background: #242424;
+        color: #9e9e9e;
+      }
+
+      /* Status badges */
+      .badge-pending {
+        background: rgba(245, 158, 11, 0.15);
+        color: #fbbf24;
+      }
+      .badge-accepted {
+        background: rgba(34, 197, 94, 0.15);
+        color: #4ade80;
+      }
+      .badge-expired {
+        background: #242424;
+        color: #9e9e9e;
+      }
+      .badge-revoked {
+        background: rgba(239, 68, 68, 0.15);
+        color: #f87171;
+      }
+
+      /* Remove / Revoke button */
+      .remove-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 6px 12px;
+        border-radius: 6px;
+        border: none;
+        background: rgba(239, 68, 68, 0.1);
+        color: #ef4444;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .remove-btn:hover {
+        background: rgba(239, 68, 68, 0.2);
+      }
+      .remove-btn svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      /* Invitation card (pending) */
+      .invite-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(245, 158, 11, 0.15);
+        color: #fbbf24;
+        flex-shrink: 0;
+      }
+      .invite-avatar svg {
+        width: 20px;
+        height: 20px;
+      }
+      .invite-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 4px;
+        font-size: 13px;
+        color: #9e9e9e;
+      }
+      .invite-meta svg {
+        width: 12px;
+        height: 12px;
+      }
+      .invite-meta-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      /* Table */
+      .table-container {
+        border-radius: 8px;
+        border: 1px solid #2a2a2a;
+        background: #1a1a1a;
+        overflow: hidden;
+      }
+      .data-table {
+        width: 100%;
+        font-size: 13px;
+        border-collapse: collapse;
+      }
+      .data-table thead tr {
+        border-bottom: 1px solid #2a2a2a;
+        background: rgba(36, 36, 36, 0.5);
+      }
+      .data-table th {
+        padding: 12px 16px;
+        text-align: left;
+        font-weight: 500;
+        color: #9e9e9e;
+      }
+      .data-table tbody tr {
+        border-bottom: 1px solid #2a2a2a;
+      }
+      .data-table tbody tr:last-child {
+        border-bottom: none;
+      }
+      .data-table td {
+        padding: 12px 16px;
+        color: #fafafa;
+      }
+      .data-table td.muted {
+        color: #9e9e9e;
+      }
+
+      /* Empty state */
+      .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 64px 0;
+        text-align: center;
+      }
+      .empty-icon {
+        width: 48px;
+        height: 48px;
+        color: rgba(158, 158, 158, 0.5);
+        margin-bottom: 16px;
+      }
+      .empty-state h3 {
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      .empty-state p {
+        font-size: 14px;
+        color: #9e9e9e;
+        margin-bottom: 24px;
+      }
+
+      /* Error state */
+      .error-state {
+        text-align: center;
+        padding: 32px 0;
+      }
+      .error-text {
+        font-size: 14px;
+        color: #ef4444;
+        margin-bottom: 16px;
+      }
+
+      @media (max-width: 640px) {
+        .member-card {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 12px;
+        }
+        .member-right {
+          flex-wrap: wrap;
+        }
+        .header-inner {
+          flex-direction: column;
+          gap: 12px;
+          align-items: flex-start;
+        }
+        .data-table {
+          font-size: 12px;
+        }
+        .data-table th,
+        .data-table td {
+          padding: 8px 12px;
+        }
+      }
+    `,
   ],
   template: `
-    <div class="min-h-screen bg-background">
-      <header class="border-b border-border bg-card">
-        <div class="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <ng-icon name="lucideUsers" class="h-6 w-6 text-primary" />
-            <h1 class="text-xl font-semibold text-foreground">Team Management</h1>
+    <div class="page">
+      <header class="top-header">
+        <div class="header-inner">
+          <div class="header-left">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+              />
+            </svg>
+            <h1>Upravljanje timom</h1>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="header-actions">
             @if (authService.currentUser()?.role === 'TENANT_OWNER') {
-              <a
-                routerLink="/account-settings"
-                class="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
-              >
-                <ng-icon name="lucideSettings" class="h-4 w-4" />
-                Account Settings
+              <a routerLink="/account-settings" class="settings-link">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                  />
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                </svg>
+                Podešavanja naloga
               </a>
             }
-            <button
-              brnButton
-              (click)="showInviteDialog$.set(true)"
-              class="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              <ng-icon name="lucideUserPlus" class="h-4 w-4" />
-              Invite Member
+            <button class="invite-btn" (click)="showInviteDialog$.set(true)">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
+                />
+              </svg>
+              Pozovi člana
             </button>
           </div>
         </div>
       </header>
 
-      <main class="container mx-auto px-4 py-8 space-y-8">
+      <main class="main-content">
         @if (isLoading$()) {
-          <div class="flex items-center justify-center py-12">
-            <ng-icon name="lucideLoader2" class="h-8 w-8 animate-spin text-muted-foreground" />
+          <div class="loading-state">
+            <div class="load-spinner"></div>
           </div>
         } @else {
+          @if (loadError$()) {
+            <div class="error-state">
+              <p class="error-text">{{ loadError$() }}</p>
+              <button class="invite-btn" (click)="loadData()">Pokušaj ponovo</button>
+            </div>
+          }
+
           <!-- Active Members -->
           @if (members$().length > 0) {
-            <section>
-              <h2 class="text-lg font-semibold text-foreground mb-4">
-                Active Members ({{ members$().length }})
-              </h2>
-              <div class="space-y-3">
+            <section class="section">
+              <h2 class="section-title">Aktivni članovi ({{ members$().length }})</h2>
+              <div class="member-list">
                 @for (member of members$(); track member.id) {
-                  <div class="flex items-center justify-between rounded-lg border bg-card p-4">
-                    <div class="flex items-center gap-4">
-                      <div class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                        <span class="text-sm font-semibold">{{ getInitials(member.name, member.email) }}</span>
+                  <div class="member-card">
+                    <div class="member-left">
+                      <div class="member-avatar">
+                        {{ getInitials(member.name, member.email) }}
                       </div>
                       <div>
-                        <p class="font-medium text-foreground">{{ member.name || member.email }}</p>
-                        <div class="flex items-center gap-2 text-sm text-muted-foreground">
-                          <span class="flex items-center gap-1">
-                            {{ member.email }}
-                          </span>
-                        </div>
+                        <div class="member-name">{{ member.name || member.email }}</div>
+                        <div class="member-email">{{ member.email }}</div>
                       </div>
                     </div>
-                    <div class="flex items-center gap-3">
-                      <span [class]="getRoleBadgeClasses(member.role)">
+                    <div class="member-right">
+                      <span [class]="getRoleBadgeClass(member.role)">
                         @if (member.role === 'TENANT_OWNER') {
-                          <ng-icon name="lucideShield" class="h-3 w-3 mr-1" />
+                          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                            />
+                          </svg>
                         }
                         {{ formatRole(member.role) }}
                       </span>
                       @if (member.department) {
-                        <span class="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-xs font-medium">
-                          {{ member.department }}
-                        </span>
+                        <span class="badge badge-dept">{{ member.department }}</span>
                       }
                       @if (canRemoveMember(member)) {
-                        <button
-                          brnButton
-                          (click)="openRemoveDialog(member)"
-                          class="inline-flex items-center justify-center gap-1 rounded-md bg-destructive/10 px-3 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/20"
-                        >
-                          <ng-icon name="lucideUserMinus" class="h-3.5 w-3.5" />
-                          Remove
+                        <button class="remove-btn" (click)="openRemoveDialog(member)">
+                          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6"
+                            />
+                          </svg>
+                          Ukloni
                         </button>
                       }
                     </div>
@@ -117,36 +515,42 @@ import { AuthService } from '../core/auth/auth.service';
 
           <!-- Pending Invitations -->
           @if (pendingInvitations$().length > 0) {
-            <section>
-              <h2 class="text-lg font-semibold text-foreground mb-4">
-                Pending Invitations ({{ pendingInvitations$().length }})
-              </h2>
-              <div class="space-y-3">
+            <section class="section">
+              <h2 class="section-title">Pozivi na čekanju ({{ pendingInvitations$().length }})</h2>
+              <div class="member-list">
                 @for (invitation of pendingInvitations$(); track invitation.id) {
-                  <div class="flex items-center justify-between rounded-lg border bg-card p-4">
-                    <div class="flex items-center gap-4">
-                      <div class="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-600">
-                        <ng-icon name="lucideMail" class="h-5 w-5" />
+                  <div class="member-card">
+                    <div class="member-left">
+                      <div class="invite-avatar">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                          />
+                        </svg>
                       </div>
                       <div>
-                        <p class="font-medium text-foreground">{{ invitation.email }}</p>
-                        <div class="flex items-center gap-2 text-sm text-muted-foreground">
-                          <span class="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-xs font-medium">
-                            {{ invitation.department }}
-                          </span>
-                          <span class="flex items-center gap-1">
-                            <ng-icon name="lucideClock" class="h-3 w-3" />
-                            Expires {{ formatExpiry(invitation.expiresAt) }}
+                        <div class="member-name">{{ invitation.email }}</div>
+                        <div class="invite-meta">
+                          <span class="badge badge-dept">{{ invitation.department }}</span>
+                          <span class="invite-meta-item">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                              />
+                            </svg>
+                            Ističe {{ formatExpiry(invitation.expiresAt) }}
                           </span>
                         </div>
                       </div>
                     </div>
-                    <button
-                      brnButton
-                      (click)="revokeInvitation(invitation.id)"
-                      class="inline-flex items-center justify-center rounded-md bg-destructive/10 px-3 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/20"
-                    >
-                      Revoke
+                    <button class="remove-btn" (click)="revokeInvitation(invitation.id)">
+                      Opozovi
                     </button>
                   </div>
                 }
@@ -156,37 +560,31 @@ import { AuthService } from '../core/auth/auth.service';
 
           <!-- All Invitations History -->
           @if (allInvitations$().length > 0) {
-            <section>
-              <h2 class="text-lg font-semibold text-foreground mb-4">
-                Invitation History
-              </h2>
-              <div class="rounded-lg border bg-card overflow-hidden">
-                <table class="w-full text-sm">
+            <section class="section">
+              <h2 class="section-title">Istorija poziva</h2>
+              <div class="table-container">
+                <table class="data-table">
                   <thead>
-                    <tr class="border-b bg-muted/50">
-                      <th class="px-4 py-3 text-left font-medium text-muted-foreground">Email</th>
-                      <th class="px-4 py-3 text-left font-medium text-muted-foreground">Department</th>
-                      <th class="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-                      <th class="px-4 py-3 text-left font-medium text-muted-foreground">Sent</th>
+                    <tr>
+                      <th>Email</th>
+                      <th>Odeljenje</th>
+                      <th>Status</th>
+                      <th>Poslato</th>
                     </tr>
                   </thead>
                   <tbody>
                     @for (invitation of allInvitations$(); track invitation.id) {
-                      <tr class="border-b last:border-0">
-                        <td class="px-4 py-3 text-foreground">{{ invitation.email }}</td>
-                        <td class="px-4 py-3">
-                          <span class="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-xs font-medium">
-                            {{ invitation.department }}
+                      <tr>
+                        <td>{{ invitation.email }}</td>
+                        <td>
+                          <span class="badge badge-dept">{{ invitation.department }}</span>
+                        </td>
+                        <td>
+                          <span [class]="getStatusBadgeClass(invitation.status)">
+                            {{ formatStatus(invitation.status) }}
                           </span>
                         </td>
-                        <td class="px-4 py-3">
-                          <span [class]="getStatusClasses(invitation.status)">
-                            {{ invitation.status }}
-                          </span>
-                        </td>
-                        <td class="px-4 py-3 text-muted-foreground">
-                          {{ formatDate(invitation.createdAt) }}
-                        </td>
+                        <td class="muted">{{ formatDate(invitation.createdAt) }}</td>
                       </tr>
                     }
                   </tbody>
@@ -197,19 +595,27 @@ import { AuthService } from '../core/auth/auth.service';
 
           <!-- Empty State -->
           @if (members$().length === 0 && allInvitations$().length === 0) {
-            <div class="flex flex-col items-center justify-center py-16 text-center">
-              <ng-icon name="lucideUsers" class="h-12 w-12 text-muted-foreground/50 mb-4" />
-              <h3 class="text-lg font-semibold text-foreground mb-2">No team members yet</h3>
-              <p class="text-muted-foreground mb-6">
-                Invite your first team member to get started.
-              </p>
-              <button
-                brnButton
-                (click)="showInviteDialog$.set(true)"
-                class="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-              >
-                <ng-icon name="lucideUserPlus" class="h-4 w-4" />
-                Invite Member
+            <div class="empty-state">
+              <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                />
+              </svg>
+              <h3>Još nema članova tima</h3>
+              <p>Pozovite prvog člana tima da biste počeli.</p>
+              <button class="invite-btn" (click)="showInviteDialog$.set(true)">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
+                  />
+                </svg>
+                Pozovi člana
               </button>
             </div>
           }
@@ -218,9 +624,7 @@ import { AuthService } from '../core/auth/auth.service';
     </div>
 
     @if (showInviteDialog$()) {
-      <app-invite-dialog
-        (close)="onInviteDialogClose($event)"
-      />
+      <app-invite-dialog (close)="onInviteDialogClose($event)" />
     }
 
     @if (memberToRemove$()) {
@@ -241,6 +645,7 @@ export class TeamComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
 
   readonly isLoading$ = signal(true);
+  readonly loadError$ = signal<string | null>(null);
   readonly members$ = signal<TeamMemberResponse[]>([]);
   readonly allInvitations$ = signal<InvitationResponse[]>([]);
   readonly pendingInvitations$ = signal<InvitationResponse[]>([]);
@@ -254,10 +659,8 @@ export class TeamComponent implements OnInit {
 
   loadData(): void {
     this.isLoading$.set(true);
-    forkJoin([
-      this.teamMembersService.getMembers(),
-      this.invitationService.getInvitations(),
-    ])
+    this.loadError$.set(null);
+    forkJoin([this.teamMembersService.getMembers(), this.invitationService.getInvitations()])
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: ([membersRes, invitationsRes]) => {
@@ -269,6 +672,7 @@ export class TeamComponent implements OnInit {
           this.isLoading$.set(false);
         },
         error: () => {
+          this.loadError$.set('Greška pri učitavanju podataka tima. Pokušajte ponovo.');
           this.isLoading$.set(false);
         },
       });
@@ -292,9 +696,7 @@ export class TeamComponent implements OnInit {
       .subscribe({
         next: (response) => {
           this.allInvitations$.set(response.data);
-          this.pendingInvitations$.set(
-            response.data.filter((inv) => inv.status === 'PENDING')
-          );
+          this.pendingInvitations$.set(response.data.filter((inv) => inv.status === 'PENDING'));
         },
       });
   }
@@ -368,25 +770,24 @@ export class TeamComponent implements OnInit {
   formatRole(role: string): string {
     switch (role) {
       case 'TENANT_OWNER':
-        return 'Owner';
+        return 'Vlasnik';
       case 'ADMIN':
         return 'Admin';
       case 'MEMBER':
-        return 'Member';
+        return 'Član';
       default:
         return role;
     }
   }
 
-  getRoleBadgeClasses(role: string): string {
-    const base = 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium';
+  getRoleBadgeClass(role: string): string {
     switch (role) {
       case 'TENANT_OWNER':
-        return `${base} bg-purple-100 text-purple-700`;
+        return 'badge badge-owner';
       case 'ADMIN':
-        return `${base} bg-blue-100 text-blue-700`;
+        return 'badge badge-admin';
       default:
-        return `${base} bg-secondary text-secondary-foreground`;
+        return 'badge badge-member';
     }
   }
 
@@ -395,32 +796,46 @@ export class TeamComponent implements OnInit {
     const now = new Date();
     const diffMs = date.getTime() - now.getTime();
     const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-    if (diffDays <= 0) return 'expired';
-    if (diffDays === 1) return 'in 1 day';
-    return `in ${diffDays} days`;
+    if (diffDays <= 0) return 'isteklo';
+    if (diffDays === 1) return 'za 1 dan';
+    return `za ${diffDays} dana`;
   }
 
   formatDate(dateStr: string): string {
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    return new Date(dateStr).toLocaleDateString('sr-Latn', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
     });
   }
 
-  getStatusClasses(status: string): string {
-    const base = 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium';
+  formatStatus(status: string): string {
     switch (status) {
       case 'PENDING':
-        return `${base} bg-amber-100 text-amber-700`;
+        return 'Na čekanju';
       case 'ACCEPTED':
-        return `${base} bg-green-100 text-green-700`;
+        return 'Prihvaćeno';
       case 'EXPIRED':
-        return `${base} bg-gray-100 text-gray-600`;
+        return 'Isteklo';
       case 'REVOKED':
-        return `${base} bg-red-100 text-red-700`;
+        return 'Opozvano';
       default:
-        return `${base} bg-secondary text-secondary-foreground`;
+        return status;
+    }
+  }
+
+  getStatusBadgeClass(status: string): string {
+    switch (status) {
+      case 'PENDING':
+        return 'badge badge-pending';
+      case 'ACCEPTED':
+        return 'badge badge-accepted';
+      case 'EXPIRED':
+        return 'badge badge-expired';
+      case 'REVOKED':
+        return 'badge badge-revoked';
+      default:
+        return 'badge badge-member';
     }
   }
 }
