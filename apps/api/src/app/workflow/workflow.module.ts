@@ -7,6 +7,7 @@ import { WebSearchModule } from '../web-search/web-search.module';
 import { ExecutionModule } from '../execution/execution.module';
 import { WorkflowService } from './workflow.service';
 import { YoloSchedulerService } from './yolo-scheduler.service';
+import { PromptCheckerService } from './prompt-checker.service';
 
 @Module({
   imports: [
@@ -17,7 +18,7 @@ import { YoloSchedulerService } from './yolo-scheduler.service';
     WebSearchModule,
     ExecutionModule,
   ],
-  providers: [WorkflowService, YoloSchedulerService],
+  providers: [WorkflowService, YoloSchedulerService, PromptCheckerService],
   exports: [WorkflowService, YoloSchedulerService],
 })
 export class WorkflowModule {}

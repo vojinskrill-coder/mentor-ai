@@ -10,6 +10,7 @@ import { NotesService } from '../notes/notes.service';
 import { WebSearchService } from '../web-search/web-search.service';
 import { BusinessContextService } from '../knowledge/services/business-context.service';
 import { ConceptRelevanceService } from '../knowledge/services/concept-relevance.service';
+import { PromptCheckerService } from './prompt-checker.service';
 import type { ExecutionPlanStep, EnrichedSearchResult } from '@mentor-ai/shared/types';
 
 describe('WorkflowService', () => {
@@ -79,6 +80,18 @@ describe('WorkflowService', () => {
           useValue: {
             scoreRelevance: jest.fn().mockReturnValue(0.8),
             getThreshold: jest.fn().mockReturnValue(0.3),
+          },
+        },
+        {
+          provide: PromptCheckerService,
+          useValue: {
+            checkAndEnrichPrompt: jest.fn().mockResolvedValue({
+              verdict: 'pass',
+              issues: [],
+              webSearchNeeded: false,
+              cyclesUsed: 0,
+              durationMs: 0,
+            }),
           },
         },
       ],

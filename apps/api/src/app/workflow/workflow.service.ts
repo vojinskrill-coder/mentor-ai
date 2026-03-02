@@ -19,6 +19,7 @@ import { NotesService } from '../notes/notes.service';
 import { WebSearchService } from '../web-search/web-search.service';
 import { BusinessContextService } from '../knowledge/services/business-context.service';
 import { ConceptRelevanceService } from '../knowledge/services/concept-relevance.service';
+import { PromptCheckerService } from './prompt-checker.service';
 import { generateSystemPrompt } from '../personas/templates/persona-prompts';
 import { getVisibleCategories } from '../knowledge/config/department-categories';
 
@@ -96,7 +97,8 @@ export class WorkflowService {
     private readonly notesService: NotesService,
     private readonly webSearchService: WebSearchService,
     private readonly businessContextService: BusinessContextService,
-    private readonly conceptRelevanceService: ConceptRelevanceService
+    private readonly conceptRelevanceService: ConceptRelevanceService,
+    private readonly promptCheckerService: PromptCheckerService
   ) {}
 
   // ─── Workflow Generation ──────────────────────────────────────
@@ -214,6 +216,12 @@ export class WorkflowService {
     tenantId: string,
     userId: string
   ): Promise<{ conceptName: string; steps: WorkflowStep[] }> {
+    // Load tenant info for checker context
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true, industry: true, description: true },
+    });
+
     // Load concept name if available
     let conceptName = 'Poslovni zadatak';
     let conceptContext = '';
@@ -271,11 +279,49 @@ Vrati JSON niz koraka. Svaki korak mora imati:
 
 Generiši 3-6 koraka. Poredaj logički prema zadatku.`;
 
+    // Pre-generation prompt quality check
+    let finalWorkflowPrompt = prompt;
+    try {
+      const checkResult = await this.promptCheckerService.checkAndEnrichPrompt({
+        userPrompt: prompt,
+        originalAsk: `${task.title}${task.content ? ' — ' + task.content : ''}`,
+        businessInfo: {
+          companyName: tenant?.name ?? undefined,
+          industry: tenant?.industry ?? undefined,
+          description: tenant?.description ?? undefined,
+        },
+        tenantId,
+        userId,
+        conversationId: task.conversationId ?? undefined,
+        conceptName,
+        isWorkflowGeneration: true,
+      });
+
+      if (checkResult.enrichedPrompt) {
+        finalWorkflowPrompt = checkResult.enrichedPrompt;
+      }
+
+      this.logger.log({
+        message: 'Workflow generation prompt checked',
+        taskTitle: task.title,
+        verdict: checkResult.verdict,
+        issueCount: checkResult.issues.length,
+        cyclesUsed: checkResult.cyclesUsed,
+        durationMs: checkResult.durationMs,
+        enriched: !!checkResult.enrichedPrompt,
+      });
+    } catch (err) {
+      this.logger.warn({
+        message: 'Prompt checker failed for workflow generation, proceeding with original',
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+    }
+
     let responseContent = '';
     await this.aiGatewayService.streamCompletionWithContext(
       [
         { role: 'system', content: WORKFLOW_GENERATION_SYSTEM_PROMPT } as ChatMessage,
-        { role: 'user', content: prompt } as ChatMessage,
+        { role: 'user', content: finalWorkflowPrompt } as ChatMessage,
       ],
       { tenantId, userId, skipRateLimit: true, skipQuotaCheck: true, useFallback: true },
       (chunk: string) => {
@@ -1060,10 +1106,51 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${taskSpecificContex
           : 'za ovo poslovanje'
       );
 
+    // 5b. Pre-execution prompt quality check
+    let finalPrompt = prompt;
+    try {
+      const checkResult = await this.promptCheckerService.checkAndEnrichPrompt({
+        userPrompt: prompt,
+        originalAsk: [step.taskTitle, step.taskContent].filter(Boolean).join(' — '),
+        businessInfo: {
+          companyName: tenant?.name ?? undefined,
+          industry: tenant?.industry ?? undefined,
+          description: tenant?.description ?? undefined,
+        },
+        tenantId,
+        userId,
+        conversationId,
+        conceptName: step.conceptName,
+        stepTitle: step.title,
+      });
+
+      if (checkResult.enrichedPrompt) {
+        finalPrompt = checkResult.enrichedPrompt;
+      }
+
+      this.logger.log({
+        message: 'Prompt checker completed',
+        stepId: step.stepId,
+        verdict: checkResult.verdict,
+        issueCount: checkResult.issues.length,
+        issues: checkResult.issues.length > 0 ? checkResult.issues.map((i) => i.code) : [],
+        cyclesUsed: checkResult.cyclesUsed,
+        durationMs: checkResult.durationMs,
+        enriched: !!checkResult.enrichedPrompt,
+        warning: checkResult.warning,
+      });
+    } catch (err) {
+      this.logger.warn({
+        message: 'Prompt checker failed, proceeding with original prompt',
+        stepId: step.stepId,
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+    }
+
     // 6. Stream AI response
     let fullContent = '';
     await this.aiGatewayService.streamCompletionWithContext(
-      [{ role: 'user', content: prompt } as ChatMessage],
+      [{ role: 'user', content: finalPrompt } as ChatMessage],
       {
         tenantId,
         userId,
@@ -1077,6 +1164,20 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${taskSpecificContex
         onChunk(chunk);
       }
     );
+
+    // 6b. Post-execution URL validation (non-blocking)
+    try {
+      const urlIssues = await this.promptCheckerService.validateUrls(fullContent);
+      if (urlIssues.length > 0) {
+        this.logger.warn({
+          message: 'Unreachable URLs detected in LLM output',
+          stepId: step.stepId,
+          issues: urlIssues.map((i) => i.description),
+        });
+      }
+    } catch {
+      // URL validation failure is non-blocking
+    }
 
     // 7. Inject citations from KNOWN input concepts (not post-hoc output scanning)
     let citations: ConceptCitation[] = [];

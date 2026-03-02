@@ -1620,6 +1620,37 @@ export interface ParallelPopuniBatchDonePayload {
   failedCount: number;
 }
 
+// ─── Prompt Checker Types ───────────────────────────────────────
+
+/** Verdict from the PromptCheckerService */
+export type PromptCheckVerdict = 'pass' | 'rewrite' | 'enrich';
+
+/** A specific issue identified in the prompt */
+export interface PromptCheckIssue {
+  code:
+    | 'placeholder_detected'
+    | 'generic_content'
+    | 'missing_original_ask'
+    | 'missing_business_context'
+    | 'unreachable_url'
+    | 'too_vague'
+    | 'language_mismatch';
+  description: string;
+  severity: 'critical' | 'warning';
+}
+
+/** Structured result from a prompt check */
+export interface PromptCheckResult {
+  verdict: PromptCheckVerdict;
+  issues: PromptCheckIssue[];
+  enrichedPrompt?: string;
+  webSearchNeeded: boolean;
+  searchQuery?: string;
+  cyclesUsed: number;
+  durationMs: number;
+  warning?: string;
+}
+
 // ─── YOLO Autonomous Execution ──────────────────────────────────
 
 export type ExecutionMode = 'MANUAL' | 'YOLO';
