@@ -12,16 +12,20 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { NotesApiService } from '../services/notes-api.service';
 import { NoteType, NoteStatus } from '@mentor-ai/shared/types';
 import type { NoteItem, CommentItem, ParallelPopuniTaskState } from '@mentor-ai/shared/types';
 // eslint-disable-next-line @nx/enforce-module-boundaries
 import { MarkdownPipe } from '@mentor-ai/shared/ui';
+import { PdfReorderDialogComponent } from './pdf-reorder-dialog.component';
+import { environment } from '../../../../environments/environment';
 
 @Component({
   selector: 'app-conversation-notes',
   standalone: true,
-  imports: [CommonModule, FormsModule, MarkdownPipe],
+  imports: [CommonModule, FormsModule, MarkdownPipe, PdfReorderDialogComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   styles: [
@@ -619,6 +623,24 @@ import { MarkdownPipe } from '@mentor-ai/shared/ui';
       }
       .select-link:hover {
         text-decoration: underline;
+      }
+      .pdf-export-btn {
+        background: none;
+        border: 1px solid #3b82f6;
+        color: #3b82f6;
+        border-radius: 6px;
+        padding: 6px 14px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .pdf-export-btn:hover {
+        background: #3b82f6;
+        color: #fafafa;
+      }
+      .pdf-export-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
       }
 
       .executing-bar {
@@ -1473,14 +1495,24 @@ import { MarkdownPipe } from '@mentor-ai/shared/ui';
         >
         <div class="run-agents-actions">
           <button class="select-link" (click)="deselectAll()">Poništi izbor</button>
-          <button
-            class="run-agents-btn"
-            [disabled]="isExecuting() || isGeneratingPlan() || isParallelExecuting()"
-            (click)="onRunAgents()"
-          >
-            Pokreni agente
-          </button>
+          @if (pdfNoteIds().length > 0) {
+            <button class="pdf-export-btn" [disabled]="pdfExporting()" (click)="onPdfExport()">
+              {{ pdfExporting() ? 'Generisanje...' : 'Eksportuj PDF' }}
+            </button>
+          }
+          @if (pendingSelectedIds().length > 0) {
+            <button
+              class="run-agents-btn"
+              [disabled]="isExecuting() || isGeneratingPlan() || isParallelExecuting()"
+              (click)="onRunAgents()"
+            >
+              Pokreni agente
+            </button>
+          }
         </div>
+        @if (pdfError()) {
+          <div style="color: #ef4444; font-size: 11px; padding: 0 16px 4px;">{{ pdfError() }}</div>
+        }
       </div>
     } @else if (pendingTaskCount() > 0) {
       <div class="run-agents-bar">
@@ -1506,14 +1538,14 @@ import { MarkdownPipe } from '@mentor-ai/shared/ui';
           <div class="task-card">
             <!-- Header -->
             <div class="task-card-header" (click)="toggleExpand(note.id)">
-              @if (note.noteType === 'TASK' && note.status !== 'COMPLETED') {
+              @if (note.noteType === 'TASK' && (note.status !== 'COMPLETED' || note.userReport)) {
                 <input
                   type="checkbox"
                   class="task-checkbox"
                   [checked]="selectedTaskIds().has(note.id)"
                   (change)="toggleSelection(note.id); $event.stopPropagation()"
                   (click)="$event.stopPropagation()"
-                  title="Izaberi za agente"
+                  [title]="note.status === 'COMPLETED' ? 'Izaberi za PDF' : 'Izaberi za agente'"
                 />
               }
               <span
@@ -2116,10 +2148,19 @@ import { MarkdownPipe } from '@mentor-ai/shared/ui';
         </button>
       }
     </div>
+
+    @if (showPdfDialog()) {
+      <app-pdf-reorder-dialog
+        [notes]="pdfDialogNotes()"
+        (exportOrder)="onPdfDialogExport($event)"
+        (cancel)="showPdfDialog.set(false)"
+      />
+    }
   `,
 })
 export class ConversationNotesComponent {
   private readonly notesApi = inject(NotesApiService);
+  private readonly http = inject(HttpClient);
 
   conversationId = input<string | null>(null);
   conceptId = input<string | null>(null);
@@ -2176,6 +2217,28 @@ export class ConversationNotesComponent {
   readonly submittingComment = signal<Set<string>>(new Set());
   readonly editingCommentId = signal<string | null>(null);
   readonly editCommentText = signal('');
+
+  // PDF export state
+  readonly showPdfDialog = signal(false);
+  readonly pdfDialogNotes = signal<NoteItem[]>([]);
+  readonly pdfExporting = signal(false);
+  private readonly pdfExportUrl = `${environment.apiUrl}/api/v1/pdf-export`;
+
+  readonly pdfNoteIds = computed(() => {
+    const selected = this.selectedTaskIds();
+    const allNotes = this.notes();
+    return allNotes
+      .filter((n) => selected.has(n.id) && n.status === 'COMPLETED' && n.userReport)
+      .map((n) => n.id);
+  });
+
+  readonly pendingSelectedIds = computed(() => {
+    const selected = this.selectedTaskIds();
+    const allNotes = this.notes();
+    return allNotes
+      .filter((n) => selected.has(n.id) && n.noteType === 'TASK' && n.status !== 'COMPLETED')
+      .map((n) => n.id);
+  });
 
   // Loading guard to prevent duplicate loads from rapid events
   private isLoadingNotes = false;
@@ -2503,10 +2566,52 @@ export class ConversationNotesComponent {
   }
 
   onRunAgents(): void {
-    const ids = Array.from(this.selectedTaskIds());
+    const ids = this.pendingSelectedIds();
     if (ids.length > 0) {
       this.runAgents.emit(ids);
       this.selectedTaskIds.set(new Set());
+    }
+  }
+
+  onPdfExport(): void {
+    const pdfIds = this.pdfNoteIds();
+    if (pdfIds.length === 0) return;
+    if (pdfIds.length === 1) {
+      this.exportPdf(pdfIds);
+      return;
+    }
+    // 2+ tasks: show reorder dialog
+    const allNotes = this.notes();
+    const pdfSet = new Set(pdfIds);
+    this.pdfDialogNotes.set(allNotes.filter((n) => pdfSet.has(n.id)));
+    this.showPdfDialog.set(true);
+  }
+
+  onPdfDialogExport(orderedIds: string[]): void {
+    this.showPdfDialog.set(false);
+    this.exportPdf(orderedIds);
+  }
+
+  readonly pdfError = signal<string | null>(null);
+
+  private async exportPdf(noteIds: string[]): Promise<void> {
+    this.pdfExporting.set(true);
+    this.pdfError.set(null);
+    try {
+      const blob = await firstValueFrom(
+        this.http.post(`${this.pdfExportUrl}/reports`, { noteIds }, { responseType: 'blob' })
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'izvestaj.pdf';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      this.selectedTaskIds.set(new Set());
+    } catch {
+      this.pdfError.set('Greška prilikom generisanja PDF-a');
+    } finally {
+      this.pdfExporting.set(false);
     }
   }
 

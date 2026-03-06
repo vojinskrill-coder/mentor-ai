@@ -180,6 +180,25 @@ export class NotesService {
   }
 
   /**
+   * Gets notes by their IDs with children included.
+   * Used for PDF export — preserves the order of noteIds passed in.
+   */
+  async getByIdsWithChildren(
+    noteIds: string[],
+    userId: string,
+    tenantId: string
+  ): Promise<NoteItem[]> {
+    if (noteIds.length === 0) return [];
+    const notes = await this.prisma.note.findMany({
+      where: { id: { in: noteIds }, userId, tenantId, parentNoteId: null },
+      include: {
+        children: { orderBy: { workflowStepNumber: 'asc' } },
+      },
+    });
+    return notes.map((n) => this.mapToNoteItemWithChildren(n));
+  }
+
+  /**
    * Gets notes for a specific concept.
    */
   async getByConcept(conceptId: string, userId: string, tenantId: string): Promise<NoteItem[]> {

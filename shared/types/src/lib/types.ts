@@ -900,6 +900,8 @@ export interface OnboardingCompleteResponse {
   executionMode?: ExecutionMode;
   /** Pre-built execution plan ID (generated during onboarding) */
   planId?: string;
+  /** Task IDs created during onboarding (for auto parallel execution) */
+  taskIds?: string[];
 }
 
 /** Onboarding metric for analytics */

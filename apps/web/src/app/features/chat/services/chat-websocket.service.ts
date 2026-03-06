@@ -28,6 +28,7 @@ interface MessageReceivedData {
   role: 'USER' | 'ASSISTANT';
 }
 
+type MessageDeletedCallback = (data: { messageId: string; conversationId: string }) => void;
 type MessageReceivedCallback = (data: MessageReceivedData) => void;
 type MessageChunkCallback = (data: ChatMessageChunk) => void;
 type CompleteCallback = (data: ChatComplete) => void;
@@ -160,6 +161,7 @@ export class ChatWebsocketService {
     return true;
   }
 
+  private messageDeletedCallbacks: MessageDeletedCallback[] = [];
   private messageReceivedCallbacks: MessageReceivedCallback[] = [];
   private messageChunkCallbacks: MessageChunkCallback[] = [];
   private completeCallbacks: CompleteCallback[] = [];
@@ -265,6 +267,13 @@ export class ChatWebsocketService {
     this.socket.io.on('reconnect_failed', () => {
       this.connectionState$.set('disconnected');
     });
+
+    this.socket.on(
+      'chat:message-deleted',
+      (data: { messageId: string; conversationId: string }) => {
+        this.messageDeletedCallbacks.forEach((cb) => cb(data));
+      }
+    );
 
     this.socket.on('chat:message-received', (data: MessageReceivedData) => {
       this.messageReceivedCallbacks.forEach((cb) => cb(data));
@@ -531,6 +540,14 @@ export class ChatWebsocketService {
     return true;
   }
 
+  regenerateResponse(conversationId: string): boolean {
+    if (!this.checkConnected('regeneracija odgovora')) {
+      return false;
+    }
+    this.socket!.emit('chat:regenerate', { conversationId });
+    return true;
+  }
+
   emitRunAgents(taskIds: string[], conversationId: string): void {
     if (!this.checkConnected('pokretanje agenata')) return;
     this.socket!.emit('workflow:run-agents', { taskIds, conversationId });
@@ -611,6 +628,14 @@ export class ChatWebsocketService {
    * @param callback - Function to call with message data
    * @returns Unsubscribe function to remove the callback
    */
+  onMessageDeleted(callback: MessageDeletedCallback): () => void {
+    this.messageDeletedCallbacks.push(callback);
+    return () => {
+      const index = this.messageDeletedCallbacks.indexOf(callback);
+      if (index > -1) this.messageDeletedCallbacks.splice(index, 1);
+    };
+  }
+
   onMessageReceived(callback: MessageReceivedCallback): () => void {
     this.messageReceivedCallbacks.push(callback);
     return () => {

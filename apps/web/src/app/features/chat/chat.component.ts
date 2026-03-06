@@ -1715,6 +1715,7 @@ interface WorkflowStatusEntry {
           (conversationSelected)="selectConversation($event)"
           (newChatRequested)="createConversationUnderConcept($event)"
           (conceptSelected)="onConceptSelected($event)"
+          (conversationDeleted)="onConversationDeleted($event)"
         />
 
         <div class="sidebar-footer">
@@ -2102,8 +2103,12 @@ interface WorkflowStatusEntry {
                       <app-chat-message
                         [message]="message"
                         [personaType]="message.role === 'ASSISTANT' ? currentPersonaType$() : null"
+                        [isLastAssistantMessage]="
+                          message.id === lastAssistantMessageId$() && !isStreaming$()
+                        "
                         (citationClick)="onCitationClick($event)"
                         (actionClick)="onSuggestedAction($event)"
+                        (regenerateClick)="regenerateResponse()"
                         style="display: block; margin-bottom: 16px;"
                       />
                     }
@@ -2910,6 +2915,14 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   readonly activeConversation$ = signal<ConversationWithMessages | null>(null);
   readonly activeConversationId$ = computed(() => this.activeConversation$()?.id ?? null);
   readonly messages$ = computed(() => this.activeConversation$()?.messages ?? []);
+  readonly lastAssistantMessageId$ = computed(() => {
+    const msgs = this.messages$();
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const msg = msgs[i];
+      if (msg && msg.role === 'ASSISTANT') return msg.id;
+    }
+    return null;
+  });
   readonly isLoading$ = signal(false);
   readonly isStreaming$ = signal(false);
   readonly showScrollToBottom$ = signal(false);
@@ -3034,6 +3047,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   readonly showYoloActivityLog$ = signal(false);
   private yoloPending = false;
   private pendingPlanId: string | null = null;
+  private pendingOnboardingTaskIds: string[] | null = null;
   private streamBuffer = '';
   private streamRafId: number | null = null;
 
@@ -3146,7 +3160,11 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           this.isYoloMode$.set(true);
           this.yoloPending = true;
         }
-        if (queryParams['planId'] && !this.yoloPending) {
+        // Auto parallel execution from onboarding (takes priority over planId)
+        if (queryParams['taskIds'] && !this.yoloPending) {
+          this.pendingOnboardingTaskIds = queryParams['taskIds'].split(',');
+        }
+        if (queryParams['planId'] && !this.yoloPending && !this.pendingOnboardingTaskIds) {
           this.pendingPlanId = queryParams['planId'];
         }
 
@@ -3231,7 +3249,18 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           this.showError('WebSocket konekcija neuspešna — YOLO mod nije mogao da se pokrene');
         }
       }
-      // Load pre-built plan from onboarding if planId is set
+      // Auto-execute onboarding tasks in parallel
+      if (this.pendingOnboardingTaskIds && this.pendingOnboardingTaskIds.length > 0) {
+        const taskIds = this.pendingOnboardingTaskIds;
+        this.pendingOnboardingTaskIds = null;
+        try {
+          await this.chatWsService.waitForConnection();
+          this.chatWsService.emitParallelPopuni(taskIds, conversationId, true);
+        } catch {
+          this.showError('WebSocket konekcija neuspešna — automatsko izvršavanje nije pokrenuto');
+        }
+      }
+      // Load pre-built plan from onboarding if planId is set (fallback when no taskIds)
       if (this.pendingPlanId) {
         const planId = this.pendingPlanId;
         this.pendingPlanId = null;
@@ -3324,6 +3353,14 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       return n;
     });
     this.router.navigate(['/chat', conversationId]);
+  }
+
+  onConversationDeleted(conversationId: string): void {
+    // If the deleted conversation is the active one, navigate away
+    if (this.activeConversationId$() === conversationId) {
+      this.activeConversation$.set(null);
+      this.router.navigate(['/chat']);
+    }
   }
 
   /**
@@ -3907,6 +3944,14 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     this.showScrollToBottom$.set(false);
   }
 
+  regenerateResponse(): void {
+    const conversationId = this.activeConversationId$();
+    if (!conversationId || this.isStreaming$()) return;
+    this.isStreaming$.set(true);
+    this.streamingContent$.set('');
+    this.chatWsService.regenerateResponse(conversationId);
+  }
+
   async sendMessage(input: string | ChatMessagePayload): Promise<void> {
     const content = typeof input === 'string' ? input : input.content;
     const attachmentIds = typeof input === 'string' ? undefined : input.attachmentIds;
@@ -4022,6 +4067,16 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     }, 500);
     this.destroyRef.onDestroy(() => clearInterval(checkConnection));
+
+    this.chatWsService.onMessageDeleted((data) => {
+      this.activeConversation$.update((conv) => {
+        if (!conv || conv.id !== data.conversationId) return conv;
+        return {
+          ...conv,
+          messages: conv.messages.filter((msg) => msg.id !== data.messageId),
+        };
+      });
+    });
 
     this.chatWsService.onMessageReceived((data) => {
       // Update user message ID with real one from server

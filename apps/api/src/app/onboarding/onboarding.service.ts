@@ -24,6 +24,7 @@ import { ConceptMatchingService } from '../knowledge/services/concept-matching.s
 import { ConversationService } from '../conversation/conversation.service';
 import { WebSearchService } from '../web-search/web-search.service';
 import { BrainSeedingService } from '../knowledge/services/brain-seeding.service';
+import { ConceptClassifierService } from '../knowledge/services/concept-classifier.service';
 import { WorkflowService } from '../workflow/workflow.service';
 import { OnboardingMetricService } from './onboarding-metric.service';
 import {
@@ -53,6 +54,7 @@ export class OnboardingService {
     private readonly conversationService: ConversationService,
     private readonly webSearchService: WebSearchService,
     private readonly brainSeedingService: BrainSeedingService,
+    private readonly conceptClassifierService: ConceptClassifierService,
     private readonly workflowService: WorkflowService
   ) {}
 
@@ -961,6 +963,7 @@ Kreiraj personalizovani Poslovni Mozak sa tačno 10 prioritizovanih zadataka.`;
       welcomeConversationId: welcomeConversationId ?? undefined,
       executionMode: (executionMode as 'MANUAL' | 'YOLO') ?? undefined,
       planId,
+      taskIds: taskIds.length > 0 ? taskIds : undefined,
     };
   }
 
@@ -1065,7 +1068,13 @@ Kreiraj personalizovani Poslovni Mozak sa tačno 10 prioritizovanih zadataka.`;
     }
 
     // Limit to top 10 concepts
-    const topTasks = diversified.slice(0, 10);
+    let topTasks = diversified.slice(0, 10);
+
+    // Verify low-confidence embedding matches via LLM classifier
+    const tenantContext = [tenant.name, tenant.industry, tenant.description]
+      .filter(Boolean)
+      .join('. ');
+    topTasks = await this.verifyConceptMatches(topTasks, tenantContext, tenantId, userId);
 
     // Load prerequisite relationships for all selected concepts
     const topConceptIds = topTasks.map((m) => m.conceptId);
@@ -1280,6 +1289,57 @@ Napiši personalizovanu dobrodošlicu.`;
     });
 
     return { conversationId: conversation.id, taskIds: createdTaskIds };
+  }
+
+  /**
+   * Verifies low-confidence embedding matches via LLM classifier.
+   * Only reclassifies tasks with score < 0.6. Non-blocking — errors keep original.
+   */
+  private async verifyConceptMatches(
+    tasks: ConceptMatch[],
+    tenantContext: string,
+    tenantId: string,
+    userId: string
+  ): Promise<ConceptMatch[]> {
+    // Run all LLM verifications in parallel to avoid serial latency
+    const results = await Promise.allSettled(
+      tasks.map(async (task) => {
+        // High-confidence matches: keep as-is
+        if (task.score >= 0.6) return task;
+
+        // Low-confidence: verify via LLM classifier
+        // Construct a realistic user message + AI context for the classifier prompt:
+        //   userMessage = what the user wants (concept name in business context)
+        //   aiResponse = the concept definition (what the AI matched to)
+        const userMessage = `Trebam zadatak za: ${task.conceptName}. ${tenantContext}`;
+        const aiResponse = task.definition ?? task.conceptName;
+        try {
+          const betterMatches = await this.conceptClassifierService.classifyAndMatch(
+            userMessage,
+            aiResponse,
+            { limit: 1, threshold: 0.5 },
+            { tenantId, userId }
+          );
+
+          if (betterMatches.length > 0 && betterMatches[0]!.conceptId !== task.conceptId) {
+            this.logger.log({
+              message: 'Onboarding: LLM reclassified concept match',
+              original: { id: task.conceptId, name: task.conceptName, score: task.score },
+              reclassified: {
+                id: betterMatches[0]!.conceptId,
+                name: betterMatches[0]!.conceptName,
+              },
+            });
+            return betterMatches[0]!;
+          }
+        } catch {
+          // LLM failure: keep original match
+        }
+        return task;
+      })
+    );
+
+    return results.map((r, i) => (r.status === 'fulfilled' ? r.value : tasks[i]!));
   }
 
   /**

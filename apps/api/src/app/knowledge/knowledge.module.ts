@@ -15,6 +15,7 @@ import { ConceptExtractionService } from './services/concept-extraction.service'
 import { BrainSeedingService } from './services/brain-seeding.service';
 import { BusinessContextService } from './services/business-context.service';
 import { ConceptRelevanceService } from './services/concept-relevance.service';
+import { ConceptClassifierService } from './services/concept-classifier.service';
 import { DepartmentGuard } from './guards/department.guard';
 
 /**
@@ -40,6 +41,7 @@ import { DepartmentGuard } from './guards/department.guard';
     BrainSeedingService,
     BusinessContextService,
     ConceptRelevanceService,
+    ConceptClassifierService,
     DepartmentGuard,
   ],
   exports: [
@@ -54,6 +56,7 @@ import { DepartmentGuard } from './guards/department.guard';
     BrainSeedingService,
     BusinessContextService,
     ConceptRelevanceService,
+    ConceptClassifierService,
     DepartmentGuard,
   ],
 })

@@ -880,11 +880,28 @@ Generiši 4-6 koraka. Redosled:
     userId: string,
     tenantId: string,
     onChunk: (chunk: string) => void,
-    completedSummaries: Array<{ title: string; conceptName: string; summary: string }> = []
+    completedSummaries: Array<{ title: string; conceptName: string; summary: string }> = [],
+    preloadedWorkflowSteps?: import('@mentor-ai/shared/types').WorkflowStep[]
   ): Promise<{ content: string; citations: ConceptCitation[] }> {
-    // Load the workflow to get the prompt template
-    const workflow = await this.getOrGenerateWorkflow(step.conceptId, tenantId, userId);
-    const workflowStep = workflow.steps.find((s) => s.stepNumber === step.workflowStepNumber);
+    // Use preloaded steps when available (e.g., from parallel-popuni which generates
+    // task-specific workflows that may differ from the cached generic workflow).
+    // Fall back to loading/generating the workflow from cache.
+    let workflowStep: import('@mentor-ai/shared/types').WorkflowStep | undefined;
+    if (preloadedWorkflowSteps) {
+      workflowStep = preloadedWorkflowSteps.find((s) => s.stepNumber === step.workflowStepNumber);
+    }
+    if (!workflowStep) {
+      if (preloadedWorkflowSteps) {
+        this.logger.warn({
+          message: 'Preloaded workflow steps missing step number, falling back to cached workflow',
+          stepNumber: step.workflowStepNumber,
+          conceptId: step.conceptId,
+          preloadedStepNumbers: preloadedWorkflowSteps.map((s) => s.stepNumber),
+        });
+      }
+      const workflow = await this.getOrGenerateWorkflow(step.conceptId, tenantId, userId);
+      workflowStep = workflow.steps.find((s) => s.stepNumber === step.workflowStepNumber);
+    }
 
     if (!workflowStep) {
       throw new Error(
@@ -1330,7 +1347,7 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${taskSpecificContex
    * for the user, scoped to their visible categories.
    * Capped at 10 new tasks per execution to prevent explosion.
    */
-  private async discoverAndCreatePendingTasks(
+  async discoverAndCreatePendingTasks(
     completedConceptIds: string[],
     userId: string,
     tenantId: string

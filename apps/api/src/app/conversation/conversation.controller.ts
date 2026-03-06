@@ -16,6 +16,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../auth/strategies/jwt.strategy';
 import { ConversationService } from './conversation.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
+import { UpdateConversationDto } from './dto/update-conversation.dto';
 import { UpdatePersonaDto } from '../personas/dto/update-persona.dto';
 import { CurriculumService } from '../knowledge/services/curriculum.service';
 import { ConceptService } from '../knowledge/services/concept.service';
@@ -169,6 +170,26 @@ export class ConversationController {
       dto.personaType
     );
 
+    return { data: conversation };
+  }
+
+  /**
+   * Rename a conversation (update its title).
+   * Placed AFTER :id/persona to avoid route collision.
+   */
+  @Patch(':id')
+  @HttpCode(HttpStatus.OK)
+  async updateConversation(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') conversationId: string,
+    @Body() dto: UpdateConversationDto
+  ) {
+    const conversation = await this.conversationService.updateTitle(
+      user.tenantId,
+      conversationId,
+      user.userId,
+      dto.title
+    );
     return { data: conversation };
   }
 }

@@ -23,6 +23,7 @@
     "paths": {
       "@mentor-ai/shared/types": ["shared/types/src/index.ts"],
       "@mentor-ai/shared/utils": ["shared/utils/src/index.ts"],
+      "@mentor-ai/shared/utils/server": ["shared/utils/src/server.ts"],
       "@mentor-ai/shared/prisma": ["shared/prisma/src/index.ts"],
       "@mentor-ai/shared/tenant-context": ["shared/tenant-context/src/index.ts"],
       "@mentor-ai/shared/ui": ["shared/ui/src/index.ts"],

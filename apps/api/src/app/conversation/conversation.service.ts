@@ -832,6 +832,79 @@ export class ConversationService {
     return this.mapConversation(updated);
   }
 
+  /**
+   * Deletes the last ASSISTANT message from a conversation for regeneration.
+   * Returns the last USER message content to re-process, or null if not applicable.
+   */
+  async deleteLastAssistantMessage(
+    tenantId: string,
+    conversationId: string,
+    userId: string
+  ): Promise<{ lastUserContent: string; deletedMessageId: string } | null> {
+    const prisma = await this.tenantPrisma.getClient(tenantId);
+
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+    });
+
+    if (!conversation) {
+      throw new NotFoundException({
+        type: 'conversation_not_found',
+        title: 'Conversation Not Found',
+        status: 404,
+        detail: `Conversation with ID ${conversationId} not found`,
+      });
+    }
+
+    if (conversation.userId !== userId) {
+      throw new ForbiddenException({
+        type: 'conversation_access_denied',
+        title: 'Access Denied',
+        status: 403,
+        detail: 'You do not have access to this conversation',
+      });
+    }
+
+    // Get last two messages: should be [USER, ASSISTANT]
+    const lastMessages = await prisma.message.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: 'desc' },
+      take: 2,
+    });
+
+    if (lastMessages.length < 2) return null;
+
+    const lastMsg = lastMessages[0]!; // most recent
+    const secondLastMsg = lastMessages[1]!; // the user message before it
+
+    if (lastMsg.role !== 'ASSISTANT' || secondLastMsg.role !== 'USER') {
+      this.logger.warn({
+        message: 'Cannot regenerate: last messages are not USER->ASSISTANT pair',
+        conversationId,
+        lastRole: lastMsg.role,
+        secondLastRole: secondLastMsg.role,
+      });
+      return null;
+    }
+
+    // Delete the last AI message
+    await prisma.message.delete({
+      where: { id: lastMsg.id },
+    });
+
+    this.logger.log({
+      message: 'Deleted last assistant message for regeneration',
+      conversationId,
+      deletedMessageId: lastMsg.id,
+      tenantId,
+    });
+
+    return {
+      lastUserContent: secondLastMsg.content,
+      deletedMessageId: lastMsg.id,
+    };
+  }
+
   private mapConversation(
     conversation: {
       id: string;

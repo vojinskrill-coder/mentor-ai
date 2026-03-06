@@ -97,6 +97,18 @@ export class ConversationService {
   }
 
   /**
+   * Renames a conversation.
+   * @param conversationId - Conversation ID to rename
+   * @param title - New title
+   */
+  async renameConversation(conversationId: string, title: string): Promise<Conversation> {
+    const response = await firstValueFrom(
+      this.http.patch<{ data: Conversation }>(`${this.baseUrl}/${conversationId}`, { title })
+    );
+    return response.data;
+  }
+
+  /**
    * Deletes a conversation and all its messages.
    * @param conversationId - Conversation ID to delete
    */

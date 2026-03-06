@@ -1,4 +1,14 @@
-import { Component, computed, input, output, signal, HostBinding } from '@angular/core';
+import {
+  Component,
+  computed,
+  input,
+  output,
+  signal,
+  HostBinding,
+  AfterViewChecked,
+  ElementRef,
+  inject,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import type {
   Message,
@@ -559,6 +569,75 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         font-size: 11px;
         flex-shrink: 0;
       }
+
+      /* Message action buttons (copy, regenerate) */
+      .msg-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 6px 16px 6px;
+      }
+      .msg-action-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 10px;
+        border: none;
+        border-radius: 6px;
+        background: transparent;
+        color: #707070;
+        font-size: 12px;
+        font-family: inherit;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .msg-action-btn:hover {
+        color: #fafafa;
+        background: #242424;
+      }
+      .msg-action-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .msg-action-btn svg {
+        width: 14px;
+        height: 14px;
+      }
+      .msg-action-btn.copied {
+        color: #22c55e;
+      }
+
+      /* Code block copy button */
+      :host ::ng-deep .code-block-wrapper {
+        position: relative;
+      }
+      :host ::ng-deep .code-copy-btn {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        padding: 4px 8px;
+        border: 1px solid #2a2a2a;
+        border-radius: 4px;
+        background: #1a1a1a;
+        color: #707070;
+        font-size: 11px;
+        font-family: inherit;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.15s;
+        z-index: 1;
+      }
+      :host ::ng-deep .code-block-wrapper:hover .code-copy-btn {
+        opacity: 1;
+      }
+      :host ::ng-deep .code-copy-btn:hover {
+        color: #fafafa;
+        border-color: #3b82f6;
+      }
+      :host ::ng-deep .code-copy-btn.copied {
+        color: #22c55e;
+        opacity: 1;
+      }
     `,
   ],
   template: `
@@ -801,6 +880,57 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
           }
         }
 
+        <!-- Message Actions (copy, regenerate) -->
+        @if (!isStreaming()) {
+          <div class="msg-actions">
+            <button
+              class="msg-action-btn"
+              [class.copied]="isCopied$()"
+              (click)="copyMessage()"
+              [title]="isCopied$() ? 'Kopirano!' : 'Kopiraj poruku'"
+            >
+              @if (isCopied$()) {
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+                Kopirano!
+              } @else {
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
+                </svg>
+                Kopiraj
+              }
+            </button>
+            @if (isLastAssistantMessage()) {
+              <button
+                class="msg-action-btn"
+                (click)="onRegenerateClick()"
+                title="Regenerisi odgovor"
+              >
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+                Regenerisi
+              </button>
+            }
+          </div>
+        }
+
         <!-- Footer -->
         @if (!isStreaming()) {
           <div class="ai-footer">
@@ -826,7 +956,9 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
     }
   `,
 })
-export class ChatMessageComponent {
+export class ChatMessageComponent implements AfterViewChecked {
+  private readonly el = inject(ElementRef);
+
   @HostBinding('attr.id') get hostId() {
     return `msg-${this.message().id}`;
   }
@@ -835,10 +967,30 @@ export class ChatMessageComponent {
   readonly isStreaming = input(false);
   readonly personaType = input<PersonaType | null>(null);
   readonly improvementSuggestion = input<string | null>(null);
+  readonly isLastAssistantMessage = input(false);
   readonly citationClick = output<ConceptCitation | string>();
   readonly attributionClick = output<MemoryAttribution>();
   readonly outdatedClick = output<MemoryAttribution>();
   readonly actionClick = output<SuggestedAction>();
+  readonly regenerateClick = output<string>();
+
+  /** Copy-to-clipboard state */
+  readonly isCopied$ = signal(false);
+  private copyTimer: ReturnType<typeof setTimeout> | null = null;
+
+  copyMessage(): void {
+    const content = this.message().content;
+    if (!content) return;
+    navigator.clipboard.writeText(content).then(() => {
+      this.isCopied$.set(true);
+      if (this.copyTimer) clearTimeout(this.copyTimer);
+      this.copyTimer = setTimeout(() => this.isCopied$.set(false), 2000);
+    });
+  }
+
+  onRegenerateClick(): void {
+    this.regenerateClick.emit(this.message().id);
+  }
 
   onCitationClick(citation: ConceptCitation | string): void {
     this.citationClick.emit(citation);
@@ -994,5 +1146,34 @@ export class ChatMessageComponent {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  /** Inject copy buttons into rendered code blocks */
+  ngAfterViewChecked(): void {
+    if (this.message().role !== 'ASSISTANT' || this.isStreaming()) return;
+    const preElements = this.el.nativeElement.querySelectorAll('pre:not(.code-copy-injected)');
+    preElements.forEach((pre: HTMLPreElement) => {
+      pre.classList.add('code-copy-injected');
+      const wrapper = document.createElement('div');
+      wrapper.className = 'code-block-wrapper';
+      pre.parentNode?.insertBefore(wrapper, pre);
+      wrapper.appendChild(pre);
+
+      const btn = document.createElement('button');
+      btn.className = 'code-copy-btn';
+      btn.textContent = 'Kopiraj';
+      btn.addEventListener('click', () => {
+        const code = pre.querySelector('code')?.textContent ?? pre.textContent ?? '';
+        navigator.clipboard.writeText(code).then(() => {
+          btn.textContent = 'Kopirano!';
+          btn.classList.add('copied');
+          setTimeout(() => {
+            btn.textContent = 'Kopiraj';
+            btn.classList.remove('copied');
+          }, 2000);
+        });
+      });
+      wrapper.appendChild(btn);
+    });
   }
 }

@@ -90,9 +90,7 @@ import type { PersonaType } from '@mentor-ai/shared/types';
           <span class="typing-name" [style.color]="getPersonaColor()">
             {{ getPersonaLabel() }}
           </span>
-          <span class="typing-status">{{
-            phase() === 'researching' ? 'istražuje...' : 'razmišlja...'
-          }}</span>
+          <span class="typing-status">{{ getPhaseText() }}</span>
         </div>
       </div>
       <div class="typing-content">
@@ -109,8 +107,8 @@ export class TypingIndicatorComponent {
   /** Optional persona type for personalized styling */
   readonly personaType = input<PersonaType | null>(null);
 
-  /** Current phase: thinking (default) or researching */
-  readonly phase = input<'thinking' | 'researching'>('thinking');
+  /** Current phase: thinking (default), researching, or generating */
+  readonly phase = input<'thinking' | 'researching' | 'generating'>('thinking');
 
   /** Persona color mapping */
   private readonly personaColors: Record<string, string> = {
@@ -152,5 +150,17 @@ export class TypingIndicatorComponent {
     const type = this.personaType();
     if (!type) return 'AI Assistant';
     return this.personaLabels[type] ?? 'AI Assistant';
+  }
+
+  /** Get phase-aware status text */
+  getPhaseText(): string {
+    switch (this.phase()) {
+      case 'researching':
+        return 'istražuje...';
+      case 'generating':
+        return 'generiše odgovor...';
+      default:
+        return 'razmišlja...';
+    }
   }
 }

@@ -360,6 +360,152 @@ interface TreeRow {
         align-items: center;
         justify-content: center;
       }
+
+      /* Context menu trigger (3-dot button) */
+      .conv-actions-btn {
+        background: none;
+        border: none;
+        padding: 2px;
+        color: #707070;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.15s;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+      }
+      .conversation-item:hover .conv-actions-btn,
+      .general-item:hover .conv-actions-btn {
+        opacity: 1;
+      }
+      .conv-actions-btn:hover {
+        color: #fafafa;
+      }
+      .conv-actions-btn svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      /* Context menu dropdown */
+      .ctx-menu {
+        position: fixed;
+        z-index: 100;
+        background: #1a1a1a;
+        border: 1px solid #2a2a2a;
+        border-radius: 8px;
+        padding: 4px;
+        min-width: 140px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      }
+      .ctx-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 8px 12px;
+        border: none;
+        background: none;
+        color: #e0e0e0;
+        font-size: 12px;
+        font-family: inherit;
+        cursor: pointer;
+        border-radius: 4px;
+        text-align: left;
+      }
+      .ctx-menu-item:hover {
+        background: #242424;
+      }
+      .ctx-menu-item.danger {
+        color: #ef4444;
+      }
+      .ctx-menu-item.danger:hover {
+        background: rgba(239, 68, 68, 0.1);
+      }
+      .ctx-menu-item svg {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+      }
+      .ctx-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 99;
+      }
+
+      /* Inline rename input */
+      .rename-input {
+        width: 100%;
+        background: #0d0d0d;
+        border: 1px solid #3b82f6;
+        border-radius: 4px;
+        padding: 4px 8px;
+        color: #fafafa;
+        font-size: 12px;
+        font-family: inherit;
+      }
+      .rename-input:focus {
+        outline: none;
+      }
+
+      /* Confirm dialog overlay */
+      .confirm-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 200;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .confirm-dialog {
+        background: #1a1a1a;
+        border: 1px solid #2a2a2a;
+        border-radius: 12px;
+        padding: 24px;
+        max-width: 360px;
+        width: 90%;
+      }
+      .confirm-title {
+        font-size: 15px;
+        font-weight: 600;
+        color: #fafafa;
+        margin-bottom: 8px;
+      }
+      .confirm-message {
+        font-size: 13px;
+        color: #a1a1a1;
+        margin-bottom: 20px;
+        line-height: 1.5;
+      }
+      .confirm-buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+      .confirm-btn {
+        padding: 8px 16px;
+        border-radius: 6px;
+        border: none;
+        font-size: 13px;
+        font-family: inherit;
+        cursor: pointer;
+        font-weight: 500;
+      }
+      .confirm-btn.cancel {
+        background: #242424;
+        color: #a1a1a1;
+      }
+      .confirm-btn.cancel:hover {
+        background: #2a2a2a;
+        color: #fafafa;
+      }
+      .confirm-btn.danger {
+        background: #ef4444;
+        color: white;
+      }
+      .confirm-btn.danger:hover {
+        background: #dc2626;
+      }
     `,
   ],
   template: `
@@ -554,9 +700,32 @@ interface TreeRow {
                 } @else if (newConversationIds().has(row.conversation!.id)) {
                   <span class="new-badge"></span>
                 }
-                <div class="conv-title" style="flex: 1;">
-                  {{ row.conversation!.title || 'Bez naslova' }}
-                </div>
+                @if (renamingConvId() === row.conversation!.id) {
+                  <input
+                    class="rename-input"
+                    [value]="renameValue()"
+                    (input)="renameValue.set(asInputValue($event))"
+                    (keydown.enter)="confirmRename()"
+                    (keydown.escape)="cancelRename()"
+                    (click)="$event.stopPropagation()"
+                    (blur)="confirmRename()"
+                  />
+                } @else {
+                  <div class="conv-title" style="flex: 1;">
+                    {{ row.conversation!.title || 'Bez naslova' }}
+                  </div>
+                }
+                <button
+                  class="conv-actions-btn"
+                  (click)="openContextMenu($event, row.conversation!)"
+                  title="Opcije"
+                >
+                  <svg fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                      d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"
+                    />
+                  </svg>
+                </button>
               </div>
               <div class="conv-meta">{{ formatDate(row.conversation!.updatedAt) }}</div>
             </button>
@@ -636,6 +805,52 @@ interface TreeRow {
         }
       }
     </div>
+
+    <!-- Context Menu -->
+    @if (contextMenuConv()) {
+      <div class="ctx-backdrop" (click)="closeContextMenu()"></div>
+      <div class="ctx-menu" [style.top.px]="contextMenuY()" [style.left.px]="contextMenuX()">
+        <button class="ctx-menu-item" (click)="startRename()">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+            />
+          </svg>
+          Preimenuj
+        </button>
+        <button class="ctx-menu-item danger" (click)="startDelete()">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+            />
+          </svg>
+          Obrisi
+        </button>
+      </div>
+    }
+
+    <!-- Confirm Delete Dialog -->
+    @if (deletingConvId()) {
+      <div class="confirm-backdrop" (click)="cancelDelete()">
+        <div class="confirm-dialog" (click)="$event.stopPropagation()">
+          <div class="confirm-title">Brisanje konverzacije</div>
+          <div class="confirm-message">
+            Da li ste sigurni da zelite da obrisete ovu konverzaciju? Ova akcija se ne moze
+            poništiti.
+          </div>
+          <div class="confirm-buttons">
+            <button class="confirm-btn cancel" (click)="cancelDelete()">Otkaži</button>
+            <button class="confirm-btn danger" (click)="confirmDelete()">Obrisi</button>
+          </div>
+        </div>
+      </div>
+    }
   `,
 })
 export class ConceptTreeComponent implements OnInit {
@@ -663,6 +878,20 @@ export class ConceptTreeComponent implements OnInit {
   readonly flatRows = signal<TreeRow[]>([]);
   readonly searchQuery = signal('');
   private searchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  // Context menu state
+  readonly contextMenuConv = signal<Conversation | null>(null);
+  readonly contextMenuX = signal(0);
+  readonly contextMenuY = signal(0);
+
+  // Rename state
+  readonly renamingConvId = signal<string | null>(null);
+  readonly renameValue = signal('');
+
+  // Delete confirmation state
+  readonly deletingConvId = signal<string | null>(null);
+
+  conversationDeleted = output<string>();
 
   ngOnInit(): void {
     this.loadTree();
@@ -924,5 +1153,125 @@ export class ConceptTreeComponent implements OnInit {
         }
       }
     }
+  }
+
+  // --- Context menu ---
+
+  openContextMenu(event: Event, conv: Conversation): void {
+    event.stopPropagation();
+    event.preventDefault();
+    const mouseEvent = event as MouseEvent;
+    this.contextMenuConv.set(conv);
+    this.contextMenuX.set(Math.min(mouseEvent.clientX, window.innerWidth - 160));
+    this.contextMenuY.set(Math.min(mouseEvent.clientY, window.innerHeight - 100));
+  }
+
+  closeContextMenu(): void {
+    this.contextMenuConv.set(null);
+  }
+
+  // --- Rename ---
+
+  startRename(): void {
+    const conv = this.contextMenuConv();
+    if (!conv) return;
+    this.renamingConvId.set(conv.id);
+    this.renameValue.set(conv.title || '');
+    this.closeContextMenu();
+  }
+
+  cancelRename(): void {
+    this.renamingConvId.set(null);
+    this.renameValue.set('');
+  }
+
+  async confirmRename(): Promise<void> {
+    const convId = this.renamingConvId();
+    const newTitle = this.renameValue().trim();
+    if (!convId || !newTitle) {
+      this.cancelRename();
+      return;
+    }
+    try {
+      await this.conversationService.renameConversation(convId, newTitle);
+      // Update local tree data
+      this.treeData$.update((data) => {
+        if (!data) return data;
+        return {
+          ...data,
+          tree: this.updateConvTitle(data.tree, convId, newTitle),
+          uncategorized: data.uncategorized.map((c) =>
+            c.id === convId ? { ...c, title: newTitle } : c
+          ),
+        };
+      });
+      this.rebuildFlatRows();
+    } catch {
+      // Silently fail — title reverts to original
+    }
+    this.cancelRename();
+  }
+
+  asInputValue(event: Event): string {
+    return (event.target as HTMLInputElement).value;
+  }
+
+  private updateConvTitle(
+    nodes: ConceptHierarchyNode[],
+    convId: string,
+    title: string
+  ): ConceptHierarchyNode[] {
+    return nodes.map((node) => ({
+      ...node,
+      conversations: node.conversations.map((c) => (c.id === convId ? { ...c, title } : c)),
+      children: this.updateConvTitle(node.children, convId, title),
+    }));
+  }
+
+  // --- Delete ---
+
+  startDelete(): void {
+    const conv = this.contextMenuConv();
+    if (!conv) return;
+    this.deletingConvId.set(conv.id);
+    this.closeContextMenu();
+  }
+
+  cancelDelete(): void {
+    this.deletingConvId.set(null);
+  }
+
+  async confirmDelete(): Promise<void> {
+    const convId = this.deletingConvId();
+    if (!convId) return;
+    try {
+      await this.conversationService.deleteConversation(convId);
+      // Remove from local tree data
+      this.treeData$.update((data) => {
+        if (!data) return data;
+        return {
+          ...data,
+          tree: this.removeConvFromTree(data.tree, convId),
+          uncategorized: data.uncategorized.filter((c) => c.id !== convId),
+        };
+      });
+      this.rebuildFlatRows();
+      this.conversationDeleted.emit(convId);
+    } catch {
+      // Silently fail
+    }
+    this.cancelDelete();
+  }
+
+  private removeConvFromTree(
+    nodes: ConceptHierarchyNode[],
+    convId: string
+  ): ConceptHierarchyNode[] {
+    return nodes.map((node) => ({
+      ...node,
+      conversations: node.conversations.filter((c) => c.id !== convId),
+      conversationCount: node.conversations.filter((c) => c.id !== convId).length,
+      children: this.removeConvFromTree(node.children, convId),
+    }));
   }
 }

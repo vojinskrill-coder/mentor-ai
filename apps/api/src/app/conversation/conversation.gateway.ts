@@ -16,6 +16,7 @@ import { ConversationService } from './conversation.service';
 import { AiGatewayService } from '../ai-gateway/ai-gateway.service';
 import { NotesService } from '../notes/notes.service';
 import { ConceptMatchingService } from '../knowledge/services/concept-matching.service';
+import { ConceptClassifierService } from '../knowledge/services/concept-classifier.service';
 import { ConceptService } from '../knowledge/services/concept.service';
 import { CitationInjectorService } from '../knowledge/services/citation-injector.service';
 import { CitationService } from '../knowledge/services/citation.service';
@@ -89,6 +90,8 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
   private readonly jwksClient: jwksClient.JwksClient;
   private readonly auth0Domain: string;
   private readonly auth0Audience: string;
+  /** Cached dev user resolved from DB (avoids repeat queries per connection) */
+  private resolvedDevUser: { userId: string; tenantId: string } | null = null;
 
   constructor(
     private readonly conversationService: ConversationService,
@@ -97,6 +100,7 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     private readonly prisma: PlatformPrismaService,
     private readonly notesService: NotesService,
     private readonly conceptMatchingService: ConceptMatchingService,
+    private readonly conceptClassifierService: ConceptClassifierService,
     private readonly citationInjectorService: CitationInjectorService,
     private readonly citationService: CitationService,
     private readonly memoryContextBuilder: MemoryContextBuilderService,
@@ -127,7 +131,7 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
    */
   async onModuleInit(): Promise<void> {
     // Mark stale executions (stuck > 30 min) as failed
-    const stale = await this.executionStateService.getStaleExecutions(30);
+    const stale = await this.executionStateService.getAllStaleExecutions(30);
     for (const exec of stale) {
       await this.executionStateService.updateStatus(
         exec.id,
@@ -143,7 +147,7 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     }
 
     // Find recently active executions (not stale) that can be resumed
-    const resumable = await this.executionStateService.getActiveExecutions('*');
+    const resumable = await this.executionStateService.getAllActiveExecutions();
     for (const exec of resumable) {
       if (exec.type === 'yolo' || exec.type === 'domain-yolo') {
         this.scheduleYoloResume(exec);
@@ -439,8 +443,13 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { executionId: string; since?: string }
   ): Promise<void> {
+    const auth = client as AuthenticatedSocket;
     const since = payload.since ? new Date(payload.since) : new Date(0);
-    const events = await this.executionStateService.getEventsSince(payload.executionId, since);
+    const events = await this.executionStateService.getEventsSince(
+      payload.executionId,
+      since,
+      auth.tenantId
+    );
 
     for (const event of events) {
       client.emit(event.eventName, event.payload);
@@ -449,6 +458,48 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
       executionId: payload.executionId,
       eventCount: events.length,
     });
+  }
+
+  /**
+   * Resolves the real active tenant/user for DEV_MODE, matching JwtAuthGuard.getDevUser().
+   * Caches the result for server lifetime. Falls back to static IDs if DB query fails.
+   */
+  private async resolveDevUser(): Promise<{ userId: string; tenantId: string }> {
+    if (this.resolvedDevUser) return this.resolvedDevUser;
+
+    try {
+      const tenant = await this.prisma.tenant.findFirst({
+        where: { status: 'ACTIVE' },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      });
+
+      if (tenant) {
+        const user = await this.prisma.user.findFirst({
+          where: { tenantId: tenant.id, isActive: true },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true },
+        });
+
+        if (user) {
+          this.resolvedDevUser = { userId: user.id, tenantId: tenant.id };
+          this.logger.log({
+            message: 'WebSocket dev mode: resolved real tenant/user from DB',
+            tenantId: tenant.id,
+            userId: user.id,
+          });
+          return this.resolvedDevUser;
+        }
+      }
+    } catch (err) {
+      this.logger.warn({
+        message: 'WebSocket dev mode: failed to resolve tenant from DB, using fallback',
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+    }
+
+    this.resolvedDevUser = { userId: 'dev-user-001', tenantId: 'dev-tenant-001' };
+    return this.resolvedDevUser;
   }
 
   /**
@@ -470,8 +521,9 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
             const jwtSecret = this.configService.get<string>('JWT_SECRET');
             if (jwtSecret) {
               const payload = verify(token, jwtSecret, { algorithms: ['HS256'] }) as JwtPayload;
-              const tokenUserId = (payload as any).userId || payload.sub || 'dev-user-001';
-              const tokenTenantId = (payload as any).tenantId || 'dev-tenant-001';
+              const devFallback = await this.resolveDevUser();
+              const tokenUserId = (payload as any).userId || payload.sub || devFallback.userId;
+              const tokenTenantId = (payload as any).tenantId || devFallback.tenantId;
 
               // Verify the user actually exists in DB (may have been cleaned up)
               const userExists = await this.prisma.user.findUnique({
@@ -508,13 +560,16 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
           }
         }
 
-        // No token or placeholder token — use dev fallback
-        authenticatedClient.userId = 'dev-user-001';
-        authenticatedClient.tenantId = 'dev-tenant-001';
-        await client.join('tenant:dev-tenant-001');
+        // No token or placeholder token — resolve dev user from DB
+        const devUser = await this.resolveDevUser();
+        authenticatedClient.userId = devUser.userId;
+        authenticatedClient.tenantId = devUser.tenantId;
+        await client.join(`tenant:${devUser.tenantId}`);
         this.logger.log({
           message: 'WebSocket client connected (dev mode, dev user)',
           clientId: client.id,
+          tenantId: devUser.tenantId,
+          userId: devUser.userId,
         });
         return;
       }
@@ -623,10 +678,67 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
    * Handles incoming chat messages.
    * Saves user message, streams AI response, and saves AI message.
    */
+  @SubscribeMessage('chat:regenerate')
+  async handleRegenerate(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { conversationId: string }
+  ) {
+    const authenticatedClient = client as AuthenticatedSocket;
+    const { conversationId } = payload;
+
+    if (!conversationId) {
+      client.emit('chat:error', {
+        type: 'invalid_payload',
+        message: 'conversationId is required for regeneration',
+      });
+      return;
+    }
+
+    try {
+      const result = await this.conversationService.deleteLastAssistantMessage(
+        authenticatedClient.tenantId,
+        conversationId,
+        authenticatedClient.userId
+      );
+
+      if (!result) {
+        client.emit('chat:error', {
+          type: 'regenerate_failed',
+          message: 'Cannot regenerate: no valid USER->ASSISTANT message pair found',
+        });
+        return;
+      }
+
+      // Notify frontend that the old message was deleted
+      client.emit('chat:message-deleted', {
+        messageId: result.deletedMessageId,
+        conversationId,
+      });
+
+      // Re-process by calling handleMessage with _isRegenerate flag (skips saving user message)
+      await this.handleMessage(client, {
+        conversationId,
+        content: result.lastUserContent,
+        _isRegenerate: true,
+      });
+    } catch (error) {
+      this.logger.error({
+        message: 'Failed to regenerate response',
+        conversationId,
+        userId: authenticatedClient.userId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      client.emit('chat:error', {
+        type: 'regenerate_error',
+        message: error instanceof Error ? error.message : 'Failed to regenerate response',
+      });
+    }
+  }
+
   @SubscribeMessage('chat:message-send')
   async handleMessage(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: ChatMessageSend & { attachmentIds?: string[] }
+    @MessageBody() payload: ChatMessageSend & { attachmentIds?: string[]; _isRegenerate?: boolean }
   ) {
     const authenticatedClient = client as AuthenticatedSocket;
     const { conversationId, content, attachmentIds: rawAttachmentIds } = payload;
@@ -684,32 +796,35 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
           .catch(() => '');
       }
 
-      // Save user message
-      const userMessage = await this.conversationService.addMessage(
-        authenticatedClient.tenantId,
-        conversationId,
-        MessageRole.USER,
-        content
-      );
-
-      // Link attachments to the saved message
-      if (attachmentIds && attachmentIds.length > 0) {
-        await Promise.all(
-          attachmentIds.map((attId) =>
-            this.attachmentsService
-              .linkToMessage(attId, userMessage.id, authenticatedClient.tenantId)
-              .catch((err) => {
-                this.logger.warn(`Failed to link attachment ${attId}: ${err}`);
-              })
-          )
+      // Save user message (skipped during regeneration — message already exists)
+      let userMessage: { id: string } | undefined;
+      if (!payload._isRegenerate) {
+        userMessage = await this.conversationService.addMessage(
+          authenticatedClient.tenantId,
+          conversationId,
+          MessageRole.USER,
+          content
         );
-      }
 
-      // Emit confirmation of user message received
-      client.emit('chat:message-received', {
-        messageId: userMessage.id,
-        role: 'USER',
-      });
+        // Link attachments to the saved message
+        if (attachmentIds && attachmentIds.length > 0) {
+          await Promise.all(
+            attachmentIds.map((attId) =>
+              this.attachmentsService
+                .linkToMessage(attId, userMessage!.id, authenticatedClient.tenantId)
+                .catch((err) => {
+                  this.logger.warn(`Failed to link attachment ${attId}: ${err}`);
+                })
+            )
+          );
+        }
+
+        // Emit confirmation of user message received
+        client.emit('chat:message-received', {
+          messageId: userMessage.id,
+          role: 'USER',
+        });
+      }
 
       // Get conversation history for context
       const conversation = await this.conversationService.getConversation(
@@ -996,7 +1111,7 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
         conversationId,
         userId: authenticatedClient.userId,
         tenantId: authenticatedClient.tenantId,
-        userMessageId: userMessage.id,
+        userMessageId: userMessage?.id ?? 'regenerated',
         aiMessageId: aiMessage.id,
         confidenceScore: confidence?.score ?? 'N/A',
         confidenceLevel: confidence?.level ?? 'N/A',
@@ -1072,15 +1187,19 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
       this.memoryExtractionService
         .extractMemories(
           conversation.messages.concat([
-            {
-              id: userMessage.id,
-              conversationId,
-              role: MessageRole.USER,
-              content,
-              confidenceScore: null,
-              confidenceFactors: null,
-              createdAt: new Date().toISOString(),
-            },
+            ...(userMessage
+              ? [
+                  {
+                    id: userMessage.id,
+                    conversationId,
+                    role: MessageRole.USER as const,
+                    content,
+                    confidenceScore: null,
+                    confidenceFactors: null,
+                    createdAt: new Date().toISOString(),
+                  },
+                ]
+              : []),
             {
               id: aiMessage.id,
               conversationId,
@@ -1424,10 +1543,13 @@ Ako nema zadataka: []`;
     const conv = await this.conversationService.getConversation(tenantId, conversationId, userId);
     if (conv.conceptId) return;
 
-    // Use semantic search to find best matching concept
-    const matches = await this.conceptMatchingService.findRelevantConcepts(
-      `${userMessage}\n${aiResponse}`,
-      { limit: 1, threshold: 0.75 }
+    // Use LLM classifier to determine intent → category → best concept
+    // Falls back to standard semantic/keyword search on LLM failure
+    const matches = await this.conceptClassifierService.classifyAndMatch(
+      userMessage,
+      aiResponse,
+      { limit: 1, threshold: 0.5 },
+      { tenantId, userId, conversationId }
     );
 
     const topMatch = matches[0];
@@ -1453,10 +1575,11 @@ Ako nema zadataka: []`;
       });
 
       this.logger.log({
-        message: 'Conversation auto-classified',
+        message: 'Conversation auto-classified (LLM)',
         conversationId,
         conceptId: topMatch.conceptId,
         conceptName: topMatch.conceptName,
+        category: topMatch.category,
         score: topMatch.score,
       });
     }
@@ -2009,7 +2132,8 @@ Odgovori SAMO sa validnim JSON nizom:
             () => {
               /* auto-popuni: collect silently */
             },
-            completedSummaries
+            completedSummaries,
+            workflow.steps
           );
 
           // Dedup: check if child note already exists
@@ -2610,12 +2734,13 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
         taskCount: payload.taskIds.length,
       });
 
-      // Load tasks
+      // Load only PENDING tasks — skip already completed ones to avoid re-execution
       const tasks = await this.prisma.note.findMany({
         where: {
           id: { in: payload.taskIds },
           tenantId,
           noteType: 'TASK',
+          status: 'PENDING',
         },
         select: {
           id: true,
@@ -2649,6 +2774,53 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
       // Resolve PREREQUISITE dependency layers
       const layers = await this.resolveParallelDependencies(tasks);
 
+      // Create per-concept conversations (same pattern as handleWorkflowApproval line 3463)
+      const conceptConversations = new Map<string, string>();
+      const uniqueConceptIds = [
+        ...new Set(tasks.filter((t) => t.conceptId).map((t) => t.conceptId!)),
+      ];
+      for (const conceptId of uniqueConceptIds) {
+        // Use actual concept name from DB, fall back to task title
+        let conceptName = 'Zadatak';
+        try {
+          const concept = await this.conceptService.findById(conceptId);
+          conceptName = concept.name;
+        } catch {
+          const taskForConcept = tasks.find((t) => t.conceptId === conceptId);
+          conceptName = taskForConcept?.title ?? 'Zadatak';
+        }
+        try {
+          const conv = await this.conversationService.createConversation(
+            tenantId,
+            userId,
+            conceptName,
+            undefined,
+            conceptId
+          );
+          conceptConversations.set(conceptId, conv.id);
+        } catch (err) {
+          this.logger.warn({
+            message: 'Failed to create concept conversation for parallel-popuni',
+            conceptId,
+            error: err instanceof Error ? err.message : 'Unknown',
+          });
+        }
+      }
+
+      // Link task notes to their concept conversations
+      for (const task of tasks) {
+        if (task.conceptId && conceptConversations.has(task.conceptId)) {
+          await this.prisma.note
+            .update({
+              where: { id: task.id },
+              data: { conversationId: conceptConversations.get(task.conceptId)! },
+            })
+            .catch(() => {
+              /* ignore link failure */
+            });
+        }
+      }
+
       // Build initial task states
       const initialStates: ParallelPopuniTaskState[] = tasks.map((t) => ({
         taskId: t.id,
@@ -2671,8 +2843,10 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
         tenantId,
         userId,
         payload.conversationId,
-        autoPopuni
+        autoPopuni,
+        conceptConversations
       ).catch((err) => {
+        this.parallelPopuniCancelled.delete(batchId);
         this.logger.error({
           message: 'Parallel Popuni loop crashed',
           batchId,
@@ -2802,7 +2976,8 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
     tenantId: string,
     userId: string,
     conversationId: string,
-    autoPopuni: boolean
+    autoPopuni: boolean,
+    conceptConversations: Map<string, string>
   ): Promise<void> {
     // Cache business context once for all tasks
     const businessContext = await this.buildBusinessContext(tenantId, userId);
@@ -2831,7 +3006,8 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
             userId,
             businessContext,
             completedSummaries,
-            autoPopuni
+            autoPopuni,
+            conceptConversations
           )
         )
       );
@@ -2862,6 +3038,42 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
       completedCount,
       failedCount,
     });
+
+    // Story 3.2: Discover related concepts and create new pending tasks
+    const completedConceptIds = [
+      ...new Set(
+        layers
+          .flat()
+          .filter((task) => completedSummaries.has(task.id) && task.conceptId)
+          .map((task) => task.conceptId!)
+      ),
+    ];
+
+    if (completedConceptIds.length > 0) {
+      this.workflowService
+        .discoverAndCreatePendingTasks(completedConceptIds, userId, tenantId)
+        .then((newConceptIds) => {
+          if (newConceptIds.length > 0) {
+            client.emit('tree:tasks-discovered', {
+              conceptIds: newConceptIds,
+              conversationId,
+              timestamp: new Date().toISOString(),
+            });
+            this.logger.log({
+              message: 'Parallel Popuni: post-execution discovery created new tasks',
+              batchId,
+              newTaskCount: newConceptIds.length,
+            });
+          }
+        })
+        .catch((err) => {
+          this.logger.warn({
+            message: 'Post parallel-popuni discovery failed (non-blocking)',
+            batchId,
+            error: err instanceof Error ? err.message : 'Unknown',
+          });
+        });
+    }
   }
 
   /**
@@ -2877,7 +3089,8 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
     userId: string,
     businessContext: string,
     completedSummaries: Map<string, string>,
-    autoPopuni: boolean
+    autoPopuni: boolean,
+    conceptConversations: Map<string, string>
   ): Promise<void> {
     const taskNote = await this.prisma.note.findUnique({ where: { id: task.id } });
     if (!taskNote) throw new Error(`Task ${task.id} not found`);
@@ -2895,7 +3108,11 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
       return;
     }
 
-    const convId = taskNote.conversationId ?? '';
+    // Prefer per-concept conversation, fall back to task's stored conversationId
+    const convId =
+      (taskNote.conceptId && conceptConversations.has(taskNote.conceptId)
+        ? conceptConversations.get(taskNote.conceptId)!
+        : taskNote.conversationId) || '';
 
     try {
       // ── Phase 1: Generate workflow ──
@@ -3010,7 +3227,8 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                     },
                   ]
                 : []),
-            ]
+            ],
+            workflow.steps
           );
 
           // Dedup: check if child note already exists
@@ -3738,7 +3956,8 @@ PRAVILA:
                   stepTitle: workflowStep.title,
                 });
               },
-              completedSummaries
+              completedSummaries,
+              workflow.steps
             );
 
             // Dedup: check if child note already exists for this step
@@ -4968,7 +5187,16 @@ Kompanija: ${tenant.name}`;
 - Koristi bullet liste za nabrajanje, NE dugačke paragrafe
 - NIKADA ne piši odgovor bez bar jednog callout bloka
 - Koristi tabele kada god imaš numeričke podatke ili poređenja
---- KRAJ FORMATIRANJA ---`;
+--- KRAJ FORMATIRANJA ---
+
+--- FUNKCIONALNOSTI APLIKACIJE koje možeš da koristiš ---
+- Kreiranje zadataka: Predloži konkretne zadatke korisniku na osnovu razgovora
+- Pretraga weba: Koristi web pretragu za aktuelne podatke i statistike
+- Poslovni kontekst: Imaš pristup svim memorijama i poslovnom profilu kompanije
+- Radni tokovi: Možeš da generišeš višekoračne planove za složene zadatke
+- Koncepti: Možeš da preporučiš relevantne poslovne koncepte iz baze znanja
+Kada korisnik pita šta možeš ili traži pomoć, pomeni ove funkcionalnosti.
+--- KRAJ FUNKCIONALNOSTI ---`;
 
       this.logger.log({
         message: 'Business context built for chat',

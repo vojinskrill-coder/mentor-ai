@@ -161,7 +161,7 @@ export class AttachmentsService {
   async getAttachmentsByMessageId(messageId: string, tenantId: string): Promise<AttachmentItem[]> {
     const client = await this.prisma.getClient(tenantId);
     const attachments = await client.attachment.findMany({
-      where: { messageId },
+      where: { messageId, tenantId },
       select: {
         id: true,
         filename: true,

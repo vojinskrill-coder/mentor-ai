@@ -580,7 +580,8 @@ export class YoloSchedulerService {
         () => {
           /* Collect chunks silently — no per-step streaming in YOLO */
         },
-        completedSummaries
+        completedSummaries,
+        workflow.steps
       );
 
       // Emit step-complete progress (Story 2.16)

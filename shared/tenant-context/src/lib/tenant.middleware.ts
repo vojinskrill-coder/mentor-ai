@@ -28,16 +28,40 @@ interface Rfc7807Error {
 @Injectable()
 export class TenantMiddleware implements NestMiddleware {
   // Paths that don't require tenant context (e.g., health checks, platform admin)
-  private readonly excludedPaths = [
-    '/health',
-    '/api/health',
-    '/api/v1/health',
-  ];
+  private readonly excludedPaths = ['/health', '/api/health', '/api/v1/health'];
+
+  /** Cached dev tenant ID resolved from DB */
+  private resolvedDevTenantId: string | null = null;
 
   constructor(
     private readonly platformPrisma: PlatformPrismaService,
     private readonly configService: ConfigService
   ) {}
+
+  /**
+   * Resolves the real active tenant ID for DEV_MODE, matching JwtAuthGuard.getDevUser().
+   * Caches the result for server lifetime. Falls back to 'dev-tenant-001' if DB query fails.
+   */
+  private async resolveDevTenantId(): Promise<string> {
+    if (this.resolvedDevTenantId) return this.resolvedDevTenantId;
+
+    try {
+      const tenant = await this.platformPrisma.tenant.findFirst({
+        where: { status: 'ACTIVE' },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      });
+      if (tenant) {
+        this.resolvedDevTenantId = tenant.id;
+        return tenant.id;
+      }
+    } catch {
+      // DB error — use fallback
+    }
+
+    this.resolvedDevTenantId = 'dev-tenant-001';
+    return this.resolvedDevTenantId;
+  }
 
   async use(req: Request, res: Response, next: NextFunction): Promise<void> {
     // Skip tenant validation for excluded paths
@@ -64,7 +88,7 @@ export class TenantMiddleware implements NestMiddleware {
           // Token decode failed - use dev fallback
         }
       }
-      req.tenantId = 'dev-tenant-001';
+      req.tenantId = await this.resolveDevTenantId();
       return next();
     }
 
@@ -73,22 +97,26 @@ export class TenantMiddleware implements NestMiddleware {
 
     // Validate tenant ID is present
     if (!tenantId) {
-      throw new ForbiddenException(this.createRfc7807Error(
-        'tenant_id_missing',
-        'Tenant ID Required',
-        'X-Tenant-Id header is required for this request',
-        correlationId
-      ));
+      throw new ForbiddenException(
+        this.createRfc7807Error(
+          'tenant_id_missing',
+          'Tenant ID Required',
+          'X-Tenant-Id header is required for this request',
+          correlationId
+        )
+      );
     }
 
     // Validate tenant ID format (must have tnt_ prefix)
     if (!tenantId.startsWith('tnt_')) {
-      throw new ForbiddenException(this.createRfc7807Error(
-        'invalid_tenant_id_format',
-        'Invalid Tenant ID Format',
-        'Tenant ID must start with "tnt_" prefix',
-        correlationId
-      ));
+      throw new ForbiddenException(
+        this.createRfc7807Error(
+          'invalid_tenant_id_format',
+          'Invalid Tenant ID Format',
+          'Tenant ID must start with "tnt_" prefix',
+          correlationId
+        )
+      );
     }
 
     // Validate tenant exists and is active
@@ -97,21 +125,25 @@ export class TenantMiddleware implements NestMiddleware {
     });
 
     if (!tenant) {
-      throw new ForbiddenException(this.createRfc7807Error(
-        'tenant_not_found',
-        'Tenant Not Found',
-        'No tenant found for provided X-Tenant-Id header',
-        correlationId
-      ));
+      throw new ForbiddenException(
+        this.createRfc7807Error(
+          'tenant_not_found',
+          'Tenant Not Found',
+          'No tenant found for provided X-Tenant-Id header',
+          correlationId
+        )
+      );
     }
 
     if (tenant.status !== TenantStatus.ACTIVE) {
-      throw new ForbiddenException(this.createRfc7807Error(
-        'tenant_not_active',
-        'Tenant Not Active',
-        `Tenant is currently ${tenant.status.toLowerCase()}`,
-        correlationId
-      ));
+      throw new ForbiddenException(
+        this.createRfc7807Error(
+          'tenant_not_active',
+          'Tenant Not Active',
+          `Tenant is currently ${tenant.status.toLowerCase()}`,
+          correlationId
+        )
+      );
     }
 
     // Attach tenant ID to request for downstream use
