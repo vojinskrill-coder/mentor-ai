@@ -15,7 +15,14 @@ export declare class TenantMiddleware implements NestMiddleware {
     private readonly platformPrisma;
     private readonly configService;
     private readonly excludedPaths;
+    /** Cached dev tenant ID resolved from DB */
+    private resolvedDevTenantId;
     constructor(platformPrisma: PlatformPrismaService, configService: ConfigService);
+    /**
+     * Resolves the real active tenant ID for DEV_MODE, matching JwtAuthGuard.getDevUser().
+     * Caches the result for server lifetime. Falls back to 'dev-tenant-001' if DB query fails.
+     */
+    private resolveDevTenantId;
     use(req: Request, res: Response, next: NextFunction): Promise<void>;
     private isExcludedPath;
     private createRfc7807Error;

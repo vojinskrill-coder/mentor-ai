@@ -717,6 +717,8 @@ export interface OnboardingCompleteResponse {
     executionMode?: ExecutionMode;
     /** Pre-built execution plan ID (generated during onboarding) */
     planId?: string;
+    /** Task IDs created during onboarding (for auto parallel execution) */
+    taskIds?: string[];
 }
 /** Onboarding metric for analytics */
 export interface OnboardingMetricResponse {
@@ -1103,7 +1105,8 @@ export declare enum NoteType {
     TASK = "TASK",
     NOTE = "NOTE",
     SUMMARY = "SUMMARY",
-    COMMENT = "COMMENT"
+    COMMENT = "COMMENT",
+    AGENT_RESEARCH = "AGENT_RESEARCH"
 }
 /** Task completion status */
 export declare enum NoteStatus {
@@ -1134,6 +1137,8 @@ export interface NoteItem {
     reusedFromNoteId: string | null;
     /** File attachments on this note/task */
     attachments?: AttachmentItem[];
+    /** Agent enrichment results stored as JSON on the note */
+    agentEnrichments: AgentEnrichments | null;
 }
 /** Request to create a note */
 export interface CreateNoteRequest {
@@ -1344,6 +1349,25 @@ export interface ParallelPopuniBatchDonePayload {
     completedCount: number;
     failedCount: number;
 }
+/** Verdict from the PromptCheckerService */
+export type PromptCheckVerdict = 'pass' | 'rewrite' | 'enrich';
+/** A specific issue identified in the prompt */
+export interface PromptCheckIssue {
+    code: 'placeholder_detected' | 'generic_content' | 'missing_original_ask' | 'missing_business_context' | 'unreachable_url' | 'too_vague' | 'language_mismatch';
+    description: string;
+    severity: 'critical' | 'warning';
+}
+/** Structured result from a prompt check */
+export interface PromptCheckResult {
+    verdict: PromptCheckVerdict;
+    issues: PromptCheckIssue[];
+    enrichedPrompt?: string;
+    webSearchNeeded: boolean;
+    searchQuery?: string;
+    cyclesUsed: number;
+    durationMs: number;
+    warning?: string;
+}
 export type ExecutionMode = 'MANUAL' | 'YOLO';
 export interface YoloConfig {
     maxConcurrency: number;
@@ -1411,4 +1435,72 @@ export interface YoloCompletePayload {
     totalConsidered?: number;
     /** Execution budget that was applied */
     executionBudget?: number;
+}
+export declare enum AgentExecutionStatus {
+    PENDING = "PENDING",
+    FORMATTING = "FORMATTING",
+    EXECUTING = "EXECUTING",
+    COMPLETED = "COMPLETED",
+    FAILED = "FAILED"
+}
+/** Approval dialog data returned before triggering research */
+export interface AgentApprovalInfo {
+    noteId: string;
+    taskTitle: string;
+    taskSummary: string;
+    estimatedCostEur: number;
+    dailySpentEur: number;
+    dailyLimitEur: number;
+    canProceed: boolean;
+}
+/** Agent execution record */
+export interface AgentExecutionResponse {
+    id: string;
+    noteId: string;
+    resultNoteId: string | null;
+    status: AgentExecutionStatus;
+    agentType: string;
+    estimatedCostEur: number | null;
+    actualCostEur: number | null;
+    error: string | null;
+    durationMs: number | null;
+    createdAt: string;
+    completedAt: string | null;
+}
+export declare enum AgentType {
+    WEB_SEARCH = "web_search",
+    CONTENT = "content",
+    MARKETING = "marketing",
+    SALES = "sales",
+    FINANCIAL = "financial"
+}
+export interface AgentTypeInfo {
+    type: AgentType;
+    label: string;
+    description: string;
+    icon: string;
+    estimatedCostEur: number;
+}
+export interface AgentRecommendation {
+    agentType: AgentType;
+    relevanceScore: number;
+    reasoning: string;
+}
+export interface AgentRecommendationsResponse {
+    noteId: string;
+    recommendations: AgentRecommendation[];
+    agentTypes?: AgentTypeInfo[];
+    dailySpentEur: number;
+    dailyLimitEur: number;
+    canProceed: boolean;
+}
+export interface AgentEnrichments {
+    [agentType: string]: AgentEnrichmentEntry;
+}
+export interface AgentEnrichmentEntry {
+    executionId: string;
+    status: AgentExecutionStatus;
+    result: string | null;
+    completedAt: string | null;
+    error: string | null;
 }

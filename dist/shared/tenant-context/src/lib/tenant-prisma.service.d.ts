@@ -1,12 +1,14 @@
 import { OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '@prisma/client';
+import { PlatformPrismaService } from './platform-prisma.service';
 export declare class TenantPrismaService implements OnModuleDestroy {
     private readonly configService;
+    private readonly platformPrisma;
     private readonly clients;
     private readonly poolConfig;
     private cleanupInterval;
-    constructor(configService: ConfigService);
+    constructor(configService: ConfigService, platformPrisma: PlatformPrismaService);
     /**
      * Get or create a PrismaClient for the given tenant
      * Uses lazy initialization and connection pooling
@@ -19,7 +21,11 @@ export declare class TenantPrismaService implements OnModuleDestroy {
     getClientSync(tenantId: string): PrismaClient;
     private createClient;
     private createClientSync;
+    /** Cache of tenant DB URLs resolved from registry */
+    private readonly dbUrlCache;
+    private getTenantDbUrlAsync;
     private getTenantDbUrl;
+    private buildTenantDbUrl;
     private startIdleCleanup;
     private cleanupIdleConnections;
     /**

@@ -31,22 +31,24 @@ const app_controller_1 = __webpack_require__(16);
 const app_service_1 = __webpack_require__(17);
 const health_module_1 = __webpack_require__(18);
 const registration_module_1 = __webpack_require__(25);
-const auth_module_1 = __webpack_require__(40);
-const invitation_module_1 = __webpack_require__(59);
-const team_module_1 = __webpack_require__(124);
+const auth_module_1 = __webpack_require__(41);
+const invitation_module_1 = __webpack_require__(60);
+const team_module_1 = __webpack_require__(126);
 // DataExportModule and TenantDeletionModule: enable when Redis is available (BullMQ dependency)
-const llm_config_module_1 = __webpack_require__(73);
-const ai_gateway_module_1 = __webpack_require__(87);
-const conversation_module_1 = __webpack_require__(129);
-const onboarding_module_1 = __webpack_require__(164);
-const personas_module_1 = __webpack_require__(170);
-const knowledge_module_1 = __webpack_require__(72);
-const memory_module_1 = __webpack_require__(134);
-const qdrant_module_1 = __webpack_require__(173);
-const web_search_module_1 = __webpack_require__(143);
-const admin_module_1 = __webpack_require__(174);
-const execution_module_1 = __webpack_require__(145);
-const attachments_module_1 = __webpack_require__(149);
+const llm_config_module_1 = __webpack_require__(74);
+const ai_gateway_module_1 = __webpack_require__(88);
+const conversation_module_1 = __webpack_require__(131);
+const onboarding_module_1 = __webpack_require__(168);
+const personas_module_1 = __webpack_require__(174);
+const knowledge_module_1 = __webpack_require__(73);
+const memory_module_1 = __webpack_require__(136);
+const qdrant_module_1 = __webpack_require__(177);
+const web_search_module_1 = __webpack_require__(145);
+const admin_module_1 = __webpack_require__(178);
+const execution_module_1 = __webpack_require__(147);
+const attachments_module_1 = __webpack_require__(152);
+const pdf_export_module_1 = __webpack_require__(182);
+const agent_execution_module_1 = __webpack_require__(193);
 // Serve Angular static files in production (combined deploy)
 const staticPath = (0, path_1.join)(__dirname, '..', '..', 'web', 'browser');
 const serveStaticImports = (0, fs_1.existsSync)(staticPath)
@@ -89,6 +91,8 @@ exports.AppModule = AppModule = tslib_1.__decorate([
             admin_module_1.AdminModule,
             execution_module_1.ExecutionModule,
             attachments_module_1.AttachmentsModule,
+            pdf_export_module_1.PdfExportModule,
+            agent_execution_module_1.AgentExecutionModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],
@@ -158,23 +162,27 @@ Object.defineProperty(exports, "TenantModule", ({ enumerable: true, get: functio
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
-var _a;
+var _a, _b;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.TenantPrismaService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const client_1 = __webpack_require__(11);
+const platform_prisma_service_1 = __webpack_require__(12);
 const DEFAULT_POOL_CONFIG = {
     max: 10,
     idleTimeoutMs: 30000,
     acquireTimeoutMs: 5000,
 };
 let TenantPrismaService = class TenantPrismaService {
-    constructor(configService) {
+    constructor(configService, platformPrisma) {
         this.configService = configService;
+        this.platformPrisma = platformPrisma;
         this.clients = new Map();
         this.cleanupInterval = null;
+        /** Cache of tenant DB URLs resolved from registry */
+        this.dbUrlCache = new Map();
         this.poolConfig = {
             max: this.configService.get('TENANT_DB_POOL_MAX') ?? DEFAULT_POOL_CONFIG.max,
             idleTimeoutMs: this.configService.get('TENANT_DB_IDLE_TIMEOUT_MS') ?? DEFAULT_POOL_CONFIG.idleTimeoutMs,
@@ -208,7 +216,7 @@ let TenantPrismaService = class TenantPrismaService {
         return client;
     }
     async createClient(tenantId) {
-        const dbUrl = this.getTenantDbUrl(tenantId);
+        const dbUrl = await this.getTenantDbUrlAsync(tenantId);
         const client = new client_1.PrismaClient({
             datasources: {
                 db: { url: dbUrl },
@@ -251,15 +259,58 @@ let TenantPrismaService = class TenantPrismaService {
         // Connect in background - client will auto-connect on first query
         return client;
     }
+    async getTenantDbUrlAsync(tenantId) {
+        // Dev mode: use the platform DATABASE_URL for all tenants (single-database mode)
+        const devMode = this.configService.get('DEV_MODE') === 'true';
+        if (devMode) {
+            const platformUrl = this.configService.get('DATABASE_URL');
+            if (platformUrl)
+                return platformUrl;
+        }
+        // Check cache first
+        const cached = this.dbUrlCache.get(tenantId);
+        if (cached)
+            return cached;
+        // Look up the tenant's dbUrl from the registry
+        try {
+            const registry = await this.platformPrisma.tenantRegistry.findUnique({
+                where: { id: tenantId },
+                select: { dbUrl: true },
+            });
+            if (registry?.dbUrl) {
+                this.dbUrlCache.set(tenantId, registry.dbUrl);
+                return registry.dbUrl;
+            }
+        }
+        catch {
+            // Registry lookup failed — fall through to fallback
+        }
+        // Fallback: use platform DATABASE_URL (single-DB setup)
+        const platformUrl = this.configService.get('DATABASE_URL');
+        if (platformUrl)
+            return platformUrl;
+        // Last resort: construct from TENANT_DB_* env vars
+        return this.buildTenantDbUrl(tenantId);
+    }
     getTenantDbUrl(tenantId) {
         // Dev mode: use the platform DATABASE_URL for all tenants (single-database mode)
         const devMode = this.configService.get('DEV_MODE') === 'true';
         if (devMode) {
             const platformUrl = this.configService.get('DATABASE_URL');
-            if (platformUrl) {
+            if (platformUrl)
                 return platformUrl;
-            }
         }
+        // Check cache
+        const cached = this.dbUrlCache.get(tenantId);
+        if (cached)
+            return cached;
+        // Fallback: use platform DATABASE_URL (single-DB setup)
+        const platformUrl = this.configService.get('DATABASE_URL');
+        if (platformUrl)
+            return platformUrl;
+        return this.buildTenantDbUrl(tenantId);
+    }
+    buildTenantDbUrl(tenantId) {
         const host = this.configService.get('TENANT_DB_HOST') ?? 'localhost';
         const port = this.configService.get('TENANT_DB_PORT') ?? 5432;
         const user = this.configService.get('TENANT_DB_USER') ?? 'postgres';
@@ -323,7 +374,7 @@ let TenantPrismaService = class TenantPrismaService {
 exports.TenantPrismaService = TenantPrismaService;
 exports.TenantPrismaService = TenantPrismaService = tslib_1.__decorate([
     (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object])
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object, typeof (_b = typeof platform_prisma_service_1.PlatformPrismaService !== "undefined" && platform_prisma_service_1.PlatformPrismaService) === "function" ? _b : Object])
 ], TenantPrismaService);
 
 
@@ -392,12 +443,34 @@ let TenantMiddleware = class TenantMiddleware {
     constructor(platformPrisma, configService) {
         this.platformPrisma = platformPrisma;
         this.configService = configService;
-        // Paths that don't require tenant context (e.g., health checks, platform admin)
-        this.excludedPaths = [
-            '/health',
-            '/api/health',
-            '/api/v1/health',
-        ];
+        // Paths that don't require tenant context (e.g., health checks, auth, platform admin)
+        this.excludedPaths = ['/health', '/api/health', '/api/v1/health', '/auth', '/api/auth'];
+        /** Cached dev tenant ID resolved from DB */
+        this.resolvedDevTenantId = null;
+    }
+    /**
+     * Resolves the real active tenant ID for DEV_MODE, matching JwtAuthGuard.getDevUser().
+     * Caches the result for server lifetime. Falls back to 'dev-tenant-001' if DB query fails.
+     */
+    async resolveDevTenantId() {
+        if (this.resolvedDevTenantId)
+            return this.resolvedDevTenantId;
+        try {
+            const tenant = await this.platformPrisma.tenant.findFirst({
+                where: { status: 'ACTIVE' },
+                orderBy: { createdAt: 'desc' },
+                select: { id: true },
+            });
+            if (tenant) {
+                this.resolvedDevTenantId = tenant.id;
+                return tenant.id;
+            }
+        }
+        catch {
+            // DB error — use fallback
+        }
+        this.resolvedDevTenantId = 'dev-tenant-001';
+        return this.resolvedDevTenantId;
     }
     async use(req, res, next) {
         // Skip tenant validation for excluded paths
@@ -424,7 +497,7 @@ let TenantMiddleware = class TenantMiddleware {
                     // Token decode failed - use dev fallback
                 }
             }
-            req.tenantId = 'dev-tenant-001';
+            req.tenantId = await this.resolveDevTenantId();
             return next();
         }
         const tenantId = req.headers[exports.TENANT_ID_HEADER];
@@ -444,7 +517,8 @@ let TenantMiddleware = class TenantMiddleware {
         if (!tenant) {
             throw new common_1.ForbiddenException(this.createRfc7807Error('tenant_not_found', 'Tenant Not Found', 'No tenant found for provided X-Tenant-Id header', correlationId));
         }
-        if (tenant.status !== client_1.TenantStatus.ACTIVE) {
+        const allowedStatuses = [client_1.TenantStatus.ACTIVE, client_1.TenantStatus.ONBOARDING];
+        if (!allowedStatuses.includes(tenant.status)) {
             throw new common_1.ForbiddenException(this.createRfc7807Error('tenant_not_active', 'Tenant Not Active', `Tenant is currently ${tenant.status.toLowerCase()}`, correlationId));
         }
         // Attach tenant ID to request for downstream use
@@ -521,7 +595,10 @@ const platform_prisma_service_1 = __webpack_require__(12);
 const tenant_middleware_1 = __webpack_require__(13);
 let TenantModule = class TenantModule {
     configure(consumer) {
-        consumer.apply(tenant_middleware_1.TenantMiddleware).forRoutes('*');
+        consumer
+            .apply(tenant_middleware_1.TenantMiddleware)
+            .exclude({ path: 'auth/(.*)', method: common_1.RequestMethod.ALL }, { path: 'health/(.*)', method: common_1.RequestMethod.ALL }, { path: 'health', method: common_1.RequestMethod.ALL }, { path: 'registration', method: common_1.RequestMethod.ALL }, { path: 'registration/(.*)', method: common_1.RequestMethod.ALL })
+            .forRoutes('*');
     }
 };
 exports.TenantModule = TenantModule;
@@ -745,7 +822,7 @@ exports.HealthService = HealthService = tslib_1.__decorate([
 /* 22 */
 /***/ ((module) => {
 
-module.exports = /*#__PURE__*/JSON.parse('{"name":"@mentor-ai/source","version":"0.0.0","license":"MIT","engines":{"node":">=22.0.0"},"scripts":{"prepare":"husky","lint":"nx run-many -t lint","format":"nx format:write","format:check":"nx format:check","prisma:generate":"cd apps/api && npx prisma generate","prisma:migrate":"cd apps/api && npx prisma migrate dev","prisma:seed":"cd apps/api && npx ts-node prisma/seed.ts","prisma:studio":"cd apps/api && npx prisma studio","db:reset":"cd apps/api && npx prisma migrate reset --force","test":"nx run-many -t test","test:affected":"nx affected -t test","test:coverage":"nx run-many -t test -- --coverage","test:api":"nx test api","test:web":"nx test web","e2e":"npx playwright test","e2e:ui":"npx playwright test --ui"},"lint-staged":{"*.{ts,tsx,js,jsx}":["eslint --fix","prettier --write"],"*.{json,md,html,css,scss}":["prettier --write"]},"private":true,"dependencies":{"@angular/common":"~21.1.0","@angular/compiler":"~21.1.0","@angular/core":"~21.1.0","@angular/forms":"~21.1.0","@angular/platform-browser":"~21.1.0","@angular/router":"~21.1.0","@auth0/auth0-angular":"^2.5.0","@nestjs-modules/mailer":"^2.0.2","@nestjs/bullmq":"^11.0.4","@nestjs/common":"^11.0.0","@nestjs/config":"^4.0.3","@nestjs/core":"^11.0.0","@nestjs/passport":"^11.0.5","@nestjs/platform-express":"^11.0.0","@nestjs/platform-socket.io":"^11.1.13","@nestjs/serve-static":"^5.0.4","@nestjs/terminus":"^11.0.0","@nestjs/throttler":"^6.5.0","@nestjs/websockets":"^11.1.13","@ng-icons/core":"^33.0.0","@ng-icons/lucide":"^33.0.0","@paralleldrive/cuid2":"^3.3.0","@prisma/client":"^5.22.0","@qdrant/js-client-rest":"^1.16.2","@spartan-ng/brain":"^0.0.1-alpha.614","@tailwindcss/postcss":"^4.1.18","@types/marked":"^6.0.0","@types/multer":"^2.0.0","@upstash/ratelimit":"^2.0.8","@upstash/redis":"^1.36.2","archiver":"^7.0.1","axios":"^1.6.0","bcrypt":"^6.0.0","bullmq":"^5.66.5","class-transformer":"^0.5.1","class-validator":"^0.14.3","dompurify":"^3.3.1","json2md":"^2.0.3","jsonwebtoken":"^9.0.3","jwks-rsa":"^3.2.2","mammoth":"^1.11.0","marked":"^17.0.3","multer":"^2.0.2","nodemailer":"^8.0.0","passport":"^0.7.0","passport-jwt":"^4.0.1","pdf-parse":"^2.4.5","pdfmake":"^0.3.2","prisma":"^5.22.0","reflect-metadata":"^0.1.13","rxjs":"^7.8.0","socket.io":"^4.8.3","socket.io-client":"^4.8.3","tailwindcss":"^4.1.18","xlsx":"^0.18.5"},"devDependencies":{"@analogjs/vite-plugin-angular":"~2.1.2","@analogjs/vitest-angular":"~2.1.2","@angular-devkit/core":"~21.1.0","@angular-devkit/schematics":"~21.1.0","@angular/build":"~21.1.0","@angular/cli":"~21.1.0","@angular/compiler-cli":"~21.1.0","@angular/language-service":"~21.1.0","@axe-core/playwright":"^4.11.1","@eslint/js":"^9.8.0","@nestjs/schematics":"^11.0.0","@nestjs/testing":"^11.0.0","@nx/angular":"^22.4.5","@nx/eslint":"22.4.5","@nx/eslint-plugin":"22.4.5","@nx/jest":"22.4.5","@nx/js":"22.4.5","@nx/nest":"22.4.5","@nx/node":"22.4.5","@nx/storybook":"^22.4.5","@nx/vite":"22.4.5","@nx/vitest":"22.4.5","@nx/web":"22.4.5","@nx/webpack":"22.4.5","@nx/workspace":"22.4.5","@schematics/angular":"~21.1.0","@spartan-ng/cli":"^0.0.1-alpha.614","@storybook/addon-a11y":"^10.2.6","@storybook/addon-essentials":"^8.6.14","@storybook/angular":"^10.2.6","@swc-node/register":"~1.9.1","@swc/cli":"~0.6.0","@swc/core":"~1.5.7","@swc/helpers":"~0.5.11","@swc/jest":"~0.2.38","@types/archiver":"^7.0.0","@types/bcrypt":"^6.0.0","@types/dompurify":"^3.2.0","@types/jest":"^30.0.0","@types/json2md":"^1.5.4","@types/jsonwebtoken":"^9.0.10","@types/node":"^22.0.0","@types/nodemailer":"^7.0.9","@types/passport-jwt":"^4.0.1","@types/pdfmake":"^0.3.0","@typescript-eslint/utils":"^8.40.0","@vitest/coverage-v8":"^4.0.0","@vitest/ui":"^4.0.8","angular-eslint":"^21.0.1","autoprefixer":"^10.4.0","axe-core":"^4.11.1","eslint":"^9.8.0","eslint-config-prettier":"^10.0.0","husky":"^9.1.7","jest":"^30.0.2","jest-environment-node":"^30.0.2","jest-util":"^30.0.2","jsdom":"^27.1.0","jsonc-eslint-parser":"^2.1.0","lint-staged":"^16.2.7","nx":"22.4.5","postcss":"^8.4.5","prettier":"~3.6.2","storybook":"^10.2.6","ts-jest":"^29.4.0","ts-node":"10.9.1","tslib":"^2.3.0","typescript":"~5.9.2","typescript-eslint":"^8.40.0","vite":"^7.0.0","vitest":"^4.0.8","webpack-cli":"^5.1.4"}}');
+module.exports = /*#__PURE__*/JSON.parse('{"name":"@mentor-ai/source","version":"0.0.0","license":"MIT","engines":{"node":">=22.0.0"},"scripts":{"prepare":"husky","lint":"nx run-many -t lint","format":"nx format:write","format:check":"nx format:check","prisma:generate":"cd apps/api && npx prisma generate","prisma:migrate":"cd apps/api && npx prisma migrate dev","prisma:seed":"cd apps/api && npx ts-node prisma/seed.ts","prisma:studio":"cd apps/api && npx prisma studio","db:reset":"cd apps/api && npx prisma migrate reset --force","test":"nx run-many -t test","test:affected":"nx affected -t test","test:coverage":"nx run-many -t test -- --coverage","test:api":"nx test api","test:web":"nx test web","e2e":"npx playwright test","e2e:ui":"npx playwright test --ui"},"lint-staged":{"*.{ts,tsx,js,jsx}":["eslint --fix","prettier --write"],"*.{json,md,html,css,scss}":["prettier --write"]},"private":true,"dependencies":{"@angular/common":"~21.1.0","@angular/compiler":"~21.1.0","@angular/core":"~21.1.0","@angular/forms":"~21.1.0","@angular/platform-browser":"~21.1.0","@angular/router":"~21.1.0","@auth0/auth0-angular":"^2.5.0","@nestjs-modules/mailer":"^2.0.2","@nestjs/bullmq":"^11.0.4","@nestjs/common":"^11.0.0","@nestjs/config":"^4.0.3","@nestjs/core":"^11.0.0","@nestjs/passport":"^11.0.5","@nestjs/platform-express":"^11.0.0","@nestjs/platform-socket.io":"^11.1.13","@nestjs/serve-static":"^5.0.4","@nestjs/terminus":"^11.0.0","@nestjs/throttler":"^6.5.0","@nestjs/websockets":"^11.1.13","@ng-icons/core":"^33.0.0","@ng-icons/lucide":"^33.0.0","@paralleldrive/cuid2":"^3.3.0","@prisma/client":"^5.22.0","@qdrant/js-client-rest":"^1.16.2","@spartan-ng/brain":"^0.0.1-alpha.614","@tailwindcss/postcss":"^4.1.18","@types/marked":"^6.0.0","@types/multer":"^2.0.0","@upstash/ratelimit":"^2.0.8","@upstash/redis":"^1.36.2","archiver":"^7.0.1","axios":"^1.6.0","bcrypt":"^6.0.0","bullmq":"^5.66.5","class-transformer":"^0.5.1","class-validator":"^0.14.3","dompurify":"^3.3.1","isomorphic-dompurify":"^3.0.0","json2md":"^2.0.3","jsonwebtoken":"^9.0.3","jwks-rsa":"^3.2.2","mammoth":"^1.11.0","marked":"^17.0.3","multer":"^2.0.2","nodemailer":"^8.0.0","passport":"^0.7.0","passport-jwt":"^4.0.1","pdf-parse":"^2.4.5","pdfmake":"^0.3.2","prisma":"^5.22.0","puppeteer":"^24.37.5","reflect-metadata":"^0.1.13","rxjs":"^7.8.0","socket.io":"^4.8.3","socket.io-client":"^4.8.3","tailwindcss":"^4.1.18","xlsx":"^0.18.5"},"devDependencies":{"@analogjs/vite-plugin-angular":"~2.1.2","@analogjs/vitest-angular":"~2.1.2","@angular-devkit/core":"~21.1.0","@angular-devkit/schematics":"~21.1.0","@angular/build":"~21.1.0","@angular/cli":"~21.1.0","@angular/compiler-cli":"~21.1.0","@angular/language-service":"~21.1.0","@axe-core/playwright":"^4.11.1","@eslint/js":"^9.8.0","@nestjs/schematics":"^11.0.0","@nestjs/testing":"^11.0.0","@nx/angular":"^22.4.5","@nx/eslint":"22.4.5","@nx/eslint-plugin":"22.4.5","@nx/jest":"22.4.5","@nx/js":"22.4.5","@nx/nest":"22.4.5","@nx/node":"22.4.5","@nx/storybook":"^22.4.5","@nx/vite":"22.4.5","@nx/vitest":"22.4.5","@nx/web":"22.4.5","@nx/webpack":"22.4.5","@nx/workspace":"22.4.5","@schematics/angular":"~21.1.0","@spartan-ng/cli":"^0.0.1-alpha.614","@storybook/addon-a11y":"^10.2.6","@storybook/addon-essentials":"^8.6.14","@storybook/angular":"^10.2.6","@swc-node/register":"~1.9.1","@swc/cli":"~0.6.0","@swc/core":"~1.5.7","@swc/helpers":"~0.5.11","@swc/jest":"~0.2.38","@types/archiver":"^7.0.0","@types/bcrypt":"^6.0.0","@types/dompurify":"^3.2.0","@types/jest":"^30.0.0","@types/json2md":"^1.5.4","@types/jsonwebtoken":"^9.0.10","@types/node":"^22.0.0","@types/nodemailer":"^7.0.9","@types/passport-jwt":"^4.0.1","@types/pdfmake":"^0.3.0","@typescript-eslint/utils":"^8.40.0","@vitest/coverage-v8":"^4.0.0","@vitest/ui":"^4.0.8","angular-eslint":"^21.0.1","autoprefixer":"^10.4.0","axe-core":"^4.11.1","eslint":"^9.8.0","eslint-config-prettier":"^10.0.0","husky":"^9.1.7","jest":"^30.0.2","jest-environment-node":"^30.0.2","jest-util":"^30.0.2","jsdom":"^27.1.0","jsonc-eslint-parser":"^2.1.0","lint-staged":"^16.2.7","nx":"22.4.5","postcss":"^8.4.5","prettier":"~3.6.2","storybook":"^10.2.6","ts-jest":"^29.4.0","ts-node":"10.9.1","tslib":"^2.3.0","typescript":"~5.9.2","typescript-eslint":"^8.40.0","vite":"^7.0.0","vitest":"^4.0.8","webpack-cli":"^5.1.4"}}');
 
 /***/ }),
 /* 23 */
@@ -867,7 +944,7 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const registration_controller_1 = __webpack_require__(26);
 const registration_service_1 = __webpack_require__(28);
-const file_upload_module_1 = __webpack_require__(39);
+const file_upload_module_1 = __webpack_require__(40);
 const tenant_context_1 = __webpack_require__(9);
 let RegistrationModule = class RegistrationModule {
 };
@@ -894,8 +971,8 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const platform_express_1 = __webpack_require__(27);
 const registration_service_1 = __webpack_require__(28);
-const register_tenant_dto_1 = __webpack_require__(36);
-const file_upload_service_1 = __webpack_require__(38);
+const register_tenant_dto_1 = __webpack_require__(37);
+const file_upload_service_1 = __webpack_require__(39);
 let RegistrationController = class RegistrationController {
     constructor(registrationService, fileUploadService) {
         this.registrationService = registrationService;
@@ -976,7 +1053,7 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
 const utils_1 = __webpack_require__(29);
-const prisma_1 = __webpack_require__(34);
+const prisma_1 = __webpack_require__(35);
 let RegistrationService = class RegistrationService {
     constructor(prisma) {
         this.prisma = prisma;
@@ -1055,6 +1132,9 @@ const tslib_1 = __webpack_require__(4);
 tslib_1.__exportStar(__webpack_require__(30), exports);
 tslib_1.__exportStar(__webpack_require__(31), exports);
 tslib_1.__exportStar(__webpack_require__(33), exports);
+tslib_1.__exportStar(__webpack_require__(34), exports);
+// markdown-server is NOT exported here — it imports Node.js-only isomorphic-dompurify.
+// Backend code should import from: @mentor-ai/shared/utils/server
 
 
 /***/ }),
@@ -1194,16 +1274,54 @@ function isValidIndustry(value) {
 
 /***/ }),
 /* 34 */
+/***/ ((__unused_webpack_module, exports) => {
+
+
+/**
+ * Shared callout and citation transforms for markdown HTML.
+ * Used by both frontend (concept-citation.component) and backend (PDF export).
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.applyCalloutTransforms = applyCalloutTransforms;
+exports.applyCitationTransforms = applyCitationTransforms;
+/**
+ * Transforms standard blockquotes with Serbian callout keywords
+ * into styled callout HTML with CSS classes.
+ *
+ * Supported callout types:
+ * - "Ključni uvid:" → .callout-insight (blue)
+ * - "Upozorenje:" → .callout-warning (amber)
+ * - "Metrika:" → .callout-metric (green)
+ * - "Rezime:" → .callout-summary (purple)
+ */
+function applyCalloutTransforms(html) {
+    return html
+        .replace(/<blockquote>\s*<p>\s*<strong>Ključni uvid:?<\/strong>/gi, '<blockquote class="callout callout-insight"><p><strong>Ključni uvid:</strong>')
+        .replace(/<blockquote>\s*<p>\s*<strong>Upozorenje:?<\/strong>/gi, '<blockquote class="callout callout-warning"><p><strong>Upozorenje:</strong>')
+        .replace(/<blockquote>\s*<p>\s*<strong>Metrika:?<\/strong>/gi, '<blockquote class="callout callout-metric"><p><strong>Metrika:</strong>')
+        .replace(/<blockquote>\s*<p>\s*<strong>Rezime:?<\/strong>/gi, '<blockquote class="callout callout-summary"><p><strong>Rezime:</strong>');
+}
+/**
+ * Replaces [[Concept Name]] citation markers with styled inline spans.
+ * For PDF/non-interactive contexts — renders as visible text badges.
+ */
+function applyCitationTransforms(html) {
+    return html.replace(/\[\[([^\]]+)\]\]/g, '<span class="citation-inline">$1</span>');
+}
+
+
+/***/ }),
+/* 35 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const tslib_1 = __webpack_require__(4);
-tslib_1.__exportStar(__webpack_require__(35), exports);
+tslib_1.__exportStar(__webpack_require__(36), exports);
 
 
 /***/ }),
-/* 35 */
+/* 36 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -1225,7 +1343,7 @@ Object.defineProperty(exports, "NoteStatus", ({ enumerable: true, get: function 
 
 
 /***/ }),
-/* 36 */
+/* 37 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -1233,7 +1351,7 @@ var _a;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.RegisterTenantDto = void 0;
 const tslib_1 = __webpack_require__(4);
-const class_validator_1 = __webpack_require__(37);
+const class_validator_1 = __webpack_require__(38);
 const utils_1 = __webpack_require__(29);
 class RegisterTenantDto {
 }
@@ -1262,13 +1380,13 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 37 */
+/* 38 */
 /***/ ((module) => {
 
 module.exports = require("class-validator");
 
 /***/ }),
-/* 38 */
+/* 39 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -1359,7 +1477,7 @@ exports.FileUploadService = FileUploadService = tslib_1.__decorate([
 
 
 /***/ }),
-/* 39 */
+/* 40 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -1367,7 +1485,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.FileUploadModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const file_upload_service_1 = __webpack_require__(38);
+const file_upload_service_1 = __webpack_require__(39);
 let FileUploadModule = class FileUploadModule {
 };
 exports.FileUploadModule = FileUploadModule;
@@ -1380,7 +1498,7 @@ exports.FileUploadModule = FileUploadModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 40 */
+/* 41 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -1388,16 +1506,16 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.AuthModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const passport_1 = __webpack_require__(41);
+const passport_1 = __webpack_require__(42);
 const config_1 = __webpack_require__(5);
 const tenant_context_1 = __webpack_require__(9);
-const auth_controller_1 = __webpack_require__(42);
-const google_auth_controller_1 = __webpack_require__(55);
-const auth_service_1 = __webpack_require__(43);
-const jwt_strategy_1 = __webpack_require__(48);
-const jwt_auth_guard_1 = __webpack_require__(45);
-const roles_guard_1 = __webpack_require__(54);
-const mfa_required_guard_1 = __webpack_require__(58);
+const auth_controller_1 = __webpack_require__(43);
+const google_auth_controller_1 = __webpack_require__(56);
+const auth_service_1 = __webpack_require__(44);
+const jwt_strategy_1 = __webpack_require__(49);
+const jwt_auth_guard_1 = __webpack_require__(46);
+const roles_guard_1 = __webpack_require__(55);
+const mfa_required_guard_1 = __webpack_require__(59);
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
@@ -1422,13 +1540,13 @@ exports.AuthModule = AuthModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 41 */
+/* 42 */
 /***/ ((module) => {
 
 module.exports = require("@nestjs/passport");
 
 /***/ }),
-/* 42 */
+/* 43 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -1438,15 +1556,15 @@ exports.AuthController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const cuid2_1 = __webpack_require__(32);
-const auth_service_1 = __webpack_require__(43);
-const jwt_auth_guard_1 = __webpack_require__(45);
-const current_user_decorator_1 = __webpack_require__(47);
-const jwt_strategy_1 = __webpack_require__(48);
-const skip_mfa_decorator_1 = __webpack_require__(50);
-const verify_totp_dto_1 = __webpack_require__(51);
-const enroll_mfa_dto_1 = __webpack_require__(52);
-const roles_decorator_1 = __webpack_require__(53);
-const roles_guard_1 = __webpack_require__(54);
+const auth_service_1 = __webpack_require__(44);
+const jwt_auth_guard_1 = __webpack_require__(46);
+const current_user_decorator_1 = __webpack_require__(48);
+const jwt_strategy_1 = __webpack_require__(49);
+const skip_mfa_decorator_1 = __webpack_require__(51);
+const verify_totp_dto_1 = __webpack_require__(52);
+const enroll_mfa_dto_1 = __webpack_require__(53);
+const roles_decorator_1 = __webpack_require__(54);
+const roles_guard_1 = __webpack_require__(55);
 let AuthController = class AuthController {
     constructor(authService) {
         this.authService = authService;
@@ -1785,7 +1903,7 @@ exports.AuthController = AuthController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 43 */
+/* 44 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -1795,7 +1913,7 @@ exports.AuthService = exports.LOCKOUT_DURATION_MINUTES = exports.MAX_FAILED_ATTE
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const bcrypt = tslib_1.__importStar(__webpack_require__(44));
+const bcrypt = tslib_1.__importStar(__webpack_require__(45));
 const cuid2_1 = __webpack_require__(32);
 const tenant_context_1 = __webpack_require__(9);
 exports.MAX_FAILED_ATTEMPTS = 5;
@@ -2052,13 +2170,13 @@ exports.AuthService = AuthService = tslib_1.__decorate([
 
 
 /***/ }),
-/* 44 */
+/* 45 */
 /***/ ((module) => {
 
 module.exports = require("bcrypt");
 
 /***/ }),
-/* 45 */
+/* 46 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -2069,10 +2187,10 @@ exports.JwtAuthGuard = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const passport_1 = __webpack_require__(41);
+const passport_1 = __webpack_require__(42);
 const core_1 = __webpack_require__(2);
-const public_decorator_1 = __webpack_require__(46);
-const prisma_1 = __webpack_require__(34);
+const public_decorator_1 = __webpack_require__(47);
+const prisma_1 = __webpack_require__(35);
 /** Static fallback when no active tenant exists yet (fresh DB) */
 const DEV_USER_FALLBACK = {
     userId: 'dev-user-001',
@@ -2248,7 +2366,7 @@ exports.JwtAuthGuard = JwtAuthGuard = JwtAuthGuard_1 = tslib_1.__decorate([
 
 
 /***/ }),
-/* 46 */
+/* 47 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -2261,7 +2379,7 @@ exports.Public = Public;
 
 
 /***/ }),
-/* 47 */
+/* 48 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -2279,7 +2397,7 @@ exports.CurrentUser = (0, common_1.createParamDecorator)((data, ctx) => {
 
 
 /***/ }),
-/* 48 */
+/* 49 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -2288,8 +2406,8 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.JwtStrategy = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const passport_1 = __webpack_require__(41);
-const passport_jwt_1 = __webpack_require__(49);
+const passport_1 = __webpack_require__(42);
+const passport_jwt_1 = __webpack_require__(50);
 const config_1 = __webpack_require__(5);
 let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(passport_jwt_1.Strategy) {
     constructor(configService) {
@@ -2326,13 +2444,13 @@ exports.JwtStrategy = JwtStrategy = tslib_1.__decorate([
 
 
 /***/ }),
-/* 49 */
+/* 50 */
 /***/ ((module) => {
 
 module.exports = require("passport-jwt");
 
 /***/ }),
-/* 50 */
+/* 51 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -2345,14 +2463,14 @@ exports.SkipMfa = SkipMfa;
 
 
 /***/ }),
-/* 51 */
+/* 52 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.VerifyTotpDto = void 0;
 const tslib_1 = __webpack_require__(4);
-const class_validator_1 = __webpack_require__(37);
+const class_validator_1 = __webpack_require__(38);
 class VerifyTotpDto {
 }
 exports.VerifyTotpDto = VerifyTotpDto;
@@ -2365,14 +2483,14 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 52 */
+/* 53 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.VerifyRecoveryCodeDto = exports.EnrollMfaDto = void 0;
 const tslib_1 = __webpack_require__(4);
-const class_validator_1 = __webpack_require__(37);
+const class_validator_1 = __webpack_require__(38);
 class EnrollMfaDto {
 }
 exports.EnrollMfaDto = EnrollMfaDto;
@@ -2399,7 +2517,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 53 */
+/* 54 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -2412,7 +2530,7 @@ exports.Roles = Roles;
 
 
 /***/ }),
-/* 54 */
+/* 55 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -2422,7 +2540,7 @@ exports.RolesGuard = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const core_1 = __webpack_require__(2);
-const roles_decorator_1 = __webpack_require__(53);
+const roles_decorator_1 = __webpack_require__(54);
 let RolesGuard = class RolesGuard {
     constructor(reflector) {
         this.reflector = reflector;
@@ -2462,7 +2580,7 @@ exports.RolesGuard = RolesGuard = tslib_1.__decorate([
 
 
 /***/ }),
-/* 55 */
+/* 56 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -2473,14 +2591,14 @@ exports.GoogleAuthController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const class_validator_1 = __webpack_require__(37);
-const axios_1 = tslib_1.__importDefault(__webpack_require__(56));
-const jwt = tslib_1.__importStar(__webpack_require__(57));
-const auth_service_1 = __webpack_require__(43);
-const public_decorator_1 = __webpack_require__(46);
+const class_validator_1 = __webpack_require__(38);
+const axios_1 = tslib_1.__importDefault(__webpack_require__(57));
+const jwt = tslib_1.__importStar(__webpack_require__(58));
+const auth_service_1 = __webpack_require__(44);
+const public_decorator_1 = __webpack_require__(47);
 const tenant_context_1 = __webpack_require__(9);
 const utils_1 = __webpack_require__(29);
-const prisma_1 = __webpack_require__(34);
+const prisma_1 = __webpack_require__(35);
 class GoogleCallbackDto {
 }
 tslib_1.__decorate([
@@ -2598,7 +2716,17 @@ let GoogleAuthController = GoogleAuthController_1 = class GoogleAuthController {
             const userId = (0, utils_1.generateUserId)();
             const normalizedEmail = idTokenPayload.email.toLowerCase();
             const displayName = idTokenPayload.name || normalizedEmail.split('@')[0] || 'My Company';
+            const databaseUrl = this.configService.get('DATABASE_URL') || '';
             await this.prisma.$transaction(async (tx) => {
+                // Create tenant registry entry (maps tenant to its database)
+                await tx.tenantRegistry.create({
+                    data: {
+                        id: tenantId,
+                        name: displayName,
+                        dbUrl: databaseUrl,
+                        status: prisma_1.TenantStatus.ONBOARDING,
+                    },
+                });
                 await tx.tenant.create({
                     data: {
                         id: tenantId,
@@ -2670,19 +2798,19 @@ exports.GoogleAuthController = GoogleAuthController = GoogleAuthController_1 = t
 
 
 /***/ }),
-/* 56 */
+/* 57 */
 /***/ ((module) => {
 
 module.exports = require("axios");
 
 /***/ }),
-/* 57 */
+/* 58 */
 /***/ ((module) => {
 
 module.exports = require("jsonwebtoken");
 
 /***/ }),
-/* 58 */
+/* 59 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -2693,8 +2821,8 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const core_1 = __webpack_require__(2);
-const skip_mfa_decorator_1 = __webpack_require__(50);
-const auth_service_1 = __webpack_require__(43);
+const skip_mfa_decorator_1 = __webpack_require__(51);
+const auth_service_1 = __webpack_require__(44);
 let MfaRequiredGuard = class MfaRequiredGuard {
     constructor(reflector, authService, configService) {
         this.reflector = reflector;
@@ -2741,7 +2869,7 @@ exports.MfaRequiredGuard = MfaRequiredGuard = tslib_1.__decorate([
 
 
 /***/ }),
-/* 59 */
+/* 60 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -2750,11 +2878,11 @@ exports.InvitationModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const email_1 = __webpack_require__(60);
+const email_1 = __webpack_require__(61);
 const tenant_context_1 = __webpack_require__(9);
-const knowledge_module_1 = __webpack_require__(72);
-const invitation_controller_1 = __webpack_require__(121);
-const invitation_service_1 = __webpack_require__(122);
+const knowledge_module_1 = __webpack_require__(73);
+const invitation_controller_1 = __webpack_require__(123);
+const invitation_service_1 = __webpack_require__(124);
 let InvitationModule = class InvitationModule {
 };
 exports.InvitationModule = InvitationModule;
@@ -2769,23 +2897,23 @@ exports.InvitationModule = InvitationModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 60 */
+/* 61 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.getInvitationEmailText = exports.getInvitationEmailHtml = exports.EmailModule = exports.EmailService = void 0;
-var email_service_1 = __webpack_require__(61);
+var email_service_1 = __webpack_require__(62);
 Object.defineProperty(exports, "EmailService", ({ enumerable: true, get: function () { return email_service_1.EmailService; } }));
-var email_module_1 = __webpack_require__(71);
+var email_module_1 = __webpack_require__(72);
 Object.defineProperty(exports, "EmailModule", ({ enumerable: true, get: function () { return email_module_1.EmailModule; } }));
-var invitation_template_1 = __webpack_require__(63);
+var invitation_template_1 = __webpack_require__(64);
 Object.defineProperty(exports, "getInvitationEmailHtml", ({ enumerable: true, get: function () { return invitation_template_1.getInvitationEmailHtml; } }));
 Object.defineProperty(exports, "getInvitationEmailText", ({ enumerable: true, get: function () { return invitation_template_1.getInvitationEmailText; } }));
 
 
 /***/ }),
-/* 61 */
+/* 62 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -2796,15 +2924,15 @@ exports.EmailService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const nodemailer = tslib_1.__importStar(__webpack_require__(62));
-const invitation_template_1 = __webpack_require__(63);
-const removal_template_1 = __webpack_require__(64);
-const backup_owner_designation_template_1 = __webpack_require__(65);
-const recovery_notification_template_1 = __webpack_require__(66);
-const data_export_complete_template_1 = __webpack_require__(67);
-const tenant_deletion_initiated_template_1 = __webpack_require__(68);
-const tenant_deletion_cancelled_template_1 = __webpack_require__(69);
-const tenant_deletion_complete_template_1 = __webpack_require__(70);
+const nodemailer = tslib_1.__importStar(__webpack_require__(63));
+const invitation_template_1 = __webpack_require__(64);
+const removal_template_1 = __webpack_require__(65);
+const backup_owner_designation_template_1 = __webpack_require__(66);
+const recovery_notification_template_1 = __webpack_require__(67);
+const data_export_complete_template_1 = __webpack_require__(68);
+const tenant_deletion_initiated_template_1 = __webpack_require__(69);
+const tenant_deletion_cancelled_template_1 = __webpack_require__(70);
+const tenant_deletion_complete_template_1 = __webpack_require__(71);
 let EmailService = EmailService_1 = class EmailService {
     constructor(configService) {
         this.configService = configService;
@@ -3062,13 +3190,13 @@ exports.EmailService = EmailService = EmailService_1 = tslib_1.__decorate([
 
 
 /***/ }),
-/* 62 */
+/* 63 */
 /***/ ((module) => {
 
 module.exports = require("nodemailer");
 
 /***/ }),
-/* 63 */
+/* 64 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -3149,7 +3277,7 @@ function getInvitationEmailText(data) {
 
 
 /***/ }),
-/* 64 */
+/* 65 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -3228,7 +3356,7 @@ function getRemovalEmailText(data) {
 
 
 /***/ }),
-/* 65 */
+/* 66 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -3312,7 +3440,7 @@ function getBackupOwnerDesignationEmailText(data) {
 
 
 /***/ }),
-/* 66 */
+/* 67 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -3413,7 +3541,7 @@ function getRecoveryNotificationEmailText(data) {
 
 
 /***/ }),
-/* 67 */
+/* 68 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -3518,7 +3646,7 @@ function getDataExportCompleteEmailText(data) {
 
 
 /***/ }),
-/* 68 */
+/* 69 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -3642,7 +3770,7 @@ function getTenantDeletionInitiatedEmailText(data) {
 
 
 /***/ }),
-/* 69 */
+/* 70 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -3729,7 +3857,7 @@ function getTenantDeletionCancelledEmailText(data) {
 
 
 /***/ }),
-/* 70 */
+/* 71 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -3834,7 +3962,7 @@ function getTenantDeletionCompleteEmailText(data) {
 
 
 /***/ }),
-/* 71 */
+/* 72 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -3843,7 +3971,7 @@ exports.EmailModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const email_service_1 = __webpack_require__(61);
+const email_service_1 = __webpack_require__(62);
 let EmailModule = class EmailModule {
 };
 exports.EmailModule = EmailModule;
@@ -3857,7 +3985,7 @@ exports.EmailModule = EmailModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 72 */
+/* 73 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -3866,22 +3994,23 @@ exports.KnowledgeModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const auth_module_1 = __webpack_require__(40);
-const llm_config_module_1 = __webpack_require__(73);
-const ai_gateway_module_1 = __webpack_require__(87);
-const knowledge_controller_1 = __webpack_require__(103);
-const concept_service_1 = __webpack_require__(104);
-const concept_seed_service_1 = __webpack_require__(108);
-const concept_matching_service_1 = __webpack_require__(109);
-const citation_injector_service_1 = __webpack_require__(113);
-const citation_service_1 = __webpack_require__(106);
-const embedding_service_1 = __webpack_require__(110);
-const curriculum_service_1 = __webpack_require__(107);
-const concept_extraction_service_1 = __webpack_require__(114);
-const brain_seeding_service_1 = __webpack_require__(116);
-const business_context_service_1 = __webpack_require__(118);
-const concept_relevance_service_1 = __webpack_require__(119);
-const department_guard_1 = __webpack_require__(120);
+const auth_module_1 = __webpack_require__(41);
+const llm_config_module_1 = __webpack_require__(74);
+const ai_gateway_module_1 = __webpack_require__(88);
+const knowledge_controller_1 = __webpack_require__(104);
+const concept_service_1 = __webpack_require__(105);
+const concept_seed_service_1 = __webpack_require__(109);
+const concept_matching_service_1 = __webpack_require__(110);
+const citation_injector_service_1 = __webpack_require__(114);
+const citation_service_1 = __webpack_require__(107);
+const embedding_service_1 = __webpack_require__(111);
+const curriculum_service_1 = __webpack_require__(108);
+const concept_extraction_service_1 = __webpack_require__(115);
+const brain_seeding_service_1 = __webpack_require__(117);
+const business_context_service_1 = __webpack_require__(119);
+const concept_relevance_service_1 = __webpack_require__(120);
+const concept_classifier_service_1 = __webpack_require__(121);
+const department_guard_1 = __webpack_require__(122);
 /**
  * Module for business concepts knowledge base.
  * Provides services for querying, seeding, and citing concepts.
@@ -3909,6 +4038,7 @@ exports.KnowledgeModule = KnowledgeModule = tslib_1.__decorate([
             brain_seeding_service_1.BrainSeedingService,
             business_context_service_1.BusinessContextService,
             concept_relevance_service_1.ConceptRelevanceService,
+            concept_classifier_service_1.ConceptClassifierService,
             department_guard_1.DepartmentGuard,
         ],
         exports: [
@@ -3923,6 +4053,7 @@ exports.KnowledgeModule = KnowledgeModule = tslib_1.__decorate([
             brain_seeding_service_1.BrainSeedingService,
             business_context_service_1.BusinessContextService,
             concept_relevance_service_1.ConceptRelevanceService,
+            concept_classifier_service_1.ConceptClassifierService,
             department_guard_1.DepartmentGuard,
         ],
     })
@@ -3930,7 +4061,7 @@ exports.KnowledgeModule = KnowledgeModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 73 */
+/* 74 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -3940,9 +4071,9 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const tenant_context_1 = __webpack_require__(9);
-const auth_module_1 = __webpack_require__(40);
-const llm_config_controller_1 = __webpack_require__(74);
-const llm_config_service_1 = __webpack_require__(75);
+const auth_module_1 = __webpack_require__(41);
+const llm_config_controller_1 = __webpack_require__(75);
+const llm_config_service_1 = __webpack_require__(76);
 let LlmConfigModule = class LlmConfigModule {
 };
 exports.LlmConfigModule = LlmConfigModule;
@@ -3957,7 +4088,7 @@ exports.LlmConfigModule = LlmConfigModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 74 */
+/* 75 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -3966,13 +4097,13 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.LlmConfigController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const jwt_auth_guard_1 = __webpack_require__(45);
-const roles_guard_1 = __webpack_require__(54);
-const roles_decorator_1 = __webpack_require__(53);
-const current_user_decorator_1 = __webpack_require__(47);
-const llm_config_service_1 = __webpack_require__(75);
-const update_llm_config_dto_1 = __webpack_require__(82);
-const validate_provider_dto_1 = __webpack_require__(86);
+const jwt_auth_guard_1 = __webpack_require__(46);
+const roles_guard_1 = __webpack_require__(55);
+const roles_decorator_1 = __webpack_require__(54);
+const current_user_decorator_1 = __webpack_require__(48);
+const llm_config_service_1 = __webpack_require__(76);
+const update_llm_config_dto_1 = __webpack_require__(83);
+const validate_provider_dto_1 = __webpack_require__(87);
 /**
  * Controller for platform-level LLM provider configuration.
  * All endpoints require PLATFORM_OWNER role (via JWT claims).
@@ -4047,7 +4178,7 @@ exports.LlmConfigController = LlmConfigController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 75 */
+/* 76 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -4058,13 +4189,13 @@ exports.LlmConfigService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const crypto = tslib_1.__importStar(__webpack_require__(76));
+const crypto = tslib_1.__importStar(__webpack_require__(77));
 const tenant_context_1 = __webpack_require__(9);
-const openrouter_provider_1 = __webpack_require__(77);
-const local_llama_provider_1 = __webpack_require__(78);
-const openai_provider_1 = __webpack_require__(79);
-const lm_studio_provider_1 = __webpack_require__(80);
-const deepseek_provider_1 = __webpack_require__(81);
+const openrouter_provider_1 = __webpack_require__(78);
+const local_llama_provider_1 = __webpack_require__(79);
+const openai_provider_1 = __webpack_require__(80);
+const lm_studio_provider_1 = __webpack_require__(81);
+const deepseek_provider_1 = __webpack_require__(82);
 const ENCRYPTION_ALGORITHM = 'aes-256-gcm';
 const API_KEY_MASK = '***masked***';
 /**
@@ -4379,13 +4510,13 @@ exports.LlmConfigService = LlmConfigService = LlmConfigService_1 = tslib_1.__dec
 
 
 /***/ }),
-/* 76 */
+/* 77 */
 /***/ ((module) => {
 
 module.exports = require("node:crypto");
 
 /***/ }),
-/* 77 */
+/* 78 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -4476,7 +4607,7 @@ exports.OpenRouterProvider = OpenRouterProvider;
 
 
 /***/ }),
-/* 78 */
+/* 79 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -4630,7 +4761,7 @@ exports.LocalLlamaProvider = LocalLlamaProvider;
 
 
 /***/ }),
-/* 79 */
+/* 80 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -4719,7 +4850,7 @@ exports.OpenAIProvider = OpenAIProvider;
 
 
 /***/ }),
-/* 80 */
+/* 81 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -4785,7 +4916,7 @@ exports.LmStudioProvider = LmStudioProvider;
 
 
 /***/ }),
-/* 81 */
+/* 82 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -4843,7 +4974,7 @@ exports.DeepSeekProvider = DeepSeekProvider;
 
 
 /***/ }),
-/* 82 */
+/* 83 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -4851,9 +4982,9 @@ var _a;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.UpdateLlmConfigDto = void 0;
 const tslib_1 = __webpack_require__(4);
-const class_validator_1 = __webpack_require__(37);
-const class_transformer_1 = __webpack_require__(83);
-const types_1 = __webpack_require__(84);
+const class_validator_1 = __webpack_require__(38);
+const class_transformer_1 = __webpack_require__(84);
+const types_1 = __webpack_require__(85);
 class ProviderConfigDto {
 }
 tslib_1.__decorate([
@@ -4894,23 +5025,23 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 83 */
+/* 84 */
 /***/ ((module) => {
 
 module.exports = require("class-transformer");
 
 /***/ }),
-/* 84 */
+/* 85 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const tslib_1 = __webpack_require__(4);
-tslib_1.__exportStar(__webpack_require__(85), exports);
+tslib_1.__exportStar(__webpack_require__(86), exports);
 
 
 /***/ }),
-/* 85 */
+/* 86 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -4919,7 +5050,7 @@ tslib_1.__exportStar(__webpack_require__(85), exports);
  * These types are used across both frontend (Angular) and backend (NestJS)
  */
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.NoteStatus = exports.NoteType = exports.MEMORY_TYPE_LABELS = exports.MEMORY_TYPE_COLORS = exports.MemorySource = exports.MemoryType = exports.ConceptSource = exports.RelationshipType = exports.ConceptCategory = exports.CONFIDENCE_COLORS = exports.ConfidenceLevel = exports.PERSONA_NAMES = exports.PERSONA_COLORS = exports.PersonaType = exports.CircuitBreakerState = exports.MessageRole = exports.LlmProviderType = exports.TenantStatus = exports.ExportStatus = exports.ExportFormat = exports.INDUSTRIES = exports.Department = exports.InvitationStatus = void 0;
+exports.AgentType = exports.AgentExecutionStatus = exports.NoteStatus = exports.NoteType = exports.MEMORY_TYPE_LABELS = exports.MEMORY_TYPE_COLORS = exports.MemorySource = exports.MemoryType = exports.ConceptSource = exports.RelationshipType = exports.ConceptCategory = exports.CONFIDENCE_COLORS = exports.ConfidenceLevel = exports.PERSONA_NAMES = exports.PERSONA_COLORS = exports.PersonaType = exports.CircuitBreakerState = exports.MessageRole = exports.LlmProviderType = exports.TenantStatus = exports.ExportStatus = exports.ExportFormat = exports.INDUSTRIES = exports.Department = exports.InvitationStatus = void 0;
 /** Invitation status */
 var InvitationStatus;
 (function (InvitationStatus) {
@@ -5190,6 +5321,7 @@ var NoteType;
     NoteType["NOTE"] = "NOTE";
     NoteType["SUMMARY"] = "SUMMARY";
     NoteType["COMMENT"] = "COMMENT";
+    NoteType["AGENT_RESEARCH"] = "AGENT_RESEARCH";
 })(NoteType || (exports.NoteType = NoteType = {}));
 /** Task completion status */
 var NoteStatus;
@@ -5198,10 +5330,28 @@ var NoteStatus;
     NoteStatus["READY_FOR_REVIEW"] = "READY_FOR_REVIEW";
     NoteStatus["COMPLETED"] = "COMPLETED";
 })(NoteStatus || (exports.NoteStatus = NoteStatus = {}));
+// ── Agent Execution Types (OpenClaw V1) ──
+var AgentExecutionStatus;
+(function (AgentExecutionStatus) {
+    AgentExecutionStatus["PENDING"] = "PENDING";
+    AgentExecutionStatus["FORMATTING"] = "FORMATTING";
+    AgentExecutionStatus["EXECUTING"] = "EXECUTING";
+    AgentExecutionStatus["COMPLETED"] = "COMPLETED";
+    AgentExecutionStatus["FAILED"] = "FAILED";
+})(AgentExecutionStatus || (exports.AgentExecutionStatus = AgentExecutionStatus = {}));
+// ── Agent Execution V2: Multi-Agent Recommendations ──
+var AgentType;
+(function (AgentType) {
+    AgentType["WEB_SEARCH"] = "web_search";
+    AgentType["CONTENT"] = "content";
+    AgentType["MARKETING"] = "marketing";
+    AgentType["SALES"] = "sales";
+    AgentType["FINANCIAL"] = "financial";
+})(AgentType || (exports.AgentType = AgentType = {}));
 
 
 /***/ }),
-/* 86 */
+/* 87 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -5209,8 +5359,8 @@ var _a;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ValidateProviderDto = void 0;
 const tslib_1 = __webpack_require__(4);
-const class_validator_1 = __webpack_require__(37);
-const types_1 = __webpack_require__(84);
+const class_validator_1 = __webpack_require__(38);
+const types_1 = __webpack_require__(85);
 class ValidateProviderDto {
 }
 exports.ValidateProviderDto = ValidateProviderDto;
@@ -5232,7 +5382,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 87 */
+/* 88 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -5242,17 +5392,17 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const tenant_context_1 = __webpack_require__(9);
-const llm_config_module_1 = __webpack_require__(73);
-const ai_gateway_service_1 = __webpack_require__(88);
-const redis_service_1 = __webpack_require__(93);
-const rate_limiter_service_1 = __webpack_require__(92);
-const token_tracker_service_1 = __webpack_require__(97);
-const quota_service_1 = __webpack_require__(96);
-const request_queue_service_1 = __webpack_require__(101);
-const circuit_breaker_service_1 = __webpack_require__(99);
-const cost_calculator_service_1 = __webpack_require__(100);
-const confidence_service_1 = __webpack_require__(89);
-const improvement_suggestions_service_1 = __webpack_require__(102);
+const llm_config_module_1 = __webpack_require__(74);
+const ai_gateway_service_1 = __webpack_require__(89);
+const redis_service_1 = __webpack_require__(94);
+const rate_limiter_service_1 = __webpack_require__(93);
+const token_tracker_service_1 = __webpack_require__(98);
+const quota_service_1 = __webpack_require__(97);
+const request_queue_service_1 = __webpack_require__(102);
+const circuit_breaker_service_1 = __webpack_require__(100);
+const cost_calculator_service_1 = __webpack_require__(101);
+const confidence_service_1 = __webpack_require__(90);
+const improvement_suggestions_service_1 = __webpack_require__(103);
 let AiGatewayModule = class AiGatewayModule {
 };
 exports.AiGatewayModule = AiGatewayModule;
@@ -5289,7 +5439,7 @@ exports.AiGatewayModule = AiGatewayModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 88 */
+/* 89 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -5300,15 +5450,15 @@ exports.AiGatewayService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const llm_config_service_1 = __webpack_require__(75);
-const types_1 = __webpack_require__(84);
-const confidence_service_1 = __webpack_require__(89);
-const persona_prompts_1 = __webpack_require__(91);
-const rate_limiter_service_1 = __webpack_require__(92);
-const quota_service_1 = __webpack_require__(96);
-const circuit_breaker_service_1 = __webpack_require__(99);
-const token_tracker_service_1 = __webpack_require__(97);
-const cost_calculator_service_1 = __webpack_require__(100);
+const llm_config_service_1 = __webpack_require__(76);
+const types_1 = __webpack_require__(85);
+const confidence_service_1 = __webpack_require__(90);
+const persona_prompts_1 = __webpack_require__(92);
+const rate_limiter_service_1 = __webpack_require__(93);
+const quota_service_1 = __webpack_require__(97);
+const circuit_breaker_service_1 = __webpack_require__(100);
+const token_tracker_service_1 = __webpack_require__(98);
+const cost_calculator_service_1 = __webpack_require__(101);
 const cuid2_1 = __webpack_require__(32);
 /**
  * Service for streaming AI completions from configured LLM providers.
@@ -6268,7 +6418,7 @@ exports.AiGatewayService = AiGatewayService = AiGatewayService_1 = tslib_1.__dec
 
 
 /***/ }),
-/* 89 */
+/* 90 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -6277,8 +6427,8 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ConfidenceService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const types_1 = __webpack_require__(84);
-const hedging_detector_1 = __webpack_require__(90);
+const types_1 = __webpack_require__(85);
+const hedging_detector_1 = __webpack_require__(91);
 /**
  * Configuration for confidence factor weights.
  * Weights must sum to 1.0.
@@ -6504,7 +6654,7 @@ exports.ConfidenceService = ConfidenceService = ConfidenceService_1 = tslib_1.__
 
 
 /***/ }),
-/* 90 */
+/* 91 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -6641,7 +6791,7 @@ function getHedgingConfidenceScore(text) {
 
 
 /***/ }),
-/* 91 */
+/* 92 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -7081,7 +7231,7 @@ function generateSystemPrompt(type) {
 
 
 /***/ }),
-/* 92 */
+/* 93 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -7092,7 +7242,7 @@ exports.RateLimiterService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const redis_service_1 = __webpack_require__(93);
+const redis_service_1 = __webpack_require__(94);
 /**
  * Service for enforcing rate limits on AI gateway requests.
  * Implements per-tenant and per-user rate limiting using sliding window algorithm.
@@ -7239,7 +7389,7 @@ exports.RateLimiterService = RateLimiterService = RateLimiterService_1 = tslib_1
 
 
 /***/ }),
-/* 93 */
+/* 94 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -7250,8 +7400,8 @@ exports.RedisService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const redis_1 = __webpack_require__(94);
-const ratelimit_1 = __webpack_require__(95);
+const redis_1 = __webpack_require__(95);
+const ratelimit_1 = __webpack_require__(96);
 /**
  * Service for managing Redis connections and rate limiters using Upstash.
  * Provides a centralized Redis client and factory methods for rate limiters.
@@ -7404,19 +7554,19 @@ exports.RedisService = RedisService = RedisService_1 = tslib_1.__decorate([
 
 
 /***/ }),
-/* 94 */
+/* 95 */
 /***/ ((module) => {
 
 module.exports = require("@upstash/redis");
 
 /***/ }),
-/* 95 */
+/* 96 */
 /***/ ((module) => {
 
 module.exports = require("@upstash/ratelimit");
 
 /***/ }),
-/* 96 */
+/* 97 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -7428,7 +7578,7 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const tenant_context_1 = __webpack_require__(9);
-const token_tracker_service_1 = __webpack_require__(97);
+const token_tracker_service_1 = __webpack_require__(98);
 /**
  * Service for enforcing token quotas on AI usage.
  * Prevents tenants from exceeding their allocated token limits.
@@ -7552,7 +7702,7 @@ exports.QuotaService = QuotaService = QuotaService_1 = tslib_1.__decorate([
 
 
 /***/ }),
-/* 97 */
+/* 98 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -7564,7 +7714,7 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
 const cuid2_1 = __webpack_require__(32);
-const library_1 = __webpack_require__(98);
+const library_1 = __webpack_require__(99);
 /**
  * Service for tracking AI token consumption and costs.
  * Records all AI requests for billing and quota enforcement.
@@ -7752,13 +7902,13 @@ exports.TokenTrackerService = TokenTrackerService = TokenTrackerService_1 = tsli
 
 
 /***/ }),
-/* 98 */
+/* 99 */
 /***/ ((module) => {
 
 module.exports = require("@prisma/client/runtime/library");
 
 /***/ }),
-/* 99 */
+/* 100 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -7768,9 +7918,9 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CircuitBreakerService = exports.CircuitBreakerEvent = exports.CircuitBreakerStatus = exports.CircuitBreakerState = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const redis_service_1 = __webpack_require__(93);
+const redis_service_1 = __webpack_require__(94);
 const cuid2_1 = __webpack_require__(32);
-const types_1 = __webpack_require__(84);
+const types_1 = __webpack_require__(85);
 Object.defineProperty(exports, "CircuitBreakerState", ({ enumerable: true, get: function () { return types_1.CircuitBreakerState; } }));
 Object.defineProperty(exports, "CircuitBreakerStatus", ({ enumerable: true, get: function () { return types_1.CircuitBreakerStatus; } }));
 Object.defineProperty(exports, "CircuitBreakerEvent", ({ enumerable: true, get: function () { return types_1.CircuitBreakerEvent; } }));
@@ -8033,7 +8183,7 @@ exports.CircuitBreakerService = CircuitBreakerService = CircuitBreakerService_1 
 
 
 /***/ }),
-/* 100 */
+/* 101 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -8211,7 +8361,7 @@ exports.CostCalculatorService = CostCalculatorService = CostCalculatorService_1 
 
 
 /***/ }),
-/* 101 */
+/* 102 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -8221,7 +8371,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.RequestQueueService = exports.PRIORITY_MAP = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const redis_service_1 = __webpack_require__(93);
+const redis_service_1 = __webpack_require__(94);
 const client_1 = __webpack_require__(11);
 const cuid2_1 = __webpack_require__(32);
 /**
@@ -8446,7 +8596,7 @@ exports.RequestQueueService = RequestQueueService = RequestQueueService_1 = tsli
 
 
 /***/ }),
-/* 102 */
+/* 103 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -8455,7 +8605,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ImprovementSuggestionsService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const types_1 = __webpack_require__(84);
+const types_1 = __webpack_require__(85);
 /**
  * Mapping of confidence factors to improvement suggestions.
  */
@@ -8717,7 +8867,7 @@ exports.ImprovementSuggestionsService = ImprovementSuggestionsService = Improvem
 
 
 /***/ }),
-/* 103 */
+/* 104 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -8727,9 +8877,9 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.KnowledgeController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const concept_service_1 = __webpack_require__(104);
-const citation_service_1 = __webpack_require__(106);
-const curriculum_service_1 = __webpack_require__(107);
+const concept_service_1 = __webpack_require__(105);
+const citation_service_1 = __webpack_require__(107);
+const curriculum_service_1 = __webpack_require__(108);
 /**
  * Controller for business concepts knowledge base endpoints.
  * Provides read-only access to the platform's concept library.
@@ -9001,7 +9151,7 @@ exports.KnowledgeController = KnowledgeController = KnowledgeController_1 = tsli
 
 
 /***/ }),
-/* 104 */
+/* 105 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -9012,8 +9162,8 @@ exports.ConceptService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const ai_gateway_service_1 = __webpack_require__(88);
-const relationship_prompt_1 = __webpack_require__(105);
+const ai_gateway_service_1 = __webpack_require__(89);
+const relationship_prompt_1 = __webpack_require__(106);
 /** Max entries in the findById LRU cache */
 const CONCEPT_CACHE_MAX = 500;
 /**
@@ -9468,7 +9618,7 @@ exports.ConceptService = ConceptService = ConceptService_1 = tslib_1.__decorate(
 
 
 /***/ }),
-/* 105 */
+/* 106 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -9546,7 +9696,7 @@ Ako ne postoje smisleni odnosi, vrati prazan niz: []`;
 
 
 /***/ }),
-/* 106 */
+/* 107 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -9755,7 +9905,7 @@ exports.CitationService = CitationService = CitationService_1 = tslib_1.__decora
 
 
 /***/ }),
-/* 107 */
+/* 108 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -9929,7 +10079,7 @@ exports.CurriculumService = CurriculumService = CurriculumService_1 = tslib_1.__
 
 
 /***/ }),
-/* 108 */
+/* 109 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -10190,7 +10340,7 @@ exports.ConceptSeedService = ConceptSeedService = ConceptSeedService_1 = tslib_1
 
 
 /***/ }),
-/* 109 */
+/* 110 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -10201,7 +10351,7 @@ exports.ConceptMatchingService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const embedding_service_1 = __webpack_require__(110);
+const embedding_service_1 = __webpack_require__(111);
 /**
  * Service for finding relevant business concepts using semantic + keyword search.
  * When Qdrant embeddings are available, uses AI-scored cosine similarity.
@@ -10571,7 +10721,7 @@ exports.ConceptMatchingService = ConceptMatchingService = ConceptMatchingService
 
 
 /***/ }),
-/* 110 */
+/* 111 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -10581,9 +10731,9 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.EmbeddingService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const node_crypto_1 = __webpack_require__(76);
+const node_crypto_1 = __webpack_require__(77);
 const tenant_context_1 = __webpack_require__(9);
-const qdrant_client_service_1 = __webpack_require__(111);
+const qdrant_client_service_1 = __webpack_require__(112);
 /** OpenAI API endpoint for embeddings */
 const OPENAI_EMBEDDINGS_URL = 'https://api.openai.com/v1/embeddings';
 /**
@@ -10836,7 +10986,7 @@ exports.EmbeddingService = EmbeddingService = EmbeddingService_1 = tslib_1.__dec
 
 
 /***/ }),
-/* 111 */
+/* 112 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -10847,7 +10997,7 @@ exports.QdrantClientService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const js_client_rest_1 = __webpack_require__(112);
+const js_client_rest_1 = __webpack_require__(113);
 /**
  * Shared Qdrant client service.
  * Provides a singleton QdrantClient instance and collection management utilities.
@@ -10934,13 +11084,13 @@ exports.QdrantClientService = QdrantClientService = QdrantClientService_1 = tsli
 
 
 /***/ }),
-/* 112 */
+/* 113 */
 /***/ ((module) => {
 
 module.exports = require("@qdrant/js-client-rest");
 
 /***/ }),
-/* 113 */
+/* 114 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -11168,7 +11318,7 @@ exports.CitationInjectorService = CitationInjectorService = CitationInjectorServ
 
 
 /***/ }),
-/* 114 */
+/* 115 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -11180,9 +11330,9 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const cuid2_1 = __webpack_require__(32);
 const tenant_context_1 = __webpack_require__(9);
-const ai_gateway_service_1 = __webpack_require__(88);
-const concept_service_1 = __webpack_require__(104);
-const extraction_prompt_1 = __webpack_require__(115);
+const ai_gateway_service_1 = __webpack_require__(89);
+const concept_service_1 = __webpack_require__(105);
+const extraction_prompt_1 = __webpack_require__(116);
 /** Default maximum concepts per extraction call */
 const DEFAULT_MAX_NEW = 5;
 /**
@@ -11363,7 +11513,7 @@ exports.ConceptExtractionService = ConceptExtractionService = ConceptExtractionS
 
 
 /***/ }),
-/* 115 */
+/* 116 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -11484,7 +11634,7 @@ function parseExtractionResponse(response) {
 
 
 /***/ }),
-/* 116 */
+/* 117 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -11501,9 +11651,9 @@ exports.BrainSeedingService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const prisma_1 = __webpack_require__(34);
+const prisma_1 = __webpack_require__(35);
 const cuid2_1 = __webpack_require__(32);
-const department_categories_1 = __webpack_require__(117);
+const department_categories_1 = __webpack_require__(118);
 let BrainSeedingService = BrainSeedingService_1 = class BrainSeedingService {
     constructor(prisma) {
         this.prisma = prisma;
@@ -11514,6 +11664,19 @@ let BrainSeedingService = BrainSeedingService_1 = class BrainSeedingService {
         this.OWNER_MAX_SEED_TOTAL = 40;
         /** Max total seed tasks for department user */
         this.DEPT_MAX_SEED_TOTAL = 30;
+    }
+    /**
+     * Build a Prisma OR clause that matches both exact category names
+     * and numbered-prefix variants (e.g., "3. Marketing") without
+     * substring false-positives (e.g., "Marketing" must NOT match "Digitalni Marketing").
+     */
+    categoryMatchClause(categories) {
+        return {
+            OR: [...categories].flatMap((cat) => [
+                { category: cat },
+                { category: { endsWith: `. ${cat}` } },
+            ]),
+        };
     }
     /**
      * Seeds PENDING task Notes for a new user.
@@ -11586,19 +11749,17 @@ let BrainSeedingService = BrainSeedingService_1 = class BrainSeedingService {
      * Owner seed: foundation categories fully + key concepts per other category.
      */
     async getOwnerSeedConcepts() {
-        // Seed all foundation concepts
+        // C9: Seed all foundation concepts — match exact or numbered-prefix (e.g., "1. Uvod u Poslovanje")
         const foundationConcepts = await this.prisma.concept.findMany({
-            where: {
-                category: { in: [...department_categories_1.FOUNDATION_CATEGORIES] },
-            },
+            where: this.categoryMatchClause(department_categories_1.FOUNDATION_CATEGORIES),
             select: { id: true, name: true, category: true },
             orderBy: { sortOrder: 'asc' },
         });
         // Seed key concepts from other categories (first N per category)
         const otherCategories = department_categories_1.ALL_CATEGORIES.filter((c) => !department_categories_1.FOUNDATION_CATEGORIES.includes(c));
-        // Single query for all non-foundation concepts, then slice per category client-side
+        // C9: Match exact or numbered-prefix for non-foundation categories
         const allOtherConcepts = await this.prisma.concept.findMany({
-            where: { category: { in: [...otherCategories] } },
+            where: this.categoryMatchClause(otherCategories),
             select: { id: true, name: true, category: true, sortOrder: true },
             orderBy: { sortOrder: 'asc' },
         });
@@ -11623,8 +11784,9 @@ let BrainSeedingService = BrainSeedingService_1 = class BrainSeedingService {
             // No filter = owner path (shouldn't reach here but fallback)
             return this.getOwnerSeedConcepts();
         }
+        // C9: Match exact or numbered-prefix for visible categories
         const concepts = await this.prisma.concept.findMany({
-            where: { category: { in: visibleCategories } },
+            where: this.categoryMatchClause(visibleCategories),
             select: { id: true, name: true, category: true },
             orderBy: { sortOrder: 'asc' },
             take: this.DEPT_MAX_SEED_TOTAL,
@@ -11640,7 +11802,7 @@ exports.BrainSeedingService = BrainSeedingService = BrainSeedingService_1 = tsli
 
 
 /***/ }),
-/* 117 */
+/* 118 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -11654,10 +11816,11 @@ exports.BrainSeedingService = BrainSeedingService = BrainSeedingService_1 = tsli
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DEPARTMENT_CATEGORY_MAP = exports.ALL_CATEGORIES = exports.FOUNDATION_CATEGORIES = void 0;
 exports.getVisibleCategories = getVisibleCategories;
-const prisma_1 = __webpack_require__(34);
+const prisma_1 = __webpack_require__(35);
 /** Foundation categories — always visible regardless of department */
 exports.FOUNDATION_CATEGORIES = ['Uvod u Poslovanje', 'Vrednost'];
 /** All known categories from the Obsidian vault (excluding guide/skipped) */
+// H14: Added missing categories: Ljudski Resursi, Operacije i Proizvodnja, Startup, Sistemi
 exports.ALL_CATEGORIES = [
     'Uvod u Poslovanje',
     'Marketing',
@@ -11665,6 +11828,7 @@ exports.ALL_CATEGORIES = [
     'Vrednost',
     'Finansije',
     'Operacije',
+    'Operacije i Proizvodnja',
     'Menadžment',
     'Preduzetništvo',
     'Digitalni Marketing',
@@ -11675,6 +11839,9 @@ exports.ALL_CATEGORIES = [
     'Liderstvo',
     'Strategija',
     'Poslovni Modeli',
+    'Ljudski Resursi',
+    'Startup',
+    'Sistemi',
 ];
 /**
  * Maps each Department enum value to its relevant Obsidian categories.
@@ -11684,8 +11851,8 @@ exports.DEPARTMENT_CATEGORY_MAP = {
     [prisma_1.Department.MARKETING]: ['Marketing', 'Digitalni Marketing'],
     [prisma_1.Department.FINANCE]: ['Finansije', 'Računovodstvo'],
     [prisma_1.Department.SALES]: ['Prodaja', 'Odnosi sa Klijentima'],
-    [prisma_1.Department.OPERATIONS]: ['Operacije', 'Preduzetništvo', 'Menadžment'],
-    [prisma_1.Department.TECHNOLOGY]: ['Tehnologija', 'Inovacije'],
+    [prisma_1.Department.OPERATIONS]: ['Operacije', 'Operacije i Proizvodnja', 'Preduzetništvo', 'Menadžment', 'Sistemi'],
+    [prisma_1.Department.TECHNOLOGY]: ['Tehnologija', 'Inovacije', 'Sistemi'],
     [prisma_1.Department.STRATEGY]: ['Strategija', 'Poslovni Modeli', 'Liderstvo'],
     [prisma_1.Department.LEGAL]: ['Menadžment'],
     [prisma_1.Department.CREATIVE]: ['Marketing', 'Digitalni Marketing'],
@@ -11708,7 +11875,7 @@ function getVisibleCategories(department, role) {
 
 
 /***/ }),
-/* 118 */
+/* 119 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -11840,7 +12007,7 @@ exports.BusinessContextService = BusinessContextService = BusinessContextService
 
 
 /***/ }),
-/* 119 */
+/* 120 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -11858,7 +12025,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ConceptRelevanceService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const department_categories_1 = __webpack_require__(117);
+const department_categories_1 = __webpack_require__(118);
 /** Scoring weights */
 const WEIGHTS = {
     INDUSTRY: 0.3,
@@ -11870,7 +12037,9 @@ const WEIGHTS = {
 const RELATIONSHIP_SCORES = {
     PREREQUISITE: 1.0,
     RELATED: 0.6,
-    ADVANCED: 0.2,
+    // H13: Raised from 0.2 to 0.5 — ADVANCED concepts should still pass the 0.3 threshold
+    // when combined with other positive factors (industry, department, prior activity)
+    ADVANCED: 0.5,
 };
 /**
  * Maps industries to relevant business concept categories.
@@ -12004,7 +12173,380 @@ exports.ConceptRelevanceService = ConceptRelevanceService = ConceptRelevanceServ
 
 
 /***/ }),
-/* 120 */
+/* 121 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var ConceptClassifierService_1;
+var _a, _b, _c;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ConceptClassifierService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const tenant_context_1 = __webpack_require__(9);
+const ai_gateway_service_1 = __webpack_require__(89);
+const concept_matching_service_1 = __webpack_require__(110);
+/**
+ * Category keywords the LLM can choose from + 1-line descriptions.
+ * Uses `contains` matching against actual DB category names to handle
+ * both "6. Prodaja" (numbered Obsidian) and "Prodaja" (AI-discovered) formats.
+ */
+const CATEGORY_KEYWORDS = {
+    Prodaja: 'Prodajni proces, prodajni plan, tehnike prodaje, pregovaranje, zatvaranje posla',
+    Marketing: 'Brending, pozicioniranje, marketing strategija, oglašavanje, promocija',
+    'Digitalni Marketing': 'Online marketing, SEO, društvene mreže, email marketing, content marketing',
+    Vrednost: 'Kreiranje vrednosti, vrednosna ponuda, oblici vrednosti, percepcija vrednosti',
+    'Određivanje Cene': 'Cenovne strategije, cenovna elastičnost, pricing modeli, popusti',
+    Finansije: 'Finansijsko upravljanje, budžet, investicije, tok novca, finansijska analiza',
+    Operacije: 'Operativno upravljanje, procesi, proizvodnja, lanac snabdevanja, logistika',
+    Menadžment: 'Upravljanje timom, organizacija, delegiranje, donošenje odluka',
+    'Poslovni Modeli': 'Modeli poslovanja, monetizacija, skaliranje, kanali distribucije',
+    Strategija: 'Poslovna strategija, konkurentska prednost, strateško planiranje, analiza tržišta',
+    Tehnologija: 'IT sistemi, softver, automatizacija, digitalna transformacija',
+    Preduzetništvo: 'Startup, pokretanje biznisa, validacija ideje, inovativno poslovanje',
+    'Odnosi sa Klijentima': 'CRM, zadovoljstvo kupaca, lojalnost, korisnička podrška',
+    'Ljudski Resursi': 'Zapošljavanje, obuka, razvoj zaposlenih, organizaciona kultura',
+    Liderstvo: 'Vođenje, vizija, motivacija tima, lični razvoj lidera',
+    'Kognitivne Sklonosti': 'Psihologija odlučivanja, pristrasnosti, heuristike, ponašanje kupaca',
+    Sistemi: 'Poslovni sistemi, automatizacija procesa, IT infrastruktura',
+    'Upravljanje Podacima': 'Analitika, podaci, izveštavanje, business intelligence',
+};
+/**
+ * All known category keywords (keys of the map above).
+ */
+const ALL_CATEGORY_KEYWORDS = Object.keys(CATEGORY_KEYWORDS);
+/**
+ * System prompt for the classifier LLM. Serbian, concise, structured JSON output.
+ */
+const CLASSIFIER_SYSTEM_PROMPT = `Ti si klasifikator poslovnih tema za srpski biznis alat. Odredi JEDNU kategoriju za razgovor korisnika.
+
+KATEGORIJE:
+${Object.entries(CATEGORY_KEYWORDS)
+    .map(([cat, desc]) => `- "${cat}": ${desc}`)
+    .join('\n')}
+
+PRAVILA:
+1. Fokus na NAMERU korisnika, ne na pojedinačne reči u poruci
+2. "Prodajni plan" → Prodaja (ne Vrednost, ne Marketing)
+3. "Marketing strategija" → Marketing (ne Strategija)
+4. "Finansijski izveštaj" → Finansije
+5. Ako korisnik traži PLAN/ANALIZU/STRATEGIJU za neku oblast, kategorija je DOMEN te oblasti
+6. Ako nije jasno, biraj NAJSPECIFIČNIJU kategoriju za zahtev
+
+VRATI ISKLJUČIVO VALIDAN JSON (bez markdown, bez objašnjenja):
+{"category": "ime kategorije", "confidence": 0.0-1.0, "conceptName": "opciono: konkretan koncept ako prepoznaješ"}
+
+Odgovor MORA biti manji od 100 tokena.`;
+/**
+ * Service that uses a fast LLM call to classify user intent into a business category,
+ * then finds the best matching concept within that category.
+ *
+ * This solves the problem where pure semantic/keyword search picks wrong concepts
+ * because it matches words rather than understanding user intent.
+ * E.g., "prodajni plan" was matched to "Proizvod" instead of "Prodaja" concepts.
+ *
+ * Follows the same LLM-call pattern as PromptCheckerService (fast/cheap model).
+ */
+let ConceptClassifierService = ConceptClassifierService_1 = class ConceptClassifierService {
+    constructor(aiGatewayService, conceptMatchingService, prisma) {
+        this.aiGatewayService = aiGatewayService;
+        this.conceptMatchingService = conceptMatchingService;
+        this.prisma = prisma;
+        this.logger = new common_1.Logger(ConceptClassifierService_1.name);
+    }
+    /**
+     * Classifies text into a category using an LLM, then finds the best concept
+     * within that category. Falls back to standard matching on LLM failure.
+     */
+    async classifyAndMatch(userMessage, aiResponse, options, context) {
+        // 1. Try LLM classification
+        const classification = await this.classifyWithLlm(userMessage, aiResponse, context);
+        if (!classification || classification.confidence < 0.4) {
+            this.logger.debug({
+                message: 'LLM classification failed or low confidence, using standard matching',
+                classification,
+            });
+            return this.conceptMatchingService.findRelevantConcepts(`${userMessage}\n${aiResponse}`, options);
+        }
+        this.logger.log({
+            message: 'LLM classified conversation intent',
+            category: classification.category,
+            confidence: classification.confidence,
+            suggestedConcept: classification.suggestedConceptName,
+        });
+        // 2. If LLM suggested a specific concept name, try direct lookup first
+        if (classification.suggestedConceptName) {
+            const directMatch = await this.findConceptByName(classification.suggestedConceptName, classification.category);
+            if (directMatch) {
+                return [directMatch];
+            }
+        }
+        // 3. Search within the classified category
+        const limit = options.limit ?? 5;
+        const categoryMatches = await this.findConceptsInCategory(userMessage, classification.category, limit);
+        if (categoryMatches.length > 0) {
+            return categoryMatches;
+        }
+        // 4. Category search returned nothing — fall back to unconstrained search
+        this.logger.debug({
+            message: 'Category-filtered search returned no results, falling back',
+            category: classification.category,
+        });
+        return this.conceptMatchingService.findRelevantConcepts(`${userMessage}\n${aiResponse}`, options);
+    }
+    /**
+     * Calls the fast/cheap LLM to classify the conversation into a category.
+     * Returns null on any failure (non-blocking).
+     */
+    async classifyWithLlm(userMessage, aiResponse, context) {
+        const userContent = `PORUKA KORISNIKA:\n"""${userMessage}"""\n\nODGOVOR AI (skraćen):\n"""${aiResponse.substring(0, 500)}"""`;
+        let responseContent = '';
+        try {
+            await this.aiGatewayService.streamCompletionWithContext([
+                { role: 'system', content: CLASSIFIER_SYSTEM_PROMPT },
+                { role: 'user', content: userContent },
+            ], {
+                tenantId: context.tenantId,
+                userId: context.userId,
+                conversationId: context.conversationId,
+                skipRateLimit: true,
+                skipQuotaCheck: true,
+                useFallback: true,
+            }, (chunk) => {
+                responseContent += chunk;
+            });
+        }
+        catch (err) {
+            this.logger.warn({
+                message: 'Classifier LLM call failed, will fall back to standard matching',
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+            return null;
+        }
+        return this.parseClassifierResponse(responseContent);
+    }
+    /**
+     * Parses the LLM JSON response into a ClassificationResult.
+     */
+    parseClassifierResponse(response) {
+        try {
+            const cleaned = response
+                .replace(/```json?\n?/g, '')
+                .replace(/```/g, '')
+                .trim();
+            const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+            if (!jsonMatch)
+                throw new Error('No JSON object found');
+            const parsed = JSON.parse(jsonMatch[0]);
+            const category = String(parsed.category ?? '').trim();
+            if (!category)
+                return null;
+            // Validate category is a known keyword (exact or fuzzy)
+            const resolved = this.resolveCategory(category);
+            if (!resolved) {
+                this.logger.warn({
+                    message: 'LLM returned unknown category',
+                    category,
+                    responsePreview: response.substring(0, 200),
+                });
+                return null;
+            }
+            return {
+                category: resolved,
+                confidence: Math.min(Number(parsed.confidence ?? 0.5), 1.0),
+                suggestedConceptName: parsed.conceptName ?? undefined,
+            };
+        }
+        catch (err) {
+            this.logger.warn({
+                message: 'Failed to parse classifier response',
+                error: err instanceof Error ? err.message : 'Unknown',
+                responsePreview: response.substring(0, 200),
+            });
+            return null;
+        }
+    }
+    /**
+     * Resolves a category name from LLM output to a known keyword.
+     * Handles exact match, then diacritics-normalized fuzzy match.
+     */
+    resolveCategory(input) {
+        // Exact match
+        if (ALL_CATEGORY_KEYWORDS.includes(input)) {
+            return input;
+        }
+        // Fuzzy match: normalize diacritics
+        const normalized = this.normalizeDiacritics(input.toLowerCase());
+        for (const cat of ALL_CATEGORY_KEYWORDS) {
+            const catNorm = this.normalizeDiacritics(cat.toLowerCase());
+            if (catNorm === normalized)
+                return cat;
+            // Partial match: LLM might return "Prodaja" for "6. Prodaja"
+            if (normalized.includes(catNorm) || catNorm.includes(normalized))
+                return cat;
+        }
+        return null;
+    }
+    /**
+     * Removes Serbian diacritics for fuzzy comparison.
+     */
+    normalizeDiacritics(str) {
+        return str
+            .replace(/č/g, 'c')
+            .replace(/ć/g, 'c')
+            .replace(/š/g, 's')
+            .replace(/ž/g, 'z')
+            .replace(/đ/g, 'dj');
+    }
+    /**
+     * Finds a concept by name, optionally filtered by category.
+     */
+    async findConceptByName(name, categoryKeyword) {
+        const concept = await this.prisma.concept.findFirst({
+            where: {
+                name: { equals: name, mode: 'insensitive' },
+                category: { contains: categoryKeyword, mode: 'insensitive' },
+            },
+            select: { id: true, name: true, category: true, definition: true },
+        });
+        if (!concept)
+            return null;
+        return {
+            conceptId: concept.id,
+            conceptName: concept.name,
+            category: concept.category,
+            definition: concept.definition,
+            score: 0.95,
+        };
+    }
+    /**
+     * Searches for concepts within a category using the category keyword.
+     * Uses `contains` matching to handle both "6. Prodaja" and "Prodaja" formats.
+     * Scores by keyword match count within the filtered set.
+     */
+    async findConceptsInCategory(userMessage, categoryKeyword, limit) {
+        // Extract keywords from user message
+        const words = userMessage
+            .toLowerCase()
+            .split(/\s+/)
+            .filter((w) => w.length >= 3)
+            .map((w) => w.replace(/[^a-zčćšžđàáâãäåèéêëìíîïòóôõöùúûüýÿñ]/gi, ''))
+            .filter((w) => w.length >= 3);
+        const commonWords = new Set([
+            'koji',
+            'koja',
+            'koje',
+            'kao',
+            'ali',
+            'ili',
+            'ako',
+            'jer',
+            'dok',
+            'več',
+            'vec',
+            'još',
+            'jos',
+            'sve',
+            'sam',
+            'smo',
+            'ste',
+            'ima',
+            'nije',
+            'biti',
+            'bio',
+            'bila',
+            'bilo',
+            'može',
+            'moze',
+            'treba',
+            'samo',
+            'ovo',
+            'taj',
+            'tog',
+            'tom',
+            'tim',
+            'kod',
+            'napravi',
+            'napraviti',
+            'hocu',
+            'hoću',
+            'želim',
+            'zelim',
+            'daj',
+            'molim',
+            'kreira',
+            'kreiraj',
+            'kreiranje',
+            'trebam',
+            'zelim',
+        ]);
+        const keywords = [...new Set(words.filter((w) => !commonWords.has(w)))];
+        // Category filter: matches both "6. Prodaja" and "Prodaja"
+        const categoryFilter = {
+            category: { contains: categoryKeyword, mode: 'insensitive' },
+        };
+        if (keywords.length === 0) {
+            // No keywords — return top concepts in category by sortOrder
+            const concepts = await this.prisma.concept.findMany({
+                where: categoryFilter,
+                select: { id: true, name: true, category: true, definition: true },
+                orderBy: { sortOrder: 'asc' },
+                take: limit,
+            });
+            return concepts.map((c) => ({
+                conceptId: c.id,
+                conceptName: c.name,
+                category: c.category,
+                definition: c.definition,
+                score: 0.7,
+            }));
+        }
+        // Search within category by keywords
+        const searchConditions = keywords.slice(0, 10).map((keyword) => ({
+            OR: [
+                { name: { contains: keyword, mode: 'insensitive' } },
+                { definition: { contains: keyword, mode: 'insensitive' } },
+            ],
+        }));
+        const concepts = await this.prisma.concept.findMany({
+            where: {
+                ...categoryFilter,
+                OR: searchConditions,
+            },
+            select: { id: true, name: true, category: true, definition: true },
+            take: limit * 3,
+        });
+        // Score by keyword match count
+        const scored = concepts.map((concept) => {
+            const nameLower = concept.name.toLowerCase();
+            const defLower = concept.definition.toLowerCase();
+            let matchScore = 0;
+            for (const keyword of keywords) {
+                if (nameLower.includes(keyword))
+                    matchScore += 3;
+                else if (defLower.includes(keyword))
+                    matchScore += 1;
+            }
+            return {
+                conceptId: concept.id,
+                conceptName: concept.name,
+                category: concept.category,
+                definition: concept.definition,
+                score: Math.min(0.5 + matchScore * 0.05, 0.95),
+            };
+        });
+        return scored.sort((a, b) => b.score - a.score).slice(0, limit);
+    }
+};
+exports.ConceptClassifierService = ConceptClassifierService;
+exports.ConceptClassifierService = ConceptClassifierService = ConceptClassifierService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _a : Object, typeof (_b = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _b : Object, typeof (_c = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _c : Object])
+], ConceptClassifierService);
+
+
+/***/ }),
+/* 122 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -12015,7 +12557,7 @@ exports.DepartmentGuard = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const department_categories_1 = __webpack_require__(117);
+const department_categories_1 = __webpack_require__(118);
 /**
  * Story 3.2: Department Fence Guard
  *
@@ -12128,7 +12670,7 @@ exports.DepartmentGuard = DepartmentGuard = DepartmentGuard_1 = tslib_1.__decora
 
 
 /***/ }),
-/* 121 */
+/* 123 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -12137,13 +12679,13 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.InvitationController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const invitation_service_1 = __webpack_require__(122);
-const create_invitation_dto_1 = __webpack_require__(123);
-const jwt_auth_guard_1 = __webpack_require__(45);
-const roles_guard_1 = __webpack_require__(54);
-const roles_decorator_1 = __webpack_require__(53);
-const current_user_decorator_1 = __webpack_require__(47);
-const jwt_strategy_1 = __webpack_require__(48);
+const invitation_service_1 = __webpack_require__(124);
+const create_invitation_dto_1 = __webpack_require__(125);
+const jwt_auth_guard_1 = __webpack_require__(46);
+const roles_guard_1 = __webpack_require__(55);
+const roles_decorator_1 = __webpack_require__(54);
+const current_user_decorator_1 = __webpack_require__(48);
+const jwt_strategy_1 = __webpack_require__(49);
 let InvitationController = class InvitationController {
     constructor(invitationService) {
         this.invitationService = invitationService;
@@ -12259,7 +12801,7 @@ exports.InvitationController = InvitationController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 122 */
+/* 124 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -12272,9 +12814,9 @@ const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const tenant_context_1 = __webpack_require__(9);
 const utils_1 = __webpack_require__(29);
-const prisma_1 = __webpack_require__(34);
-const email_1 = __webpack_require__(60);
-const brain_seeding_service_1 = __webpack_require__(116);
+const prisma_1 = __webpack_require__(35);
+const email_1 = __webpack_require__(61);
+const brain_seeding_service_1 = __webpack_require__(117);
 let InvitationService = InvitationService_1 = class InvitationService {
     constructor(prisma, emailService, configService, brainSeedingService) {
         this.prisma = prisma;
@@ -12585,7 +13127,7 @@ exports.InvitationService = InvitationService = InvitationService_1 = tslib_1.__
 
 
 /***/ }),
-/* 123 */
+/* 125 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -12593,8 +13135,8 @@ var _a;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CreateInvitationDto = void 0;
 const tslib_1 = __webpack_require__(4);
-const class_validator_1 = __webpack_require__(37);
-const prisma_1 = __webpack_require__(34);
+const class_validator_1 = __webpack_require__(38);
+const prisma_1 = __webpack_require__(35);
 class CreateInvitationDto {
 }
 exports.CreateInvitationDto = CreateInvitationDto;
@@ -12609,7 +13151,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 124 */
+/* 126 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -12618,11 +13160,11 @@ exports.TeamModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const email_1 = __webpack_require__(60);
+const email_1 = __webpack_require__(61);
 const tenant_context_1 = __webpack_require__(9);
-const auth_module_1 = __webpack_require__(40);
-const team_controller_1 = __webpack_require__(125);
-const team_service_1 = __webpack_require__(126);
+const auth_module_1 = __webpack_require__(41);
+const team_controller_1 = __webpack_require__(127);
+const team_service_1 = __webpack_require__(128);
 let TeamModule = class TeamModule {
 };
 exports.TeamModule = TeamModule;
@@ -12637,7 +13179,7 @@ exports.TeamModule = TeamModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 125 */
+/* 127 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -12646,15 +13188,15 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.TeamController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const team_service_1 = __webpack_require__(126);
-const remove_member_dto_1 = __webpack_require__(127);
-const designate_backup_owner_dto_1 = __webpack_require__(128);
-const jwt_auth_guard_1 = __webpack_require__(45);
-const roles_guard_1 = __webpack_require__(54);
-const mfa_required_guard_1 = __webpack_require__(58);
-const roles_decorator_1 = __webpack_require__(53);
-const current_user_decorator_1 = __webpack_require__(47);
-const jwt_strategy_1 = __webpack_require__(48);
+const team_service_1 = __webpack_require__(128);
+const remove_member_dto_1 = __webpack_require__(129);
+const designate_backup_owner_dto_1 = __webpack_require__(130);
+const jwt_auth_guard_1 = __webpack_require__(46);
+const roles_guard_1 = __webpack_require__(55);
+const mfa_required_guard_1 = __webpack_require__(59);
+const roles_decorator_1 = __webpack_require__(54);
+const current_user_decorator_1 = __webpack_require__(48);
+const jwt_strategy_1 = __webpack_require__(49);
 let TeamController = class TeamController {
     constructor(teamService) {
         this.teamService = teamService;
@@ -12826,7 +13368,7 @@ exports.TeamController = TeamController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 126 */
+/* 128 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -12837,7 +13379,7 @@ exports.TeamService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const email_1 = __webpack_require__(60);
+const email_1 = __webpack_require__(61);
 let TeamService = TeamService_1 = class TeamService {
     constructor(prisma, emailService) {
         this.prisma = prisma;
@@ -13200,14 +13742,14 @@ exports.TeamService = TeamService = TeamService_1 = tslib_1.__decorate([
 
 
 /***/ }),
-/* 127 */
+/* 129 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.RemoveMemberDto = void 0;
 const tslib_1 = __webpack_require__(4);
-const class_validator_1 = __webpack_require__(37);
+const class_validator_1 = __webpack_require__(38);
 class RemoveMemberDto {
 }
 exports.RemoveMemberDto = RemoveMemberDto;
@@ -13220,14 +13762,14 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 128 */
+/* 130 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DesignateBackupOwnerDto = void 0;
 const tslib_1 = __webpack_require__(4);
-const class_validator_1 = __webpack_require__(37);
+const class_validator_1 = __webpack_require__(38);
 class DesignateBackupOwnerDto {
 }
 exports.DesignateBackupOwnerDto = DesignateBackupOwnerDto;
@@ -13239,7 +13781,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 129 */
+/* 131 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -13249,18 +13791,18 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const tenant_context_1 = __webpack_require__(9);
-const auth_module_1 = __webpack_require__(40);
-const ai_gateway_module_1 = __webpack_require__(87);
-const notes_module_1 = __webpack_require__(130);
-const knowledge_module_1 = __webpack_require__(72);
-const memory_module_1 = __webpack_require__(134);
-const workflow_module_1 = __webpack_require__(142);
-const web_search_module_1 = __webpack_require__(143);
-const execution_module_1 = __webpack_require__(145);
-const attachments_module_1 = __webpack_require__(149);
-const conversation_controller_1 = __webpack_require__(156);
-const conversation_service_1 = __webpack_require__(157);
-const conversation_gateway_1 = __webpack_require__(160);
+const auth_module_1 = __webpack_require__(41);
+const ai_gateway_module_1 = __webpack_require__(88);
+const notes_module_1 = __webpack_require__(132);
+const knowledge_module_1 = __webpack_require__(73);
+const memory_module_1 = __webpack_require__(136);
+const workflow_module_1 = __webpack_require__(144);
+const web_search_module_1 = __webpack_require__(145);
+const execution_module_1 = __webpack_require__(147);
+const attachments_module_1 = __webpack_require__(152);
+const conversation_controller_1 = __webpack_require__(159);
+const conversation_service_1 = __webpack_require__(160);
+const conversation_gateway_1 = __webpack_require__(164);
 let ConversationModule = class ConversationModule {
 };
 exports.ConversationModule = ConversationModule;
@@ -13287,7 +13829,7 @@ exports.ConversationModule = ConversationModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 130 */
+/* 132 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -13296,10 +13838,10 @@ exports.NotesModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const auth_module_1 = __webpack_require__(40);
-const ai_gateway_module_1 = __webpack_require__(87);
-const notes_service_1 = __webpack_require__(131);
-const notes_controller_1 = __webpack_require__(132);
+const auth_module_1 = __webpack_require__(41);
+const ai_gateway_module_1 = __webpack_require__(88);
+const notes_service_1 = __webpack_require__(133);
+const notes_controller_1 = __webpack_require__(134);
 /**
  * Module for managing user notes.
  * Provides note creation, storage, and retrieval for AI-generated content.
@@ -13322,7 +13864,7 @@ exports.NotesModule = NotesModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 131 */
+/* 133 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -13334,8 +13876,8 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const cuid2_1 = __webpack_require__(32);
 const tenant_context_1 = __webpack_require__(9);
-const prisma_1 = __webpack_require__(34);
-const ai_gateway_service_1 = __webpack_require__(88);
+const prisma_1 = __webpack_require__(35);
+const ai_gateway_service_1 = __webpack_require__(89);
 /**
  * Service for managing user notes.
  * Provides CRUD operations for notes created from AI outputs and manual entry.
@@ -13445,6 +13987,21 @@ let NotesService = NotesService_1 = class NotesService {
                 children: { orderBy: { workflowStepNumber: 'asc' } },
             },
             orderBy: { createdAt: 'desc' },
+        });
+        return notes.map((n) => this.mapToNoteItemWithChildren(n));
+    }
+    /**
+     * Gets notes by their IDs with children included.
+     * Used for PDF export — preserves the order of noteIds passed in.
+     */
+    async getByIdsWithChildren(noteIds, userId, tenantId) {
+        if (noteIds.length === 0)
+            return [];
+        const notes = await this.prisma.note.findMany({
+            where: { id: { in: noteIds }, userId, tenantId, parentNoteId: null },
+            include: {
+                children: { orderBy: { workflowStepNumber: 'asc' } },
+            },
         });
         return notes.map((n) => this.mapToNoteItemWithChildren(n));
     }
@@ -13670,6 +14227,26 @@ let NotesService = NotesService_1 = class NotesService {
         if (!note) {
             throw new common_1.NotFoundException(`Note ${noteId} not found`);
         }
+        // M10: Validate status transitions — prevent backward transitions
+        // Review fix: Allow idempotent COMPLETED → COMPLETED (no-op)
+        if (note.status === status) {
+            return this.mapToNoteItem(note); // Already in target state
+        }
+        const validTransitions = {
+            PENDING: ['READY_FOR_REVIEW', 'COMPLETED'],
+            READY_FOR_REVIEW: ['COMPLETED', 'PENDING'],
+            COMPLETED: [], // Terminal state — no backward transition
+        };
+        const allowed = validTransitions[note.status ?? 'PENDING'] ?? ['READY_FOR_REVIEW', 'COMPLETED'];
+        if (!allowed.includes(status)) {
+            this.logger.warn({
+                message: 'Invalid status transition blocked',
+                noteId,
+                from: note.status,
+                to: status,
+            });
+            return this.mapToNoteItem(note);
+        }
         const updated = await this.prisma.note.update({
             where: { id: noteId },
             data: { status },
@@ -13719,9 +14296,10 @@ let NotesService = NotesService_1 = class NotesService {
         if (!note) {
             throw new common_1.NotFoundException(`Note ${noteId} not found`);
         }
+        // M11: Set status to COMPLETED when user submits a report
         const updated = await this.prisma.note.update({
             where: { id: noteId },
-            data: { userReport: report },
+            data: { userReport: report, status: 'COMPLETED' },
         });
         return this.mapToNoteItem(updated);
     }
@@ -14041,6 +14619,7 @@ Odgovori ISKLJUČIVO u JSON formatu:
             expectedOutcome: note.expectedOutcome ?? null,
             workflowStepNumber: note.workflowStepNumber ?? null,
             reusedFromNoteId: note.reusedFromNoteId ?? null,
+            agentEnrichments: note.agentEnrichments ?? null,
         };
     }
     mapToNoteItemWithChildren(note) {
@@ -14059,7 +14638,7 @@ exports.NotesService = NotesService = NotesService_1 = tslib_1.__decorate([
 
 
 /***/ }),
-/* 132 */
+/* 134 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -14068,11 +14647,11 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.NotesController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const jwt_auth_guard_1 = __webpack_require__(45);
-const current_user_decorator_1 = __webpack_require__(47);
-const notes_service_1 = __webpack_require__(131);
-const prisma_1 = __webpack_require__(34);
-const comment_dto_1 = __webpack_require__(133);
+const jwt_auth_guard_1 = __webpack_require__(46);
+const current_user_decorator_1 = __webpack_require__(48);
+const notes_service_1 = __webpack_require__(133);
+const prisma_1 = __webpack_require__(35);
+const comment_dto_1 = __webpack_require__(135);
 let NotesController = class NotesController {
     constructor(notesService) {
         this.notesService = notesService;
@@ -14304,14 +14883,14 @@ exports.NotesController = NotesController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 133 */
+/* 135 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.UpdateCommentDto = exports.CreateCommentDto = void 0;
 const tslib_1 = __webpack_require__(4);
-const class_validator_1 = __webpack_require__(37);
+const class_validator_1 = __webpack_require__(38);
 /**
  * DTO for creating a comment on a task or workflow step.
  */
@@ -14339,7 +14918,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 134 */
+/* 136 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -14349,13 +14928,13 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const tenant_context_1 = __webpack_require__(9);
-const auth_module_1 = __webpack_require__(40);
-const memory_controller_1 = __webpack_require__(135);
-const memory_service_1 = __webpack_require__(136);
-const memory_extraction_service_1 = __webpack_require__(139);
-const memory_embedding_service_1 = __webpack_require__(140);
-const memory_context_builder_service_1 = __webpack_require__(141);
-const llm_config_module_1 = __webpack_require__(73);
+const auth_module_1 = __webpack_require__(41);
+const memory_controller_1 = __webpack_require__(137);
+const memory_service_1 = __webpack_require__(138);
+const memory_extraction_service_1 = __webpack_require__(141);
+const memory_embedding_service_1 = __webpack_require__(142);
+const memory_context_builder_service_1 = __webpack_require__(143);
+const llm_config_module_1 = __webpack_require__(74);
 /**
  * Module for persistent memory across conversations.
  * Provides services for creating, retrieving, and managing user memories.
@@ -14391,7 +14970,7 @@ exports.MemoryModule = MemoryModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 135 */
+/* 137 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -14401,12 +14980,12 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.MemoryController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const class_validator_1 = __webpack_require__(37);
-const jwt_auth_guard_1 = __webpack_require__(45);
-const current_user_decorator_1 = __webpack_require__(47);
-const memory_service_1 = __webpack_require__(136);
-const create_memory_dto_1 = __webpack_require__(137);
-const update_memory_dto_1 = __webpack_require__(138);
+const class_validator_1 = __webpack_require__(38);
+const jwt_auth_guard_1 = __webpack_require__(46);
+const current_user_decorator_1 = __webpack_require__(48);
+const memory_service_1 = __webpack_require__(138);
+const create_memory_dto_1 = __webpack_require__(139);
+const update_memory_dto_1 = __webpack_require__(140);
 /**
  * Request body for forgetting all memories.
  * Requires typing "FORGET" to confirm deletion.
@@ -14615,7 +15194,7 @@ exports.MemoryController = MemoryController = MemoryController_1 = tslib_1.__dec
 
 
 /***/ }),
-/* 136 */
+/* 138 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -14941,7 +15520,7 @@ exports.MemoryService = MemoryService = MemoryService_1 = tslib_1.__decorate([
 
 
 /***/ }),
-/* 137 */
+/* 139 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -14949,8 +15528,8 @@ var _a, _b;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CreateMemoryDto = void 0;
 const tslib_1 = __webpack_require__(4);
-const class_validator_1 = __webpack_require__(37);
-const types_1 = __webpack_require__(84);
+const class_validator_1 = __webpack_require__(38);
+const types_1 = __webpack_require__(85);
 /**
  * DTO for creating a new memory entry.
  */
@@ -14989,14 +15568,14 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 138 */
+/* 140 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.UpdateMemoryDto = void 0;
 const tslib_1 = __webpack_require__(4);
-const class_validator_1 = __webpack_require__(37);
+const class_validator_1 = __webpack_require__(38);
 /**
  * DTO for updating/correcting a memory entry.
  * Source will automatically be set to USER_CORRECTED.
@@ -15016,7 +15595,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 139 */
+/* 141 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -15027,10 +15606,10 @@ exports.MemoryExtractionService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const memory_service_1 = __webpack_require__(136);
-const memory_embedding_service_1 = __webpack_require__(140);
-const llm_config_service_1 = __webpack_require__(75);
-const types_1 = __webpack_require__(84);
+const memory_service_1 = __webpack_require__(138);
+const memory_embedding_service_1 = __webpack_require__(142);
+const llm_config_service_1 = __webpack_require__(76);
+const types_1 = __webpack_require__(85);
 /**
  * Service for extracting memorable facts from conversations.
  * Uses LLM to identify client mentions, preferences, and facts.
@@ -15366,7 +15945,7 @@ exports.MemoryExtractionService = MemoryExtractionService = MemoryExtractionServ
 
 
 /***/ }),
-/* 140 */
+/* 142 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -15376,8 +15955,8 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.MemoryEmbeddingService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const memory_service_1 = __webpack_require__(136);
-const qdrant_client_service_1 = __webpack_require__(111);
+const memory_service_1 = __webpack_require__(138);
+const qdrant_client_service_1 = __webpack_require__(112);
 /** OpenAI API endpoint for embeddings */
 const OPENAI_EMBEDDINGS_URL = 'https://api.openai.com/v1/embeddings';
 /**
@@ -15649,7 +16228,7 @@ exports.MemoryEmbeddingService = MemoryEmbeddingService = MemoryEmbeddingService
 
 
 /***/ }),
-/* 141 */
+/* 143 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -15659,7 +16238,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.MemoryContextBuilderService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const memory_embedding_service_1 = __webpack_require__(140);
+const memory_embedding_service_1 = __webpack_require__(142);
 /**
  * Service for building memory context for AI prompts.
  * Formats relevant memories for RAG injection.
@@ -15833,7 +16412,7 @@ exports.MemoryContextBuilderService = MemoryContextBuilderService = MemoryContex
 
 
 /***/ }),
-/* 142 */
+/* 144 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -15842,13 +16421,14 @@ exports.WorkflowModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const knowledge_module_1 = __webpack_require__(72);
-const ai_gateway_module_1 = __webpack_require__(87);
-const notes_module_1 = __webpack_require__(130);
-const web_search_module_1 = __webpack_require__(143);
-const execution_module_1 = __webpack_require__(145);
-const workflow_service_1 = __webpack_require__(147);
-const yolo_scheduler_service_1 = __webpack_require__(148);
+const knowledge_module_1 = __webpack_require__(73);
+const ai_gateway_module_1 = __webpack_require__(88);
+const notes_module_1 = __webpack_require__(132);
+const web_search_module_1 = __webpack_require__(145);
+const execution_module_1 = __webpack_require__(147);
+const workflow_service_1 = __webpack_require__(149);
+const yolo_scheduler_service_1 = __webpack_require__(151);
+const prompt_checker_service_1 = __webpack_require__(150);
 let WorkflowModule = class WorkflowModule {
 };
 exports.WorkflowModule = WorkflowModule;
@@ -15862,14 +16442,14 @@ exports.WorkflowModule = WorkflowModule = tslib_1.__decorate([
             web_search_module_1.WebSearchModule,
             execution_module_1.ExecutionModule,
         ],
-        providers: [workflow_service_1.WorkflowService, yolo_scheduler_service_1.YoloSchedulerService],
+        providers: [workflow_service_1.WorkflowService, yolo_scheduler_service_1.YoloSchedulerService, prompt_checker_service_1.PromptCheckerService],
         exports: [workflow_service_1.WorkflowService, yolo_scheduler_service_1.YoloSchedulerService],
     })
 ], WorkflowModule);
 
 
 /***/ }),
-/* 143 */
+/* 145 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -15878,7 +16458,7 @@ exports.WebSearchModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const web_search_service_1 = __webpack_require__(144);
+const web_search_service_1 = __webpack_require__(146);
 let WebSearchModule = class WebSearchModule {
 };
 exports.WebSearchModule = WebSearchModule;
@@ -15892,7 +16472,7 @@ exports.WebSearchModule = WebSearchModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 144 */
+/* 146 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -15903,7 +16483,7 @@ exports.WebSearchService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const axios_1 = tslib_1.__importDefault(__webpack_require__(56));
+const axios_1 = tslib_1.__importDefault(__webpack_require__(57));
 const SEARCH_TIMEOUT_MS = 8_000;
 const PAGE_FETCH_TIMEOUT_MS = 10_000;
 const TOTAL_WEB_RESEARCH_TIMEOUT_MS = 15_000;
@@ -16123,7 +16703,7 @@ exports.WebSearchService = WebSearchService = WebSearchService_1 = tslib_1.__dec
 
 
 /***/ }),
-/* 145 */
+/* 147 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -16132,7 +16712,7 @@ exports.ExecutionModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const execution_state_service_1 = __webpack_require__(146);
+const execution_state_service_1 = __webpack_require__(148);
 let ExecutionModule = class ExecutionModule {
 };
 exports.ExecutionModule = ExecutionModule;
@@ -16146,7 +16726,7 @@ exports.ExecutionModule = ExecutionModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 146 */
+/* 148 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -16224,9 +16804,18 @@ let ExecutionStateService = ExecutionStateService_1 = class ExecutionStateServic
         });
     }
     /**
-     * Get all events for an execution since a given timestamp, ordered chronologically.
+     * Get events for an execution since a given timestamp, with tenant ownership verification.
+     * Returns empty array if the execution does not belong to the specified tenant.
      */
-    async getEventsSince(executionId, since) {
+    async getEventsSince(executionId, since, tenantId) {
+        // Verify execution belongs to this tenant before returning events
+        const execution = await this.prisma.execution.findFirst({
+            where: { id: executionId, tenantId },
+            select: { id: true },
+        });
+        if (!execution) {
+            return [];
+        }
         return this.prisma.executionEvent.findMany({
             where: {
                 executionId,
@@ -16236,18 +16825,26 @@ let ExecutionStateService = ExecutionStateService_1 = class ExecutionStateServic
         });
     }
     /**
-     * Get all active (executing or pending) executions for a tenant.
-     * Pass '*' for tenantId to get all tenants (used for server restart recovery).
+     * Get active (executing or pending) executions for a specific tenant.
      */
     async getActiveExecutions(tenantId) {
-        const where = {
-            status: { in: ['executing', 'pending'] },
-        };
-        if (tenantId !== '*') {
-            where.tenantId = tenantId;
-        }
         return this.prisma.execution.findMany({
-            where,
+            where: {
+                tenantId,
+                status: { in: ['executing', 'pending'] },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+    }
+    /**
+     * SYSTEM-ONLY: Get ALL active executions across all tenants for server restart recovery.
+     * Must NOT be called from user-facing code paths.
+     */
+    async getAllActiveExecutions() {
+        return this.prisma.execution.findMany({
+            where: {
+                status: { in: ['executing', 'pending'] },
+            },
             orderBy: { createdAt: 'desc' },
         });
     }
@@ -16265,17 +16862,36 @@ let ExecutionStateService = ExecutionStateService_1 = class ExecutionStateServic
         });
     }
     /**
-     * Find an execution by its planId.
+     * Find an execution by its planId, scoped to a specific tenant.
      */
-    async getByPlanId(planId) {
-        return this.prisma.execution.findUnique({
+    async getByPlanId(planId, tenantId) {
+        const execution = await this.prisma.execution.findUnique({
             where: { planId },
+        });
+        // Defense-in-depth: verify tenant ownership (findUnique can't filter by non-unique field)
+        if (execution && execution.tenantId !== tenantId) {
+            return null;
+        }
+        return execution;
+    }
+    /**
+     * Find stale executions for a specific tenant (stuck in executing state for too long).
+     */
+    async getStaleExecutions(tenantId, olderThanMinutes) {
+        const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000);
+        return this.prisma.execution.findMany({
+            where: {
+                tenantId,
+                status: 'executing',
+                updatedAt: { lt: cutoff },
+            },
         });
     }
     /**
-     * Find stale executions (stuck in executing state for too long).
+     * SYSTEM-ONLY: Find stale executions across ALL tenants for server restart recovery.
+     * Must NOT be called from user-facing code paths.
      */
-    async getStaleExecutions(olderThanMinutes) {
+    async getAllStaleExecutions(olderThanMinutes) {
         const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000);
         return this.prisma.execution.findMany({
             where: {
@@ -16285,7 +16901,9 @@ let ExecutionStateService = ExecutionStateService_1 = class ExecutionStateServic
         });
     }
     /**
-     * Delete old event journal entries for cleanup.
+     * SYSTEM-ONLY: Delete old event journal entries across all tenants for cleanup.
+     * This is an administrative housekeeping operation. ExecutionEvents inherit
+     * tenant scope through the Execution FK. Age-based pruning is tenant-agnostic by design.
      */
     async pruneOldEvents(olderThanDays) {
         const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
@@ -16306,30 +16924,31 @@ exports.ExecutionStateService = ExecutionStateService = ExecutionStateService_1 
 
 
 /***/ }),
-/* 147 */
+/* 149 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 var WorkflowService_1;
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.WorkflowService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const cuid2_1 = __webpack_require__(32);
 const tenant_context_1 = __webpack_require__(9);
-const prisma_1 = __webpack_require__(34);
-const concept_service_1 = __webpack_require__(104);
-const concept_matching_service_1 = __webpack_require__(109);
-const citation_injector_service_1 = __webpack_require__(113);
-const citation_service_1 = __webpack_require__(106);
-const ai_gateway_service_1 = __webpack_require__(88);
-const notes_service_1 = __webpack_require__(131);
-const web_search_service_1 = __webpack_require__(144);
-const business_context_service_1 = __webpack_require__(118);
-const concept_relevance_service_1 = __webpack_require__(119);
-const persona_prompts_1 = __webpack_require__(91);
-const department_categories_1 = __webpack_require__(117);
+const prisma_1 = __webpack_require__(35);
+const concept_service_1 = __webpack_require__(105);
+const concept_matching_service_1 = __webpack_require__(110);
+const citation_injector_service_1 = __webpack_require__(114);
+const citation_service_1 = __webpack_require__(107);
+const ai_gateway_service_1 = __webpack_require__(89);
+const notes_service_1 = __webpack_require__(133);
+const web_search_service_1 = __webpack_require__(146);
+const business_context_service_1 = __webpack_require__(119);
+const concept_relevance_service_1 = __webpack_require__(120);
+const prompt_checker_service_1 = __webpack_require__(150);
+const persona_prompts_1 = __webpack_require__(92);
+const department_categories_1 = __webpack_require__(118);
 const MAX_RECURSION_DEPTH = 10;
 const WORKFLOW_GENERATION_SYSTEM_PROMPT = `Ti si iskusan dizajner poslovnih radnih tokova za srpska preduzeća. Kreiraj strukturirane, sekvencijalne radne tokove gde svaki korak PROIZVODI konkretan poslovni dokument.
 
@@ -16358,7 +16977,7 @@ Primer LOŠ promptTemplate:
 VAŽNO: Sav tekst MORA biti na SRPSKOM JEZIKU.
 Vrati SAMO validan JSON niz bez markdown formatiranja.`;
 let WorkflowService = WorkflowService_1 = class WorkflowService {
-    constructor(prisma, conceptService, conceptMatchingService, citationInjectorService, citationService, aiGatewayService, notesService, webSearchService, businessContextService, conceptRelevanceService) {
+    constructor(prisma, conceptService, conceptMatchingService, citationInjectorService, citationService, aiGatewayService, notesService, webSearchService, businessContextService, conceptRelevanceService, promptCheckerService) {
         this.prisma = prisma;
         this.conceptService = conceptService;
         this.conceptMatchingService = conceptMatchingService;
@@ -16369,6 +16988,7 @@ let WorkflowService = WorkflowService_1 = class WorkflowService {
         this.webSearchService = webSearchService;
         this.businessContextService = businessContextService;
         this.conceptRelevanceService = conceptRelevanceService;
+        this.promptCheckerService = promptCheckerService;
         this.logger = new common_1.Logger(WorkflowService_1.name);
         /** In-memory store for active execution plans */
         this.activePlans = new Map();
@@ -16449,6 +17069,11 @@ let WorkflowService = WorkflowService_1 = class WorkflowService {
      * These are NOT cached — each task gets unique steps.
      */
     async generateTaskSpecificWorkflow(task, tenantId, userId) {
+        // Load tenant info for checker context
+        const tenant = await this.prisma.tenant.findUnique({
+            where: { id: tenantId },
+            select: { name: true, industry: true, description: true },
+        });
         // Load concept name if available
         let conceptName = 'Poslovni zadatak';
         let conceptContext = '';
@@ -16504,10 +17129,46 @@ Vrati JSON niz koraka. Svaki korak mora imati:
 - departmentTag (opciono: "CFO", "CMO", "CTO", "OPERATIONS", "LEGAL", "CREATIVE")
 
 Generiši 3-6 koraka. Poredaj logički prema zadatku.`;
+        // Pre-generation prompt quality check
+        let finalWorkflowPrompt = prompt;
+        try {
+            const checkResult = await this.promptCheckerService.checkAndEnrichPrompt({
+                userPrompt: prompt,
+                originalAsk: `${task.title}${task.content ? ' — ' + task.content : ''}`,
+                businessInfo: {
+                    companyName: tenant?.name ?? undefined,
+                    industry: tenant?.industry ?? undefined,
+                    description: tenant?.description ?? undefined,
+                },
+                tenantId,
+                userId,
+                conversationId: task.conversationId ?? undefined,
+                conceptName,
+                isWorkflowGeneration: true,
+            });
+            if (checkResult.enrichedPrompt) {
+                finalWorkflowPrompt = checkResult.enrichedPrompt;
+            }
+            this.logger.log({
+                message: 'Workflow generation prompt checked',
+                taskTitle: task.title,
+                verdict: checkResult.verdict,
+                issueCount: checkResult.issues.length,
+                cyclesUsed: checkResult.cyclesUsed,
+                durationMs: checkResult.durationMs,
+                enriched: !!checkResult.enrichedPrompt,
+            });
+        }
+        catch (err) {
+            this.logger.warn({
+                message: 'Prompt checker failed for workflow generation, proceeding with original',
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+        }
         let responseContent = '';
         await this.aiGatewayService.streamCompletionWithContext([
             { role: 'system', content: WORKFLOW_GENERATION_SYSTEM_PROMPT },
-            { role: 'user', content: prompt },
+            { role: 'user', content: finalWorkflowPrompt },
         ], { tenantId, userId, skipRateLimit: true, skipQuotaCheck: true, useFallback: true }, (chunk) => {
             responseContent += chunk;
         });
@@ -16971,10 +17632,26 @@ Generiši 4-6 koraka. Redosled:
      * Queries embeddings to find relevant concepts, loads full knowledge, and produces
      * actionable deliverables (not instructions). Citations come from known input concepts.
      */
-    async executeStepAutonomous(step, conversationId, userId, tenantId, onChunk, completedSummaries = []) {
-        // Load the workflow to get the prompt template
-        const workflow = await this.getOrGenerateWorkflow(step.conceptId, tenantId, userId);
-        const workflowStep = workflow.steps.find((s) => s.stepNumber === step.workflowStepNumber);
+    async executeStepAutonomous(step, conversationId, userId, tenantId, onChunk, completedSummaries = [], preloadedWorkflowSteps) {
+        // Use preloaded steps when available (e.g., from parallel-popuni which generates
+        // task-specific workflows that may differ from the cached generic workflow).
+        // Fall back to loading/generating the workflow from cache.
+        let workflowStep;
+        if (preloadedWorkflowSteps) {
+            workflowStep = preloadedWorkflowSteps.find((s) => s.stepNumber === step.workflowStepNumber);
+        }
+        if (!workflowStep) {
+            if (preloadedWorkflowSteps) {
+                this.logger.warn({
+                    message: 'Preloaded workflow steps missing step number, falling back to cached workflow',
+                    stepNumber: step.workflowStepNumber,
+                    conceptId: step.conceptId,
+                    preloadedStepNumbers: preloadedWorkflowSteps.map((s) => s.stepNumber),
+                });
+            }
+            const workflow = await this.getOrGenerateWorkflow(step.conceptId, tenantId, userId);
+            workflowStep = workflow.steps.find((s) => s.stepNumber === step.workflowStepNumber);
+        }
         if (!workflowStep) {
             throw new Error(`Workflow step ${step.workflowStepNumber} not found for concept ${step.conceptId}`);
         }
@@ -17181,9 +17858,48 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${taskSpecificContex
             .replace(/\{\{businessContext\}\}/g, tenant
             ? `za kompaniju "${tenant.name}" u industriji ${tenant.industry ?? 'opšte poslovanje'}`
             : 'za ovo poslovanje');
+        // 5b. Pre-execution prompt quality check
+        let finalPrompt = prompt;
+        try {
+            const checkResult = await this.promptCheckerService.checkAndEnrichPrompt({
+                userPrompt: prompt,
+                originalAsk: [step.taskTitle, step.taskContent].filter(Boolean).join(' — '),
+                businessInfo: {
+                    companyName: tenant?.name ?? undefined,
+                    industry: tenant?.industry ?? undefined,
+                    description: tenant?.description ?? undefined,
+                },
+                tenantId,
+                userId,
+                conversationId,
+                conceptName: step.conceptName,
+                stepTitle: step.title,
+            });
+            if (checkResult.enrichedPrompt) {
+                finalPrompt = checkResult.enrichedPrompt;
+            }
+            this.logger.log({
+                message: 'Prompt checker completed',
+                stepId: step.stepId,
+                verdict: checkResult.verdict,
+                issueCount: checkResult.issues.length,
+                issues: checkResult.issues.length > 0 ? checkResult.issues.map((i) => i.code) : [],
+                cyclesUsed: checkResult.cyclesUsed,
+                durationMs: checkResult.durationMs,
+                enriched: !!checkResult.enrichedPrompt,
+                warning: checkResult.warning,
+            });
+        }
+        catch (err) {
+            this.logger.warn({
+                message: 'Prompt checker failed, proceeding with original prompt',
+                stepId: step.stepId,
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+        }
         // 6. Stream AI response
         let fullContent = '';
-        await this.aiGatewayService.streamCompletionWithContext([{ role: 'user', content: prompt }], {
+        await this.aiGatewayService.streamCompletionWithContext([{ role: 'user', content: finalPrompt }], {
             tenantId,
             userId,
             conversationId,
@@ -17194,6 +17910,20 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${taskSpecificContex
             fullContent += chunk;
             onChunk(chunk);
         });
+        // 6b. Post-execution URL validation (non-blocking)
+        try {
+            const urlIssues = await this.promptCheckerService.validateUrls(fullContent);
+            if (urlIssues.length > 0) {
+                this.logger.warn({
+                    message: 'Unreachable URLs detected in LLM output',
+                    stepId: step.stepId,
+                    issues: urlIssues.map((i) => i.description),
+                });
+            }
+        }
+        catch {
+            // URL validation failure is non-blocking
+        }
         // 7. Inject citations from KNOWN input concepts (not post-hoc output scanning)
         let citations = [];
         let contentWithCitations = fullContent;
@@ -17371,7 +18101,13 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${taskSpecificContex
             relationshipType: r.relationshipType,
         }))
             .filter((r) => !existingConceptIds.has(r.concept.id))
-            .filter((r) => !visibleCategories || visibleCategories.includes(r.concept.category));
+            // C8: Strip number prefix for category matching (DB has "3. Marketing", filter has "Marketing")
+            .filter((r) => {
+            if (!visibleCategories)
+                return true;
+            const stripped = r.concept.category.replace(/^\d+\.\s*/, '').trim();
+            return visibleCategories.includes(r.concept.category) || visibleCategories.includes(stripped);
+        });
         // Story 3.3 AC5: Relevance scoring — filter by business relevance
         const tenant = await this.prisma.tenant.findUnique({
             where: { id: tenantId },
@@ -17449,12 +18185,336 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${taskSpecificContex
 exports.WorkflowService = WorkflowService;
 exports.WorkflowService = WorkflowService = WorkflowService_1 = tslib_1.__decorate([
     (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _b : Object, typeof (_c = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _c : Object, typeof (_d = typeof citation_injector_service_1.CitationInjectorService !== "undefined" && citation_injector_service_1.CitationInjectorService) === "function" ? _d : Object, typeof (_e = typeof citation_service_1.CitationService !== "undefined" && citation_service_1.CitationService) === "function" ? _e : Object, typeof (_f = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _f : Object, typeof (_g = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _g : Object, typeof (_h = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _h : Object, typeof (_j = typeof business_context_service_1.BusinessContextService !== "undefined" && business_context_service_1.BusinessContextService) === "function" ? _j : Object, typeof (_k = typeof concept_relevance_service_1.ConceptRelevanceService !== "undefined" && concept_relevance_service_1.ConceptRelevanceService) === "function" ? _k : Object])
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _b : Object, typeof (_c = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _c : Object, typeof (_d = typeof citation_injector_service_1.CitationInjectorService !== "undefined" && citation_injector_service_1.CitationInjectorService) === "function" ? _d : Object, typeof (_e = typeof citation_service_1.CitationService !== "undefined" && citation_service_1.CitationService) === "function" ? _e : Object, typeof (_f = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _f : Object, typeof (_g = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _g : Object, typeof (_h = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _h : Object, typeof (_j = typeof business_context_service_1.BusinessContextService !== "undefined" && business_context_service_1.BusinessContextService) === "function" ? _j : Object, typeof (_k = typeof concept_relevance_service_1.ConceptRelevanceService !== "undefined" && concept_relevance_service_1.ConceptRelevanceService) === "function" ? _k : Object, typeof (_l = typeof prompt_checker_service_1.PromptCheckerService !== "undefined" && prompt_checker_service_1.PromptCheckerService) === "function" ? _l : Object])
 ], WorkflowService);
 
 
 /***/ }),
-/* 148 */
+/* 150 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var PromptCheckerService_1;
+var _a, _b, _c;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PromptCheckerService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const axios_1 = tslib_1.__importDefault(__webpack_require__(57));
+const ai_gateway_service_1 = __webpack_require__(89);
+const web_search_service_1 = __webpack_require__(146);
+/** Maximum rewrite cycles before force pass-through */
+const MAX_REWRITE_CYCLES = 2;
+/** Timeout for URL HEAD requests (ms) */
+const URL_CHECK_TIMEOUT_MS = 3_000;
+/** Maximum URLs to validate per prompt */
+const MAX_URL_CHECKS = 5;
+/**
+ * Meta-prompt for the checker LLM. Evaluates prompt quality and returns structured JSON.
+ * Designed for fast execution (~200-500 output tokens) on a fallback model.
+ */
+const CHECKER_SYSTEM_PROMPT = `Ti si kontrolor kvaliteta AI promptova za srpski biznis alat. Tvoj posao je da PROCENIŠ da li je prompt dovoljno specifičan i kontekstualizovan PRE nego što se pošalje na izvršavanje.
+
+EVALUIRAJ prompt prema ovim kriterijumima:
+1. SPECIFIČNOST: Da li koristi PRAVO ime kompanije, industriju i specifične detalje? Ili koristi generičke placeholder-e ("Kompanija XYZ", "vaše poslovanje", "primer industrija")?
+2. PORAVNANJE SA ZAHTEVOM: Da li je prompt DIREKTNO povezan sa originalnim zahtevom korisnika? Ili se udaljio u generičku analizu?
+3. POSLOVNI KONTEKST: Da li su ime kompanije i industrija INTEGRISANI u sam prompt, ne samo pomenuti?
+4. AKCIONA ORIJENTACIJA: Da li prompt traži KONKRETAN rezultat (dokument, plan, analizu) ili generičke savete?
+5. JEZIK: Da li je prompt na srpskom jeziku?
+
+DONESI ODLUKU:
+- "pass" — prompt je dovoljno kvalitetan, pošalji ga na izvršavanje
+- "rewrite" — prompt ima problema, vratio sam poboljšanu verziju u enrichedPrompt
+- "enrich" — promptu nedostaju realni podaci, potrebna je web pretraga
+
+ZA "rewrite" i "enrich":
+- U enrichedPrompt OBAVEZNO zadrži SVE originalne instrukcije i dodaj specifičnost
+- NE menjaj osnovnu nameru prompta
+- ZAMENI svaki placeholder PRAVIM podacima iz poslovnog konteksta
+- DODAJ konkretne zahteve za format izlaza (tabele, brojke, rokovi)
+
+VRATI ISKLJUČIVO VALIDAN JSON (bez markdown):
+{
+  "verdict": "pass" | "rewrite" | "enrich",
+  "issues": [
+    {"code": "placeholder_detected" | "generic_content" | "missing_original_ask" | "missing_business_context" | "too_vague" | "language_mismatch", "description": "opis problema", "severity": "critical" | "warning"}
+  ],
+  "enrichedPrompt": "poboljšan prompt sa svim ispravkama (samo ako verdict != pass)",
+  "webSearchNeeded": true | false,
+  "searchQuery": "optimizovan upit za Google pretragu (samo ako webSearchNeeded=true)"
+}
+
+BUDI STROG ali EFIKASAN. Ako je prompt 80%+ dobar, vrati "pass". Fokusiraj se na KRITIČNE probleme:
+- Placeholder imena umesto pravih
+- Potpuno odsustvo poslovnog konteksta
+- Prompt koji nema veze sa korisnikovim zahtevom
+
+NE blokiraj promptove koji su funkcionalno OK ali ne savršeni.
+Odgovor MORA biti manji od 500 tokena.`;
+let PromptCheckerService = PromptCheckerService_1 = class PromptCheckerService {
+    constructor(aiGatewayService, webSearchService, configService) {
+        this.aiGatewayService = aiGatewayService;
+        this.webSearchService = webSearchService;
+        this.configService = configService;
+        this.logger = new common_1.Logger(PromptCheckerService_1.name);
+        const envValue = this.configService.get('PROMPT_CHECKER_ENABLED');
+        this.enabled = envValue !== 'false'; // Enabled by default unless explicitly disabled
+    }
+    /**
+     * Whether the prompt checker is enabled.
+     * Controlled by PROMPT_CHECKER_ENABLED env var (default: true).
+     */
+    isEnabled() {
+        return this.enabled;
+    }
+    /**
+     * Main entry point: checks a prompt for quality issues
+     * and optionally rewrites it, up to MAX_REWRITE_CYCLES times.
+     * Returns the final verdict with an enriched prompt if needed.
+     *
+     * Non-blocking: any failure returns original prompt unchanged.
+     */
+    async checkAndEnrichPrompt(context) {
+        const passThrough = {
+            verdict: 'pass',
+            issues: [],
+            webSearchNeeded: false,
+            cyclesUsed: 0,
+            durationMs: 0,
+        };
+        // Skip if disabled via env var
+        if (!this.enabled) {
+            return passThrough;
+        }
+        // Skip if no business context to validate against
+        if (!context.businessInfo.companyName) {
+            return passThrough;
+        }
+        const startTime = Date.now();
+        let currentPrompt = context.userPrompt;
+        let totalCycles = 0;
+        let lastResult = null;
+        for (let cycle = 0; cycle < MAX_REWRITE_CYCLES; cycle++) {
+            totalCycles = cycle + 1;
+            // 1. Run the LLM checker call
+            const checkResult = await this.runCheckerLlm(currentPrompt, context);
+            // 2. If pass, return immediately
+            if (checkResult.verdict === 'pass') {
+                return {
+                    ...checkResult,
+                    cyclesUsed: totalCycles,
+                    durationMs: Date.now() - startTime,
+                };
+            }
+            // 3. If web search needed and available, enrich
+            let enrichedPrompt = checkResult.enrichedPrompt ?? currentPrompt;
+            if (checkResult.webSearchNeeded &&
+                checkResult.searchQuery &&
+                this.webSearchService.isAvailable()) {
+                try {
+                    const searchResults = await this.webSearchService.searchAndExtract(checkResult.searchQuery, 3);
+                    if (searchResults.length > 0) {
+                        const webContext = this.webSearchService.formatSourcesAsObsidian(searchResults);
+                        enrichedPrompt = enrichedPrompt + '\n\n' + webContext;
+                    }
+                }
+                catch (err) {
+                    this.logger.warn({
+                        message: 'Checker web search failed (non-blocking)',
+                        error: err instanceof Error ? err.message : 'Unknown',
+                    });
+                }
+            }
+            // 4. Update prompt for next cycle
+            currentPrompt = enrichedPrompt;
+            lastResult = {
+                verdict: checkResult.verdict,
+                issues: [...checkResult.issues],
+                enrichedPrompt: currentPrompt,
+                webSearchNeeded: checkResult.webSearchNeeded,
+                searchQuery: checkResult.searchQuery,
+                cyclesUsed: totalCycles,
+                durationMs: Date.now() - startTime,
+            };
+            // If the checker returned 'enrich' (web search done), pass through
+            if (checkResult.verdict === 'enrich') {
+                return lastResult;
+            }
+            // If 'rewrite', loop again for re-evaluation
+        }
+        // Max cycles exceeded — pass through with warning
+        this.logger.warn({
+            message: 'Prompt checker max cycles exceeded, passing through',
+            cycles: totalCycles,
+            context: context.stepTitle ?? context.originalAsk?.substring(0, 100),
+        });
+        return {
+            verdict: 'pass',
+            issues: lastResult?.issues ?? [],
+            enrichedPrompt: currentPrompt,
+            webSearchNeeded: false,
+            cyclesUsed: totalCycles,
+            durationMs: Date.now() - startTime,
+            warning: 'Max rewrite cycles reached. Prompt passed through with warning.',
+        };
+    }
+    /**
+     * Calls the fallback LLM with the checker meta-prompt.
+     * Returns a structured verdict.
+     */
+    async runCheckerLlm(userPrompt, context) {
+        const checkerUserMessage = this.buildCheckerUserMessage(userPrompt, context);
+        let responseContent = '';
+        try {
+            await this.aiGatewayService.streamCompletionWithContext([
+                { role: 'system', content: CHECKER_SYSTEM_PROMPT },
+                { role: 'user', content: checkerUserMessage },
+            ], {
+                tenantId: context.tenantId,
+                userId: context.userId,
+                conversationId: context.conversationId,
+                skipRateLimit: true,
+                skipQuotaCheck: true,
+                useFallback: true,
+            }, (chunk) => {
+                responseContent += chunk;
+            });
+        }
+        catch (err) {
+            this.logger.warn({
+                message: 'Checker LLM call failed, defaulting to pass',
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+            return {
+                verdict: 'pass',
+                issues: [],
+                webSearchNeeded: false,
+            };
+        }
+        return this.parseCheckerResponse(responseContent, userPrompt);
+    }
+    /**
+     * Builds the user message sent to the checker LLM.
+     */
+    buildCheckerUserMessage(userPrompt, context) {
+        return `PROMPT ZA PROVERU:
+"""
+${userPrompt}
+"""
+
+ORIGINALNI ZAHTEV KORISNIKA:
+"""
+${context.originalAsk || 'Nije dostupan'}
+"""
+
+POSLOVNI KONTEKST:
+- Kompanija: ${context.businessInfo.companyName ?? 'NEPOZNATA'}
+- Industrija: ${context.businessInfo.industry ?? 'NEPOZNATA'}
+- Opis: ${context.businessInfo.description ?? 'Nema opisa'}
+
+KONCEPT: ${context.conceptName ?? 'Nema'}
+KORAK: ${context.stepTitle ?? 'N/A'}
+TIP: ${context.isWorkflowGeneration ? 'GENERISANJE RADNOG TOKA' : 'IZVRŠAVANJE KORAKA'}
+
+Analiziraj i vrati JSON.`;
+    }
+    /**
+     * Parses the checker LLM's JSON response into a typed result.
+     * Falls back to 'pass' on parse failure.
+     */
+    parseCheckerResponse(response, originalPrompt) {
+        try {
+            const cleaned = response
+                .replace(/```json?\n?/g, '')
+                .replace(/```/g, '')
+                .trim();
+            const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+            if (!jsonMatch)
+                throw new Error('No JSON object found');
+            const parsed = JSON.parse(jsonMatch[0]);
+            const verdict = this.normalizeVerdict(parsed.verdict);
+            const issues = Array.isArray(parsed.issues)
+                ? parsed.issues.map((i) => ({
+                    code: i.code ?? 'generic_content',
+                    description: i.description ?? '',
+                    severity: i.severity ?? 'warning',
+                }))
+                : [];
+            return {
+                verdict,
+                issues,
+                enrichedPrompt: verdict !== 'pass' ? (parsed.enrichedPrompt ?? originalPrompt) : undefined,
+                webSearchNeeded: !!parsed.webSearchNeeded,
+                searchQuery: parsed.searchQuery ?? undefined,
+            };
+        }
+        catch (err) {
+            this.logger.warn({
+                message: 'Failed to parse checker response, defaulting to pass',
+                error: err instanceof Error ? err.message : 'Unknown',
+                responsePreview: response.substring(0, 200),
+            });
+            return {
+                verdict: 'pass',
+                issues: [],
+                webSearchNeeded: false,
+            };
+        }
+    }
+    /**
+     * Normalizes the verdict string from LLM output.
+     */
+    normalizeVerdict(raw) {
+        const str = String(raw).toLowerCase().trim();
+        if (str === 'pass')
+            return 'pass';
+        if (str === 'rewrite')
+            return 'rewrite';
+        if (str === 'enrich')
+            return 'enrich';
+        return 'pass'; // Safe default
+    }
+    /**
+     * Extracts URLs from text and validates them with HEAD requests.
+     * Returns issues for unreachable URLs.
+     */
+    async validateUrls(text) {
+        const urlRegex = /https?:\/\/[^\s)>\]"']+/g;
+        const urls = [...new Set(text.match(urlRegex) ?? [])].slice(0, MAX_URL_CHECKS);
+        if (urls.length === 0)
+            return [];
+        const issues = [];
+        const results = await Promise.allSettled(urls.map((url) => axios_1.default
+            .head(url, {
+            timeout: URL_CHECK_TIMEOUT_MS,
+            maxRedirects: 3,
+            validateStatus: (status) => status < 400,
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MentorAI/1.0)' },
+        })
+            .then(() => ({ url, ok: true }))
+            .catch(() => ({ url, ok: false }))));
+        for (const result of results) {
+            if (result.status === 'fulfilled' && !result.value.ok) {
+                issues.push({
+                    code: 'unreachable_url',
+                    description: `URL nedostupan: ${result.value.url}`,
+                    severity: 'warning',
+                });
+            }
+        }
+        return issues;
+    }
+};
+exports.PromptCheckerService = PromptCheckerService;
+exports.PromptCheckerService = PromptCheckerService = PromptCheckerService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _a : Object, typeof (_b = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _b : Object, typeof (_c = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _c : Object])
+], PromptCheckerService);
+
+
+/***/ }),
+/* 151 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -17466,14 +18526,14 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const cuid2_1 = __webpack_require__(32);
 const tenant_context_1 = __webpack_require__(9);
-const prisma_1 = __webpack_require__(34);
-const workflow_service_1 = __webpack_require__(147);
-const notes_service_1 = __webpack_require__(131);
-const concept_service_1 = __webpack_require__(104);
-const concept_matching_service_1 = __webpack_require__(109);
-const curriculum_service_1 = __webpack_require__(107);
-const concept_extraction_service_1 = __webpack_require__(114);
-const concept_relevance_service_1 = __webpack_require__(119);
+const prisma_1 = __webpack_require__(35);
+const workflow_service_1 = __webpack_require__(149);
+const notes_service_1 = __webpack_require__(133);
+const concept_service_1 = __webpack_require__(105);
+const concept_matching_service_1 = __webpack_require__(110);
+const curriculum_service_1 = __webpack_require__(108);
+const concept_extraction_service_1 = __webpack_require__(115);
+const concept_relevance_service_1 = __webpack_require__(120);
 const MAX_LOG_BUFFER = 100;
 const SUMMARY_TRUNCATE_LENGTH = 300;
 const RETRY_BASE_DELAY_MS = 5_000; // 5s base, exponential: 5s, 15s, 45s
@@ -17881,7 +18941,7 @@ let YoloSchedulerService = YoloSchedulerService_1 = class YoloSchedulerService {
             // Execute the step using WorkflowService's shared logic
             const result = await this.workflowService.executeStepAutonomous(step, conversationId, userId, tenantId, () => {
                 /* Collect chunks silently — no per-step streaming in YOLO */
-            }, completedSummaries);
+            }, completedSummaries, workflow.steps);
             // Emit step-complete progress (Story 2.16)
             state.workerStepInfo.set(task.taskId, {
                 stepIndex: stepIdx,
@@ -18199,7 +19259,7 @@ exports.YoloSchedulerService = YoloSchedulerService = YoloSchedulerService_1 = t
 
 
 /***/ }),
-/* 149 */
+/* 152 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -18208,8 +19268,8 @@ exports.AttachmentsModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const attachments_controller_1 = __webpack_require__(150);
-const attachments_service_1 = __webpack_require__(152);
+const attachments_controller_1 = __webpack_require__(153);
+const attachments_service_1 = __webpack_require__(155);
 let AttachmentsModule = class AttachmentsModule {
 };
 exports.AttachmentsModule = AttachmentsModule;
@@ -18224,7 +19284,7 @@ exports.AttachmentsModule = AttachmentsModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 150 */
+/* 153 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -18234,10 +19294,10 @@ exports.AttachmentsController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const platform_express_1 = __webpack_require__(27);
-const express_1 = __webpack_require__(151);
-const jwt_auth_guard_1 = __webpack_require__(45);
-const current_user_decorator_1 = __webpack_require__(47);
-const attachments_service_1 = __webpack_require__(152);
+const express_1 = __webpack_require__(154);
+const jwt_auth_guard_1 = __webpack_require__(46);
+const current_user_decorator_1 = __webpack_require__(48);
+const attachments_service_1 = __webpack_require__(155);
 let AttachmentsController = class AttachmentsController {
     constructor(attachmentsService) {
         this.attachmentsService = attachmentsService;
@@ -18287,13 +19347,13 @@ exports.AttachmentsController = AttachmentsController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 151 */
+/* 154 */
 /***/ ((module) => {
 
 module.exports = require("express");
 
 /***/ }),
-/* 152 */
+/* 155 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -18427,7 +19487,7 @@ let AttachmentsService = AttachmentsService_1 = class AttachmentsService {
     async getAttachmentsByMessageId(messageId, tenantId) {
         const client = await this.prisma.getClient(tenantId);
         const attachments = await client.attachment.findMany({
-            where: { messageId },
+            where: { messageId, tenantId },
             select: {
                 id: true,
                 filename: true,
@@ -18450,7 +19510,7 @@ let AttachmentsService = AttachmentsService_1 = class AttachmentsService {
         let text = null;
         switch (mimeType) {
             case 'application/pdf': {
-                const pdfParse = __webpack_require__(153);
+                const pdfParse = __webpack_require__(156);
                 const result = await pdfParse(buffer);
                 text = result.text;
                 break;
@@ -18461,7 +19521,7 @@ let AttachmentsService = AttachmentsService_1 = class AttachmentsService {
                 break;
             }
             case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': {
-                const XLSX = __webpack_require__(154);
+                const XLSX = __webpack_require__(157);
                 const workbook = XLSX.read(buffer, { type: 'buffer' });
                 const sheets = [];
                 for (const name of workbook.SheetNames) {
@@ -18472,7 +19532,7 @@ let AttachmentsService = AttachmentsService_1 = class AttachmentsService {
                 break;
             }
             case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': {
-                const mammoth = __webpack_require__(155);
+                const mammoth = __webpack_require__(158);
                 const result = await mammoth.extractRawText({ buffer });
                 text = result.value;
                 break;
@@ -18498,41 +19558,42 @@ exports.AttachmentsService = AttachmentsService = AttachmentsService_1 = tslib_1
 
 
 /***/ }),
-/* 153 */
+/* 156 */
 /***/ ((module) => {
 
 module.exports = require("pdf-parse");
 
 /***/ }),
-/* 154 */
+/* 157 */
 /***/ ((module) => {
 
 module.exports = require("xlsx");
 
 /***/ }),
-/* 155 */
+/* 158 */
 /***/ ((module) => {
 
 module.exports = require("mammoth");
 
 /***/ }),
-/* 156 */
+/* 159 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
-var _a, _b, _c, _d, _e;
+var _a, _b, _c, _d, _e, _f;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ConversationController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const jwt_auth_guard_1 = __webpack_require__(45);
-const department_guard_1 = __webpack_require__(120);
-const current_user_decorator_1 = __webpack_require__(47);
-const conversation_service_1 = __webpack_require__(157);
-const create_conversation_dto_1 = __webpack_require__(158);
-const update_persona_dto_1 = __webpack_require__(159);
-const curriculum_service_1 = __webpack_require__(107);
-const concept_service_1 = __webpack_require__(104);
+const jwt_auth_guard_1 = __webpack_require__(46);
+const department_guard_1 = __webpack_require__(122);
+const current_user_decorator_1 = __webpack_require__(48);
+const conversation_service_1 = __webpack_require__(160);
+const create_conversation_dto_1 = __webpack_require__(161);
+const update_conversation_dto_1 = __webpack_require__(162);
+const update_persona_dto_1 = __webpack_require__(163);
+const curriculum_service_1 = __webpack_require__(108);
+const concept_service_1 = __webpack_require__(105);
 /**
  * Controller for chat conversation management.
  * All endpoints require JWT authentication.
@@ -18612,6 +19673,14 @@ let ConversationController = class ConversationController {
         const conversation = await this.conversationService.updatePersona(user.tenantId, conversationId, user.userId, dto.personaType);
         return { data: conversation };
     }
+    /**
+     * Rename a conversation (update its title).
+     * Placed AFTER :id/persona to avoid route collision.
+     */
+    async updateConversation(user, conversationId, dto) {
+        const conversation = await this.conversationService.updateTitle(user.tenantId, conversationId, user.userId, dto.title);
+        return { data: conversation };
+    }
 };
 exports.ConversationController = ConversationController;
 tslib_1.__decorate([
@@ -18676,6 +19745,16 @@ tslib_1.__decorate([
     tslib_1.__metadata("design:paramtypes", [Object, String, typeof (_e = typeof update_persona_dto_1.UpdatePersonaDto !== "undefined" && update_persona_dto_1.UpdatePersonaDto) === "function" ? _e : Object]),
     tslib_1.__metadata("design:returntype", Promise)
 ], ConversationController.prototype, "updatePersona", null);
+tslib_1.__decorate([
+    (0, common_1.Patch)(':id'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Param)('id')),
+    tslib_1.__param(2, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, String, typeof (_f = typeof update_conversation_dto_1.UpdateConversationDto !== "undefined" && update_conversation_dto_1.UpdateConversationDto) === "function" ? _f : Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ConversationController.prototype, "updateConversation", null);
 exports.ConversationController = ConversationController = tslib_1.__decorate([
     (0, common_1.Controller)('v1/conversations'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
@@ -18684,7 +19763,7 @@ exports.ConversationController = ConversationController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 157 */
+/* 160 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -18697,11 +19776,11 @@ const common_1 = __webpack_require__(1);
 const cuid2_1 = __webpack_require__(32);
 const tenant_context_1 = __webpack_require__(9);
 const client_1 = __webpack_require__(11);
-const concept_service_1 = __webpack_require__(104);
-const curriculum_service_1 = __webpack_require__(107);
-const citation_service_1 = __webpack_require__(106);
-const notes_service_1 = __webpack_require__(131);
-const department_categories_1 = __webpack_require__(117);
+const concept_service_1 = __webpack_require__(105);
+const curriculum_service_1 = __webpack_require__(108);
+const citation_service_1 = __webpack_require__(107);
+const notes_service_1 = __webpack_require__(133);
+const department_categories_1 = __webpack_require__(118);
 /**
  * Service for managing chat conversations.
  * All operations are tenant-scoped through the TenantPrismaService.
@@ -19368,6 +20447,65 @@ let ConversationService = ConversationService_1 = class ConversationService {
         });
         return this.mapConversation(updated);
     }
+    /**
+     * Deletes the last ASSISTANT message from a conversation for regeneration.
+     * Returns the last USER message content to re-process, or null if not applicable.
+     */
+    async deleteLastAssistantMessage(tenantId, conversationId, userId) {
+        const prisma = await this.tenantPrisma.getClient(tenantId);
+        const conversation = await prisma.conversation.findUnique({
+            where: { id: conversationId },
+        });
+        if (!conversation) {
+            throw new common_1.NotFoundException({
+                type: 'conversation_not_found',
+                title: 'Conversation Not Found',
+                status: 404,
+                detail: `Conversation with ID ${conversationId} not found`,
+            });
+        }
+        if (conversation.userId !== userId) {
+            throw new common_1.ForbiddenException({
+                type: 'conversation_access_denied',
+                title: 'Access Denied',
+                status: 403,
+                detail: 'You do not have access to this conversation',
+            });
+        }
+        // Get last two messages: should be [USER, ASSISTANT]
+        const lastMessages = await prisma.message.findMany({
+            where: { conversationId },
+            orderBy: { createdAt: 'desc' },
+            take: 2,
+        });
+        if (lastMessages.length < 2)
+            return null;
+        const lastMsg = lastMessages[0]; // most recent
+        const secondLastMsg = lastMessages[1]; // the user message before it
+        if (lastMsg.role !== 'ASSISTANT' || secondLastMsg.role !== 'USER') {
+            this.logger.warn({
+                message: 'Cannot regenerate: last messages are not USER->ASSISTANT pair',
+                conversationId,
+                lastRole: lastMsg.role,
+                secondLastRole: secondLastMsg.role,
+            });
+            return null;
+        }
+        // Delete the last AI message
+        await prisma.message.delete({
+            where: { id: lastMsg.id },
+        });
+        this.logger.log({
+            message: 'Deleted last assistant message for regeneration',
+            conversationId,
+            deletedMessageId: lastMsg.id,
+            tenantId,
+        });
+        return {
+            lastUserContent: secondLastMsg.content,
+            deletedMessageId: lastMsg.id,
+        };
+    }
     mapConversation(conversation, conceptName, conceptCategory) {
         return {
             id: conversation.id,
@@ -19418,7 +20556,7 @@ exports.ConversationService = ConversationService = ConversationService_1 = tsli
 
 
 /***/ }),
-/* 158 */
+/* 161 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -19426,8 +20564,8 @@ var _a;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CreateConversationDto = void 0;
 const tslib_1 = __webpack_require__(4);
-const class_validator_1 = __webpack_require__(37);
-const types_1 = __webpack_require__(84);
+const class_validator_1 = __webpack_require__(38);
+const types_1 = __webpack_require__(85);
 /**
  * Valid persona type values for validation.
  * Derived from shared PersonaType enum to avoid duplication.
@@ -19466,7 +20604,27 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 159 */
+/* 162 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.UpdateConversationDto = void 0;
+const tslib_1 = __webpack_require__(4);
+const class_validator_1 = __webpack_require__(38);
+class UpdateConversationDto {
+}
+exports.UpdateConversationDto = UpdateConversationDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    (0, class_validator_1.MaxLength)(255),
+    tslib_1.__metadata("design:type", String)
+], UpdateConversationDto.prototype, "title", void 0);
+
+
+/***/ }),
+/* 163 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -19474,8 +20632,8 @@ var _a;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.UpdatePersonaDto = void 0;
 const tslib_1 = __webpack_require__(4);
-const class_validator_1 = __webpack_require__(37);
-const types_1 = __webpack_require__(84);
+const class_validator_1 = __webpack_require__(38);
+const types_1 = __webpack_require__(85);
 /**
  * Valid persona type values for validation.
  * Derived from shared PersonaType enum to avoid duplication.
@@ -19498,56 +20656,58 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 160 */
+/* 164 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 var ConversationGateway_1;
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ConversationGateway = void 0;
 const tslib_1 = __webpack_require__(4);
-const websockets_1 = __webpack_require__(161);
-const socket_io_1 = __webpack_require__(162);
+const websockets_1 = __webpack_require__(165);
+const socket_io_1 = __webpack_require__(166);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const jsonwebtoken_1 = __webpack_require__(57);
-const jwks_rsa_1 = tslib_1.__importDefault(__webpack_require__(163));
-const conversation_service_1 = __webpack_require__(157);
-const ai_gateway_service_1 = __webpack_require__(88);
-const notes_service_1 = __webpack_require__(131);
-const concept_matching_service_1 = __webpack_require__(109);
-const concept_service_1 = __webpack_require__(104);
-const citation_injector_service_1 = __webpack_require__(113);
-const citation_service_1 = __webpack_require__(106);
-const memory_context_builder_service_1 = __webpack_require__(141);
-const memory_extraction_service_1 = __webpack_require__(139);
-const memory_service_1 = __webpack_require__(136);
-const concept_extraction_service_1 = __webpack_require__(114);
-const workflow_service_1 = __webpack_require__(147);
-const yolo_scheduler_service_1 = __webpack_require__(148);
-const web_search_service_1 = __webpack_require__(144);
-const business_context_service_1 = __webpack_require__(118);
-const execution_state_service_1 = __webpack_require__(146);
-const attachments_service_1 = __webpack_require__(152);
+const jsonwebtoken_1 = __webpack_require__(58);
+const jwks_rsa_1 = tslib_1.__importDefault(__webpack_require__(167));
+const conversation_service_1 = __webpack_require__(160);
+const ai_gateway_service_1 = __webpack_require__(89);
+const notes_service_1 = __webpack_require__(133);
+const concept_matching_service_1 = __webpack_require__(110);
+const concept_classifier_service_1 = __webpack_require__(121);
+const concept_service_1 = __webpack_require__(105);
+const citation_injector_service_1 = __webpack_require__(114);
+const citation_service_1 = __webpack_require__(107);
+const memory_context_builder_service_1 = __webpack_require__(143);
+const memory_extraction_service_1 = __webpack_require__(141);
+const memory_service_1 = __webpack_require__(138);
+const concept_extraction_service_1 = __webpack_require__(115);
+const workflow_service_1 = __webpack_require__(149);
+const yolo_scheduler_service_1 = __webpack_require__(151);
+const web_search_service_1 = __webpack_require__(146);
+const business_context_service_1 = __webpack_require__(119);
+const execution_state_service_1 = __webpack_require__(148);
+const attachments_service_1 = __webpack_require__(155);
 const tenant_context_1 = __webpack_require__(9);
 const cuid2_1 = __webpack_require__(32);
-const prisma_1 = __webpack_require__(34);
-const types_1 = __webpack_require__(84);
-const types_2 = __webpack_require__(84);
+const prisma_1 = __webpack_require__(35);
+const types_1 = __webpack_require__(85);
+const types_2 = __webpack_require__(85);
 /**
  * WebSocket gateway for real-time chat streaming.
  * Handles client connections, message sending, and AI response streaming.
  * Note: CORS origin is configured dynamically in afterInit using ConfigService.
  */
 let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
-    constructor(conversationService, aiGatewayService, configService, prisma, notesService, conceptMatchingService, citationInjectorService, citationService, memoryContextBuilder, memoryExtractionService, memoryService, workflowService, conceptService, conceptExtractionService, yoloScheduler, webSearchService, businessContextService, executionStateService, attachmentsService) {
+    constructor(conversationService, aiGatewayService, configService, prisma, notesService, conceptMatchingService, conceptClassifierService, citationInjectorService, citationService, memoryContextBuilder, memoryExtractionService, memoryService, workflowService, conceptService, conceptExtractionService, yoloScheduler, webSearchService, businessContextService, executionStateService, attachmentsService) {
         this.conversationService = conversationService;
         this.aiGatewayService = aiGatewayService;
         this.configService = configService;
         this.prisma = prisma;
         this.notesService = notesService;
         this.conceptMatchingService = conceptMatchingService;
+        this.conceptClassifierService = conceptClassifierService;
         this.citationInjectorService = citationInjectorService;
         this.citationService = citationService;
         this.memoryContextBuilder = memoryContextBuilder;
@@ -19562,6 +20722,8 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
         this.executionStateService = executionStateService;
         this.attachmentsService = attachmentsService;
         this.logger = new common_1.Logger(ConversationGateway_1.name);
+        /** Cached dev user resolved from DB (avoids repeat queries per connection) */
+        this.resolvedDevUser = null;
         // ─── YOLO Auto-Popuni Queue (H2 fix: sequential to avoid LLM overload) ───
         this.autoPopuniYoloQueue = [];
         this.isProcessingAutoPopuniYolo = false;
@@ -19582,7 +20744,7 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
      */
     async onModuleInit() {
         // Mark stale executions (stuck > 30 min) as failed
-        const stale = await this.executionStateService.getStaleExecutions(30);
+        const stale = await this.executionStateService.getAllStaleExecutions(30);
         for (const exec of stale) {
             await this.executionStateService.updateStatus(exec.id, 'failed', null, 'Server restarted during execution');
             this.logger.warn({
@@ -19592,7 +20754,7 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
             });
         }
         // Find recently active executions (not stale) that can be resumed
-        const resumable = await this.executionStateService.getActiveExecutions('*');
+        const resumable = await this.executionStateService.getAllActiveExecutions();
         for (const exec of resumable) {
             if (exec.type === 'yolo' || exec.type === 'domain-yolo') {
                 this.scheduleYoloResume(exec);
@@ -19796,8 +20958,9 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
      * Used after reconnect to catch up on missed events.
      */
     async handleReplayEvents(client, payload) {
+        const auth = client;
         const since = payload.since ? new Date(payload.since) : new Date(0);
-        const events = await this.executionStateService.getEventsSince(payload.executionId, since);
+        const events = await this.executionStateService.getEventsSince(payload.executionId, since, auth.tenantId);
         for (const event of events) {
             client.emit(event.eventName, event.payload);
         }
@@ -19805,6 +20968,45 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
             executionId: payload.executionId,
             eventCount: events.length,
         });
+    }
+    /**
+     * Resolves the real active tenant/user for DEV_MODE, matching JwtAuthGuard.getDevUser().
+     * Caches the result for server lifetime. Falls back to static IDs if DB query fails.
+     */
+    async resolveDevUser() {
+        if (this.resolvedDevUser)
+            return this.resolvedDevUser;
+        try {
+            const tenant = await this.prisma.tenant.findFirst({
+                where: { status: 'ACTIVE' },
+                orderBy: { createdAt: 'desc' },
+                select: { id: true },
+            });
+            if (tenant) {
+                const user = await this.prisma.user.findFirst({
+                    where: { tenantId: tenant.id, isActive: true },
+                    orderBy: { createdAt: 'asc' },
+                    select: { id: true },
+                });
+                if (user) {
+                    this.resolvedDevUser = { userId: user.id, tenantId: tenant.id };
+                    this.logger.log({
+                        message: 'WebSocket dev mode: resolved real tenant/user from DB',
+                        tenantId: tenant.id,
+                        userId: user.id,
+                    });
+                    return this.resolvedDevUser;
+                }
+            }
+        }
+        catch (err) {
+            this.logger.warn({
+                message: 'WebSocket dev mode: failed to resolve tenant from DB, using fallback',
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+        }
+        this.resolvedDevUser = { userId: 'dev-user-001', tenantId: 'dev-tenant-001' };
+        return this.resolvedDevUser;
     }
     /**
      * Handles new WebSocket connections.
@@ -19823,8 +21025,9 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
                         const jwtSecret = this.configService.get('JWT_SECRET');
                         if (jwtSecret) {
                             const payload = (0, jsonwebtoken_1.verify)(token, jwtSecret, { algorithms: ['HS256'] });
-                            const tokenUserId = payload.userId || payload.sub || 'dev-user-001';
-                            const tokenTenantId = payload.tenantId || 'dev-tenant-001';
+                            const devFallback = await this.resolveDevUser();
+                            const tokenUserId = payload.userId || payload.sub || devFallback.userId;
+                            const tokenTenantId = payload.tenantId || devFallback.tenantId;
                             // Verify the user actually exists in DB (may have been cleaned up)
                             const userExists = await this.prisma.user.findUnique({
                                 where: { id: tokenUserId },
@@ -19858,13 +21061,16 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
                         this.logger.debug('Dev mode: WebSocket JWT validation failed, using dev user fallback');
                     }
                 }
-                // No token or placeholder token — use dev fallback
-                authenticatedClient.userId = 'dev-user-001';
-                authenticatedClient.tenantId = 'dev-tenant-001';
-                await client.join('tenant:dev-tenant-001');
+                // No token or placeholder token — resolve dev user from DB
+                const devUser = await this.resolveDevUser();
+                authenticatedClient.userId = devUser.userId;
+                authenticatedClient.tenantId = devUser.tenantId;
+                await client.join(`tenant:${devUser.tenantId}`);
                 this.logger.log({
                     message: 'WebSocket client connected (dev mode, dev user)',
                     clientId: client.id,
+                    tenantId: devUser.tenantId,
+                    userId: devUser.userId,
                 });
                 return;
             }
@@ -19965,6 +21171,50 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
      * Handles incoming chat messages.
      * Saves user message, streams AI response, and saves AI message.
      */
+    async handleRegenerate(client, payload) {
+        const authenticatedClient = client;
+        const { conversationId } = payload;
+        if (!conversationId) {
+            client.emit('chat:error', {
+                type: 'invalid_payload',
+                message: 'conversationId is required for regeneration',
+            });
+            return;
+        }
+        try {
+            const result = await this.conversationService.deleteLastAssistantMessage(authenticatedClient.tenantId, conversationId, authenticatedClient.userId);
+            if (!result) {
+                client.emit('chat:error', {
+                    type: 'regenerate_failed',
+                    message: 'Cannot regenerate: no valid USER->ASSISTANT message pair found',
+                });
+                return;
+            }
+            // Notify frontend that the old message was deleted
+            client.emit('chat:message-deleted', {
+                messageId: result.deletedMessageId,
+                conversationId,
+            });
+            // Re-process by calling handleMessage with _isRegenerate flag (skips saving user message)
+            await this.handleMessage(client, {
+                conversationId,
+                content: result.lastUserContent,
+                _isRegenerate: true,
+            });
+        }
+        catch (error) {
+            this.logger.error({
+                message: 'Failed to regenerate response',
+                conversationId,
+                userId: authenticatedClient.userId,
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
+            client.emit('chat:error', {
+                type: 'regenerate_error',
+                message: error instanceof Error ? error.message : 'Failed to regenerate response',
+            });
+        }
+    }
     async handleMessage(client, payload) {
         const authenticatedClient = client;
         const { conversationId, content, attachmentIds: rawAttachmentIds } = payload;
@@ -20010,21 +21260,24 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
                     .getExtractedText(attachmentIds, authenticatedClient.tenantId)
                     .catch(() => '');
             }
-            // Save user message
-            const userMessage = await this.conversationService.addMessage(authenticatedClient.tenantId, conversationId, types_2.MessageRole.USER, content);
-            // Link attachments to the saved message
-            if (attachmentIds && attachmentIds.length > 0) {
-                await Promise.all(attachmentIds.map((attId) => this.attachmentsService
-                    .linkToMessage(attId, userMessage.id, authenticatedClient.tenantId)
-                    .catch((err) => {
-                    this.logger.warn(`Failed to link attachment ${attId}: ${err}`);
-                })));
+            // Save user message (skipped during regeneration — message already exists)
+            let userMessage;
+            if (!payload._isRegenerate) {
+                userMessage = await this.conversationService.addMessage(authenticatedClient.tenantId, conversationId, types_2.MessageRole.USER, content);
+                // Link attachments to the saved message
+                if (attachmentIds && attachmentIds.length > 0) {
+                    await Promise.all(attachmentIds.map((attId) => this.attachmentsService
+                        .linkToMessage(attId, userMessage.id, authenticatedClient.tenantId)
+                        .catch((err) => {
+                        this.logger.warn(`Failed to link attachment ${attId}: ${err}`);
+                    })));
+                }
+                // Emit confirmation of user message received
+                client.emit('chat:message-received', {
+                    messageId: userMessage.id,
+                    role: 'USER',
+                });
             }
-            // Emit confirmation of user message received
-            client.emit('chat:message-received', {
-                messageId: userMessage.id,
-                role: 'USER',
-            });
             // Get conversation history for context
             const conversation = await this.conversationService.getConversation(authenticatedClient.tenantId, conversationId, authenticatedClient.userId);
             // Format messages for AI (inject attachment context into last user message)
@@ -20241,7 +21494,7 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
                 conversationId,
                 userId: authenticatedClient.userId,
                 tenantId: authenticatedClient.tenantId,
-                userMessageId: userMessage.id,
+                userMessageId: userMessage?.id ?? 'regenerated',
                 aiMessageId: aiMessage.id,
                 confidenceScore: confidence?.score ?? 'N/A',
                 confidenceLevel: confidence?.level ?? 'N/A',
@@ -20284,15 +21537,19 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
                 : undefined;
             this.memoryExtractionService
                 .extractMemories(conversation.messages.concat([
-                {
-                    id: userMessage.id,
-                    conversationId,
-                    role: types_2.MessageRole.USER,
-                    content,
-                    confidenceScore: null,
-                    confidenceFactors: null,
-                    createdAt: new Date().toISOString(),
-                },
+                ...(userMessage
+                    ? [
+                        {
+                            id: userMessage.id,
+                            conversationId,
+                            role: types_2.MessageRole.USER,
+                            content,
+                            confidenceScore: null,
+                            confidenceFactors: null,
+                            createdAt: new Date().toISOString(),
+                        },
+                    ]
+                    : []),
                 {
                     id: aiMessage.id,
                     conversationId,
@@ -20590,8 +21847,9 @@ Ako nema zadataka: []`;
         const conv = await this.conversationService.getConversation(tenantId, conversationId, userId);
         if (conv.conceptId)
             return;
-        // Use semantic search to find best matching concept
-        const matches = await this.conceptMatchingService.findRelevantConcepts(`${userMessage}\n${aiResponse}`, { limit: 1, threshold: 0.75 });
+        // Use LLM classifier to determine intent → category → best concept
+        // Falls back to standard semantic/keyword search on LLM failure
+        const matches = await this.conceptClassifierService.classifyAndMatch(userMessage, aiResponse, { limit: 1, threshold: 0.5 }, { tenantId, userId, conversationId });
         const topMatch = matches[0];
         if (topMatch) {
             await this.conversationService.updateConceptId(tenantId, conversationId, userId, topMatch.conceptId);
@@ -20607,10 +21865,11 @@ Ako nema zadataka: []`;
                 conceptName: topMatch.conceptName,
             });
             this.logger.log({
-                message: 'Conversation auto-classified',
+                message: 'Conversation auto-classified (LLM)',
                 conversationId,
                 conceptId: topMatch.conceptId,
                 conceptName: topMatch.conceptName,
+                category: topMatch.category,
                 score: topMatch.score,
             });
         }
@@ -20942,13 +22201,35 @@ Odgovori SAMO sa validnim JSON nizom:
             totalTasks: tasks.length,
             completedTasks: completedCount,
         });
-        // TODO(H4): After auto-popuni completes tasks, traverse concept_relationships
-        // to spawn new PENDING tasks for ADVANCED/related concepts. This would close
-        // the autonomous growth loop (Business Brain architecture). Requires:
-        // 1. Query concept_relationships for outgoing edges from completed concepts
-        // 2. Create PENDING tasks for connected concepts that don't already have tasks
-        // 3. Depth limit to prevent infinite auto-popuni → spawn → auto-popuni loops
-        // 4. Must NOT re-trigger triggerAutoAiPopuni on spawned tasks (break recursion)
+        // C7: After auto-popuni completes tasks, traverse concept_relationships
+        // to spawn new PENDING tasks for ADVANCED/related concepts (autonomous growth loop)
+        const completedConceptIds = [
+            ...new Set(tasks
+                .filter((t) => completedTaskIds.includes(t.id) && t.conceptId)
+                .map((t) => t.conceptId)),
+        ];
+        if (completedConceptIds.length > 0) {
+            this.workflowService
+                .discoverAndCreatePendingTasks(completedConceptIds, userId, tenantId)
+                .then((newConceptIds) => {
+                if (newConceptIds.length > 0) {
+                    this.emitToTenant(tenantId, executionId, 'tree:tasks-discovered', {
+                        conceptIds: newConceptIds,
+                        timestamp: new Date().toISOString(),
+                    });
+                    this.logger.log({
+                        message: 'Auto-popuni: post-execution discovery created new tasks',
+                        newTaskCount: newConceptIds.length,
+                    });
+                }
+            })
+                .catch((err) => {
+                this.logger.warn({
+                    message: 'Post auto-popuni discovery failed (non-blocking)',
+                    error: err instanceof Error ? err.message : 'Unknown',
+                });
+            });
+        }
     }
     /**
      * Auto-popuni for a single task:
@@ -21034,7 +22315,7 @@ Odgovori SAMO sa validnim JSON nizom:
                     };
                     const result = await this.workflowService.executeStepAutonomous(step, convId ?? '', userId, tenantId, () => {
                         /* auto-popuni: collect silently */
-                    }, completedSummaries);
+                    }, completedSummaries, workflow.steps);
                     // Dedup: check if child note already exists
                     const existingSubTask = await this.notesService.findExistingSubTask(tenantId, task.id, workflowStep.stepNumber);
                     if (!existingSubTask) {
@@ -21530,12 +22811,13 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                 userId,
                 taskCount: payload.taskIds.length,
             });
-            // Load tasks
+            // Load only PENDING tasks — skip already completed ones to avoid re-execution
             const tasks = await this.prisma.note.findMany({
                 where: {
                     id: { in: payload.taskIds },
                     tenantId,
                     noteType: 'TASK',
+                    status: 'PENDING',
                 },
                 select: {
                     id: true,
@@ -21565,6 +22847,47 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
             }
             // Resolve PREREQUISITE dependency layers
             const layers = await this.resolveParallelDependencies(tasks);
+            // Create per-concept conversations (same pattern as handleWorkflowApproval line 3463)
+            const conceptConversations = new Map();
+            const uniqueConceptIds = [
+                ...new Set(tasks.filter((t) => t.conceptId).map((t) => t.conceptId)),
+            ];
+            for (const conceptId of uniqueConceptIds) {
+                // Use actual concept name from DB, fall back to task title
+                let conceptName = 'Zadatak';
+                try {
+                    const concept = await this.conceptService.findById(conceptId);
+                    conceptName = concept.name;
+                }
+                catch {
+                    const taskForConcept = tasks.find((t) => t.conceptId === conceptId);
+                    conceptName = taskForConcept?.title ?? 'Zadatak';
+                }
+                try {
+                    const conv = await this.conversationService.createConversation(tenantId, userId, conceptName, undefined, conceptId);
+                    conceptConversations.set(conceptId, conv.id);
+                }
+                catch (err) {
+                    this.logger.warn({
+                        message: 'Failed to create concept conversation for parallel-popuni',
+                        conceptId,
+                        error: err instanceof Error ? err.message : 'Unknown',
+                    });
+                }
+            }
+            // Link task notes to their concept conversations
+            for (const task of tasks) {
+                if (task.conceptId && conceptConversations.has(task.conceptId)) {
+                    await this.prisma.note
+                        .update({
+                        where: { id: task.id },
+                        data: { conversationId: conceptConversations.get(task.conceptId) },
+                    })
+                        .catch(() => {
+                        /* ignore link failure */
+                    });
+                }
+            }
             // Build initial task states
             const initialStates = tasks.map((t) => ({
                 taskId: t.id,
@@ -21578,11 +22901,18 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
             };
             client.emit('parallel-popuni:start', startPayload);
             // Run the parallel loop (fire-and-forget with error handling)
-            this.runParallelPopuniLoop(client, layers, batchId, tenantId, userId, payload.conversationId, autoPopuni).catch((err) => {
+            this.runParallelPopuniLoop(client, layers, batchId, tenantId, userId, payload.conversationId, autoPopuni, conceptConversations).catch((err) => {
+                this.parallelPopuniCancelled.delete(batchId);
                 this.logger.error({
                     message: 'Parallel Popuni loop crashed',
                     batchId,
                     error: err instanceof Error ? err.message : 'Unknown',
+                });
+                // C2: Always emit batch-done even on crash so frontend UI doesn't get stuck
+                client.emit('parallel-popuni:batch-done', {
+                    batchId,
+                    completedCount: 0,
+                    failedCount: 1,
                 });
             });
         }
@@ -21684,7 +23014,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
     /**
      * Execute all dependency layers, running all tasks within a layer simultaneously.
      */
-    async runParallelPopuniLoop(client, layers, batchId, tenantId, userId, conversationId, autoPopuni) {
+    async runParallelPopuniLoop(client, layers, batchId, tenantId, userId, conversationId, autoPopuni, conceptConversations) {
         // Cache business context once for all tasks
         const businessContext = await this.buildBusinessContext(tenantId, userId);
         const completedSummaries = new Map();
@@ -21700,7 +23030,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                 taskCount: layer.length,
             });
             // Run ALL tasks in this layer simultaneously
-            const results = await Promise.allSettled(layer.map((task) => this.executeParallelPopuniWorker(client, task, batchId, tenantId, userId, businessContext, completedSummaries, autoPopuni)));
+            const results = await Promise.allSettled(layer.map((task) => this.executeParallelPopuniWorker(client, task, batchId, tenantId, userId, businessContext, completedSummaries, autoPopuni, conceptConversations)));
             for (const result of results) {
                 if (result.status === 'fulfilled') {
                     completedCount++;
@@ -21725,13 +23055,45 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
             completedCount,
             failedCount,
         });
+        // Story 3.2: Discover related concepts and create new pending tasks
+        const completedConceptIds = [
+            ...new Set(layers
+                .flat()
+                .filter((task) => completedSummaries.has(task.id) && task.conceptId)
+                .map((task) => task.conceptId)),
+        ];
+        if (completedConceptIds.length > 0) {
+            this.workflowService
+                .discoverAndCreatePendingTasks(completedConceptIds, userId, tenantId)
+                .then((newConceptIds) => {
+                if (newConceptIds.length > 0) {
+                    client.emit('tree:tasks-discovered', {
+                        conceptIds: newConceptIds,
+                        conversationId,
+                        timestamp: new Date().toISOString(),
+                    });
+                    this.logger.log({
+                        message: 'Parallel Popuni: post-execution discovery created new tasks',
+                        batchId,
+                        newTaskCount: newConceptIds.length,
+                    });
+                }
+            })
+                .catch((err) => {
+                this.logger.warn({
+                    message: 'Post parallel-popuni discovery failed (non-blocking)',
+                    batchId,
+                    error: err instanceof Error ? err.message : 'Unknown',
+                });
+            });
+        }
     }
     /**
      * Execute a single task in the parallel popuni batch.
      * Full lifecycle: workflow → steps → synthesis → scoring (if autoPopuni).
      * Modeled after autoPopuniSingleTask but emits parallel-popuni events.
      */
-    async executeParallelPopuniWorker(client, task, batchId, tenantId, userId, businessContext, completedSummaries, autoPopuni) {
+    async executeParallelPopuniWorker(client, task, batchId, tenantId, userId, businessContext, completedSummaries, autoPopuni, conceptConversations) {
         const taskNote = await this.prisma.note.findUnique({ where: { id: task.id } });
         if (!taskNote)
             throw new Error(`Task ${task.id} not found`);
@@ -21747,7 +23109,10 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
             completedSummaries.set(task.id, (taskNote.userReport ?? '').substring(0, 500));
             return;
         }
-        const convId = taskNote.conversationId ?? '';
+        // Prefer per-concept conversation, fall back to task's stored conversationId
+        const convId = (taskNote.conceptId && conceptConversations.has(taskNote.conceptId)
+            ? conceptConversations.get(taskNote.conceptId)
+            : taskNote.conversationId) || '';
         try {
             // ── Phase 1: Generate workflow ──
             const progressWorkflow = {
@@ -21833,7 +23198,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                                 },
                             ]
                             : []),
-                    ]);
+                    ], workflow.steps);
                     // Dedup: check if child note already exists
                     const existingSubTask = await this.notesService.findExistingSubTask(tenantId, task.id, workflowStep.stepNumber);
                     if (!existingSubTask) {
@@ -22429,7 +23794,7 @@ PRAVILA:
                                 index: stepIdx * 1000 + completedSummaries.length,
                                 stepTitle: workflowStep.title,
                             });
-                        }, completedSummaries);
+                        }, completedSummaries, workflow.steps);
                         // Dedup: check if child note already exists for this step
                         const existingSubTask = await this.notesService.findExistingSubTask(authenticatedClient.tenantId, payload.taskId, workflowStep.stepNumber);
                         if (!existingSubTask) {
@@ -22814,13 +24179,14 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                 score = rawScore * 10; // Scale 1-10 → 10-100
             }
         }
-        // 6. Update the task note with optimized result and score
+        // 6. Update the task note with optimized result, score, and mark COMPLETED (M11)
         await this.prisma.note.update({
             where: { id: taskId },
             data: {
                 userReport: fullResult,
                 aiScore: score,
                 aiFeedback: score !== null ? `AI ocena: ${score}/100` : null,
+                status: 'COMPLETED',
             },
         });
         this.logger.log({
@@ -22933,7 +24299,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                 originalConversationId: payload.conversationId,
             };
             client.emit('workflow:conversations-created', conversationsPayload);
-            // Start YOLO scheduler
+            // H1: Create Execution record for YOLO (enables recovery on server restart)
             const executionBudget = parseInt(process.env['YOLO_EXECUTION_BUDGET'] ?? '50', 10);
             const config = {
                 maxConcurrency: 3,
@@ -22941,10 +24307,15 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                 retryAttempts: 3,
                 maxExecutionBudget: executionBudget,
             };
+            const executionId = await this.executionStateService.createExecution(authenticatedClient.tenantId, authenticatedClient.userId, 'yolo', undefined, payload.conversationId, { config });
             this.yoloScheduler
                 .startYoloExecution(authenticatedClient.tenantId, authenticatedClient.userId, payload.conversationId, config, {
                 onProgress: (progress) => {
                     client.emit('workflow:yolo-progress', progress);
+                    // Update checkpoint for recovery
+                    this.executionStateService
+                        .updateCheckpoint(executionId, { completedCount: progress.completed })
+                        .catch(() => { });
                 },
                 onComplete: (result) => {
                     client.emit('workflow:yolo-complete', result);
@@ -22952,12 +24323,23 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                         conversationId: payload.conversationId,
                         count: 0,
                     });
+                    // Mark execution as completed
+                    this.executionStateService
+                        .updateStatus(executionId, 'completed', {
+                        completed: result.completed,
+                        failed: result.failed,
+                        total: result.total,
+                    })
+                        .catch(() => { });
                 },
                 onError: (error) => {
                     client.emit('workflow:error', {
                         message: error,
                         conversationId: payload.conversationId,
                     });
+                    this.executionStateService
+                        .updateStatus(executionId, 'failed', null, error)
+                        .catch(() => { });
                 },
                 saveMessage: async (_role, content, conceptId) => {
                     const targetConvId = conceptId && conceptConversations.has(conceptId)
@@ -22994,6 +24376,10 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                         discoveredConversationId,
                     });
                 },
+                // H3: Wire onTaskCompleted for auto AI popuni after each YOLO task
+                onTaskCompleted: (taskId, conversationId) => {
+                    this.enqueueAutoPopuniAfterYolo(client, authenticatedClient.tenantId, authenticatedClient.userId, taskId, conversationId);
+                },
             }, conceptConversations)
                 .catch((err) => {
                 this.logger.error({
@@ -23004,6 +24390,9 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                     message: err instanceof Error ? err.message : 'YOLO execution failed',
                     conversationId: payload.conversationId,
                 });
+                this.executionStateService
+                    .updateStatus(executionId, 'failed', null, err instanceof Error ? err.message : 'Unknown')
+                    .catch(() => { });
             });
         }
         catch (error) {
@@ -23032,7 +24421,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
             });
             // Create per-concept conversations for discovered tasks
             const conceptConversations = new Map();
-            // Start YOLO with category scoping
+            // H1: Create Execution record for domain YOLO
             const executionBudget = parseInt(process.env['YOLO_EXECUTION_BUDGET'] ?? '50', 10);
             const config = {
                 maxConcurrency: 3,
@@ -23040,10 +24429,14 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                 retryAttempts: 3,
                 maxExecutionBudget: executionBudget,
             };
+            const executionId = await this.executionStateService.createExecution(authenticatedClient.tenantId, authenticatedClient.userId, 'domain-yolo', undefined, payload.conversationId, { config, category: payload.category });
             this.yoloScheduler
                 .startYoloExecution(authenticatedClient.tenantId, authenticatedClient.userId, payload.conversationId, config, {
                 onProgress: (progress) => {
                     client.emit('workflow:yolo-progress', progress);
+                    this.executionStateService
+                        .updateCheckpoint(executionId, { completedCount: progress.completed })
+                        .catch(() => { });
                 },
                 onComplete: (result) => {
                     client.emit('workflow:yolo-complete', result);
@@ -23051,12 +24444,22 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                         conversationId: payload.conversationId,
                         count: 0,
                     });
+                    this.executionStateService
+                        .updateStatus(executionId, 'completed', {
+                        completed: result.completed,
+                        failed: result.failed,
+                        total: result.total,
+                    })
+                        .catch(() => { });
                 },
                 onError: (error) => {
                     client.emit('workflow:error', {
                         message: error,
                         conversationId: payload.conversationId,
                     });
+                    this.executionStateService
+                        .updateStatus(executionId, 'failed', null, error)
+                        .catch(() => { });
                 },
                 saveMessage: async (_role, content, conceptId) => {
                     const targetConvId = conceptId && conceptConversations.has(conceptId)
@@ -23093,6 +24496,10 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                         discoveredConversationId,
                     });
                 },
+                // H3: Wire onTaskCompleted for auto AI popuni after each domain YOLO task
+                onTaskCompleted: (taskId, conversationId) => {
+                    this.enqueueAutoPopuniAfterYolo(client, authenticatedClient.tenantId, authenticatedClient.userId, taskId, conversationId);
+                },
             }, conceptConversations, payload.category // Story 3.2: per-domain scope
             )
                 .catch((err) => {
@@ -23105,6 +24512,9 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                     message: err instanceof Error ? err.message : 'Domain YOLO failed',
                     conversationId: payload.conversationId,
                 });
+                this.executionStateService
+                    .updateStatus(executionId, 'failed', null, err instanceof Error ? err.message : 'Unknown')
+                    .catch(() => { });
             });
         }
         catch (error) {
@@ -23449,7 +24859,16 @@ Kompanija: ${tenant.name}`;
 - Koristi bullet liste za nabrajanje, NE dugačke paragrafe
 - NIKADA ne piši odgovor bez bar jednog callout bloka
 - Koristi tabele kada god imaš numeričke podatke ili poređenja
---- KRAJ FORMATIRANJA ---`;
+--- KRAJ FORMATIRANJA ---
+
+--- FUNKCIONALNOSTI APLIKACIJE koje možeš da koristiš ---
+- Kreiranje zadataka: Predloži konkretne zadatke korisniku na osnovu razgovora
+- Pretraga weba: Koristi web pretragu za aktuelne podatke i statistike
+- Poslovni kontekst: Imaš pristup svim memorijama i poslovnom profilu kompanije
+- Radni tokovi: Možeš da generišeš višekoračne planove za složene zadatke
+- Koncepti: Možeš da preporučiš relevantne poslovne koncepte iz baze znanja
+Kada korisnik pita šta možeš ili traži pomoć, pomeni ove funkcionalnosti.
+--- KRAJ FUNKCIONALNOSTI ---`;
             this.logger.log({
                 message: 'Business context built for chat',
                 tenantId,
@@ -23643,29 +25062,37 @@ FORMAT BRIEFA:
 exports.ConversationGateway = ConversationGateway;
 tslib_1.__decorate([
     (0, websockets_1.WebSocketServer)(),
-    tslib_1.__metadata("design:type", typeof (_v = typeof socket_io_1.Server !== "undefined" && socket_io_1.Server) === "function" ? _v : Object)
+    tslib_1.__metadata("design:type", typeof (_w = typeof socket_io_1.Server !== "undefined" && socket_io_1.Server) === "function" ? _w : Object)
 ], ConversationGateway.prototype, "server", void 0);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('execution:get-active'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_w = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _w : Object]),
-    tslib_1.__metadata("design:returntype", typeof (_x = typeof Promise !== "undefined" && Promise) === "function" ? _x : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_x = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _x : Object]),
+    tslib_1.__metadata("design:returntype", typeof (_y = typeof Promise !== "undefined" && Promise) === "function" ? _y : Object)
 ], ConversationGateway.prototype, "handleGetActiveExecutions", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('execution:replay-events'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_y = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _y : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_z = typeof Promise !== "undefined" && Promise) === "function" ? _z : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_z = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _z : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_0 = typeof Promise !== "undefined" && Promise) === "function" ? _0 : Object)
 ], ConversationGateway.prototype, "handleReplayEvents", null);
+tslib_1.__decorate([
+    (0, websockets_1.SubscribeMessage)('chat:regenerate'),
+    tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
+    tslib_1.__param(1, (0, websockets_1.MessageBody)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_1 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _1 : Object, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ConversationGateway.prototype, "handleRegenerate", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('chat:message-send'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_0 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _0 : Object, Object]),
+    tslib_1.__metadata("design:paramtypes", [typeof (_2 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _2 : Object, Object]),
     tslib_1.__metadata("design:returntype", Promise)
 ], ConversationGateway.prototype, "handleMessage", null);
 tslib_1.__decorate([
@@ -23673,23 +25100,23 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_1 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _1 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_2 = typeof Promise !== "undefined" && Promise) === "function" ? _2 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_3 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _3 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_4 = typeof Promise !== "undefined" && Promise) === "function" ? _4 : Object)
 ], ConversationGateway.prototype, "handleRunAgents", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('workflow:parallel-popuni'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_3 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _3 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_4 = typeof Promise !== "undefined" && Promise) === "function" ? _4 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_5 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _5 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_6 = typeof Promise !== "undefined" && Promise) === "function" ? _6 : Object)
 ], ConversationGateway.prototype, "handleParallelPopuni", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('parallel-popuni:cancel'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_5 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _5 : Object, Object]),
+    tslib_1.__metadata("design:paramtypes", [typeof (_7 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _7 : Object, Object]),
     tslib_1.__metadata("design:returntype", void 0)
 ], ConversationGateway.prototype, "handleParallelPopuniCancel", null);
 tslib_1.__decorate([
@@ -23697,23 +25124,23 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_6 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _6 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_7 = typeof Promise !== "undefined" && Promise) === "function" ? _7 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_8 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _8 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_9 = typeof Promise !== "undefined" && Promise) === "function" ? _9 : Object)
 ], ConversationGateway.prototype, "handleGetPlan", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('workflow:approve'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_8 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _8 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_9 = typeof Promise !== "undefined" && Promise) === "function" ? _9 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_10 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _10 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_11 = typeof Promise !== "undefined" && Promise) === "function" ? _11 : Object)
 ], ConversationGateway.prototype, "handleWorkflowApproval", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('workflow:cancel'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_10 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _10 : Object, Object]),
+    tslib_1.__metadata("design:paramtypes", [typeof (_12 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _12 : Object, Object]),
     tslib_1.__metadata("design:returntype", void 0)
 ], ConversationGateway.prototype, "handleWorkflowCancel", null);
 tslib_1.__decorate([
@@ -23721,7 +25148,7 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_11 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _11 : Object, Object]),
+    tslib_1.__metadata("design:paramtypes", [typeof (_13 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _13 : Object, Object]),
     tslib_1.__metadata("design:returntype", void 0)
 ], ConversationGateway.prototype, "handleStepContinue", null);
 tslib_1.__decorate([
@@ -23729,40 +25156,40 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_12 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _12 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_13 = typeof Promise !== "undefined" && Promise) === "function" ? _13 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_14 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _14 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_15 = typeof Promise !== "undefined" && Promise) === "function" ? _15 : Object)
 ], ConversationGateway.prototype, "handleExecuteTaskAi", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('task:submit-result'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_14 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _14 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_15 = typeof Promise !== "undefined" && Promise) === "function" ? _15 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_16 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _16 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_17 = typeof Promise !== "undefined" && Promise) === "function" ? _17 : Object)
 ], ConversationGateway.prototype, "handleSubmitTaskResult", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('workflow:start-yolo'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_16 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _16 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_17 = typeof Promise !== "undefined" && Promise) === "function" ? _17 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_18 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _18 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_19 = typeof Promise !== "undefined" && Promise) === "function" ? _19 : Object)
 ], ConversationGateway.prototype, "handleStartYolo", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('yolo:start-domain'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_18 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _18 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_19 = typeof Promise !== "undefined" && Promise) === "function" ? _19 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_20 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _20 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_21 = typeof Promise !== "undefined" && Promise) === "function" ? _21 : Object)
 ], ConversationGateway.prototype, "handleStartDomainYolo", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('discovery:send-message'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_20 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _20 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_21 = typeof Promise !== "undefined" && Promise) === "function" ? _21 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_22 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _22 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_23 = typeof Promise !== "undefined" && Promise) === "function" ? _23 : Object)
 ], ConversationGateway.prototype, "handleDiscoveryMessage", null);
 exports.ConversationGateway = ConversationGateway = ConversationGateway_1 = tslib_1.__decorate([
     (0, websockets_1.WebSocketGateway)({
@@ -23772,30 +25199,30 @@ exports.ConversationGateway = ConversationGateway = ConversationGateway_1 = tsli
             credentials: true,
         },
     }),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _c : Object, typeof (_d = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _d : Object, typeof (_e = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _e : Object, typeof (_f = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _f : Object, typeof (_g = typeof citation_injector_service_1.CitationInjectorService !== "undefined" && citation_injector_service_1.CitationInjectorService) === "function" ? _g : Object, typeof (_h = typeof citation_service_1.CitationService !== "undefined" && citation_service_1.CitationService) === "function" ? _h : Object, typeof (_j = typeof memory_context_builder_service_1.MemoryContextBuilderService !== "undefined" && memory_context_builder_service_1.MemoryContextBuilderService) === "function" ? _j : Object, typeof (_k = typeof memory_extraction_service_1.MemoryExtractionService !== "undefined" && memory_extraction_service_1.MemoryExtractionService) === "function" ? _k : Object, typeof (_l = typeof memory_service_1.MemoryService !== "undefined" && memory_service_1.MemoryService) === "function" ? _l : Object, typeof (_m = typeof workflow_service_1.WorkflowService !== "undefined" && workflow_service_1.WorkflowService) === "function" ? _m : Object, typeof (_o = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _o : Object, typeof (_p = typeof concept_extraction_service_1.ConceptExtractionService !== "undefined" && concept_extraction_service_1.ConceptExtractionService) === "function" ? _p : Object, typeof (_q = typeof yolo_scheduler_service_1.YoloSchedulerService !== "undefined" && yolo_scheduler_service_1.YoloSchedulerService) === "function" ? _q : Object, typeof (_r = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _r : Object, typeof (_s = typeof business_context_service_1.BusinessContextService !== "undefined" && business_context_service_1.BusinessContextService) === "function" ? _s : Object, typeof (_t = typeof execution_state_service_1.ExecutionStateService !== "undefined" && execution_state_service_1.ExecutionStateService) === "function" ? _t : Object, typeof (_u = typeof attachments_service_1.AttachmentsService !== "undefined" && attachments_service_1.AttachmentsService) === "function" ? _u : Object])
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _c : Object, typeof (_d = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _d : Object, typeof (_e = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _e : Object, typeof (_f = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _f : Object, typeof (_g = typeof concept_classifier_service_1.ConceptClassifierService !== "undefined" && concept_classifier_service_1.ConceptClassifierService) === "function" ? _g : Object, typeof (_h = typeof citation_injector_service_1.CitationInjectorService !== "undefined" && citation_injector_service_1.CitationInjectorService) === "function" ? _h : Object, typeof (_j = typeof citation_service_1.CitationService !== "undefined" && citation_service_1.CitationService) === "function" ? _j : Object, typeof (_k = typeof memory_context_builder_service_1.MemoryContextBuilderService !== "undefined" && memory_context_builder_service_1.MemoryContextBuilderService) === "function" ? _k : Object, typeof (_l = typeof memory_extraction_service_1.MemoryExtractionService !== "undefined" && memory_extraction_service_1.MemoryExtractionService) === "function" ? _l : Object, typeof (_m = typeof memory_service_1.MemoryService !== "undefined" && memory_service_1.MemoryService) === "function" ? _m : Object, typeof (_o = typeof workflow_service_1.WorkflowService !== "undefined" && workflow_service_1.WorkflowService) === "function" ? _o : Object, typeof (_p = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _p : Object, typeof (_q = typeof concept_extraction_service_1.ConceptExtractionService !== "undefined" && concept_extraction_service_1.ConceptExtractionService) === "function" ? _q : Object, typeof (_r = typeof yolo_scheduler_service_1.YoloSchedulerService !== "undefined" && yolo_scheduler_service_1.YoloSchedulerService) === "function" ? _r : Object, typeof (_s = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _s : Object, typeof (_t = typeof business_context_service_1.BusinessContextService !== "undefined" && business_context_service_1.BusinessContextService) === "function" ? _t : Object, typeof (_u = typeof execution_state_service_1.ExecutionStateService !== "undefined" && execution_state_service_1.ExecutionStateService) === "function" ? _u : Object, typeof (_v = typeof attachments_service_1.AttachmentsService !== "undefined" && attachments_service_1.AttachmentsService) === "function" ? _v : Object])
 ], ConversationGateway);
 
 
 /***/ }),
-/* 161 */
+/* 165 */
 /***/ ((module) => {
 
 module.exports = require("@nestjs/websockets");
 
 /***/ }),
-/* 162 */
+/* 166 */
 /***/ ((module) => {
 
 module.exports = require("socket.io");
 
 /***/ }),
-/* 163 */
+/* 167 */
 /***/ ((module) => {
 
 module.exports = require("jwks-rsa");
 
 /***/ }),
-/* 164 */
+/* 168 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -23804,17 +25231,17 @@ exports.OnboardingModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const auth_module_1 = __webpack_require__(40);
-const ai_gateway_module_1 = __webpack_require__(87);
-const notes_module_1 = __webpack_require__(130);
-const knowledge_module_1 = __webpack_require__(72);
-const conversation_module_1 = __webpack_require__(129);
-const web_search_module_1 = __webpack_require__(143);
-const file_upload_module_1 = __webpack_require__(39);
-const workflow_module_1 = __webpack_require__(142);
-const onboarding_controller_1 = __webpack_require__(165);
-const onboarding_service_1 = __webpack_require__(166);
-const onboarding_metric_service_1 = __webpack_require__(167);
+const auth_module_1 = __webpack_require__(41);
+const ai_gateway_module_1 = __webpack_require__(88);
+const notes_module_1 = __webpack_require__(132);
+const knowledge_module_1 = __webpack_require__(73);
+const conversation_module_1 = __webpack_require__(131);
+const web_search_module_1 = __webpack_require__(145);
+const file_upload_module_1 = __webpack_require__(40);
+const workflow_module_1 = __webpack_require__(144);
+const onboarding_controller_1 = __webpack_require__(169);
+const onboarding_service_1 = __webpack_require__(170);
+const onboarding_metric_service_1 = __webpack_require__(171);
 /**
  * Module for the onboarding quick win flow.
  * Provides sub-5-minute first value experience for new users.
@@ -23843,7 +25270,7 @@ exports.OnboardingModule = OnboardingModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 165 */
+/* 169 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -23854,12 +25281,12 @@ exports.OnboardingController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const platform_express_1 = __webpack_require__(27);
-const onboarding_service_1 = __webpack_require__(166);
-const quick_win_dto_1 = __webpack_require__(169);
-const jwt_auth_guard_1 = __webpack_require__(45);
-const mfa_required_guard_1 = __webpack_require__(58);
-const skip_mfa_decorator_1 = __webpack_require__(50);
-const current_user_decorator_1 = __webpack_require__(47);
+const onboarding_service_1 = __webpack_require__(170);
+const quick_win_dto_1 = __webpack_require__(173);
+const jwt_auth_guard_1 = __webpack_require__(46);
+const mfa_required_guard_1 = __webpack_require__(59);
+const skip_mfa_decorator_1 = __webpack_require__(51);
+const current_user_decorator_1 = __webpack_require__(48);
 /**
  * Controller for onboarding quick win flow.
  * Handles the wizard for sub-5-minute first value experience.
@@ -24158,35 +25585,36 @@ exports.OnboardingController = OnboardingController = OnboardingController_1 = t
 
 
 /***/ }),
-/* 166 */
+/* 170 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 var OnboardingService_1;
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.OnboardingService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const prisma_1 = __webpack_require__(34);
-const ai_gateway_service_1 = __webpack_require__(88);
-const notes_service_1 = __webpack_require__(131);
-const concept_service_1 = __webpack_require__(104);
-const concept_matching_service_1 = __webpack_require__(109);
-const conversation_service_1 = __webpack_require__(157);
-const web_search_service_1 = __webpack_require__(144);
-const brain_seeding_service_1 = __webpack_require__(116);
-const workflow_service_1 = __webpack_require__(147);
-const onboarding_metric_service_1 = __webpack_require__(167);
-const quick_task_templates_1 = __webpack_require__(168);
-const department_categories_1 = __webpack_require__(117);
+const prisma_1 = __webpack_require__(35);
+const ai_gateway_service_1 = __webpack_require__(89);
+const notes_service_1 = __webpack_require__(133);
+const concept_service_1 = __webpack_require__(105);
+const concept_matching_service_1 = __webpack_require__(110);
+const conversation_service_1 = __webpack_require__(160);
+const web_search_service_1 = __webpack_require__(146);
+const brain_seeding_service_1 = __webpack_require__(117);
+const concept_classifier_service_1 = __webpack_require__(121);
+const workflow_service_1 = __webpack_require__(149);
+const onboarding_metric_service_1 = __webpack_require__(171);
+const quick_task_templates_1 = __webpack_require__(172);
+const department_categories_1 = __webpack_require__(118);
 /**
  * Service for managing the onboarding quick win flow.
  * Enables users to experience AI value within 5 minutes of registration.
  */
 let OnboardingService = OnboardingService_1 = class OnboardingService {
-    constructor(prisma, aiGateway, notesService, metricService, conceptService, conceptMatchingService, conversationService, webSearchService, brainSeedingService, workflowService) {
+    constructor(prisma, aiGateway, notesService, metricService, conceptService, conceptMatchingService, conversationService, webSearchService, brainSeedingService, conceptClassifierService, workflowService) {
         this.prisma = prisma;
         this.aiGateway = aiGateway;
         this.notesService = notesService;
@@ -24196,6 +25624,7 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
         this.conversationService = conversationService;
         this.webSearchService = webSearchService;
         this.brainSeedingService = brainSeedingService;
+        this.conceptClassifierService = conceptClassifierService;
         this.workflowService = workflowService;
         this.logger = new common_1.Logger(OnboardingService_1.name);
     }
@@ -24215,7 +25644,7 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
         }
         let text;
         try {
-            const { PDFParse } = await Promise.resolve().then(() => tslib_1.__importStar(__webpack_require__(153)));
+            const { PDFParse } = await Promise.resolve().then(() => tslib_1.__importStar(__webpack_require__(156)));
             const parser = new PDFParse({ data: pdfBuffer });
             const result = await parser.getText();
             text = result.text?.trim() ?? '';
@@ -24984,6 +26413,7 @@ Kreiraj personalizovani Poslovni Mozak sa tačno 10 prioritizovanih zadataka.`;
             welcomeConversationId: welcomeConversationId ?? undefined,
             executionMode: executionMode ?? undefined,
             planId,
+            taskIds: taskIds.length > 0 ? taskIds : undefined,
         };
     }
     /**
@@ -25071,7 +26501,12 @@ Kreiraj personalizovani Poslovni Mozak sa tačno 10 prioritizovanih zadataka.`;
             diversified.unshift(removed[0]);
         }
         // Limit to top 10 concepts
-        const topTasks = diversified.slice(0, 10);
+        let topTasks = diversified.slice(0, 10);
+        // Verify low-confidence embedding matches via LLM classifier
+        const tenantContext = [tenant.name, tenant.industry, tenant.description]
+            .filter(Boolean)
+            .join('. ');
+        topTasks = await this.verifyConceptMatches(topTasks, tenantContext, tenantId, userId);
         // Load prerequisite relationships for all selected concepts
         const topConceptIds = topTasks.map((m) => m.conceptId);
         const prerequisites = await this.prisma.conceptRelationship.findMany({
@@ -25253,6 +26688,43 @@ Napiši personalizovanu dobrodošlicu.`;
         return { conversationId: conversation.id, taskIds: createdTaskIds };
     }
     /**
+     * Verifies low-confidence embedding matches via LLM classifier.
+     * Only reclassifies tasks with score < 0.6. Non-blocking — errors keep original.
+     */
+    async verifyConceptMatches(tasks, tenantContext, tenantId, userId) {
+        // Run all LLM verifications in parallel to avoid serial latency
+        const results = await Promise.allSettled(tasks.map(async (task) => {
+            // High-confidence matches: keep as-is
+            if (task.score >= 0.6)
+                return task;
+            // Low-confidence: verify via LLM classifier
+            // Construct a realistic user message + AI context for the classifier prompt:
+            //   userMessage = what the user wants (concept name in business context)
+            //   aiResponse = the concept definition (what the AI matched to)
+            const userMessage = `Trebam zadatak za: ${task.conceptName}. ${tenantContext}`;
+            const aiResponse = task.definition ?? task.conceptName;
+            try {
+                const betterMatches = await this.conceptClassifierService.classifyAndMatch(userMessage, aiResponse, { limit: 1, threshold: 0.5 }, { tenantId, userId });
+                if (betterMatches.length > 0 && betterMatches[0].conceptId !== task.conceptId) {
+                    this.logger.log({
+                        message: 'Onboarding: LLM reclassified concept match',
+                        original: { id: task.conceptId, name: task.conceptName, score: task.score },
+                        reclassified: {
+                            id: betterMatches[0].conceptId,
+                            name: betterMatches[0].conceptName,
+                        },
+                    });
+                    return betterMatches[0];
+                }
+            }
+            catch {
+                // LLM failure: keep original match
+            }
+            return task;
+        }));
+        return results.map((r, i) => (r.status === 'fulfilled' ? r.value : tasks[i]));
+    }
+    /**
      * Parses LLM-generated enriched task content into per-task title + content.
      * Falls back gracefully if LLM output is malformed.
      */
@@ -25359,6 +26831,16 @@ ${match.category}
             where: { id: tenantId },
             data: { status: prisma_1.TenantStatus.ACTIVE },
         });
+        // Keep tenantRegistry in sync
+        try {
+            await this.prisma.tenantRegistry.update({
+                where: { id: tenantId },
+                data: { status: prisma_1.TenantStatus.ACTIVE },
+            });
+        }
+        catch {
+            // Registry entry may not exist in dev/single-DB setups — not critical
+        }
         this.logger.log({
             message: 'Tenant status updated to ACTIVE',
             tenantId,
@@ -25370,12 +26852,12 @@ ${match.category}
 exports.OnboardingService = OnboardingService;
 exports.OnboardingService = OnboardingService = OnboardingService_1 = tslib_1.__decorate([
     (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _c : Object, typeof (_d = typeof onboarding_metric_service_1.OnboardingMetricService !== "undefined" && onboarding_metric_service_1.OnboardingMetricService) === "function" ? _d : Object, typeof (_e = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _e : Object, typeof (_f = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _f : Object, typeof (_g = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _g : Object, typeof (_h = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _h : Object, typeof (_j = typeof brain_seeding_service_1.BrainSeedingService !== "undefined" && brain_seeding_service_1.BrainSeedingService) === "function" ? _j : Object, typeof (_k = typeof workflow_service_1.WorkflowService !== "undefined" && workflow_service_1.WorkflowService) === "function" ? _k : Object])
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _c : Object, typeof (_d = typeof onboarding_metric_service_1.OnboardingMetricService !== "undefined" && onboarding_metric_service_1.OnboardingMetricService) === "function" ? _d : Object, typeof (_e = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _e : Object, typeof (_f = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _f : Object, typeof (_g = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _g : Object, typeof (_h = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _h : Object, typeof (_j = typeof brain_seeding_service_1.BrainSeedingService !== "undefined" && brain_seeding_service_1.BrainSeedingService) === "function" ? _j : Object, typeof (_k = typeof concept_classifier_service_1.ConceptClassifierService !== "undefined" && concept_classifier_service_1.ConceptClassifierService) === "function" ? _k : Object, typeof (_l = typeof workflow_service_1.WorkflowService !== "undefined" && workflow_service_1.WorkflowService) === "function" ? _l : Object])
 ], OnboardingService);
 
 
 /***/ }),
-/* 167 */
+/* 171 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -25524,7 +27006,7 @@ exports.OnboardingMetricService = OnboardingMetricService = OnboardingMetricServ
 
 
 /***/ }),
-/* 168 */
+/* 172 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -25534,7 +27016,7 @@ exports.getTasksByIndustry = getTasksByIndustry;
 exports.getTaskById = getTaskById;
 exports.generateSystemPrompt = generateSystemPrompt;
 exports.generateUserPrompt = generateUserPrompt;
-const types_1 = __webpack_require__(84);
+const types_1 = __webpack_require__(85);
 /**
  * @deprecated Story 3.2 — Quick-task templates are superseded by the
  * Autonomous Business Brain concept seeding (BrainSeedingService).
@@ -25714,14 +27196,14 @@ Please generate a professional, ready-to-use output that demonstrates immediate 
 
 
 /***/ }),
-/* 169 */
+/* 173 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.OnboardingCompleteDto = exports.SetDepartmentDto = exports.QuickWinDto = exports.BusinessContextDto = exports.SetupCompanyDto = void 0;
 const tslib_1 = __webpack_require__(4);
-const class_validator_1 = __webpack_require__(37);
+const class_validator_1 = __webpack_require__(38);
 /**
  * DTO for setting up company details during onboarding step 1.
  */
@@ -25843,7 +27325,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 170 */
+/* 174 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -25851,9 +27333,9 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.PersonasModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const auth_module_1 = __webpack_require__(40);
-const personas_service_1 = __webpack_require__(171);
-const personas_controller_1 = __webpack_require__(172);
+const auth_module_1 = __webpack_require__(41);
+const personas_service_1 = __webpack_require__(175);
+const personas_controller_1 = __webpack_require__(176);
 /**
  * Module for department persona management.
  * Provides persona definitions and API endpoints for persona selection.
@@ -25872,7 +27354,7 @@ exports.PersonasModule = PersonasModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 171 */
+/* 175 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -25881,7 +27363,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.PersonasService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const types_1 = __webpack_require__(84);
+const types_1 = __webpack_require__(85);
 /**
  * Static persona definitions with prs_ prefix IDs.
  * These are predefined personas representing C-suite and department leads.
@@ -26013,7 +27495,7 @@ exports.PersonasService = PersonasService = PersonasService_1 = tslib_1.__decora
 
 
 /***/ }),
-/* 172 */
+/* 176 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -26022,9 +27504,9 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.PersonasController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const jwt_auth_guard_1 = __webpack_require__(45);
-const mfa_required_guard_1 = __webpack_require__(58);
-const personas_service_1 = __webpack_require__(171);
+const jwt_auth_guard_1 = __webpack_require__(46);
+const mfa_required_guard_1 = __webpack_require__(59);
+const personas_service_1 = __webpack_require__(175);
 /**
  * Controller for persona-related API endpoints.
  * All endpoints require authentication and MFA verification.
@@ -26076,7 +27558,7 @@ exports.PersonasController = PersonasController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 173 */
+/* 177 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -26085,7 +27567,7 @@ exports.QdrantModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const qdrant_client_service_1 = __webpack_require__(111);
+const qdrant_client_service_1 = __webpack_require__(112);
 /**
  * Global module for Qdrant vector database client.
  * Marked @Global so all modules can inject QdrantClientService
@@ -26105,7 +27587,7 @@ exports.QdrantModule = QdrantModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 174 */
+/* 178 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -26114,10 +27596,10 @@ exports.AdminModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const auth_module_1 = __webpack_require__(40);
-const data_integrity_controller_1 = __webpack_require__(175);
-const data_integrity_service_1 = __webpack_require__(176);
-const brain_config_controller_1 = __webpack_require__(177);
+const auth_module_1 = __webpack_require__(41);
+const data_integrity_controller_1 = __webpack_require__(179);
+const data_integrity_service_1 = __webpack_require__(180);
+const brain_config_controller_1 = __webpack_require__(181);
 let AdminModule = class AdminModule {
 };
 exports.AdminModule = AdminModule;
@@ -26131,7 +27613,7 @@ exports.AdminModule = AdminModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 175 */
+/* 179 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -26140,7 +27622,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DataIntegrityController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const data_integrity_service_1 = __webpack_require__(176);
+const data_integrity_service_1 = __webpack_require__(180);
 let DataIntegrityController = class DataIntegrityController {
     constructor(integrityService) {
         this.integrityService = integrityService;
@@ -26163,7 +27645,7 @@ exports.DataIntegrityController = DataIntegrityController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 176 */
+/* 180 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -26174,7 +27656,7 @@ exports.DataIntegrityService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const qdrant_client_service_1 = __webpack_require__(111);
+const qdrant_client_service_1 = __webpack_require__(112);
 let DataIntegrityService = DataIntegrityService_1 = class DataIntegrityService {
     constructor(prisma, qdrantClient) {
         this.prisma = prisma;
@@ -26285,7 +27767,7 @@ exports.DataIntegrityService = DataIntegrityService = DataIntegrityService_1 = t
 
 
 /***/ }),
-/* 177 */
+/* 181 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -26295,10 +27777,10 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.BrainConfigController = exports.UpdateBrainConfigDto = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const class_validator_1 = __webpack_require__(37);
+const class_validator_1 = __webpack_require__(38);
 const tenant_context_1 = __webpack_require__(9);
-const jwt_auth_guard_1 = __webpack_require__(45);
-const current_user_decorator_1 = __webpack_require__(47);
+const jwt_auth_guard_1 = __webpack_require__(46);
+const current_user_decorator_1 = __webpack_require__(48);
 class UpdateBrainConfigDto {
 }
 exports.UpdateBrainConfigDto = UpdateBrainConfigDto;
@@ -26360,7 +27842,1706 @@ exports.BrainConfigController = BrainConfigController = BrainConfigController_1 
 
 
 /***/ }),
-/* 178 */
+/* 182 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PdfExportModule = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const tenant_context_1 = __webpack_require__(9);
+const auth_module_1 = __webpack_require__(41);
+const notes_module_1 = __webpack_require__(132);
+const pdf_export_controller_1 = __webpack_require__(183);
+const pdf_export_service_1 = __webpack_require__(184);
+const puppeteer_provider_1 = __webpack_require__(185);
+let PdfExportModule = class PdfExportModule {
+};
+exports.PdfExportModule = PdfExportModule;
+exports.PdfExportModule = PdfExportModule = tslib_1.__decorate([
+    (0, common_1.Module)({
+        imports: [tenant_context_1.TenantModule, auth_module_1.AuthModule, notes_module_1.NotesModule],
+        controllers: [pdf_export_controller_1.PdfExportController],
+        providers: [pdf_export_service_1.PdfExportService, puppeteer_provider_1.PuppeteerProvider],
+    })
+], PdfExportModule);
+
+
+/***/ }),
+/* 183 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var PdfExportController_1;
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PdfExportController = exports.ExportReportsDto = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const class_validator_1 = __webpack_require__(38);
+const express_1 = __webpack_require__(154);
+const jwt_auth_guard_1 = __webpack_require__(46);
+const current_user_decorator_1 = __webpack_require__(48);
+const pdf_export_service_1 = __webpack_require__(184);
+class ExportReportsDto {
+}
+exports.ExportReportsDto = ExportReportsDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.ArrayNotEmpty)(),
+    (0, class_validator_1.ArrayMaxSize)(50),
+    (0, class_validator_1.IsString)({ each: true }),
+    tslib_1.__metadata("design:type", Array)
+], ExportReportsDto.prototype, "noteIds", void 0);
+let PdfExportController = PdfExportController_1 = class PdfExportController {
+    constructor(pdfExportService) {
+        this.pdfExportService = pdfExportService;
+        this.logger = new common_1.Logger(PdfExportController_1.name);
+    }
+    async exportReports(dto, user, res) {
+        try {
+            const pdfBuffer = await this.pdfExportService.generateReportPdf(dto.noteIds, user.userId, user.tenantId);
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', 'attachment; filename="izvestaj.pdf"');
+            res.send(pdfBuffer);
+        }
+        catch (error) {
+            this.logger.error({ message: 'PDF generation failed', error });
+            const status = error.status ?? 500;
+            const message = error.message ?? 'PDF generation failed';
+            res.status(status).json({ statusCode: status, message });
+        }
+    }
+};
+exports.PdfExportController = PdfExportController;
+tslib_1.__decorate([
+    (0, common_1.Post)('reports'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    tslib_1.__param(0, (0, common_1.Body)()),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(2, (0, common_1.Res)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [ExportReportsDto, Object, typeof (_b = typeof express_1.Response !== "undefined" && express_1.Response) === "function" ? _b : Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], PdfExportController.prototype, "exportReports", null);
+exports.PdfExportController = PdfExportController = PdfExportController_1 = tslib_1.__decorate([
+    (0, common_1.Controller)('v1/pdf-export'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof pdf_export_service_1.PdfExportService !== "undefined" && pdf_export_service_1.PdfExportService) === "function" ? _a : Object])
+], PdfExportController);
+
+
+/***/ }),
+/* 184 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var PdfExportService_1;
+var _a, _b, _c;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PdfExportService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const notes_service_1 = __webpack_require__(133);
+const tenant_context_1 = __webpack_require__(9);
+const puppeteer_provider_1 = __webpack_require__(185);
+const pdf_html_builder_1 = __webpack_require__(187);
+let PdfExportService = PdfExportService_1 = class PdfExportService {
+    constructor(notesService, puppeteer, prisma) {
+        this.notesService = notesService;
+        this.puppeteer = puppeteer;
+        this.prisma = prisma;
+        this.logger = new common_1.Logger(PdfExportService_1.name);
+    }
+    async generateReportPdf(noteIds, userId, tenantId) {
+        // 1. Fetch notes with children, preserving requested order
+        const notes = await this.notesService.getByIdsWithChildren(noteIds, userId, tenantId);
+        if (notes.length === 0) {
+            throw new common_1.NotFoundException('No completed notes found for the given IDs');
+        }
+        // Preserve the requested order
+        const noteMap = new Map(notes.map((n) => [n.id, n]));
+        const orderedNotes = noteIds
+            .map((id) => noteMap.get(id))
+            .filter((n) => n != null);
+        // 2. Load tenant info for cover page
+        const tenant = await this.prisma.tenant.findUnique({
+            where: { id: tenantId },
+            select: { name: true },
+        });
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { name: true },
+        });
+        // 3. Build HTML document
+        const html = (0, pdf_html_builder_1.buildPdfHtml)({
+            notes: orderedNotes,
+            tenantName: tenant?.name ?? undefined,
+            userName: user?.name ?? undefined,
+            exportDate: new Date().toLocaleDateString('sr-Latn', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+            }),
+        });
+        this.logger.log({
+            message: 'Generating PDF',
+            noteCount: orderedNotes.length,
+            userId,
+            tenantId,
+        });
+        // 4. Render PDF via Puppeteer
+        return this.renderPdf(html);
+    }
+    async renderPdf(html) {
+        const browser = this.puppeteer.getBrowser();
+        const page = await browser.newPage();
+        try {
+            await page.setContent(html, { waitUntil: 'domcontentloaded' });
+            const pdfBuffer = await page.pdf({
+                format: 'A4',
+                printBackground: true,
+                margin: { top: '25mm', right: '20mm', bottom: '25mm', left: '20mm' },
+                displayHeaderFooter: true,
+                headerTemplate: '<span></span>',
+                footerTemplate: `
+          <div style="width: 100%; text-align: center; font-size: 8pt; color: #adb5bd; font-family: system-ui, sans-serif;">
+            <span class="pageNumber"></span> / <span class="totalPages"></span>
+          </div>
+        `,
+            });
+            return Buffer.from(pdfBuffer);
+        }
+        finally {
+            await page.close();
+        }
+    }
+};
+exports.PdfExportService = PdfExportService;
+exports.PdfExportService = PdfExportService = PdfExportService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _a : Object, typeof (_b = typeof puppeteer_provider_1.PuppeteerProvider !== "undefined" && puppeteer_provider_1.PuppeteerProvider) === "function" ? _b : Object, typeof (_c = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _c : Object])
+], PdfExportService);
+
+
+/***/ }),
+/* 185 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var PuppeteerProvider_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PuppeteerProvider = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const puppeteer_1 = tslib_1.__importDefault(__webpack_require__(186));
+let PuppeteerProvider = PuppeteerProvider_1 = class PuppeteerProvider {
+    constructor() {
+        this.logger = new common_1.Logger(PuppeteerProvider_1.name);
+        this.browser = null;
+    }
+    async onModuleInit() {
+        this.logger.log('Launching Puppeteer browser...');
+        this.browser = await puppeteer_1.default.launch({
+            headless: true,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+            ],
+        });
+        this.logger.log('Puppeteer browser launched');
+    }
+    async onModuleDestroy() {
+        if (this.browser) {
+            await this.browser.close();
+            this.logger.log('Puppeteer browser closed');
+        }
+    }
+    getBrowser() {
+        if (!this.browser) {
+            throw new Error('Puppeteer browser not initialized');
+        }
+        return this.browser;
+    }
+};
+exports.PuppeteerProvider = PuppeteerProvider;
+exports.PuppeteerProvider = PuppeteerProvider = PuppeteerProvider_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)()
+], PuppeteerProvider);
+
+
+/***/ }),
+/* 186 */
+/***/ ((module) => {
+
+module.exports = require("puppeteer");
+
+/***/ }),
+/* 187 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.buildPdfHtml = buildPdfHtml;
+const server_1 = __webpack_require__(188);
+const pdf_light_theme_1 = __webpack_require__(192);
+function escapeHtml(str) {
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+function getScoreClass(score) {
+    if (score >= 80)
+        return 'high';
+    if (score >= 50)
+        return 'medium';
+    return 'low';
+}
+function buildPdfHtml(options) {
+    const { notes, tenantName, userName, exportDate } = options;
+    // Cover page
+    const coverHtml = `
+    <div class="cover-page">
+      <div class="cover-title">${escapeHtml(tenantName ?? 'Mentor AI')}</div>
+      <div class="cover-subtitle">Izveštaj o obavljenim zadacima</div>
+      ${userName ? `<div class="cover-subtitle">${escapeHtml(userName)}</div>` : ''}
+      <div class="cover-date">${escapeHtml(exportDate)}</div>
+    </div>
+  `;
+    // Table of contents (only for multi-report PDFs)
+    let tocHtml = '';
+    if (notes.length > 1) {
+        const tocItems = notes
+            .map((note, i) => `<div class="toc-item">${i + 1}. ${escapeHtml(note.title)}</div>`)
+            .join('\n');
+        tocHtml = `
+      <div class="toc">
+        <h2>Sadržaj</h2>
+        ${tocItems}
+      </div>
+    `;
+    }
+    // Report sections
+    const reportsHtml = notes
+        .map((note) => {
+        const scoreHtml = note.aiScore != null
+            ? `<span class="report-score ${getScoreClass(note.aiScore)}">${note.aiScore}/100</span>`
+            : '';
+        const reportContent = note.userReport ?? note.content ?? '';
+        const renderedHtml = (0, server_1.renderMarkdownServer)(reportContent);
+        // Workflow step children
+        let childrenHtml = '';
+        if (note.children && note.children.length > 0) {
+            childrenHtml = note.children
+                .map((child, idx) => {
+                const childContent = child.userReport ?? child.content ?? '';
+                if (!childContent)
+                    return '';
+                return `
+              <div class="step-section">
+                <h3>Korak ${idx + 1}: ${escapeHtml(child.title)}</h3>
+                <div class="report-content">${(0, server_1.renderMarkdownServer)(childContent)}</div>
+              </div>
+            `;
+            })
+                .join('\n');
+        }
+        // AI Feedback
+        const feedbackHtml = note.aiFeedback
+            ? `<div class="feedback-box">
+             <div class="feedback-label">AI Povratna informacija:</div>
+             <div class="report-content">${(0, server_1.renderMarkdownServer)(note.aiFeedback)}</div>
+           </div>`
+            : '';
+        const dateStr = new Date(note.createdAt).toLocaleDateString('sr-Latn');
+        const metaParts = [`Datum: ${dateStr}`];
+        if (note.expectedOutcome) {
+            metaParts.push(`Očekivani ishod: ${escapeHtml(note.expectedOutcome)}`);
+        }
+        return `
+        <div class="report-section">
+          <div class="report-header">
+            <div class="report-title">${escapeHtml(note.title)} ${scoreHtml}</div>
+            <div class="report-meta">${metaParts.join(' | ')}</div>
+          </div>
+          <div class="report-content">
+            ${renderedHtml}
+          </div>
+          ${childrenHtml}
+          ${feedbackHtml}
+        </div>
+      `;
+    })
+        .join('\n');
+    return `<!DOCTYPE html>
+<html lang="sr">
+<head>
+  <meta charset="UTF-8">
+  <style>${pdf_light_theme_1.PDF_LIGHT_THEME_CSS}</style>
+</head>
+<body>
+  ${coverHtml}
+  ${tocHtml}
+  ${reportsHtml}
+</body>
+</html>`;
+}
+
+
+/***/ }),
+/* 188 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+const tslib_1 = __webpack_require__(4);
+// Server-only exports (Node.js dependencies like isomorphic-dompurify).
+// Do NOT import from frontend code — use @mentor-ai/shared/utils instead.
+tslib_1.__exportStar(__webpack_require__(189), exports);
+
+
+/***/ }),
+/* 189 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+/**
+ * Server-side markdown rendering.
+ * Mirrors the frontend renderMarkdown() from shared/ui/src/lib/pipes/markdown-config.ts
+ * but uses isomorphic-dompurify for Node.js compatibility.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.renderMarkdownServer = renderMarkdownServer;
+const tslib_1 = __webpack_require__(4);
+const marked_1 = __webpack_require__(190);
+const isomorphic_dompurify_1 = tslib_1.__importDefault(__webpack_require__(191));
+const callout_transform_1 = __webpack_require__(34);
+const PURIFY_CONFIG = {
+    ADD_ATTR: ['target', 'rel', 'class'],
+    ALLOWED_TAGS: [
+        'h1',
+        'h2',
+        'h3',
+        'h4',
+        'h5',
+        'h6',
+        'p',
+        'br',
+        'hr',
+        'strong',
+        'em',
+        'del',
+        's',
+        'ul',
+        'ol',
+        'li',
+        'a',
+        'code',
+        'pre',
+        'blockquote',
+        'table',
+        'thead',
+        'tbody',
+        'tr',
+        'th',
+        'td',
+        'span',
+        'div',
+        'img',
+    ],
+};
+let initialized = false;
+function ensureInitialized() {
+    if (initialized)
+        return;
+    const renderer = new marked_1.marked.Renderer();
+    const originalLinkRenderer = renderer.link.bind(renderer);
+    renderer.link = (token) => {
+        const html = originalLinkRenderer(token);
+        return html.replace('<a ', '<a target="_blank" rel="noopener noreferrer" ');
+    };
+    marked_1.marked.setOptions({ gfm: true, breaks: true, renderer });
+    initialized = true;
+}
+/**
+ * Render markdown to sanitized HTML on the server (Node.js).
+ * Applies callout transforms and citation inline styling.
+ */
+function renderMarkdownServer(value) {
+    if (!value)
+        return '';
+    ensureInitialized();
+    const rawHtml = marked_1.marked.parse(value, { async: false });
+    const withCallouts = (0, callout_transform_1.applyCalloutTransforms)(rawHtml);
+    const withCitations = (0, callout_transform_1.applyCitationTransforms)(withCallouts);
+    return isomorphic_dompurify_1.default.sanitize(withCitations, PURIFY_CONFIG);
+}
+
+
+/***/ }),
+/* 190 */
+/***/ ((module) => {
+
+module.exports = require("marked");
+
+/***/ }),
+/* 191 */
+/***/ ((module) => {
+
+module.exports = require("isomorphic-dompurify");
+
+/***/ }),
+/* 192 */
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PDF_LIGHT_THEME_CSS = void 0;
+/**
+ * Light-theme CSS for PDF rendering.
+ * Derived from the dark-theme .ai-content CSS in conversation-notes.component.ts.
+ */
+exports.PDF_LIGHT_THEME_CSS = `
+  @page {
+    size: A4;
+    margin: 25mm 20mm 25mm 20mm;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-size: 11pt;
+    line-height: 1.6;
+    color: #343a40;
+    background: #ffffff;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* ── Cover Page ── */
+  .cover-page {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    text-align: center;
+    page-break-after: always;
+  }
+  .cover-title {
+    font-size: 28pt;
+    font-weight: 700;
+    color: #212529;
+    margin-bottom: 16px;
+  }
+  .cover-subtitle {
+    font-size: 14pt;
+    color: #6c757d;
+    margin-bottom: 8px;
+  }
+  .cover-date {
+    font-size: 11pt;
+    color: #adb5bd;
+    margin-top: 32px;
+  }
+
+  /* ── Table of Contents ── */
+  .toc {
+    page-break-after: always;
+  }
+  .toc h2 {
+    font-size: 18pt;
+    font-weight: 700;
+    color: #212529;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #dee2e6;
+    padding-bottom: 8px;
+  }
+  .toc-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px dotted #dee2e6;
+    font-size: 11pt;
+    color: #212529;
+  }
+
+  /* ── Report Section ── */
+  .report-section + .report-section {
+    page-break-before: always;
+  }
+  .report-header {
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #dee2e6;
+  }
+  .report-title {
+    font-size: 16pt;
+    font-weight: 700;
+    color: #212529;
+    margin: 0 0 4px 0;
+  }
+  .report-meta {
+    font-size: 9pt;
+    color: #6c757d;
+  }
+  .report-score {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 10pt;
+    font-weight: 600;
+    margin-left: 8px;
+  }
+  .report-score.high   { background: #d4edda; color: #155724; }
+  .report-score.medium { background: #fff3cd; color: #856404; }
+  .report-score.low    { background: #f8d7da; color: #721c24; }
+
+  /* ── Markdown Content (light theme) ── */
+  .report-content {
+    font-size: 11pt;
+    line-height: 1.65;
+    color: #343a40;
+    word-break: break-word;
+  }
+  .report-content > :first-child { margin-top: 0 !important; }
+  .report-content > :last-child  { margin-bottom: 0 !important; }
+
+  .report-content h1 {
+    font-size: 1.35em; font-weight: 700; color: #212529;
+    margin: 16px 0 6px; padding-bottom: 4px;
+    border-bottom: 1px solid #dee2e6;
+  }
+  .report-content h2 {
+    font-size: 1.2em; font-weight: 600; color: #212529;
+    margin: 14px 0 5px; padding-bottom: 3px;
+    border-bottom: 1px solid rgba(222,226,230,0.5);
+  }
+  .report-content h3 {
+    font-size: 1.1em; font-weight: 600; color: #343a40;
+    margin: 12px 0 4px;
+  }
+  .report-content h4,
+  .report-content h5,
+  .report-content h6 {
+    font-size: 1em; font-weight: 600; color: #495057;
+    margin: 10px 0 3px;
+  }
+
+  .report-content p { margin: 8px 0; line-height: 1.65; }
+  .report-content strong { color: #212529; font-weight: 600; }
+  .report-content em { color: #495057; font-style: italic; }
+
+  .report-content ul, .report-content ol {
+    margin: 6px 0; padding-left: 1.5em; list-style-position: outside;
+  }
+  .report-content ul { list-style-type: disc; }
+  .report-content ol { list-style-type: decimal; }
+  .report-content li { margin: 3px 0; line-height: 1.65; color: #343a40; }
+  .report-content li::marker { color: #6c757d; }
+  .report-content li > ul,
+  .report-content li > ol { margin: 3px 0; }
+  .report-content li > p { margin: 3px 0; }
+  .report-content ul ul { list-style-type: circle; }
+  .report-content ul ul ul { list-style-type: square; }
+
+  .report-content table {
+    width: 100%; border-collapse: collapse; margin: 10px 0;
+    font-size: 0.9em; border: 1px solid #dee2e6;
+    page-break-inside: avoid;
+  }
+  .report-content thead th {
+    background: #f8f9fa; color: #212529; font-weight: 600;
+    text-align: left; padding: 7px 10px;
+    border-bottom: 2px solid #adb5bd;
+  }
+  .report-content tbody td {
+    padding: 7px 10px; border-bottom: 1px solid #e9ecef; color: #495057;
+  }
+  .report-content tbody tr:nth-child(even) { background: #f8f9fa; }
+
+  .report-content code {
+    background: rgba(0,0,0,0.06); color: #495057;
+    padding: 0.1em 0.35em; border-radius: 3px;
+    font-family: 'Consolas', 'Fira Code', monospace;
+    font-size: 0.875em;
+  }
+  .report-content pre {
+    background: #f1f3f5; border: 1px solid #dee2e6;
+    border-radius: 6px; padding: 10px 14px;
+    overflow-x: auto; margin: 10px 0;
+    page-break-inside: avoid;
+  }
+  .report-content pre code {
+    background: none; padding: 0; font-size: 0.85em; line-height: 1.5;
+  }
+
+  .report-content blockquote {
+    border-left: 3px solid #2563eb; margin: 10px 0; padding: 6px 12px;
+    color: #6c757d; background: rgba(37,99,235,0.04);
+    border-radius: 0 6px 6px 0;
+  }
+  .report-content blockquote p { margin: 3px 0; }
+
+  /* Callout boxes */
+  .report-content blockquote.callout { padding: 12px 16px; }
+  .report-content .callout-insight {
+    border-left-color: #2563eb; background: rgba(37,99,235,0.06);
+  }
+  .report-content .callout-insight strong { color: #2563eb; }
+  .report-content .callout-warning {
+    border-left-color: #d97706; background: rgba(217,119,6,0.06);
+  }
+  .report-content .callout-warning strong { color: #d97706; }
+  .report-content .callout-metric {
+    border-left-color: #059669; background: rgba(5,150,105,0.06);
+  }
+  .report-content .callout-metric strong { color: #059669; }
+  .report-content .callout-summary {
+    border-left-color: #7c3aed; background: rgba(124,58,237,0.06);
+  }
+  .report-content .callout-summary strong { color: #7c3aed; }
+
+  /* Citation inline badges */
+  .citation-inline {
+    display: inline;
+    padding: 1px 6px;
+    font-size: 0.85em;
+    font-weight: 500;
+    border-radius: 3px;
+    background: rgba(37,99,235,0.08);
+    border: 1px solid rgba(37,99,235,0.2);
+    color: #2563eb;
+  }
+
+  .report-content a { color: #2563eb; text-decoration: none; }
+  .report-content hr { border: none; border-top: 1px solid #dee2e6; margin: 14px 0; }
+  .report-content del { color: #6c757d; text-decoration: line-through; }
+
+  /* Workflow step sub-section */
+  .step-section {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px dashed #dee2e6;
+  }
+  .step-section h3 {
+    font-size: 1.05em;
+    font-weight: 600;
+    color: #495057;
+    margin: 0 0 8px 0;
+  }
+
+  /* AI Feedback box */
+  .feedback-box {
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+  }
+  .feedback-box .feedback-label {
+    font-size: 0.9em;
+    font-weight: 600;
+    color: #6c757d;
+    margin-bottom: 6px;
+  }
+`;
+
+
+/***/ }),
+/* 193 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AgentExecutionModule = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const tenant_context_1 = __webpack_require__(9);
+const auth_module_1 = __webpack_require__(41);
+const ai_gateway_module_1 = __webpack_require__(88);
+const notes_module_1 = __webpack_require__(132);
+const agent_execution_service_1 = __webpack_require__(194);
+const agent_execution_controller_1 = __webpack_require__(200);
+const openclaw_client_service_1 = __webpack_require__(195);
+const agent_registry_service_1 = __webpack_require__(197);
+const agent_recommender_service_1 = __webpack_require__(198);
+const agent_prompt_service_1 = __webpack_require__(196);
+const budget_service_1 = __webpack_require__(199);
+let AgentExecutionModule = class AgentExecutionModule {
+};
+exports.AgentExecutionModule = AgentExecutionModule;
+exports.AgentExecutionModule = AgentExecutionModule = tslib_1.__decorate([
+    (0, common_1.Module)({
+        imports: [
+            config_1.ConfigModule,
+            tenant_context_1.TenantModule,
+            auth_module_1.AuthModule,
+            ai_gateway_module_1.AiGatewayModule,
+            notes_module_1.NotesModule,
+        ],
+        controllers: [agent_execution_controller_1.AgentExecutionController],
+        providers: [
+            agent_execution_service_1.AgentExecutionService,
+            openclaw_client_service_1.OpenClawClientService,
+            agent_registry_service_1.AgentRegistryService,
+            agent_recommender_service_1.AgentRecommenderService,
+            agent_prompt_service_1.AgentPromptService,
+            budget_service_1.BudgetService,
+        ],
+        exports: [agent_execution_service_1.AgentExecutionService],
+    })
+], AgentExecutionModule);
+
+
+/***/ }),
+/* 194 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var AgentExecutionService_1;
+var _a, _b, _c, _d, _e, _f;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AgentExecutionService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const tenant_context_1 = __webpack_require__(9);
+const cuid2_1 = __webpack_require__(32);
+const types_1 = __webpack_require__(85);
+const openclaw_client_service_1 = __webpack_require__(195);
+const agent_prompt_service_1 = __webpack_require__(196);
+const agent_recommender_service_1 = __webpack_require__(198);
+const agent_registry_service_1 = __webpack_require__(197);
+const budget_service_1 = __webpack_require__(199);
+let AgentExecutionService = AgentExecutionService_1 = class AgentExecutionService {
+    constructor(prisma, openClawClient, agentPrompt, agentRecommender, registry, budgetService) {
+        this.prisma = prisma;
+        this.openClawClient = openClawClient;
+        this.agentPrompt = agentPrompt;
+        this.agentRecommender = agentRecommender;
+        this.registry = registry;
+        this.budgetService = budgetService;
+        this.logger = new common_1.Logger(AgentExecutionService_1.name);
+        this.MAX_CONCURRENT_PER_TENANT = 3;
+        this.VALID_STATUSES = new Set(Object.values(types_1.AgentExecutionStatus));
+    }
+    async getRecommendations(noteId, userId, tenantId) {
+        const note = await this.prisma.note.findFirst({
+            where: { id: noteId, tenantId },
+        });
+        if (!note) {
+            throw new common_1.NotFoundException(`Note ${noteId} not found`);
+        }
+        if (!note.userReport) {
+            throw new common_1.BadRequestException('Task has no completed report');
+        }
+        const [recommendations, budget] = await Promise.all([
+            this.agentRecommender.getRecommendations({
+                taskTitle: note.title,
+                taskContent: note.content,
+                userReport: note.userReport,
+                expectedOutcome: note.expectedOutcome,
+                tenantId,
+                userId,
+            }),
+            this.budgetService.getDailySpent(tenantId),
+        ]);
+        const estimatedCost = this.budgetService.getEstimatedCost();
+        return {
+            noteId: note.id,
+            recommendations,
+            agentTypes: this.registry.getAllAgentTypeInfos(),
+            dailySpentEur: budget.spentEur,
+            dailyLimitEur: budget.limitEur,
+            canProceed: budget.spentEur + estimatedCost <= budget.limitEur,
+        };
+    }
+    async triggerAgent(noteId, agentType, userId, tenantId) {
+        // Validate agent type
+        const agentDef = this.registry.getAgent(agentType);
+        // Verify note
+        const note = await this.prisma.note.findFirst({
+            where: { id: noteId, tenantId },
+        });
+        if (!note) {
+            throw new common_1.NotFoundException(`Note ${noteId} not found`);
+        }
+        if (!note.userReport) {
+            throw new common_1.BadRequestException('Task has no completed report');
+        }
+        // Check OpenClaw config
+        if (!this.openClawClient.isConfigured()) {
+            throw new common_1.BadRequestException('Agent execution is not configured');
+        }
+        // Check for existing active execution on this note+agentType
+        const existingActive = await this.prisma.agentExecution.findFirst({
+            where: {
+                noteId,
+                tenantId,
+                agentType,
+                status: { in: ['PENDING', 'FORMATTING', 'EXECUTING'] },
+            },
+        });
+        if (existingActive) {
+            throw new common_1.BadRequestException(`${agentDef.label} is already in progress for this task`);
+        }
+        // Check budget
+        const canSpend = await this.budgetService.canSpend(tenantId);
+        if (!canSpend) {
+            throw new common_1.ForbiddenException('Daily budget exceeded');
+        }
+        // Check concurrency via DB count (safe across multiple instances)
+        const activeCount = await this.prisma.agentExecution.count({
+            where: {
+                tenantId,
+                status: { in: ['PENDING', 'FORMATTING', 'EXECUTING'] },
+            },
+        });
+        if (activeCount >= this.MAX_CONCURRENT_PER_TENANT) {
+            throw new common_1.BadRequestException(`Maximum ${this.MAX_CONCURRENT_PER_TENANT} concurrent agent executions`);
+        }
+        // Create execution record + reserve budget
+        const executionId = `agx_${(0, cuid2_1.createId)()}`;
+        const estimatedCost = agentDef.estimatedCostEur;
+        await this.prisma.agentExecution.create({
+            data: {
+                id: executionId,
+                tenantId,
+                userId,
+                noteId,
+                status: 'PENDING',
+                agentType,
+                estimatedCostEur: estimatedCost,
+            },
+        });
+        await this.budgetService.recordSpend(tenantId, estimatedCost);
+        this.logger.log({
+            message: 'Agent triggered',
+            executionId,
+            noteId,
+            agentType,
+            userId,
+            tenantId,
+            reservedCostEur: estimatedCost,
+        });
+        // Fire-and-forget async pipeline
+        this.executeAgentPipeline(executionId, agentType, note, userId, tenantId, estimatedCost).catch((err) => {
+            this.logger.error({
+                message: 'Agent pipeline failed unexpectedly',
+                executionId,
+                agentType,
+                error: err.message,
+            });
+        });
+        return { executionId };
+    }
+    async executeAgentPipeline(executionId, agentType, note, userId, tenantId, reservedCostEur) {
+        const openClawAgentId = this.registry.getOpenClawAgentId(agentType);
+        try {
+            // Step 1: Format task into agent-specific instruction
+            await this.updateStatus(executionId, 'FORMATTING');
+            const formattedPrompt = await this.agentPrompt.formatPrompt({
+                agentType,
+                taskTitle: note.title,
+                taskContent: note.content,
+                userReport: note.userReport,
+                expectedOutcome: note.expectedOutcome,
+                tenantId,
+                userId,
+            });
+            await this.prisma.agentExecution.update({
+                where: { id: executionId },
+                data: { formattedPrompt },
+            });
+            // Step 2: Send to OpenClaw with the correct agent
+            await this.updateStatus(executionId, 'EXECUTING', { startedAt: new Date() });
+            const result = await this.openClawClient.executeAgent(formattedPrompt, {
+                agentId: openClawAgentId,
+            });
+            if (!result.success) {
+                await this.updateStatus(executionId, 'FAILED', {
+                    error: result.error ?? 'Agent execution failed',
+                    completedAt: new Date(),
+                    durationMs: result.durationMs,
+                });
+                return;
+            }
+            // Step 3: Store results in Note.agentEnrichments JSON (atomic merge)
+            await this.mergeEnrichment(note.id, agentType, {
+                executionId,
+                status: types_1.AgentExecutionStatus.COMPLETED,
+                result: result.output,
+                completedAt: new Date().toISOString(),
+                error: null,
+            });
+            // Step 4: Calculate cost and adjust budget
+            const actualCost = this.estimateActualCost(result.usage);
+            const costDifference = actualCost - reservedCostEur;
+            if (Math.abs(costDifference) > 0.0001) {
+                await this.budgetService.recordSpend(tenantId, costDifference);
+            }
+            // Step 5: Mark completed
+            await this.prisma.agentExecution.update({
+                where: { id: executionId },
+                data: {
+                    status: 'COMPLETED',
+                    agentOutput: result.output,
+                    actualCostEur: actualCost,
+                    completedAt: new Date(),
+                    durationMs: result.durationMs,
+                },
+            });
+            this.logger.log({
+                message: 'Agent execution completed',
+                executionId,
+                agentType,
+                durationMs: result.durationMs,
+                actualCostEur: actualCost,
+            });
+        }
+        catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            this.logger.error({
+                message: 'Agent pipeline error',
+                executionId,
+                agentType,
+                error: errorMessage,
+            });
+            // Store error in enrichments too (atomic merge — safe under concurrency)
+            try {
+                await this.mergeEnrichment(note.id, agentType, {
+                    executionId,
+                    status: types_1.AgentExecutionStatus.FAILED,
+                    result: null,
+                    completedAt: new Date().toISOString(),
+                    error: errorMessage,
+                });
+            }
+            catch { /* best-effort */ }
+            await this.updateStatus(executionId, 'FAILED', {
+                error: errorMessage,
+                completedAt: new Date(),
+            });
+        }
+        finally {
+            // No cleanup needed — concurrency is tracked via DB status
+        }
+    }
+    async updateStatus(executionId, status, extra) {
+        await this.prisma.agentExecution.update({
+            where: { id: executionId },
+            data: { status, ...extra },
+        });
+    }
+    /**
+     * Atomically merges an enrichment entry into Note.agentEnrichments JSON
+     * using PostgreSQL jsonb || operator. Prevents race conditions when
+     * multiple agents write to the same note concurrently.
+     *
+     * NOTE: Uses raw SQL intentionally to get atomic JSONB merge semantics.
+     * This bypasses Prisma middleware (logging, hooks, @updatedAt).
+     * We manually set updated_at to compensate.
+     */
+    async mergeEnrichment(noteId, agentType, entry) {
+        const patch = JSON.stringify({ [agentType]: entry });
+        await this.prisma.$executeRaw `
+      UPDATE notes
+      SET agent_enrichments = COALESCE(agent_enrichments, '{}'::jsonb) || ${patch}::jsonb,
+          updated_at = NOW()
+      WHERE id = ${noteId}
+    `;
+    }
+    estimateActualCost(usage) {
+        if (!usage?.total)
+            return this.budgetService.getEstimatedCost();
+        const inputCost = ((usage.input ?? 0) / 1_000_000) * 0.27;
+        const outputCost = ((usage.output ?? 0) / 1_000_000) * 1.1;
+        const fetchCost = 0.03;
+        return Math.round((inputCost + outputCost + fetchCost) * 10000) / 10000;
+    }
+    async getExecution(executionId, tenantId) {
+        const exec = await this.prisma.agentExecution.findFirst({
+            where: { id: executionId, tenantId },
+        });
+        if (!exec)
+            return null;
+        return this.mapToResponse(exec);
+    }
+    async getExecutionsByNote(noteId, tenantId) {
+        const executions = await this.prisma.agentExecution.findMany({
+            where: { noteId, tenantId },
+            orderBy: { createdAt: 'desc' },
+        });
+        return executions.map((e) => this.mapToResponse(e));
+    }
+    mapToResponse(exec) {
+        let status = exec.status;
+        if (!this.VALID_STATUSES.has(status)) {
+            this.logger.warn({ message: 'Unknown execution status in DB', executionId: exec.id, status: exec.status });
+            status = types_1.AgentExecutionStatus.FAILED;
+        }
+        return {
+            id: exec.id,
+            noteId: exec.noteId,
+            resultNoteId: exec.resultNoteId,
+            status,
+            agentType: exec.agentType,
+            estimatedCostEur: exec.estimatedCostEur ? Number(exec.estimatedCostEur) : null,
+            actualCostEur: exec.actualCostEur ? Number(exec.actualCostEur) : null,
+            error: exec.error,
+            durationMs: exec.durationMs,
+            createdAt: exec.createdAt.toISOString(),
+            completedAt: exec.completedAt?.toISOString() ?? null,
+        };
+    }
+};
+exports.AgentExecutionService = AgentExecutionService;
+exports.AgentExecutionService = AgentExecutionService = AgentExecutionService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof openclaw_client_service_1.OpenClawClientService !== "undefined" && openclaw_client_service_1.OpenClawClientService) === "function" ? _b : Object, typeof (_c = typeof agent_prompt_service_1.AgentPromptService !== "undefined" && agent_prompt_service_1.AgentPromptService) === "function" ? _c : Object, typeof (_d = typeof agent_recommender_service_1.AgentRecommenderService !== "undefined" && agent_recommender_service_1.AgentRecommenderService) === "function" ? _d : Object, typeof (_e = typeof agent_registry_service_1.AgentRegistryService !== "undefined" && agent_registry_service_1.AgentRegistryService) === "function" ? _e : Object, typeof (_f = typeof budget_service_1.BudgetService !== "undefined" && budget_service_1.BudgetService) === "function" ? _f : Object])
+], AgentExecutionService);
+
+
+/***/ }),
+/* 195 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var OpenClawClientService_1;
+var _a;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.OpenClawClientService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+let OpenClawClientService = OpenClawClientService_1 = class OpenClawClientService {
+    constructor(configService) {
+        this.configService = configService;
+        this.logger = new common_1.Logger(OpenClawClientService_1.name);
+        this.relayUrl =
+            this.configService.get('OPENCLAW_RELAY_URL') ?? '';
+        this.authToken =
+            this.configService.get('OPENCLAW_AUTH_TOKEN') ?? '';
+        this.timeoutSeconds =
+            parseInt(this.configService.get('OPENCLAW_TIMEOUT_SECONDS') ?? '600', 10);
+    }
+    isConfigured() {
+        return !!this.authToken && !!this.relayUrl;
+    }
+    async executeAgent(message, options) {
+        const agentId = options?.agentId ?? 'main';
+        const timeout = options?.timeoutSeconds ?? this.timeoutSeconds;
+        this.logger.log({
+            message: 'Sending to OpenClaw relay',
+            agentId,
+            msgLength: message.length,
+            timeoutSeconds: timeout,
+        });
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), (timeout + 30) * 1000);
+        try {
+            const response = await fetch(this.relayUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${this.authToken}`,
+                },
+                body: JSON.stringify({ message, agentId, timeoutSeconds: timeout }),
+                signal: controller.signal,
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                this.logger.error({
+                    message: 'OpenClaw relay error',
+                    status: response.status,
+                    error: data.error,
+                });
+                return {
+                    success: false,
+                    output: '',
+                    durationMs: data.durationMs ?? 0,
+                    error: data.error ?? `HTTP ${response.status}`,
+                };
+            }
+            this.logger.log({
+                message: 'OpenClaw relay success',
+                durationMs: data.durationMs,
+                outputLength: data.output?.length ?? 0,
+                runId: data.runId,
+            });
+            return data;
+        }
+        catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            this.logger.error({ message: 'OpenClaw relay call failed', error: errorMessage });
+            return {
+                success: false,
+                output: '',
+                durationMs: 0,
+                error: errorMessage,
+            };
+        }
+        finally {
+            clearTimeout(timer);
+        }
+    }
+};
+exports.OpenClawClientService = OpenClawClientService;
+exports.OpenClawClientService = OpenClawClientService = OpenClawClientService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object])
+], OpenClawClientService);
+
+
+/***/ }),
+/* 196 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var AgentPromptService_1;
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AgentPromptService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const ai_gateway_service_1 = __webpack_require__(89);
+const agent_registry_service_1 = __webpack_require__(197);
+let AgentPromptService = AgentPromptService_1 = class AgentPromptService {
+    constructor(aiGateway, registry) {
+        this.aiGateway = aiGateway;
+        this.registry = registry;
+        this.logger = new common_1.Logger(AgentPromptService_1.name);
+    }
+    /**
+     * Generates a per-agent-type prompt for the OpenClaw agent.
+     * Uses AiGatewayService which automatically injects tenant memories
+     * (company name, industry, brand, goals, style, target audience).
+     */
+    async formatPrompt(params) {
+        const { agentType, taskTitle, taskContent, userReport, expectedOutcome, tenantId, userId } = params;
+        const agentDef = this.registry.getAgent(agentType);
+        const userMessage = `Task: ${taskTitle}
+
+Description: ${taskContent}
+
+${expectedOutcome ? `Expected Outcome: ${expectedOutcome}\n` : ''}User's Completed Report:
+${userReport.substring(0, 3000)}
+
+Based on this task report and the business context from memories, generate a direct execution instruction for the ${agentDef.label} agent. The agent should ACT on this — execute its tools, produce deliverables, and return results. Not analyze or plan.`;
+        const messages = [
+            { role: 'system', content: agentDef.systemPrompt },
+            { role: 'user', content: userMessage },
+        ];
+        let result = '';
+        await this.aiGateway.streamCompletionWithContext(messages, {
+            tenantId,
+            userId,
+            skipRateLimit: true,
+            skipQuotaCheck: true,
+        }, (chunk) => {
+            result += chunk;
+        });
+        this.logger.log({
+            message: 'Prompt formatted for agent',
+            agentType,
+            taskTitle,
+            instructionLength: result.length,
+        });
+        return result.trim();
+    }
+};
+exports.AgentPromptService = AgentPromptService;
+exports.AgentPromptService = AgentPromptService = AgentPromptService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _a : Object, typeof (_b = typeof agent_registry_service_1.AgentRegistryService !== "undefined" && agent_registry_service_1.AgentRegistryService) === "function" ? _b : Object])
+], AgentPromptService);
+
+
+/***/ }),
+/* 197 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AgentRegistryService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const types_1 = __webpack_require__(85);
+let AgentRegistryService = class AgentRegistryService {
+    constructor() {
+        this.agents = new Map([
+            [
+                types_1.AgentType.WEB_SEARCH,
+                {
+                    type: types_1.AgentType.WEB_SEARCH,
+                    openClawAgentId: 'web-search',
+                    label: 'Online istraživanje',
+                    description: 'Pretražuje internet za relevantne informacije, trendove i izvore',
+                    icon: '🔍',
+                    estimatedCostEur: 0.5,
+                    systemPrompt: `You write a direct execution instruction for a web research agent. The agent has tools: web_search, web_fetch, browser.
+
+Given the task report and business context (injected from memories), write an instruction that tells the agent EXACTLY what to search for and what data to return.
+
+Your output instruction MUST:
+- List 3-5 specific web searches to execute (exact search queries)
+- Name specific competitor websites to analyze with web_fetch
+- Specify the exact data points to extract (prices, stats, market size, trends)
+- Tell the agent to cite every finding with a source URL
+- Tell the agent to write ALL output in Serbian language
+- Tell the agent to format output as clean markdown with tables and sections (NO code blocks, NO HTML tags)
+
+Write in English. Output ONLY the instruction text, under 500 words.`,
+                },
+            ],
+            [
+                types_1.AgentType.CONTENT,
+                {
+                    type: types_1.AgentType.CONTENT,
+                    openClawAgentId: 'content',
+                    label: 'Kreiranje sadržaja',
+                    description: 'Kreira gotov sadržaj sa tekstom i slikama',
+                    icon: '✏️',
+                    estimatedCostEur: 0.5,
+                    systemPrompt: `You write a direct execution instruction for a content creation agent. The agent has tools: web_search, web_fetch, exec.
+
+MANDATORY TOOL — IMAGE GENERATION:
+The agent MUST generate images for every content piece. The exact command is:
+FAL_IMAGE_SIZE=square_hd fal-generate "prompt here in English"
+Available sizes: square_hd, landscape_4_3, landscape_16_9, portrait_4_3, portrait_16_9
+The command returns an image URL on stdout. The agent must embed it as: ![description](returned_url)
+
+Given the task report and business context (injected from memories), write an instruction that tells the agent:
+1. First analyze the company's visual identity by fetching their website/social media with web_fetch
+2. Create a visual brief (colors, style, lighting, aesthetic) based on the analysis
+3. For EACH content piece: write the full text AND generate at least one matching image using the exec command above
+4. Format ALL output as clean markdown — NOT HTML, NOT code blocks
+5. Use ![description](url) for images — NEVER use <img> HTML tags
+6. Write ALL text content in Serbian language
+7. Include headlines, body copy, CTAs, hashtags, posting schedule
+
+CRITICAL FORMAT RULES for the agent:
+- Output must be pure markdown, never wrap content in \`\`\`html code blocks
+- Images must use markdown syntax: ![opis](url)
+- Tables use markdown pipe syntax
+- No raw HTML anywhere in the output
+
+Write in English. Output ONLY the instruction text, under 600 words.`,
+                },
+            ],
+            [
+                types_1.AgentType.MARKETING,
+                {
+                    type: types_1.AgentType.MARKETING,
+                    openClawAgentId: 'marketing',
+                    label: 'Marketing analiza',
+                    description: 'Analizira tržište, kreira vizuelni sadržaj sa AI slikama',
+                    icon: '📈',
+                    estimatedCostEur: 0.5,
+                    systemPrompt: `You write a direct execution instruction for a marketing strategy agent. The agent has tools: web_search, web_fetch, exec.
+
+MANDATORY TOOL — IMAGE GENERATION (when task involves content/visuals):
+The agent MUST generate images using exec:
+FAL_IMAGE_SIZE=square_hd fal-generate "prompt in English"
+Available sizes: square_hd, landscape_4_3, landscape_16_9, portrait_4_3, portrait_16_9
+Embed result as: ![description](returned_url)
+
+Given the task report and business context (injected from memories), write an instruction that tells the agent:
+1. What specific market data to find via web_search (competitors, pricing, market share — use exact search queries)
+2. What analysis frameworks to apply (SWOT, competitive positioning, segmentation)
+3. If the task involves content: generate at least 2 images using the exec command above
+4. Format ALL output as clean markdown with tables, sections, source URLs
+5. Write ALL output in Serbian language
+6. Use markdown image syntax ![opis](url) — never HTML <img> tags
+7. Never wrap output in code blocks
+
+Write in English. Output ONLY the instruction text, under 600 words.`,
+                },
+            ],
+            [
+                types_1.AgentType.SALES,
+                {
+                    type: types_1.AgentType.SALES,
+                    openClawAgentId: 'sales',
+                    label: 'Prodajna strategija',
+                    description: 'Kreira prodajne planove i šalje personalizovane emailove',
+                    icon: '💼',
+                    estimatedCostEur: 0.5,
+                    systemPrompt: `You write a direct execution instruction for a sales strategy agent. The agent has tools: web_search, web_fetch, exec.
+
+MANDATORY TOOL — EMAIL SENDING:
+The agent MUST send at least one personalized email per execution. The exact command is:
+agentmail-send --to "vojinskrill@gmail.com" --subject "Subject here" --text "Email body here"
+The agent must compose the email content based on the task context, then execute the command to send it.
+After sending, the agent must include the sent email content and confirmation in its output.
+
+Given the task report and business context (injected from memories), write an instruction that tells the agent:
+1. What sales data to research via web_search (competitor pricing, market positioning)
+2. What sales strategy to create (target profile, approach, objection handling, pricing)
+3. What email(s) to compose and send — specify the email purpose (cold outreach, follow-up, proposal, etc.)
+4. The email content must be personalized to the business context and task — NOT generic
+5. The agent MUST use the agentmail-send exec command to actually send each email
+6. Format ALL output as clean markdown with tables and sections
+7. Write ALL output in Serbian language
+8. Include a "Poslati Emailovi" section showing each sent email with subject, body, and send confirmation
+
+CRITICAL: The instruction MUST contain the exact agentmail-send command syntax. Do not omit email sending.
+
+Write in English. Output ONLY the instruction text, under 600 words.`,
+                },
+            ],
+            [
+                types_1.AgentType.FINANCIAL,
+                {
+                    type: types_1.AgentType.FINANCIAL,
+                    openClawAgentId: 'financial',
+                    label: 'Finansijska analiza',
+                    description: 'Računanje ROI, budžetska analiza i finansijsko planiranje',
+                    icon: '💰',
+                    estimatedCostEur: 0.5,
+                    systemPrompt: `You write a direct execution instruction for a financial analyst agent. The agent has tools: web_search, web_fetch.
+
+Given the task report and business context (injected from memories), write an instruction that tells the agent:
+1. What specific financials to calculate (ROI, break-even, margins, projections) with exact formulas
+2. What industry benchmarks to search for via web_search (exact search queries for costs, margins, growth rates)
+3. To build tables with actual numbers — not qualitative descriptions
+4. To include scenario analysis (optimistic, realistic, pessimistic)
+5. To include risk assessment with probability and financial impact
+6. Format ALL output as clean markdown with tables and sections
+7. Write ALL output in Serbian language
+8. Cite every benchmark with source URL
+
+Write in English. Output ONLY the instruction text, under 500 words.`,
+                },
+            ],
+        ]);
+    }
+    getAgent(type) {
+        const agent = this.agents.get(type);
+        if (!agent) {
+            throw new Error(`Unknown agent type: ${type}`);
+        }
+        return agent;
+    }
+    getAllAgents() {
+        return Array.from(this.agents.values());
+    }
+    getAgentLabel(type) {
+        return this.getAgent(type).label;
+    }
+    getOpenClawAgentId(type) {
+        return this.getAgent(type).openClawAgentId;
+    }
+    getAllAgentTypeInfos() {
+        return this.getAllAgents().map((a) => ({
+            type: a.type,
+            label: a.label,
+            description: a.description,
+            icon: a.icon,
+            estimatedCostEur: a.estimatedCostEur,
+        }));
+    }
+};
+exports.AgentRegistryService = AgentRegistryService;
+exports.AgentRegistryService = AgentRegistryService = tslib_1.__decorate([
+    (0, common_1.Injectable)()
+], AgentRegistryService);
+
+
+/***/ }),
+/* 198 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var AgentRecommenderService_1;
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AgentRecommenderService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const ai_gateway_service_1 = __webpack_require__(89);
+const agent_registry_service_1 = __webpack_require__(197);
+const types_1 = __webpack_require__(85);
+let AgentRecommenderService = AgentRecommenderService_1 = class AgentRecommenderService {
+    constructor(aiGateway, registry) {
+        this.aiGateway = aiGateway;
+        this.registry = registry;
+        this.logger = new common_1.Logger(AgentRecommenderService_1.name);
+    }
+    async getRecommendations(params) {
+        const { taskTitle, taskContent, userReport, expectedOutcome, tenantId, userId } = params;
+        const agentDescriptions = this.registry
+            .getAllAgents()
+            .map((a) => `- ${a.type}: ${a.label} — ${a.description}`)
+            .join('\n');
+        const systemPrompt = `You are a business task analyzer. Given a completed task report, recommend which AI agents would be most useful to enrich the report.
+
+Available agent types:
+${agentDescriptions}
+
+Rules:
+- Recommend 2-3 agents that would add the most value to this specific task
+- Each recommendation needs: agentType (exact enum value), relevanceScore (0-100), reasoning (1 sentence in Serbian explaining why)
+- Higher relevanceScore = more relevant for this specific task
+- Only recommend agents that genuinely add value — don't recommend all 5
+- Respond ONLY with a JSON array, no other text
+
+Example output:
+[{"agentType":"web_search","relevanceScore":85,"reasoning":"Istraživanje tržišta bi obogatilo analizu konkurencije."},{"agentType":"financial","relevanceScore":70,"reasoning":"ROI kalkulacija bi pomogla u donošenju odluke o investiciji."}]`;
+        const userMessage = `Task: ${taskTitle}
+
+Description: ${taskContent.substring(0, 500)}
+
+${expectedOutcome ? `Expected Outcome: ${expectedOutcome}\n` : ''}User Report (first 2000 chars):
+${userReport.substring(0, 2000)}
+
+Which agents would best enrich this report? Return JSON array only.`;
+        const messages = [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage },
+        ];
+        let result = '';
+        try {
+            await this.aiGateway.streamCompletionWithContext(messages, {
+                tenantId,
+                userId,
+                skipRateLimit: true,
+                skipQuotaCheck: true,
+            }, (chunk) => {
+                result += chunk;
+            });
+            const jsonMatch = result.match(/\[[\s\S]*\]/);
+            if (!jsonMatch) {
+                this.logger.warn({ message: 'No JSON array found in recommendation response', result: result.substring(0, 200) });
+                return this.getDefaultRecommendations();
+            }
+            const parsed = JSON.parse(jsonMatch[0]);
+            const validTypes = Object.values(types_1.AgentType);
+            const recommendations = parsed
+                .filter((r) => validTypes.includes(r.agentType))
+                .map((r) => ({
+                agentType: r.agentType,
+                relevanceScore: Math.max(0, Math.min(100, Number(r.relevanceScore) || 50)),
+                reasoning: r.reasoning || '',
+            }))
+                .slice(0, 3);
+            this.logger.log({
+                message: 'Agent recommendations generated',
+                taskTitle,
+                count: recommendations.length,
+                types: recommendations.map((r) => r.agentType),
+            });
+            return recommendations.length > 0 ? recommendations : this.getDefaultRecommendations();
+        }
+        catch (err) {
+            this.logger.error({
+                message: 'Failed to generate recommendations',
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+            return this.getDefaultRecommendations();
+        }
+    }
+    getDefaultRecommendations() {
+        return [
+            {
+                agentType: types_1.AgentType.WEB_SEARCH,
+                relevanceScore: 70,
+                reasoning: 'Online istraživanje može pronaći dodatne podatke i izvore.',
+            },
+            {
+                agentType: types_1.AgentType.MARKETING,
+                relevanceScore: 60,
+                reasoning: 'Marketing analiza može dati uvid u tržište i konkurenciju.',
+            },
+        ];
+    }
+};
+exports.AgentRecommenderService = AgentRecommenderService;
+exports.AgentRecommenderService = AgentRecommenderService = AgentRecommenderService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _a : Object, typeof (_b = typeof agent_registry_service_1.AgentRegistryService !== "undefined" && agent_registry_service_1.AgentRegistryService) === "function" ? _b : Object])
+], AgentRecommenderService);
+
+
+/***/ }),
+/* 199 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var BudgetService_1;
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BudgetService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const tenant_context_1 = __webpack_require__(9);
+const library_1 = __webpack_require__(99);
+let BudgetService = BudgetService_1 = class BudgetService {
+    constructor(prisma, configService) {
+        this.prisma = prisma;
+        this.configService = configService;
+        this.logger = new common_1.Logger(BudgetService_1.name);
+        this.dailyLimitEur = parseFloat(this.configService.get('AGENT_DAILY_BUDGET_EUR') ?? '20');
+        this.estimatedCostEur = parseFloat(this.configService.get('AGENT_ESTIMATED_COST_EUR') ?? '0.50');
+    }
+    getEstimatedCost() {
+        return this.estimatedCostEur;
+    }
+    getDailyLimit() {
+        return this.dailyLimitEur;
+    }
+    async getDailySpent(tenantId) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const budget = await this.prisma.agentDailyBudget.findUnique({
+            where: { tenantId_date: { tenantId, date: today } },
+        });
+        return {
+            spentEur: budget ? Number(budget.spentEur) : 0,
+            limitEur: budget ? Number(budget.limitEur) : this.dailyLimitEur,
+        };
+    }
+    async canSpend(tenantId, amount) {
+        const cost = amount ?? this.estimatedCostEur;
+        const { spentEur, limitEur } = await this.getDailySpent(tenantId);
+        return spentEur + cost <= limitEur;
+    }
+    async recordSpend(tenantId, amountEur) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        await this.prisma.agentDailyBudget.upsert({
+            where: { tenantId_date: { tenantId, date: today } },
+            update: {
+                spentEur: { increment: new library_1.Decimal(amountEur) },
+            },
+            create: {
+                tenantId,
+                date: today,
+                spentEur: new library_1.Decimal(amountEur),
+                limitEur: new library_1.Decimal(this.dailyLimitEur),
+            },
+        });
+        this.logger.log({
+            message: 'Budget spend recorded',
+            tenantId,
+            amountEur,
+        });
+    }
+};
+exports.BudgetService = BudgetService;
+exports.BudgetService = BudgetService = BudgetService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _b : Object])
+], BudgetService);
+
+
+/***/ }),
+/* 200 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AgentExecutionController = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const jwt_auth_guard_1 = __webpack_require__(46);
+const current_user_decorator_1 = __webpack_require__(48);
+const agent_execution_service_1 = __webpack_require__(194);
+const budget_service_1 = __webpack_require__(199);
+const types_1 = __webpack_require__(85);
+let AgentExecutionController = class AgentExecutionController {
+    constructor(agentExecutionService, budgetService) {
+        this.agentExecutionService = agentExecutionService;
+        this.budgetService = budgetService;
+    }
+    async getTodaysBudget(user) {
+        const { spentEur, limitEur } = await this.budgetService.getDailySpent(user.tenantId);
+        return { data: { spentEur, limitEur } };
+    }
+    async getRecommendations(noteId, user) {
+        const result = await this.agentExecutionService.getRecommendations(noteId, user.userId, user.tenantId);
+        return { data: result };
+    }
+    async triggerAgent(noteId, agentType, user) {
+        const validTypes = Object.values(types_1.AgentType);
+        if (!validTypes.includes(agentType)) {
+            throw new common_1.BadRequestException(`Invalid agent type: ${agentType}`);
+        }
+        const result = await this.agentExecutionService.triggerAgent(noteId, agentType, user.userId, user.tenantId);
+        return { data: result };
+    }
+    async getExecutionsByNote(noteId, user) {
+        const executions = await this.agentExecutionService.getExecutionsByNote(noteId, user.tenantId);
+        return { data: executions };
+    }
+    async getExecution(executionId, user) {
+        const execution = await this.agentExecutionService.getExecution(executionId, user.tenantId);
+        if (!execution) {
+            throw new common_1.NotFoundException(`Execution ${executionId} not found`);
+        }
+        return { data: execution };
+    }
+};
+exports.AgentExecutionController = AgentExecutionController;
+tslib_1.__decorate([
+    (0, common_1.Get)('budget/today'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "getTodaysBudget", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('recommendations/:noteId'),
+    tslib_1.__param(0, (0, common_1.Param)('noteId')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "getRecommendations", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('trigger/:noteId/:agentType'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
+    tslib_1.__param(0, (0, common_1.Param)('noteId')),
+    tslib_1.__param(1, (0, common_1.Param)('agentType')),
+    tslib_1.__param(2, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "triggerAgent", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('note/:noteId'),
+    tslib_1.__param(0, (0, common_1.Param)('noteId')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "getExecutionsByNote", null);
+tslib_1.__decorate([
+    (0, common_1.Get)(':executionId'),
+    tslib_1.__param(0, (0, common_1.Param)('executionId')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "getExecution", null);
+exports.AgentExecutionController = AgentExecutionController = tslib_1.__decorate([
+    (0, common_1.Controller)('v1/agent-execution'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof agent_execution_service_1.AgentExecutionService !== "undefined" && agent_execution_service_1.AgentExecutionService) === "function" ? _a : Object, typeof (_b = typeof budget_service_1.BudgetService !== "undefined" && budget_service_1.BudgetService) === "function" ? _b : Object])
+], AgentExecutionController);
+
+
+/***/ }),
+/* 201 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -26556,7 +29737,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 const common_1 = __webpack_require__(1);
 const core_1 = __webpack_require__(2);
 const app_module_1 = __webpack_require__(3);
-const all_exceptions_filter_1 = __webpack_require__(178);
+const all_exceptions_filter_1 = __webpack_require__(201);
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
     const globalPrefix = 'api';

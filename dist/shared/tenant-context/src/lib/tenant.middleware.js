@@ -29,6 +29,33 @@ const _client = require("@prisma/client");
 const TENANT_ID_HEADER = 'x-tenant-id';
 const TENANT_ID_KEY = 'tenantId';
 let TenantMiddleware = class TenantMiddleware {
+    /**
+   * Resolves the real active tenant ID for DEV_MODE, matching JwtAuthGuard.getDevUser().
+   * Caches the result for server lifetime. Falls back to 'dev-tenant-001' if DB query fails.
+   */ async resolveDevTenantId() {
+        if (this.resolvedDevTenantId) return this.resolvedDevTenantId;
+        try {
+            const tenant = await this.platformPrisma.tenant.findFirst({
+                where: {
+                    status: 'ACTIVE'
+                },
+                orderBy: {
+                    createdAt: 'desc'
+                },
+                select: {
+                    id: true
+                }
+            });
+            if (tenant) {
+                this.resolvedDevTenantId = tenant.id;
+                return tenant.id;
+            }
+        } catch (e) {
+        // DB error — use fallback
+        }
+        this.resolvedDevTenantId = 'dev-tenant-001';
+        return this.resolvedDevTenantId;
+    }
     async use(req, res, next) {
         // Skip tenant validation for excluded paths
         if (this.isExcludedPath(req.path)) {
@@ -54,7 +81,7 @@ let TenantMiddleware = class TenantMiddleware {
                 // Token decode failed - use dev fallback
                 }
             }
-            req.tenantId = 'dev-tenant-001';
+            req.tenantId = await this.resolveDevTenantId();
             return next();
         }
         const tenantId = req.headers[TENANT_ID_HEADER];
@@ -104,6 +131,7 @@ let TenantMiddleware = class TenantMiddleware {
             '/api/health',
             '/api/v1/health'
         ];
+        this.resolvedDevTenantId = null;
     }
 };
 TenantMiddleware = _ts_decorate._([

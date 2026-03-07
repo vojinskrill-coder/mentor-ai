@@ -12,6 +12,12 @@ function _export(target, all) {
     });
 }
 _export(exports, {
+    AgentExecutionStatus: function() {
+        return AgentExecutionStatus;
+    },
+    AgentType: function() {
+        return AgentType;
+    },
     CONFIDENCE_COLORS: function() {
         return CONFIDENCE_COLORS;
     },
@@ -263,6 +269,7 @@ var NoteType;
     NoteType["NOTE"] = "NOTE";
     NoteType["SUMMARY"] = "SUMMARY";
     NoteType["COMMENT"] = "COMMENT";
+    NoteType["AGENT_RESEARCH"] = "AGENT_RESEARCH";
 })(NoteType || (NoteType = {}));
 var NoteStatus;
 (function(NoteStatus) {
@@ -270,5 +277,21 @@ var NoteStatus;
     NoteStatus["READY_FOR_REVIEW"] = "READY_FOR_REVIEW";
     NoteStatus["COMPLETED"] = "COMPLETED";
 })(NoteStatus || (NoteStatus = {}));
+var AgentExecutionStatus;
+(function(AgentExecutionStatus) {
+    AgentExecutionStatus["PENDING"] = "PENDING";
+    AgentExecutionStatus["FORMATTING"] = "FORMATTING";
+    AgentExecutionStatus["EXECUTING"] = "EXECUTING";
+    AgentExecutionStatus["COMPLETED"] = "COMPLETED";
+    AgentExecutionStatus["FAILED"] = "FAILED";
+})(AgentExecutionStatus || (AgentExecutionStatus = {}));
+var AgentType;
+(function(AgentType) {
+    AgentType["WEB_SEARCH"] = "web_search";
+    AgentType["CONTENT"] = "content";
+    AgentType["MARKETING"] = "marketing";
+    AgentType["SALES"] = "sales";
+    AgentType["FINANCIAL"] = "financial";
+})(AgentType || (AgentType = {}));
 
 //# sourceMappingURL=types.js.map
