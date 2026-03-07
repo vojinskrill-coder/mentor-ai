@@ -27,8 +27,14 @@ interface Rfc7807Error {
 
 @Injectable()
 export class TenantMiddleware implements NestMiddleware {
-  // Paths that don't require tenant context (e.g., health checks, platform admin)
-  private readonly excludedPaths = ['/health', '/api/health', '/api/v1/health'];
+  // Paths that don't require tenant context (e.g., health checks, auth, platform admin)
+  private readonly excludedPaths = [
+    '/health',
+    '/api/health',
+    '/api/v1/health',
+    '/auth',
+    '/api/auth',
+  ];
 
   /** Cached dev tenant ID resolved from DB */
   private resolvedDevTenantId: string | null = null;
@@ -135,7 +141,8 @@ export class TenantMiddleware implements NestMiddleware {
       );
     }
 
-    if (tenant.status !== TenantStatus.ACTIVE) {
+    const allowedStatuses: TenantStatus[] = [TenantStatus.ACTIVE, TenantStatus.ONBOARDING];
+    if (!allowedStatuses.includes(tenant.status)) {
       throw new ForbiddenException(
         this.createRfc7807Error(
           'tenant_not_active',

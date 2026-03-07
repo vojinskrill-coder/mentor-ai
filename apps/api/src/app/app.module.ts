@@ -25,6 +25,7 @@ import { AdminModule } from './admin/admin.module';
 import { ExecutionModule } from './execution/execution.module';
 import { AttachmentsModule } from './attachments/attachments.module';
 import { PdfExportModule } from './pdf-export/pdf-export.module';
+import { AgentExecutionModule } from './agent-execution/agent-execution.module';
 
 // Serve Angular static files in production (combined deploy)
 const staticPath = join(__dirname, '..', '..', 'web', 'browser');
@@ -66,6 +67,7 @@ const serveStaticImports = existsSync(staticPath)
     ExecutionModule,
     AttachmentsModule,
     PdfExportModule,
+    AgentExecutionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

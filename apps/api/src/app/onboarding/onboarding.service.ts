@@ -1469,6 +1469,16 @@ ${match.category}
       data: { status: PrismaTenantStatus.ACTIVE },
     });
 
+    // Keep tenantRegistry in sync
+    try {
+      await this.prisma.tenantRegistry.update({
+        where: { id: tenantId },
+        data: { status: PrismaTenantStatus.ACTIVE },
+      });
+    } catch {
+      // Registry entry may not exist in dev/single-DB setups — not critical
+    }
+
     this.logger.log({
       message: 'Tenant status updated to ACTIVE',
       tenantId,

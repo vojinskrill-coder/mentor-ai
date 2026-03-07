@@ -974,6 +974,8 @@ export class ChatWebsocketService {
   }
 
   clearCallbacks(): void {
+    // H6: Include messageDeletedCallbacks in cleanup to prevent accumulation on reconnect
+    this.messageDeletedCallbacks = [];
     this.messageReceivedCallbacks = [];
     this.messageChunkCallbacks = [];
     this.completeCallbacks = [];

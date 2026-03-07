@@ -1346,6 +1346,7 @@ export enum NoteType {
   NOTE = 'NOTE',
   SUMMARY = 'SUMMARY',
   COMMENT = 'COMMENT',
+  AGENT_RESEARCH = 'AGENT_RESEARCH',
 }
 
 /** Task completion status */
@@ -1378,6 +1379,8 @@ export interface NoteItem {
   reusedFromNoteId: string | null;
   /** File attachments on this note/task */
   attachments?: AttachmentItem[];
+  /** Agent enrichment results stored as JSON on the note */
+  agentEnrichments: AgentEnrichments | null;
 }
 
 /** Request to create a note */
@@ -1728,4 +1731,85 @@ export interface YoloCompletePayload {
   totalConsidered?: number;
   /** Execution budget that was applied */
   executionBudget?: number;
+}
+
+// ── Agent Execution Types (OpenClaw V1) ──
+
+export enum AgentExecutionStatus {
+  PENDING = 'PENDING',
+  FORMATTING = 'FORMATTING',
+  EXECUTING = 'EXECUTING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+}
+
+/** Approval dialog data returned before triggering research */
+export interface AgentApprovalInfo {
+  noteId: string;
+  taskTitle: string;
+  taskSummary: string;
+  estimatedCostEur: number;
+  dailySpentEur: number;
+  dailyLimitEur: number;
+  canProceed: boolean;
+}
+
+/** Agent execution record */
+export interface AgentExecutionResponse {
+  id: string;
+  noteId: string;
+  resultNoteId: string | null;
+  status: AgentExecutionStatus;
+  agentType: string;
+  estimatedCostEur: number | null;
+  actualCostEur: number | null;
+  error: string | null;
+  durationMs: number | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+// ── Agent Execution V2: Multi-Agent Recommendations ──
+
+export enum AgentType {
+  WEB_SEARCH = 'web_search',
+  CONTENT = 'content',
+  MARKETING = 'marketing',
+  SALES = 'sales',
+  FINANCIAL = 'financial',
+}
+
+export interface AgentTypeInfo {
+  type: AgentType;
+  label: string;
+  description: string;
+  icon: string;
+  estimatedCostEur: number;
+}
+
+export interface AgentRecommendation {
+  agentType: AgentType;
+  relevanceScore: number;
+  reasoning: string;
+}
+
+export interface AgentRecommendationsResponse {
+  noteId: string;
+  recommendations: AgentRecommendation[];
+  agentTypes?: AgentTypeInfo[];
+  dailySpentEur: number;
+  dailyLimitEur: number;
+  canProceed: boolean;
+}
+
+export interface AgentEnrichments {
+  [agentType: string]: AgentEnrichmentEntry;
+}
+
+export interface AgentEnrichmentEntry {
+  executionId: string;
+  status: AgentExecutionStatus;
+  result: string | null;
+  completedAt: string | null;
+  error: string | null;
 }

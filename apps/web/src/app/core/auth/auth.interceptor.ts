@@ -9,9 +9,10 @@ import { Router } from '@angular/router';
 import { tap } from 'rxjs';
 
 const STORAGE_KEY = 'mentor_ai_token';
+const USER_STORAGE_KEY = 'mentor_ai_user';
 
 /**
- * HTTP Interceptor to add Authorization header with stored JWT token.
+ * HTTP Interceptor to add Authorization and X-Tenant-Id headers.
  * Also handles 401 responses by clearing stale tokens and redirecting to login.
  */
 export const authInterceptor: HttpInterceptorFn = (
@@ -35,7 +36,26 @@ export const authInterceptor: HttpInterceptorFn = (
   }
 
   const token = localStorage.getItem(STORAGE_KEY);
-  const request = token ? req.clone({ setHeaders: { Authorization: `Bearer ${token}` } }) : req;
+  const headers: Record<string, string> = {};
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  // Add X-Tenant-Id from stored user data
+  try {
+    const userData = localStorage.getItem(USER_STORAGE_KEY);
+    if (userData) {
+      const user = JSON.parse(userData);
+      if (user?.tenantId) {
+        headers['X-Tenant-Id'] = user.tenantId;
+      }
+    }
+  } catch {
+    // Invalid stored user data — skip
+  }
+
+  const request = Object.keys(headers).length > 0 ? req.clone({ setHeaders: headers }) : req;
 
   return next(request).pipe(
     tap({

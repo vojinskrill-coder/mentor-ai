@@ -1,6 +1,7 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '@prisma/client';
+import { PlatformPrismaService } from './platform-prisma.service';
 
 interface PoolConfig {
   max: number;
@@ -25,11 +26,18 @@ export class TenantPrismaService implements OnModuleDestroy {
   private readonly poolConfig: PoolConfig;
   private cleanupInterval: NodeJS.Timeout | null = null;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly platformPrisma: PlatformPrismaService
+  ) {
     this.poolConfig = {
       max: this.configService.get<number>('TENANT_DB_POOL_MAX') ?? DEFAULT_POOL_CONFIG.max,
-      idleTimeoutMs: this.configService.get<number>('TENANT_DB_IDLE_TIMEOUT_MS') ?? DEFAULT_POOL_CONFIG.idleTimeoutMs,
-      acquireTimeoutMs: this.configService.get<number>('TENANT_DB_ACQUIRE_TIMEOUT_MS') ?? DEFAULT_POOL_CONFIG.acquireTimeoutMs,
+      idleTimeoutMs:
+        this.configService.get<number>('TENANT_DB_IDLE_TIMEOUT_MS') ??
+        DEFAULT_POOL_CONFIG.idleTimeoutMs,
+      acquireTimeoutMs:
+        this.configService.get<number>('TENANT_DB_ACQUIRE_TIMEOUT_MS') ??
+        DEFAULT_POOL_CONFIG.acquireTimeoutMs,
     };
 
     this.startIdleCleanup();
@@ -67,7 +75,7 @@ export class TenantPrismaService implements OnModuleDestroy {
   }
 
   private async createClient(tenantId: string): Promise<PrismaClient> {
-    const dbUrl = this.getTenantDbUrl(tenantId);
+    const dbUrl = await this.getTenantDbUrlAsync(tenantId);
 
     const client = new PrismaClient({
       datasources: {
@@ -80,7 +88,11 @@ export class TenantPrismaService implements OnModuleDestroy {
       const connectPromise = client.$connect();
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => {
-          reject(new Error(`Connection acquisition timeout after ${this.poolConfig.acquireTimeoutMs}ms for tenant ${tenantId}`));
+          reject(
+            new Error(
+              `Connection acquisition timeout after ${this.poolConfig.acquireTimeoutMs}ms for tenant ${tenantId}`
+            )
+          );
         }, this.poolConfig.acquireTimeoutMs);
       });
 
@@ -119,16 +131,63 @@ export class TenantPrismaService implements OnModuleDestroy {
     return client;
   }
 
+  /** Cache of tenant DB URLs resolved from registry */
+  private readonly dbUrlCache = new Map<string, string>();
+
+  private async getTenantDbUrlAsync(tenantId: string): Promise<string> {
+    // Dev mode: use the platform DATABASE_URL for all tenants (single-database mode)
+    const devMode = this.configService.get<string>('DEV_MODE') === 'true';
+    if (devMode) {
+      const platformUrl = this.configService.get<string>('DATABASE_URL');
+      if (platformUrl) return platformUrl;
+    }
+
+    // Check cache first
+    const cached = this.dbUrlCache.get(tenantId);
+    if (cached) return cached;
+
+    // Look up the tenant's dbUrl from the registry
+    try {
+      const registry = await this.platformPrisma.tenantRegistry.findUnique({
+        where: { id: tenantId },
+        select: { dbUrl: true },
+      });
+      if (registry?.dbUrl) {
+        this.dbUrlCache.set(tenantId, registry.dbUrl);
+        return registry.dbUrl;
+      }
+    } catch {
+      // Registry lookup failed — fall through to fallback
+    }
+
+    // Fallback: use platform DATABASE_URL (single-DB setup)
+    const platformUrl = this.configService.get<string>('DATABASE_URL');
+    if (platformUrl) return platformUrl;
+
+    // Last resort: construct from TENANT_DB_* env vars
+    return this.buildTenantDbUrl(tenantId);
+  }
+
   private getTenantDbUrl(tenantId: string): string {
     // Dev mode: use the platform DATABASE_URL for all tenants (single-database mode)
     const devMode = this.configService.get<string>('DEV_MODE') === 'true';
     if (devMode) {
       const platformUrl = this.configService.get<string>('DATABASE_URL');
-      if (platformUrl) {
-        return platformUrl;
-      }
+      if (platformUrl) return platformUrl;
     }
 
+    // Check cache
+    const cached = this.dbUrlCache.get(tenantId);
+    if (cached) return cached;
+
+    // Fallback: use platform DATABASE_URL (single-DB setup)
+    const platformUrl = this.configService.get<string>('DATABASE_URL');
+    if (platformUrl) return platformUrl;
+
+    return this.buildTenantDbUrl(tenantId);
+  }
+
+  private buildTenantDbUrl(tenantId: string): string {
     const host = this.configService.get<string>('TENANT_DB_HOST') ?? 'localhost';
     const port = this.configService.get<number>('TENANT_DB_PORT') ?? 5432;
     const user = this.configService.get<string>('TENANT_DB_USER') ?? 'postgres';
@@ -195,8 +254,8 @@ export class TenantPrismaService implements OnModuleDestroy {
     }
 
     // Disconnect all clients
-    const disconnectPromises = Array.from(this.clients.values()).map(
-      (connection) => connection.client.$disconnect()
+    const disconnectPromises = Array.from(this.clients.values()).map((connection) =>
+      connection.client.$disconnect()
     );
 
     await Promise.all(disconnectPromises);

@@ -20,12 +20,19 @@ import type { NoteItem, CommentItem, ParallelPopuniTaskState } from '@mentor-ai/
 // eslint-disable-next-line @nx/enforce-module-boundaries
 import { MarkdownPipe } from '@mentor-ai/shared/ui';
 import { PdfReorderDialogComponent } from './pdf-reorder-dialog.component';
+import { AgentPanelComponent } from './agent-panel.component';
 import { environment } from '../../../../environments/environment';
 
 @Component({
   selector: 'app-conversation-notes',
   standalone: true,
-  imports: [CommonModule, FormsModule, MarkdownPipe, PdfReorderDialogComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    MarkdownPipe,
+    PdfReorderDialogComponent,
+    AgentPanelComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   styles: [
@@ -1302,6 +1309,18 @@ import { environment } from '../../../../environments/environment';
         color: #9e9e9e;
         text-decoration: line-through;
       }
+
+      .research-result-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 10px;
+        color: #a855f7;
+        background: rgba(168, 85, 247, 0.1);
+        padding: 2px 6px;
+        border-radius: 4px;
+        margin-left: 6px;
+      }
     `,
   ],
   template: `
@@ -1793,12 +1812,29 @@ import { environment } from '../../../../environments/environment';
                 @if (note.children && note.children.length > 0) {
                   <div class="subtasks-section">
                     <div class="subtasks-label">
-                      Rezultat workflow-a ({{ note.children.length }} koraka)
+                      Povezani rezultati ({{ note.children.length }})
                     </div>
                     @for (child of note.children; track child.id) {
                       <div>
                         <div class="subtask-item" (click)="toggleSubtaskExpand(child.id)">
-                          @if (child.workflowStepNumber !== null) {
+                          @if (child.noteType === 'AGENT_RESEARCH') {
+                            <span class="research-result-badge">
+                              <svg
+                                style="width:12px;height:12px;"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  stroke-width="2"
+                                  d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
+                                />
+                              </svg>
+                              Rezultati istraživanja
+                            </span>
+                          } @else if (child.workflowStepNumber !== null) {
                             <span class="subtask-step-num">{{ child.workflowStepNumber }}</span>
                           }
                           @if (child.status === 'COMPLETED') {
@@ -1841,11 +1877,16 @@ import { environment } from '../../../../environments/environment';
                                 placeholder="Opišite šta ste uradili, šta ste naučili, ostvarene rezultate..."
                                 [value]="getReportText(child.id)"
                                 (input)="setReportText(child.id, asTextareaValue($event))"
+                                [disabled]="isExecuting() || isParallelExecuting()"
                               ></textarea>
                               <div class="report-actions">
                                 <button
                                   class="btn-ai-fill"
-                                  [disabled]="generatingReportId() === child.id"
+                                  [disabled]="
+                                    generatingReportId() === child.id ||
+                                    isExecuting() ||
+                                    isParallelExecuting()
+                                  "
                                   (click)="onGenerateReport(child.id)"
                                 >
                                   {{
@@ -1857,7 +1898,10 @@ import { environment } from '../../../../environments/environment';
                                 <button
                                   class="btn-primary"
                                   [disabled]="
-                                    !getReportText(child.id) || submittingInProgress().has(child.id)
+                                    !getReportText(child.id) ||
+                                    submittingInProgress().has(child.id) ||
+                                    isExecuting() ||
+                                    isParallelExecuting()
                                   "
                                   (click)="submitReport(child.id)"
                                 >
@@ -1936,18 +1980,26 @@ import { environment } from '../../../../environments/environment';
                       placeholder="Opišite šta ste uradili, šta ste naučili, ostvarene rezultate..."
                       [value]="getReportText(note.id)"
                       (input)="setReportText(note.id, asTextareaValue($event))"
+                      [disabled]="isExecuting() || isParallelExecuting()"
                     ></textarea>
                     <div class="report-actions">
                       <button
                         class="btn-ai-fill"
-                        [disabled]="generatingReportId() === note.id"
+                        [disabled]="
+                          generatingReportId() === note.id || isExecuting() || isParallelExecuting()
+                        "
                         (click)="onGenerateReport(note.id)"
                       >
                         {{ generatingReportId() === note.id ? 'AI generiše...' : 'AI popuni' }}
                       </button>
                       <button
                         class="btn-primary"
-                        [disabled]="!getReportText(note.id) || submittingInProgress().has(note.id)"
+                        [disabled]="
+                          !getReportText(note.id) ||
+                          submittingInProgress().has(note.id) ||
+                          isExecuting() ||
+                          isParallelExecuting()
+                        "
                         (click)="submitReport(note.id)"
                       >
                         {{ submittingInProgress().has(note.id) ? 'Šaljem...' : 'Pošalji izveštaj' }}
@@ -2007,6 +2059,10 @@ import { environment } from '../../../../environments/environment';
                       </div>
                     }
                   </div>
+                }
+
+                @if (note.noteType === 'TASK' && note.status === 'COMPLETED' && note.userReport) {
+                  <app-agent-panel [note]="note" (noteUpdated)="loadNotes()"> </app-agent-panel>
                 }
 
                 <!-- Comments thread -->
@@ -2161,7 +2217,6 @@ import { environment } from '../../../../environments/environment';
 export class ConversationNotesComponent {
   private readonly notesApi = inject(NotesApiService);
   private readonly http = inject(HttpClient);
-
   conversationId = input<string | null>(null);
   conceptId = input<string | null>(null);
   isExecuting = input<boolean>(false);
@@ -2474,6 +2529,8 @@ export class ConversationNotesComponent {
 
   async deleteNote(noteId: string): Promise<void> {
     if (this.deletingInProgress().has(noteId)) return;
+    // H11: Block deletion during any execution
+    if (this.isParallelExecuting() || this.isExecuting() || this.executingTaskId()) return;
     this.deletingInProgress.update((s) => {
       const n = new Set(s);
       n.add(noteId);
@@ -2632,13 +2689,27 @@ export class ConversationNotesComponent {
   updateFilteredNotes(): void {
     const filter = this.activeFilter();
     const all = this.notes();
+    let filtered: NoteItem[];
     if (filter === 'all') {
-      this.filteredNotes.set(all);
+      filtered = all;
     } else if (filter === 'READY_FOR_REVIEW') {
-      this.filteredNotes.set(all.filter((n) => n.status === 'READY_FOR_REVIEW'));
+      filtered = all.filter((n) => n.status === 'READY_FOR_REVIEW');
     } else {
-      this.filteredNotes.set(all.filter((n) => n.noteType === filter));
+      filtered = all.filter((n) => n.noteType === filter);
     }
+    // H5: Sort tasks — PENDING first, then by most recently updated/created
+    filtered = [...filtered].sort((a, b) => {
+      // PENDING before COMPLETED/READY_FOR_REVIEW
+      const statusOrder: Record<string, number> = { PENDING: 0, READY_FOR_REVIEW: 1, COMPLETED: 2 };
+      const sa = statusOrder[a.status ?? ''] ?? 1;
+      const sb = statusOrder[b.status ?? ''] ?? 1;
+      if (sa !== sb) return sa - sb;
+      // Within same status, sort by updatedAt descending (most recent first)
+      const dateA = new Date(a.updatedAt ?? a.createdAt).getTime();
+      const dateB = new Date(b.updatedAt ?? b.createdAt).getTime();
+      return dateB - dateA;
+    });
+    this.filteredNotes.set(filtered);
     this.pendingTaskCount.set(
       all.filter((n) => n.noteType === 'TASK' && n.status !== 'COMPLETED').length
     );

@@ -12,6 +12,7 @@ import { Department } from '@mentor-ai/shared/prisma';
 export const FOUNDATION_CATEGORIES = ['Uvod u Poslovanje', 'Vrednost'] as const;
 
 /** All known categories from the Obsidian vault (excluding guide/skipped) */
+// H14: Added missing categories: Ljudski Resursi, Operacije i Proizvodnja, Startup, Sistemi
 export const ALL_CATEGORIES = [
   'Uvod u Poslovanje',
   'Marketing',
@@ -19,6 +20,7 @@ export const ALL_CATEGORIES = [
   'Vrednost',
   'Finansije',
   'Operacije',
+  'Operacije i Proizvodnja',
   'Menadžment',
   'Preduzetništvo',
   'Digitalni Marketing',
@@ -29,6 +31,9 @@ export const ALL_CATEGORIES = [
   'Liderstvo',
   'Strategija',
   'Poslovni Modeli',
+  'Ljudski Resursi',
+  'Startup',
+  'Sistemi',
 ] as const;
 
 /**
@@ -39,8 +44,14 @@ export const DEPARTMENT_CATEGORY_MAP: Record<Department, string[]> = {
   [Department.MARKETING]: ['Marketing', 'Digitalni Marketing'],
   [Department.FINANCE]: ['Finansije', 'Računovodstvo'],
   [Department.SALES]: ['Prodaja', 'Odnosi sa Klijentima'],
-  [Department.OPERATIONS]: ['Operacije', 'Preduzetništvo', 'Menadžment'],
-  [Department.TECHNOLOGY]: ['Tehnologija', 'Inovacije'],
+  [Department.OPERATIONS]: [
+    'Operacije',
+    'Operacije i Proizvodnja',
+    'Preduzetništvo',
+    'Menadžment',
+    'Sistemi',
+  ],
+  [Department.TECHNOLOGY]: ['Tehnologija', 'Inovacije', 'Sistemi'],
   [Department.STRATEGY]: ['Strategija', 'Poslovni Modeli', 'Liderstvo'],
   [Department.LEGAL]: ['Menadžment'],
   [Department.CREATIVE]: ['Marketing', 'Digitalni Marketing'],

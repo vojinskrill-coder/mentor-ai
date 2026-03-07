@@ -38,7 +38,9 @@ const WEIGHTS = {
 const RELATIONSHIP_SCORES: Record<RelationshipType, number> = {
   PREREQUISITE: 1.0,
   RELATED: 0.6,
-  ADVANCED: 0.2,
+  // H13: Raised from 0.2 to 0.5 — ADVANCED concepts should still pass the 0.3 threshold
+  // when combined with other positive factors (industry, department, prior activity)
+  ADVANCED: 0.5,
 };
 
 /**

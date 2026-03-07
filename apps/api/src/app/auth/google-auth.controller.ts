@@ -181,7 +181,19 @@ export class GoogleAuthController {
       const normalizedEmail = idTokenPayload.email.toLowerCase();
       const displayName = idTokenPayload.name || normalizedEmail.split('@')[0] || 'My Company';
 
+      const databaseUrl = this.configService.get<string>('DATABASE_URL') || '';
+
       await this.prisma.$transaction(async (tx) => {
+        // Create tenant registry entry (maps tenant to its database)
+        await tx.tenantRegistry.create({
+          data: {
+            id: tenantId,
+            name: displayName,
+            dbUrl: databaseUrl,
+            status: TenantStatus.ONBOARDING,
+          },
+        });
+
         await tx.tenant.create({
           data: {
             id: tenantId,

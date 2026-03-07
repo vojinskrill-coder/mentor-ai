@@ -1402,7 +1402,14 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${taskSpecificContex
         relationshipType: r.relationshipType as 'PREREQUISITE' | 'RELATED' | 'ADVANCED',
       }))
       .filter((r) => !existingConceptIds.has(r.concept.id))
-      .filter((r) => !visibleCategories || visibleCategories.includes(r.concept.category));
+      // C8: Strip number prefix for category matching (DB has "3. Marketing", filter has "Marketing")
+      .filter((r) => {
+        if (!visibleCategories) return true;
+        const stripped = r.concept.category.replace(/^\d+\.\s*/, '').trim();
+        return (
+          visibleCategories.includes(r.concept.category) || visibleCategories.includes(stripped)
+        );
+      });
 
     // Story 3.3 AC5: Relevance scoring — filter by business relevance
     const tenant = await this.prisma.tenant.findUnique({

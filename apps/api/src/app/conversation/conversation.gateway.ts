@@ -2004,13 +2004,36 @@ Odgovori SAMO sa validnim JSON nizom:
       completedTasks: completedCount,
     });
 
-    // TODO(H4): After auto-popuni completes tasks, traverse concept_relationships
-    // to spawn new PENDING tasks for ADVANCED/related concepts. This would close
-    // the autonomous growth loop (Business Brain architecture). Requires:
-    // 1. Query concept_relationships for outgoing edges from completed concepts
-    // 2. Create PENDING tasks for connected concepts that don't already have tasks
-    // 3. Depth limit to prevent infinite auto-popuni → spawn → auto-popuni loops
-    // 4. Must NOT re-trigger triggerAutoAiPopuni on spawned tasks (break recursion)
+    // C7: After auto-popuni completes tasks, traverse concept_relationships
+    // to spawn new PENDING tasks for ADVANCED/related concepts (autonomous growth loop)
+    const completedConceptIds = [
+      ...new Set(
+        tasks.filter((t) => completedTaskIds.includes(t.id) && t.conceptId).map((t) => t.conceptId!)
+      ),
+    ];
+
+    if (completedConceptIds.length > 0) {
+      this.workflowService
+        .discoverAndCreatePendingTasks(completedConceptIds, userId, tenantId)
+        .then((newConceptIds) => {
+          if (newConceptIds.length > 0) {
+            this.emitToTenant(tenantId, executionId, 'tree:tasks-discovered', {
+              conceptIds: newConceptIds,
+              timestamp: new Date().toISOString(),
+            });
+            this.logger.log({
+              message: 'Auto-popuni: post-execution discovery created new tasks',
+              newTaskCount: newConceptIds.length,
+            });
+          }
+        })
+        .catch((err) => {
+          this.logger.warn({
+            message: 'Post auto-popuni discovery failed (non-blocking)',
+            error: err instanceof Error ? err.message : 'Unknown',
+          });
+        });
+    }
   }
 
   /**
@@ -2852,6 +2875,12 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
           batchId,
           error: err instanceof Error ? err.message : 'Unknown',
         });
+        // C2: Always emit batch-done even on crash so frontend UI doesn't get stuck
+        client.emit('parallel-popuni:batch-done', {
+          batchId,
+          completedCount: 0,
+          failedCount: 1,
+        } satisfies ParallelPopuniBatchDonePayload);
       });
     } catch (error) {
       this.logger.error({
@@ -4404,13 +4433,14 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
       }
     }
 
-    // 6. Update the task note with optimized result and score
+    // 6. Update the task note with optimized result, score, and mark COMPLETED (M11)
     await this.prisma.note.update({
       where: { id: taskId },
       data: {
         userReport: fullResult,
         aiScore: score,
         aiFeedback: score !== null ? `AI ocena: ${score}/100` : null,
+        status: 'COMPLETED',
       },
     });
 
@@ -4557,7 +4587,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
       };
       client.emit('workflow:conversations-created', conversationsPayload);
 
-      // Start YOLO scheduler
+      // H1: Create Execution record for YOLO (enables recovery on server restart)
       const executionBudget = parseInt(process.env['YOLO_EXECUTION_BUDGET'] ?? '50', 10);
       const config = {
         maxConcurrency: 3,
@@ -4565,6 +4595,15 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
         retryAttempts: 3,
         maxExecutionBudget: executionBudget,
       };
+
+      const executionId = await this.executionStateService.createExecution(
+        authenticatedClient.tenantId,
+        authenticatedClient.userId,
+        'yolo',
+        undefined,
+        payload.conversationId,
+        { config }
+      );
 
       this.yoloScheduler
         .startYoloExecution(
@@ -4575,6 +4614,12 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
           {
             onProgress: (progress) => {
               client.emit('workflow:yolo-progress', progress);
+              // Update checkpoint for recovery
+              this.executionStateService
+                .updateCheckpoint(executionId, { completedCount: progress.completed })
+                .catch(() => {
+                  /* non-blocking */
+                });
             },
             onComplete: (result) => {
               client.emit('workflow:yolo-complete', result);
@@ -4582,12 +4627,27 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                 conversationId: payload.conversationId,
                 count: 0,
               });
+              // Mark execution as completed
+              this.executionStateService
+                .updateStatus(executionId, 'completed', {
+                  completed: result.completed,
+                  failed: result.failed,
+                  total: result.total,
+                })
+                .catch(() => {
+                  /* non-blocking */
+                });
             },
             onError: (error) => {
               client.emit('workflow:error', {
                 message: error,
                 conversationId: payload.conversationId,
               });
+              this.executionStateService
+                .updateStatus(executionId, 'failed', null, error)
+                .catch(() => {
+                  /* non-blocking */
+                });
             },
             saveMessage: async (_role, content, conceptId) => {
               const targetConvId =
@@ -4639,6 +4699,16 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                 discoveredConversationId,
               });
             },
+            // H3: Wire onTaskCompleted for auto AI popuni after each YOLO task
+            onTaskCompleted: (taskId: string, conversationId: string) => {
+              this.enqueueAutoPopuniAfterYolo(
+                client,
+                authenticatedClient.tenantId,
+                authenticatedClient.userId,
+                taskId,
+                conversationId
+              );
+            },
           },
           conceptConversations
         )
@@ -4651,6 +4721,16 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
             message: err instanceof Error ? err.message : 'YOLO execution failed',
             conversationId: payload.conversationId,
           });
+          this.executionStateService
+            .updateStatus(
+              executionId,
+              'failed',
+              null,
+              err instanceof Error ? err.message : 'Unknown'
+            )
+            .catch(() => {
+              /* non-blocking */
+            });
         });
     } catch (error) {
       this.logger.error({
@@ -4686,7 +4766,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
       // Create per-concept conversations for discovered tasks
       const conceptConversations = new Map<string, string>();
 
-      // Start YOLO with category scoping
+      // H1: Create Execution record for domain YOLO
       const executionBudget = parseInt(process.env['YOLO_EXECUTION_BUDGET'] ?? '50', 10);
       const config = {
         maxConcurrency: 3,
@@ -4694,6 +4774,15 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
         retryAttempts: 3,
         maxExecutionBudget: executionBudget,
       };
+
+      const executionId = await this.executionStateService.createExecution(
+        authenticatedClient.tenantId,
+        authenticatedClient.userId,
+        'domain-yolo',
+        undefined,
+        payload.conversationId,
+        { config, category: payload.category }
+      );
 
       this.yoloScheduler
         .startYoloExecution(
@@ -4704,6 +4793,11 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
           {
             onProgress: (progress) => {
               client.emit('workflow:yolo-progress', progress);
+              this.executionStateService
+                .updateCheckpoint(executionId, { completedCount: progress.completed })
+                .catch(() => {
+                  /* non-blocking */
+                });
             },
             onComplete: (result) => {
               client.emit('workflow:yolo-complete', result);
@@ -4711,12 +4805,26 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                 conversationId: payload.conversationId,
                 count: 0,
               });
+              this.executionStateService
+                .updateStatus(executionId, 'completed', {
+                  completed: result.completed,
+                  failed: result.failed,
+                  total: result.total,
+                })
+                .catch(() => {
+                  /* non-blocking */
+                });
             },
             onError: (error) => {
               client.emit('workflow:error', {
                 message: error,
                 conversationId: payload.conversationId,
               });
+              this.executionStateService
+                .updateStatus(executionId, 'failed', null, error)
+                .catch(() => {
+                  /* non-blocking */
+                });
             },
             saveMessage: async (_role, content, conceptId) => {
               const targetConvId =
@@ -4768,6 +4876,16 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                 discoveredConversationId,
               });
             },
+            // H3: Wire onTaskCompleted for auto AI popuni after each domain YOLO task
+            onTaskCompleted: (taskId: string, conversationId: string) => {
+              this.enqueueAutoPopuniAfterYolo(
+                client,
+                authenticatedClient.tenantId,
+                authenticatedClient.userId,
+                taskId,
+                conversationId
+              );
+            },
           },
           conceptConversations,
           payload.category // Story 3.2: per-domain scope
@@ -4782,6 +4900,16 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
             message: err instanceof Error ? err.message : 'Domain YOLO failed',
             conversationId: payload.conversationId,
           });
+          this.executionStateService
+            .updateStatus(
+              executionId,
+              'failed',
+              null,
+              err instanceof Error ? err.message : 'Unknown'
+            )
+            .catch(() => {
+              /* non-blocking */
+            });
         });
     } catch (error) {
       this.logger.error({

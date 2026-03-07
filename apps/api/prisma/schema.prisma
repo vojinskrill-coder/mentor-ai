@@ -376,10 +376,11 @@ enum NoteSource {
 }
 
 enum NoteType {
-  TASK       // Actionable item
-  NOTE       // Free-form note
-  SUMMARY    // AI-generated conversation summary
-  COMMENT    // Per-user comment on a task/workflow step (Story 3.4)
+  TASK             // Actionable item
+  NOTE             // Free-form note
+  SUMMARY          // AI-generated conversation summary
+  COMMENT          // Per-user comment on a task/workflow step (Story 3.4)
+  AGENT_RESEARCH   // Results from external agent research (OpenClaw)
 }
 
 enum NoteStatus {
@@ -429,6 +430,9 @@ model Note {
   // AI scoring
   aiScore            Int?     @map("ai_score")
   aiFeedback         String?  @db.Text @map("ai_feedback")
+
+  // Agent enrichments (V2: multi-agent results as JSON)
+  agentEnrichments   Json?    @map("agent_enrichments")
 
   // Workflow linkage
   expectedOutcome    String?  @db.Text @map("expected_outcome")
@@ -653,5 +657,58 @@ model Attachment {
   @@index([noteId])
   @@index([userId, tenantId])
   @@map("attachments")
+}
+
+// ── Agent Execution (V1: OpenClaw Web Research) ──
+// Tracks each external agent task execution with cost and results
+// ID uses agx_ prefix for type identification
+
+model AgentExecution {
+  id               String    @id @map("id") // Must have agx_ prefix, e.g., agx_cuid123
+  tenantId         String    @map("tenant_id")
+  userId           String    @map("user_id")
+  noteId           String    @map("note_id")        // The completed task note
+  resultNoteId     String?   @map("result_note_id") // The child note created with results
+  status           String    @default("PENDING")     // PENDING|FORMATTING|EXECUTING|COMPLETED|FAILED
+  agentType        String    @default("web_search") @map("agent_type")
+
+  // Input/Output
+  formattedPrompt  String?   @db.Text @map("formatted_prompt")
+  agentOutput      String?   @db.Text @map("agent_output")
+
+  // Cost tracking
+  estimatedCostEur Decimal?  @db.Decimal(6, 4) @map("estimated_cost_eur")
+  actualCostEur    Decimal?  @db.Decimal(6, 4) @map("actual_cost_eur")
+
+  // Timing
+  startedAt        DateTime? @map("started_at")
+  completedAt      DateTime? @map("completed_at")
+  durationMs       Int?      @map("duration_ms")
+
+  // Error
+  error            String?
+
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([tenantId, createdAt])
+  @@index([noteId])
+  @@map("agent_executions")
+}
+
+// Daily budget tracking per tenant for agent executions
+model AgentDailyBudget {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  date      DateTime @db.Date
+  spentEur  Decimal  @default(0) @db.Decimal(8, 4) @map("spent_eur")
+  limitEur  Decimal  @default(20) @db.Decimal(8, 4) @map("limit_eur")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, date])
+  @@index([tenantId])
+  @@map("agent_daily_budgets")
 }
 

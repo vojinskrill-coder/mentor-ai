@@ -29,6 +29,20 @@ export class BrainSeedingService {
   constructor(private readonly prisma: PlatformPrismaService) {}
 
   /**
+   * Build a Prisma OR clause that matches both exact category names
+   * and numbered-prefix variants (e.g., "3. Marketing") without
+   * substring false-positives (e.g., "Marketing" must NOT match "Digitalni Marketing").
+   */
+  private categoryMatchClause(categories: readonly string[] | string[]) {
+    return {
+      OR: [...categories].flatMap((cat) => [
+        { category: cat },
+        { category: { endsWith: `. ${cat}` } },
+      ]),
+    };
+  }
+
+  /**
    * Seeds PENDING task Notes for a new user.
    * Idempotent — skips if user already has pending tasks.
    *
@@ -115,11 +129,9 @@ export class BrainSeedingService {
   private async getOwnerSeedConcepts(): Promise<
     Array<{ id: string; name: string; category: string }>
   > {
-    // Seed all foundation concepts
+    // C9: Seed all foundation concepts — match exact or numbered-prefix (e.g., "1. Uvod u Poslovanje")
     const foundationConcepts = await this.prisma.concept.findMany({
-      where: {
-        category: { in: [...FOUNDATION_CATEGORIES] },
-      },
+      where: this.categoryMatchClause(FOUNDATION_CATEGORIES),
       select: { id: true, name: true, category: true },
       orderBy: { sortOrder: 'asc' },
     });
@@ -129,9 +141,9 @@ export class BrainSeedingService {
       (c) => !(FOUNDATION_CATEGORIES as readonly string[]).includes(c)
     );
 
-    // Single query for all non-foundation concepts, then slice per category client-side
+    // C9: Match exact or numbered-prefix for non-foundation categories
     const allOtherConcepts = await this.prisma.concept.findMany({
-      where: { category: { in: [...otherCategories] } },
+      where: this.categoryMatchClause(otherCategories),
       select: { id: true, name: true, category: true, sortOrder: true },
       orderBy: { sortOrder: 'asc' },
     });
@@ -164,8 +176,9 @@ export class BrainSeedingService {
       return this.getOwnerSeedConcepts();
     }
 
+    // C9: Match exact or numbered-prefix for visible categories
     const concepts = await this.prisma.concept.findMany({
-      where: { category: { in: visibleCategories } },
+      where: this.categoryMatchClause(visibleCategories),
       select: { id: true, name: true, category: true },
       orderBy: { sortOrder: 'asc' },
       take: this.DEPT_MAX_SEED_TOTAL,

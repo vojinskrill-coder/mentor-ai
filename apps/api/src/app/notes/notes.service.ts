@@ -468,6 +468,26 @@ export class NotesService {
     if (!note) {
       throw new NotFoundException(`Note ${noteId} not found`);
     }
+    // M10: Validate status transitions — prevent backward transitions
+    // Review fix: Allow idempotent COMPLETED → COMPLETED (no-op)
+    if (note.status === status) {
+      return this.mapToNoteItem(note); // Already in target state
+    }
+    const validTransitions: Record<string, string[]> = {
+      PENDING: ['READY_FOR_REVIEW', 'COMPLETED'],
+      READY_FOR_REVIEW: ['COMPLETED', 'PENDING'],
+      COMPLETED: [], // Terminal state — no backward transition
+    };
+    const allowed = validTransitions[note.status ?? 'PENDING'] ?? ['READY_FOR_REVIEW', 'COMPLETED'];
+    if (!allowed.includes(status)) {
+      this.logger.warn({
+        message: 'Invalid status transition blocked',
+        noteId,
+        from: note.status,
+        to: status,
+      });
+      return this.mapToNoteItem(note);
+    }
     const updated = await this.prisma.note.update({
       where: { id: noteId },
       data: { status },
@@ -524,9 +544,10 @@ export class NotesService {
     if (!note) {
       throw new NotFoundException(`Note ${noteId} not found`);
     }
+    // M11: Set status to COMPLETED when user submits a report
     const updated = await this.prisma.note.update({
       where: { id: noteId },
-      data: { userReport: report },
+      data: { userReport: report, status: 'COMPLETED' },
     });
     return this.mapToNoteItem(updated);
   }
@@ -912,6 +933,7 @@ Odgovori ISKLJUČIVO u JSON formatu:
     expectedOutcome?: string | null;
     workflowStepNumber?: number | null;
     reusedFromNoteId?: string | null;
+    agentEnrichments?: unknown;
     createdAt: Date;
     updatedAt: Date;
   }): NoteItem {
@@ -934,6 +956,7 @@ Odgovori ISKLJUČIVO u JSON formatu:
       expectedOutcome: note.expectedOutcome ?? null,
       workflowStepNumber: note.workflowStepNumber ?? null,
       reusedFromNoteId: note.reusedFromNoteId ?? null,
+      agentEnrichments: (note.agentEnrichments as NoteItem['agentEnrichments']) ?? null,
     };
   }
 
