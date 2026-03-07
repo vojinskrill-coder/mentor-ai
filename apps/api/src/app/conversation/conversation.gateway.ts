@@ -30,6 +30,7 @@ import { WebSearchService } from '../web-search/web-search.service';
 import { BusinessContextService } from '../knowledge/services/business-context.service';
 import { ExecutionStateService } from '../execution/execution-state.service';
 import { AttachmentsService } from '../attachments/attachments.service';
+import { JobPlannerService } from '../agent-execution/job-planner.service';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { createId } from '@paralleldrive/cuid2';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
@@ -113,7 +114,8 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     private readonly webSearchService: WebSearchService,
     private readonly businessContextService: BusinessContextService,
     private readonly executionStateService: ExecutionStateService,
-    private readonly attachmentsService: AttachmentsService
+    private readonly attachmentsService: AttachmentsService,
+    private readonly jobPlannerService: JobPlannerService
   ) {
     this.auth0Domain = this.configService.get<string>('AUTH0_DOMAIN') ?? '';
     this.auth0Audience = this.configService.get<string>('AUTH0_AUDIENCE') ?? '';
@@ -2059,7 +2061,17 @@ Odgovori SAMO sa validnim JSON nizom:
       auto: true,
     });
 
-    const businessContext = await this.buildBusinessContext(tenantId, userId);
+    const businessContext = await this.buildBusinessContext(tenantId, userId, { lean: true });
+
+    // Pre-load tenant + brainContext once for all workflow steps (avoids per-step DB lookups)
+    const [cachedTenantData, brainCtx] = await Promise.all([
+      this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true, industry: true, description: true },
+      }),
+      this.businessContextService.getBusinessContext(tenantId).catch(() => ''),
+    ]);
+    const stepCachedContext = { tenant: cachedTenantData, brainContext: brainCtx };
 
     // Load task details
     const taskNote = await this.prisma.note.findUnique({ where: { id: task.id } });
@@ -2156,7 +2168,8 @@ Odgovori SAMO sa validnim JSON nizom:
               /* auto-popuni: collect silently */
             },
             completedSummaries,
-            workflow.steps
+            workflow.steps,
+            stepCachedContext
           );
 
           // Dedup: check if child note already exists
@@ -2400,18 +2413,10 @@ PRAVILA:
       auto: true,
     });
 
-    // Load tenant info for scoring context
+    // Use pre-loaded tenant data for scoring context (cachedTenantData from line 2067)
     let tenantInfo = '';
-    try {
-      const tenant = await this.prisma.tenant.findUnique({
-        where: { id: tenantId },
-        select: { name: true, industry: true },
-      });
-      if (tenant) {
-        tenantInfo = `\nKOMPANIJA: ${tenant.name}${tenant.industry ? ` | INDUSTRIJA: ${tenant.industry}` : ''}`;
-      }
-    } catch {
-      /* non-blocking */
+    if (cachedTenantData) {
+      tenantInfo = `\nKOMPANIJA: ${cachedTenantData.name}${cachedTenantData.industry ? ` | INDUSTRIJA: ${cachedTenantData.industry}` : ''}`;
     }
 
     let conceptScoreContext = '';
@@ -2469,7 +2474,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
 
     await this.aiGatewayService.streamCompletionWithContext(
       [{ role: 'user', content: scorePrompt }],
-      { tenantId, userId, conversationId: convId, businessContext },
+      { tenantId, userId, conversationId: convId, businessContext, useFallback: true },
       (chunk: string) => {
         scoreResult += chunk;
         client.emit('task:result-chunk', {
@@ -2511,6 +2516,29 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
       auto: true,
     });
     client.emit('chat:notes-updated', { conversationId: convId, count: 0 });
+
+    // Auto-plan agent jobs after scoring
+    try {
+      const jobs = await this.jobPlannerService.planJobs(task.id, tenantId, userId);
+      if (jobs.length > 0) {
+        client.emit('jobs:planned', {
+          noteId: task.id,
+          conversationId: convId,
+          jobs,
+        });
+        this.logger.log({
+          message: 'Jobs planned after auto-popuni scoring',
+          taskId: task.id,
+          jobCount: jobs.length,
+        });
+      }
+    } catch (jobErr) {
+      this.logger.error({
+        message: 'Job planning failed after auto-popuni scoring',
+        taskId: task.id,
+        error: jobErr instanceof Error ? jobErr.message : 'Unknown',
+      });
+    }
   }
 
   // ─── YOLO Auto-Popuni Queue (H2 fix: sequential to avoid LLM overload) ───
@@ -2602,12 +2630,12 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
       taskCount: 1,
     });
 
-    let completed = false;
-
-    // Reuse the same handlers — handleExecuteTaskAi will find child notes
-    // and synthesize them into a final deliverable
+    // Reuse handleExecuteTaskAi — it synthesizes child notes into a final
+    // deliverable, auto-scores via scoreTaskInternal, and plans agent jobs.
     try {
       await this.handleExecuteTaskAi(client, { taskId, conversationId });
+      // Emit complete event (H3 fix)
+      client.emit('auto-popuni:complete', { totalTasks: 1, completedTasks: 1 });
     } catch (err) {
       this.logger.warn({
         message: 'YOLO auto-popuni AI execute failed',
@@ -2615,26 +2643,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
         error: err instanceof Error ? err.message : 'Unknown',
       });
       client.emit('auto-popuni:complete', { totalTasks: 1, completedTasks: 0 });
-      return;
     }
-
-    // Now score the result
-    try {
-      await this.handleSubmitTaskResult(client, { taskId });
-      completed = true;
-    } catch (err) {
-      this.logger.warn({
-        message: 'YOLO auto-popuni scoring failed',
-        taskId,
-        error: err instanceof Error ? err.message : 'Unknown',
-      });
-    }
-
-    // Emit complete event (H3 fix)
-    client.emit('auto-popuni:complete', {
-      totalTasks: 1,
-      completedTasks: completed ? 1 : 0,
-    });
   }
 
   // ─── Workflow / Agent Execution Events ─────────────────────────
@@ -3008,8 +3017,19 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
     autoPopuni: boolean,
     conceptConversations: Map<string, string>
   ): Promise<void> {
-    // Cache business context once for all tasks
-    const businessContext = await this.buildBusinessContext(tenantId, userId);
+    // Cache business context once for all tasks (lean: skip chat-only formatting/capabilities)
+    const businessContext = await this.buildBusinessContext(tenantId, userId, { lean: true });
+
+    // Pre-load tenant + brainContext once for all workflow steps across all tasks
+    const [cachedTenant, cachedBrainCtx] = await Promise.all([
+      this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true, industry: true, description: true },
+      }),
+      this.businessContextService.getBusinessContext(tenantId).catch(() => ''),
+    ]);
+    const stepCachedContext = { tenant: cachedTenant, brainContext: cachedBrainCtx };
+
     const completedSummaries = new Map<string, string>();
     let completedCount = 0;
     let failedCount = 0;
@@ -3036,7 +3056,8 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
             businessContext,
             completedSummaries,
             autoPopuni,
-            conceptConversations
+            conceptConversations,
+            stepCachedContext
           )
         )
       );
@@ -3107,7 +3128,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
 
   /**
    * Execute a single task in the parallel popuni batch.
-   * Full lifecycle: workflow → steps → synthesis → scoring (if autoPopuni).
+   * Full lifecycle: workflow → steps → synthesis → scoring → job planning.
    * Modeled after autoPopuniSingleTask but emits parallel-popuni events.
    */
   private async executeParallelPopuniWorker(
@@ -3119,7 +3140,11 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
     businessContext: string,
     completedSummaries: Map<string, string>,
     autoPopuni: boolean,
-    conceptConversations: Map<string, string>
+    conceptConversations: Map<string, string>,
+    stepCachedContext?: {
+      tenant: { name: string; industry: string | null; description: string | null } | null;
+      brainContext: string;
+    }
   ): Promise<void> {
     const taskNote = await this.prisma.note.findUnique({ where: { id: task.id } });
     if (!taskNote) throw new Error(`Task ${task.id} not found`);
@@ -3257,7 +3282,8 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                   ]
                 : []),
             ],
-            workflow.steps
+            workflow.steps,
+            stepCachedContext
           );
 
           // Dedup: check if child note already exists
@@ -3435,18 +3461,45 @@ PRAVILA:
 
       client.emit('chat:notes-updated', { conversationId: convId, count: 0 });
 
-      // ── Phase 4: Scoring (if autoPopuni) ──
+      // ── Phase 4: Scoring — always score after parallel popuni ──
       let score: number | null = null;
-      if (autoPopuni) {
-        const scoreProgress: ParallelPopuniProgressPayload = {
-          batchId,
-          taskId: task.id,
-          status: 'scoring',
-        };
-        client.emit('parallel-popuni:task-progress', scoreProgress);
+      const scoreProgress: ParallelPopuniProgressPayload = {
+        batchId,
+        taskId: task.id,
+        status: 'scoring',
+      };
+      client.emit('parallel-popuni:task-progress', scoreProgress);
 
-        const scoreResult = await this.scoreTaskInternal(client, task.id, tenantId, userId);
-        score = scoreResult.score;
+      const scoreResult = await this.scoreTaskInternal(
+        client,
+        task.id,
+        tenantId,
+        userId,
+        businessContext
+      );
+      score = scoreResult.score;
+
+      // Auto-plan agent jobs after scoring
+      try {
+        const jobs = await this.jobPlannerService.planJobs(task.id, tenantId, userId);
+        if (jobs.length > 0) {
+          client.emit('jobs:planned', {
+            noteId: task.id,
+            conversationId: convId,
+            jobs,
+          });
+          this.logger.log({
+            message: 'Jobs planned after parallel popuni scoring',
+            taskId: task.id,
+            jobCount: jobs.length,
+          });
+        }
+      } catch (jobErr) {
+        this.logger.error({
+          message: 'Job planning failed after parallel popuni scoring',
+          taskId: task.id,
+          error: jobErr instanceof Error ? jobErr.message : 'Unknown',
+        });
       }
 
       // Emit task done
@@ -3892,6 +3945,12 @@ PRAVILA:
         orderBy: { workflowStepNumber: 'asc' },
       });
 
+      // Pre-load tenant info once (reused for workflow steps + web search + scoring)
+      const execTenant = await this.prisma.tenant.findUnique({
+        where: { id: authenticatedClient.tenantId },
+        select: { name: true, industry: true, description: true },
+      });
+
       // 2b. If no children exist, generate a workflow and execute each step first
       //     This ensures every task goes through multi-step research before synthesis
       if (childNotes.length === 0) {
@@ -3944,6 +4003,12 @@ PRAVILA:
           const completedSummaries: Array<{ title: string; conceptName: string; summary: string }> =
             [];
 
+          // Pre-load brainContext once for all steps (tenant already loaded above)
+          const execBrainCtx = await this.businessContextService
+            .getBusinessContext(authenticatedClient.tenantId)
+            .catch(() => '');
+          const execCachedContext = { tenant: execTenant, brainContext: execBrainCtx };
+
           for (let stepIdx = 0; stepIdx < workflow.steps.length; stepIdx++) {
             const workflowStep = workflow.steps[stepIdx]!;
 
@@ -3986,7 +4051,8 @@ PRAVILA:
                 });
               },
               completedSummaries,
-              workflow.steps
+              workflow.steps,
+              execCachedContext
             );
 
             // Dedup: check if child note already exists for this step
@@ -4051,10 +4117,11 @@ PRAVILA:
         }
       }
 
-      // 3. Build business context
+      // 3. Build business context (lean: skip chat-only formatting/capabilities)
       const businessContext = await this.buildBusinessContext(
         authenticatedClient.tenantId,
-        authenticatedClient.userId
+        authenticatedClient.userId,
+        { lean: true }
       );
 
       // 4. Load concept knowledge if task is linked to a concept
@@ -4085,11 +4152,8 @@ PRAVILA:
       let webContext = '';
       if (this.webSearchService.isAvailable()) {
         try {
-          const tenant = await this.prisma.tenant.findUnique({
-            where: { id: authenticatedClient.tenantId },
-            select: { name: true, industry: true },
-          });
-          const searchQuery = `${task.title} ${tenant?.industry ?? ''} ${new Date().getFullYear()}`;
+          // Reuse pre-loaded execTenant instead of redundant DB query
+          const searchQuery = `${task.title} ${execTenant?.industry ?? ''} ${new Date().getFullYear()}`;
           const webResults = await this.webSearchService.searchAndExtract(searchQuery, 3);
           if (webResults.length > 0) {
             webContext = this.webSearchService.formatSourcesAsObsidian(webResults);
@@ -4276,7 +4340,8 @@ PRAVILA:
           client,
           payload.taskId,
           authenticatedClient.tenantId,
-          authenticatedClient.userId
+          authenticatedClient.userId,
+          businessContext
         );
         client.emit('task:result-complete', {
           taskId: payload.taskId,
@@ -4286,6 +4351,33 @@ PRAVILA:
           timestamp: new Date().toISOString(),
         });
         client.emit('chat:notes-updated', { conversationId: scoredConvId, count: 0 });
+
+        // Auto-plan agent jobs after scoring
+        try {
+          const jobs = await this.jobPlannerService.planJobs(
+            payload.taskId,
+            authenticatedClient.tenantId,
+            authenticatedClient.userId
+          );
+          if (jobs.length > 0) {
+            client.emit('jobs:planned', {
+              noteId: payload.taskId,
+              conversationId: scoredConvId,
+              jobs,
+            });
+            this.logger.log({
+              message: 'Jobs planned after auto-score',
+              taskId: payload.taskId,
+              jobCount: jobs.length,
+            });
+          }
+        } catch (jobErr) {
+          this.logger.error({
+            message: 'Job planning failed after auto-score',
+            taskId: payload.taskId,
+            error: jobErr instanceof Error ? jobErr.message : 'Unknown',
+          });
+        }
       } catch (scoreErr) {
         this.logger.warn({
           message: 'Auto-scoring failed after AI task execution',
@@ -4316,7 +4408,8 @@ PRAVILA:
     client: Socket,
     taskId: string,
     tenantId: string,
-    userId: string
+    userId: string,
+    prebuiltBusinessContext?: string
   ): Promise<{ score: number | null; result: string; conversationId: string | null }> {
     // 1. Load the completed task note
     const task = await this.prisma.note.findUnique({
@@ -4329,8 +4422,10 @@ PRAVILA:
       throw new Error('Zadatak nema izveštaj za ocenjivanje');
     }
 
-    // 2. Build context for scoring
-    const businessContext = await this.buildBusinessContext(tenantId, userId);
+    // 2. Build context for scoring (reuse pre-built if available)
+    const businessContext =
+      prebuiltBusinessContext ??
+      (await this.buildBusinessContext(tenantId, userId, { lean: true }));
 
     let conceptContext = '';
     if (task.conceptId) {
@@ -4344,19 +4439,6 @@ PRAVILA:
       } catch {
         /* concept not found */
       }
-    }
-
-    let tenantInfo = '';
-    try {
-      const tenant = await this.prisma.tenant.findUnique({
-        where: { id: tenantId },
-        select: { name: true, industry: true, description: true },
-      });
-      if (tenant) {
-        tenantInfo = `\nKOMPANIJA: ${tenant.name}${tenant.industry ? ` | INDUSTRIJA: ${tenant.industry}` : ''}`;
-      }
-    } catch {
-      /* non-blocking */
     }
 
     // 3. Build the optimization + scoring prompt
@@ -4375,7 +4457,7 @@ PRAVILA:
    - KOMPLETNOST: Da li pokriva sve aspekte zadatka i očekivanog rezultata?
    - RELEVANTNOST: Da li je prilagođen industriji i specifičnim potrebama kompanije?
    - KVALITET: Da li je profesionalno strukturiran, jasan i bez grešaka?
-${tenantInfo}${conceptContext}
+${conceptContext}
 
 ZADATAK: ${task.title}
 ${task.content ? `OPIS: ${task.content}` : ''}
@@ -4411,6 +4493,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
         userId,
         conversationId: task.conversationId ?? undefined,
         businessContext,
+        useFallback: true,
       },
       (chunk: string) => {
         fullResult += chunk;
@@ -4497,6 +4580,33 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
 
       // Refresh notes
       client.emit('chat:notes-updated', { conversationId, count: 0 });
+
+      // Auto-plan agent jobs after scoring
+      try {
+        const jobs = await this.jobPlannerService.planJobs(
+          payload.taskId,
+          authenticatedClient.tenantId,
+          authenticatedClient.userId
+        );
+        if (jobs.length > 0) {
+          client.emit('jobs:planned', {
+            noteId: payload.taskId,
+            conversationId,
+            jobs,
+          });
+          this.logger.log({
+            message: 'Jobs planned after scoring',
+            taskId: payload.taskId,
+            jobCount: jobs.length,
+          });
+        }
+      } catch (jobErr) {
+        this.logger.error({
+          message: 'Job planning failed after scoring',
+          taskId: payload.taskId,
+          error: jobErr instanceof Error ? jobErr.message : 'Unknown',
+        });
+      }
     } catch (error) {
       this.logger.error({
         message: 'Task result submission failed',
@@ -5245,7 +5355,11 @@ ${businessContext}${brainMemoryContext ? '\n' + brainMemoryContext : ''}${webCon
     }
   }
 
-  private async buildBusinessContext(tenantId: string, userId: string): Promise<string> {
+  private async buildBusinessContext(
+    tenantId: string,
+    userId: string,
+    options?: { lean?: boolean }
+  ): Promise<string> {
     try {
       const [tenant, onboardingNote] = await Promise.all([
         this.prisma.tenant.findUnique({
@@ -5283,7 +5397,7 @@ Kompanija: ${tenant.name}`;
 
       context += '\n--- KRAJ POSLOVNOG KONTEKSTA ---';
 
-      // Output quality rules + mandatory formatting
+      // Output quality rules
       context += `
 
 --- PRAVILA ZA ODGOVARANJE ---
@@ -5294,7 +5408,11 @@ Kompanija: ${tenant.name}`;
 5. Ako imaš web izvore, citiraj INLINE: ([Naziv izvora](URL))
 6. Odgovaraj ISKLJUČIVO na srpskom jeziku
 7. Minimum 300 reči za pitanja koja zahtevaju analizu — ne daj površne odgovore
---- KRAJ PRAVILA ---
+--- KRAJ PRAVILA ---`;
+
+      // Formatting rules + capabilities only for interactive chat (not task execution)
+      if (!options?.lean) {
+        context += `
 
 --- FORMATIRANJE (STROGO OBAVEZNO — svaki odgovor MORA koristiti ove formate) ---
 1. SEKCIJE: Organizuj svaki odgovor sa ## naslovom za svaku sekciju.
@@ -5325,6 +5443,7 @@ Kompanija: ${tenant.name}`;
 - Koncepti: Možeš da preporučiš relevantne poslovne koncepte iz baze znanja
 Kada korisnik pita šta možeš ili traži pomoć, pomeni ove funkcionalnosti.
 --- KRAJ FUNKCIONALNOSTI ---`;
+      }
 
       this.logger.log({
         message: 'Business context built for chat',

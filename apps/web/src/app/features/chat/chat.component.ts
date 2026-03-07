@@ -4718,6 +4718,12 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       this.conversationNotes?.loadNotes();
     });
 
+    // Agent job pipeline: refresh notes when jobs are planned after scoring
+    this.chatWsService.onJobsPlanned((data) => {
+      if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
+      this.conversationNotes?.loadNotes();
+    });
+
     this.chatWsService.onTaskResultError((data) => {
       if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
       if (this.resultSubmissionTimeout) {

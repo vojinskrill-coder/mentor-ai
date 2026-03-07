@@ -11,12 +11,10 @@ import {
   AgentExecutionResponse,
   AgentExecutionStatus,
   AgentEnrichmentEntry,
-  AgentRecommendationsResponse,
   AgentType,
 } from '@mentor-ai/shared/types';
 import { OpenClawClientService } from './openclaw-client.service';
 import { AgentPromptService } from './agent-prompt.service';
-import { AgentRecommenderService } from './agent-recommender.service';
 import { AgentRegistryService } from './agent-registry.service';
 import { BudgetService } from './budget.service';
 
@@ -29,51 +27,9 @@ export class AgentExecutionService {
     private readonly prisma: PlatformPrismaService,
     private readonly openClawClient: OpenClawClientService,
     private readonly agentPrompt: AgentPromptService,
-    private readonly agentRecommender: AgentRecommenderService,
     private readonly registry: AgentRegistryService,
     private readonly budgetService: BudgetService
   ) {}
-
-  async getRecommendations(
-    noteId: string,
-    userId: string,
-    tenantId: string
-  ): Promise<AgentRecommendationsResponse> {
-    const note = await this.prisma.note.findFirst({
-      where: { id: noteId, tenantId },
-    });
-
-    if (!note) {
-      throw new NotFoundException(`Note ${noteId} not found`);
-    }
-
-    if (!note.userReport) {
-      throw new BadRequestException('Task has no completed report');
-    }
-
-    const [recommendations, budget] = await Promise.all([
-      this.agentRecommender.getRecommendations({
-        taskTitle: note.title,
-        taskContent: note.content,
-        userReport: note.userReport,
-        expectedOutcome: note.expectedOutcome,
-        tenantId,
-        userId,
-      }),
-      this.budgetService.getDailySpent(tenantId),
-    ]);
-
-    const estimatedCost = this.budgetService.getEstimatedCost();
-
-    return {
-      noteId: note.id,
-      recommendations,
-      agentTypes: this.registry.getAllAgentTypeInfos(),
-      dailySpentEur: budget.spentEur,
-      dailyLimitEur: budget.limitEur,
-      canProceed: budget.spentEur + estimatedCost <= budget.limitEur,
-    };
-  }
 
   async triggerAgent(
     noteId: string,
@@ -335,6 +291,283 @@ export class AgentExecutionService {
     const outputCost = ((usage.output ?? 0) / 1_000_000) * 1.1;
     const fetchCost = 0.03;
     return Math.round((inputCost + outputCost + fetchCost) * 10000) / 10000;
+  }
+
+  // --- Agent Job Pipeline ---
+
+  async executeJob(
+    jobId: string,
+    userId: string,
+    tenantId: string
+  ): Promise<{ jobId: string; executionId: string }> {
+    // Load and validate job
+    const job = await this.prisma.agentJob.findFirst({
+      where: { id: jobId, tenantId },
+    });
+
+    if (!job) {
+      throw new NotFoundException(`Job ${jobId} not found`);
+    }
+    if (job.status !== 'PLANNED') {
+      throw new BadRequestException(`Job is already ${job.status.toLowerCase()}`);
+    }
+
+    // Check all dependencies are COMPLETED
+    if (job.dependsOn.length > 0) {
+      const depJobs = await this.prisma.agentJob.findMany({
+        where: { id: { in: job.dependsOn } },
+      });
+      const allCompleted = depJobs.every((d) => d.status === 'COMPLETED');
+      if (!allCompleted) {
+        throw new BadRequestException('Dependency jobs not yet completed');
+      }
+    }
+
+    // Load parent note
+    const note = await this.prisma.note.findFirst({
+      where: { id: job.noteId, tenantId },
+    });
+    if (!note) {
+      throw new NotFoundException(`Note ${job.noteId} not found`);
+    }
+
+    // Validate agent type, config, budget
+    const agentType = job.agentType as AgentType;
+    const agentDef = this.registry.getAgent(agentType);
+
+    if (!this.openClawClient.isConfigured()) {
+      throw new BadRequestException('Agent execution is not configured');
+    }
+
+    const canSpend = await this.budgetService.canSpend(tenantId);
+    if (!canSpend) {
+      throw new ForbiddenException('Daily budget exceeded');
+    }
+
+    // Check concurrency
+    const activeCount = await this.prisma.agentExecution.count({
+      where: {
+        tenantId,
+        status: { in: ['PENDING', 'FORMATTING', 'EXECUTING'] },
+      },
+    });
+    if (activeCount >= this.MAX_CONCURRENT_PER_TENANT) {
+      throw new BadRequestException(
+        `Maximum ${this.MAX_CONCURRENT_PER_TENANT} concurrent agent executions`
+      );
+    }
+
+    // Create execution record + reserve budget
+    const executionId = `agx_${createId()}`;
+    const estimatedCost = agentDef.estimatedCostEur;
+
+    await this.prisma.agentExecution.create({
+      data: {
+        id: executionId,
+        tenantId,
+        userId,
+        noteId: job.noteId,
+        status: 'PENDING',
+        agentType,
+        estimatedCostEur: estimatedCost,
+      },
+    });
+
+    await this.budgetService.recordSpend(tenantId, estimatedCost);
+
+    // Update job: RUNNING + link execution
+    await this.prisma.agentJob.update({
+      where: { id: jobId },
+      data: { status: 'RUNNING', executionId },
+    });
+
+    this.logger.log({
+      message: 'Job execution triggered',
+      jobId,
+      executionId,
+      agentType,
+      noteId: job.noteId,
+    });
+
+    // Gather dependency context
+    let dependencyContext = '';
+    if (job.dependsOn.length > 0) {
+      const depJobs = await this.prisma.agentJob.findMany({
+        where: { id: { in: job.dependsOn }, status: 'COMPLETED' },
+        orderBy: { order: 'asc' },
+      });
+      for (const dep of depJobs) {
+        if (dep.agentOutput) {
+          const depLabel = this.registry.getAgent(dep.agentType as AgentType).label;
+          dependencyContext += `\n--- Previous Result: ${depLabel} ---\n${dep.agentOutput}\n--- End ---\n`;
+        }
+      }
+      this.logger.log({
+        message: 'Dependency context gathered',
+        jobId,
+        dependencyCount: depJobs.length,
+        contextLength: dependencyContext.length,
+      });
+    }
+
+    // Fire-and-forget
+    this.executeJobPipeline(
+      executionId,
+      jobId,
+      agentType,
+      note,
+      job.instruction,
+      dependencyContext,
+      userId,
+      tenantId,
+      estimatedCost
+    ).catch((err) => {
+      this.logger.error({
+        message: 'Job pipeline failed unexpectedly',
+        jobId,
+        executionId,
+        error: err.message,
+      });
+    });
+
+    return { jobId, executionId };
+  }
+
+  private async executeJobPipeline(
+    executionId: string,
+    jobId: string,
+    agentType: AgentType,
+    note: {
+      id: string;
+      title: string;
+      content: string;
+      userReport: string | null;
+      expectedOutcome: string | null;
+    },
+    jobInstruction: string,
+    dependencyContext: string,
+    userId: string,
+    tenantId: string,
+    reservedCostEur: number
+  ): Promise<void> {
+    const openClawAgentId = this.registry.getOpenClawAgentId(agentType);
+
+    try {
+      // Step 1: Build enriched instruction with dependency context
+      await this.updateStatus(executionId, 'FORMATTING');
+
+      const enrichedInstruction = dependencyContext
+        ? `${jobInstruction}\n\nContext from previous agent results:\n${dependencyContext}`
+        : jobInstruction;
+
+      const formattedPrompt = await this.agentPrompt.formatPrompt({
+        agentType,
+        taskTitle: note.title,
+        taskContent: enrichedInstruction,
+        userReport: note.userReport!,
+        expectedOutcome: note.expectedOutcome,
+        tenantId,
+        userId,
+      });
+
+      await this.prisma.agentExecution.update({
+        where: { id: executionId },
+        data: { formattedPrompt },
+      });
+
+      // Step 2: Send to OpenClaw
+      await this.updateStatus(executionId, 'EXECUTING', { startedAt: new Date() });
+
+      const result = await this.openClawClient.executeAgent(formattedPrompt, {
+        agentId: openClawAgentId,
+      });
+
+      if (!result.success) {
+        const errorMsg = result.error ?? 'Agent execution failed';
+        await this.prisma.agentJob.update({
+          where: { id: jobId },
+          data: { status: 'FAILED', error: errorMsg },
+        });
+        await this.updateStatus(executionId, 'FAILED', {
+          error: errorMsg,
+          completedAt: new Date(),
+          durationMs: result.durationMs,
+        });
+        return;
+      }
+
+      // Step 3: Store result in both AgentJob and Note enrichments
+      await this.prisma.agentJob.update({
+        where: { id: jobId },
+        data: { status: 'COMPLETED', agentOutput: result.output },
+      });
+
+      await this.mergeEnrichment(note.id, agentType, {
+        executionId,
+        status: AgentExecutionStatus.COMPLETED,
+        result: result.output,
+        completedAt: new Date().toISOString(),
+        error: null,
+      });
+
+      // Step 4: Cost adjustment
+      const actualCost = this.estimateActualCost(result.usage);
+      const costDifference = actualCost - reservedCostEur;
+      if (Math.abs(costDifference) > 0.0001) {
+        await this.budgetService.recordSpend(tenantId, costDifference);
+      }
+
+      // Step 5: Mark execution completed
+      await this.prisma.agentExecution.update({
+        where: { id: executionId },
+        data: {
+          status: 'COMPLETED',
+          agentOutput: result.output,
+          actualCostEur: actualCost,
+          completedAt: new Date(),
+          durationMs: result.durationMs,
+        },
+      });
+
+      this.logger.log({
+        message: 'Job execution completed',
+        jobId,
+        executionId,
+        agentType,
+        durationMs: result.durationMs,
+        actualCostEur: actualCost,
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      this.logger.error({
+        message: 'Job pipeline error',
+        jobId,
+        executionId,
+        agentType,
+        error: errorMessage,
+      });
+
+      try {
+        await this.prisma.agentJob.update({
+          where: { id: jobId },
+          data: { status: 'FAILED', error: errorMessage },
+        });
+        await this.mergeEnrichment(note.id, agentType, {
+          executionId,
+          status: AgentExecutionStatus.FAILED,
+          result: null,
+          completedAt: new Date().toISOString(),
+          error: errorMessage,
+        });
+      } catch {
+        /* best-effort */
+      }
+
+      await this.updateStatus(executionId, 'FAILED', {
+        error: errorMessage,
+        completedAt: new Date(),
+      });
+    }
   }
 
   async getExecution(

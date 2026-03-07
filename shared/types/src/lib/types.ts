@@ -1813,3 +1813,46 @@ export interface AgentEnrichmentEntry {
   completedAt: string | null;
   error: string | null;
 }
+
+// --- Agent Job Pipeline ---
+
+export enum AgentJobStatus {
+  PLANNED = 'PLANNED',
+  RUNNING = 'RUNNING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+}
+
+export interface AgentJobItem {
+  id: string;
+  noteId: string;
+  agentType: AgentType;
+  order: number;
+  dependsOn: string[];
+  instruction: string;
+  status: AgentJobStatus;
+  executionId: string | null;
+  agentOutput: string | null;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface JobsForNoteResponse {
+  noteId: string;
+  jobs: AgentJobItem[];
+  dailySpentEur: number;
+  dailyLimitEur: number;
+  canProceed: boolean;
+}
+
+export interface JobExecuteResponse {
+  jobId: string;
+  executionId: string;
+}
+
+export interface JobsPlannedPayload {
+  noteId: string;
+  conversationId: string | null;
+  jobs: AgentJobItem[];
+}

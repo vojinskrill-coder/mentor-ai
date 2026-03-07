@@ -8,8 +8,8 @@ import { AgentExecutionService } from './agent-execution.service';
 import { AgentExecutionController } from './agent-execution.controller';
 import { OpenClawClientService } from './openclaw-client.service';
 import { AgentRegistryService } from './agent-registry.service';
-import { AgentRecommenderService } from './agent-recommender.service';
 import { AgentPromptService } from './agent-prompt.service';
+import { JobPlannerService } from './job-planner.service';
 import { BudgetService } from './budget.service';
 
 @Module({
@@ -19,10 +19,10 @@ import { BudgetService } from './budget.service';
     AgentExecutionService,
     OpenClawClientService,
     AgentRegistryService,
-    AgentRecommenderService,
     AgentPromptService,
+    JobPlannerService,
     BudgetService,
   ],
-  exports: [AgentExecutionService],
+  exports: [AgentExecutionService, JobPlannerService],
 })
 export class AgentExecutionModule {}

@@ -277,7 +277,7 @@ Vrati JSON niz koraka. Svaki korak mora imati:
 - estimatedMinutes (celobrojna vrednost)
 - departmentTag (opciono: "CFO", "CMO", "CTO", "OPERATIONS", "LEGAL", "CREATIVE")
 
-Generiši 3-6 koraka. Poredaj logički prema zadatku.`;
+Generiši tačno 3 koraka. Poredaj logički prema zadatku.`;
 
     // Pre-generation prompt quality check
     let finalWorkflowPrompt = prompt;
@@ -382,13 +382,11 @@ Vrati JSON niz koraka. Svaki korak mora imati:
 - estimatedMinutes (celobrojna vrednost, realna procena)
 - departmentTag (opciono: "CFO", "CMO", "CTO", "OPERATIONS", "LEGAL", "CREATIVE")
 
-Generiši 4-6 koraka. Redosled:
+Generiši 3-4 koraka. Redosled:
 1. Dijagnostika/analiza trenutnog stanja
-2. Istraživanje tržišta/konkurencije (ako je relevantno)
-3. Strateško planiranje
-4. Akcioni plan sa konkretnim koracima
-5. KPI i sistem merenja (ako je relevantno)
-6. Implementacioni roadmap`;
+2. Strateško planiranje i akcioni plan
+3. Implementacioni plan sa KPI merenjem
+4. (opciono, samo za složene teme) Istraživanje tržišta/konkurencije`;
 
     return prompt;
   }
@@ -881,7 +879,11 @@ Generiši 4-6 koraka. Redosled:
     tenantId: string,
     onChunk: (chunk: string) => void,
     completedSummaries: Array<{ title: string; conceptName: string; summary: string }> = [],
-    preloadedWorkflowSteps?: import('@mentor-ai/shared/types').WorkflowStep[]
+    preloadedWorkflowSteps?: import('@mentor-ai/shared/types').WorkflowStep[],
+    cachedContext?: {
+      tenant: { name: string; industry: string | null; description: string | null } | null;
+      brainContext: string;
+    }
   ): Promise<{ content: string; citations: ConceptCitation[] }> {
     // Use preloaded steps when available (e.g., from parallel-popuni which generates
     // task-specific workflows that may differ from the cached generic workflow).
@@ -957,11 +959,14 @@ Generiši 4-6 koraka. Redosled:
     }
     conceptKnowledge += '\n--- KRAJ BAZE ZNANJA ---';
 
-    // 3. Load business context
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { name: true, industry: true, description: true },
-    });
+    // 3. Load business context (use cachedContext when available to avoid per-step DB lookups)
+    const tenant =
+      cachedContext?.tenant !== undefined
+        ? cachedContext.tenant
+        : await this.prisma.tenant.findUnique({
+            where: { id: tenantId },
+            select: { name: true, industry: true, description: true },
+          });
     let businessInfo = '';
     if (tenant) {
       businessInfo = `\n\n--- POSLOVNI KONTEKST ---\nKompanija: ${tenant.name}`;
@@ -972,14 +977,18 @@ Generiši 4-6 koraka. Redosled:
 
     // 3.2 Story 3.2: Load tenant-wide Business Brain context (all memories)
     let brainContext = '';
-    try {
-      brainContext = await this.businessContextService.getBusinessContext(tenantId);
-    } catch (err) {
-      this.logger.warn({
-        message: 'Business context load failed (non-blocking)',
-        tenantId,
-        error: err instanceof Error ? err.message : 'Unknown',
-      });
+    if (cachedContext?.brainContext !== undefined) {
+      brainContext = cachedContext.brainContext;
+    } else {
+      try {
+        brainContext = await this.businessContextService.getBusinessContext(tenantId);
+      } catch (err) {
+        this.logger.warn({
+          message: 'Business context load failed (non-blocking)',
+          tenantId,
+          error: err instanceof Error ? err.message : 'Unknown',
+        });
+      }
     }
 
     // 3.3 Load originating conversation messages for task-specific context

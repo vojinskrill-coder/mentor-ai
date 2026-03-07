@@ -387,15 +387,19 @@ export class ConversationService {
   ): Promise<ConceptTreeData> {
     const prisma = await this.tenantPrisma.getClient(tenantId);
 
+    // 2. Determine ownership scope
+    const isOwner = role === 'PLATFORM_OWNER' || role === 'TENANT_OWNER' || !department;
+
     // 1. Get conversations for linking (to enable "Pogledaj" navigation)
+    // Non-owners only see their own conversations; owners see all for oversight
     const convRows = await prisma.conversation.findMany({
-      where: { conceptId: { not: null } },
+      where: {
+        conceptId: { not: null },
+        ...(isOwner ? {} : { userId }),
+      },
       select: { conceptId: true, userId: true, id: true, title: true, updatedAt: true },
       orderBy: { updatedAt: 'desc' },
     });
-
-    // 2. Get task notes by status
-    const isOwner = role === 'PLATFORM_OWNER' || role === 'TENANT_OWNER' || !department;
     const [pendingTasks, completedTasks] = await Promise.all([
       this.notesService.getPendingTaskConceptIds(tenantId, isOwner ? undefined : userId),
       this.notesService.getCompletedTaskConceptIds(tenantId, isOwner ? undefined : userId),

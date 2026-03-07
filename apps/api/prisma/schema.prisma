@@ -712,3 +712,33 @@ model AgentDailyBudget {
   @@map("agent_daily_budgets")
 }
 
+// Agent job pipeline — auto-planned jobs with dependency chaining
+enum AgentJobStatus {
+  PLANNED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model AgentJob {
+  id          String         @id              // ajob_ prefix
+  noteId      String         @map("note_id")
+  tenantId    String         @map("tenant_id")
+  userId      String         @map("user_id")
+  agentType   String         @map("agent_type")
+  order       Int                             // 1-based execution order
+  dependsOn   String[]       @map("depends_on") // ajob_ IDs
+  instruction String         @db.Text
+  status      AgentJobStatus @default(PLANNED)
+  executionId String?        @map("execution_id")
+  agentOutput String?        @db.Text @map("agent_output")
+  error       String?
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  @@index([noteId])
+  @@index([tenantId])
+  @@index([noteId, order])
+  @@map("agent_jobs")
+}
+

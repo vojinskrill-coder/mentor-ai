@@ -12,6 +12,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AgentExecutionService } from './agent-execution.service';
+import { JobPlannerService } from './job-planner.service';
 import { BudgetService } from './budget.service';
 import { AgentType } from '@mentor-ai/shared/types';
 
@@ -29,6 +30,7 @@ interface CurrentUserPayload {
 export class AgentExecutionController {
   constructor(
     private readonly agentExecutionService: AgentExecutionService,
+    private readonly jobPlannerService: JobPlannerService,
     private readonly budgetService: BudgetService
   ) {}
 
@@ -36,19 +38,6 @@ export class AgentExecutionController {
   async getTodaysBudget(@CurrentUser() user: CurrentUserPayload) {
     const { spentEur, limitEur } = await this.budgetService.getDailySpent(user.tenantId);
     return { data: { spentEur, limitEur } };
-  }
-
-  @Get('recommendations/:noteId')
-  async getRecommendations(
-    @Param('noteId') noteId: string,
-    @CurrentUser() user: CurrentUserPayload
-  ) {
-    const result = await this.agentExecutionService.getRecommendations(
-      noteId,
-      user.userId,
-      user.tenantId
-    );
-    return { data: result };
   }
 
   @Post('trigger/:noteId/:agentType')
@@ -79,6 +68,29 @@ export class AgentExecutionController {
   ) {
     const executions = await this.agentExecutionService.getExecutionsByNote(noteId, user.tenantId);
     return { data: executions };
+  }
+
+  @Get('jobs/:noteId')
+  async getJobsForNote(@Param('noteId') noteId: string, @CurrentUser() user: CurrentUserPayload) {
+    const jobs = await this.jobPlannerService.getJobsForNote(noteId, user.tenantId);
+    const budget = await this.budgetService.getDailySpent(user.tenantId);
+    const estimatedCost = this.budgetService.getEstimatedCost();
+    return {
+      data: {
+        noteId,
+        jobs,
+        dailySpentEur: budget.spentEur,
+        dailyLimitEur: budget.limitEur,
+        canProceed: budget.spentEur + estimatedCost <= budget.limitEur,
+      },
+    };
+  }
+
+  @Post('jobs/:jobId/execute')
+  @HttpCode(HttpStatus.CREATED)
+  async executeJob(@Param('jobId') jobId: string, @CurrentUser() user: CurrentUserPayload) {
+    const result = await this.agentExecutionService.executeJob(jobId, user.userId, user.tenantId);
+    return { data: result };
   }
 
   @Get(':executionId')

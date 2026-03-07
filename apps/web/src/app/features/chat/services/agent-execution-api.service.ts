@@ -4,8 +4,9 @@ import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 import type {
   AgentExecutionResponse,
-  AgentRecommendationsResponse,
   AgentType,
+  JobsForNoteResponse,
+  JobExecuteResponse,
 } from '@mentor-ai/shared/types';
 
 interface DataResponse<T> {
@@ -16,15 +17,6 @@ interface DataResponse<T> {
 export class AgentExecutionApiService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = `${environment.apiUrl}/api/v1/agent-execution`;
-
-  async getRecommendations(noteId: string): Promise<AgentRecommendationsResponse> {
-    const response = await firstValueFrom(
-      this.http.get<DataResponse<AgentRecommendationsResponse>>(
-        `${this.baseUrl}/recommendations/${noteId}`
-      )
-    );
-    return response.data;
-  }
 
   async triggerAgent(noteId: string, agentType: AgentType): Promise<{ executionId: string }> {
     const response = await firstValueFrom(
@@ -46,6 +38,20 @@ export class AgentExecutionApiService {
   async getExecutionsByNote(noteId: string): Promise<AgentExecutionResponse[]> {
     const response = await firstValueFrom(
       this.http.get<DataResponse<AgentExecutionResponse[]>>(`${this.baseUrl}/note/${noteId}`)
+    );
+    return response.data;
+  }
+
+  async getJobsForNote(noteId: string): Promise<JobsForNoteResponse> {
+    const response = await firstValueFrom(
+      this.http.get<DataResponse<JobsForNoteResponse>>(`${this.baseUrl}/jobs/${noteId}`)
+    );
+    return response.data;
+  }
+
+  async executeJob(jobId: string): Promise<JobExecuteResponse> {
+    const response = await firstValueFrom(
+      this.http.post<DataResponse<JobExecuteResponse>>(`${this.baseUrl}/jobs/${jobId}/execute`, {})
     );
     return response.data;
   }

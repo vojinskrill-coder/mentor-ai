@@ -21,6 +21,7 @@ import type {
   ParallelPopuniProgressPayload,
   ParallelPopuniTaskDonePayload,
   ParallelPopuniBatchDonePayload,
+  JobsPlannedPayload,
 } from '@mentor-ai/shared/types';
 
 interface MessageReceivedData {
@@ -103,6 +104,7 @@ type ParallelPopuniStartCallback = (data: ParallelPopuniStartPayload) => void;
 type ParallelPopuniProgressCallback = (data: ParallelPopuniProgressPayload) => void;
 type ParallelPopuniTaskDoneCallback = (data: ParallelPopuniTaskDonePayload) => void;
 type ParallelPopuniBatchDoneCallback = (data: ParallelPopuniBatchDonePayload) => void;
+type JobsPlannedCallback = (data: JobsPlannedPayload) => void;
 
 /** Execution persistence types for reconnect resilience */
 export interface ActiveExecution {
@@ -201,6 +203,7 @@ export class ChatWebsocketService {
   private parallelPopuniProgressCallbacks: ParallelPopuniProgressCallback[] = [];
   private parallelPopuniTaskDoneCallbacks: ParallelPopuniTaskDoneCallback[] = [];
   private parallelPopuniBatchDoneCallbacks: ParallelPopuniBatchDoneCallback[] = [];
+  private jobsPlannedCallbacks: JobsPlannedCallback[] = [];
 
   /**
    * Connects to the WebSocket server.
@@ -481,6 +484,11 @@ export class ChatWebsocketService {
     // Execution persistence: active state response
     this.socket.on('execution:active-state', (data: ExecutionActiveState) => {
       this.executionActiveStateCallbacks.forEach((cb) => cb(data));
+    });
+
+    // Agent job pipeline: jobs planned after scoring
+    this.socket.on('jobs:planned', (data: JobsPlannedPayload) => {
+      this.jobsPlannedCallbacks.forEach((cb) => cb(data));
     });
   }
 
@@ -973,6 +981,14 @@ export class ChatWebsocketService {
     };
   }
 
+  onJobsPlanned(callback: JobsPlannedCallback): () => void {
+    this.jobsPlannedCallbacks.push(callback);
+    return () => {
+      const index = this.jobsPlannedCallbacks.indexOf(callback);
+      if (index > -1) this.jobsPlannedCallbacks.splice(index, 1);
+    };
+  }
+
   clearCallbacks(): void {
     // H6: Include messageDeletedCallbacks in cleanup to prevent accumulation on reconnect
     this.messageDeletedCallbacks = [];
@@ -1015,5 +1031,6 @@ export class ChatWebsocketService {
     this.parallelPopuniProgressCallbacks = [];
     this.parallelPopuniTaskDoneCallbacks = [];
     this.parallelPopuniBatchDoneCallbacks = [];
+    this.jobsPlannedCallbacks = [];
   }
 }

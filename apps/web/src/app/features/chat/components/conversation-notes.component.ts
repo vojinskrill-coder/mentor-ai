@@ -20,19 +20,13 @@ import type { NoteItem, CommentItem, ParallelPopuniTaskState } from '@mentor-ai/
 // eslint-disable-next-line @nx/enforce-module-boundaries
 import { MarkdownPipe } from '@mentor-ai/shared/ui';
 import { PdfReorderDialogComponent } from './pdf-reorder-dialog.component';
-import { AgentPanelComponent } from './agent-panel.component';
+import { JobPanelComponent } from './job-panel.component';
 import { environment } from '../../../../environments/environment';
 
 @Component({
   selector: 'app-conversation-notes',
   standalone: true,
-  imports: [
-    CommonModule,
-    FormsModule,
-    MarkdownPipe,
-    PdfReorderDialogComponent,
-    AgentPanelComponent,
-  ],
+  imports: [CommonModule, FormsModule, MarkdownPipe, PdfReorderDialogComponent, JobPanelComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   styles: [
@@ -355,6 +349,47 @@ import { environment } from '../../../../environments/environment';
         color: #9e9e9e;
         margin-bottom: 6px;
         text-transform: uppercase;
+      }
+      .report-collapse-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        padding: 4px 0;
+        margin-bottom: 4px;
+      }
+      .report-collapse-header:hover .report-label {
+        color: #bbb;
+      }
+      .report-collapse-header .report-label {
+        margin-bottom: 0;
+      }
+      .report-collapse-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .report-score-pill {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 10px;
+      }
+      .report-score-pill.high {
+        background: rgba(34, 197, 94, 0.15);
+        color: #22c55e;
+      }
+      .report-score-pill.medium {
+        background: rgba(234, 179, 8, 0.15);
+        color: #eab308;
+      }
+      .report-score-pill.low {
+        background: rgba(239, 68, 68, 0.15);
+        color: #ef4444;
+      }
+      .report-collapse-chevron {
+        font-size: 10px;
+        color: #666;
       }
       .report-textarea {
         width: 100%;
@@ -2010,59 +2045,78 @@ import { environment } from '../../../../environments/environment';
 
                 @if (note.userReport) {
                   <div class="report-section">
-                    <div class="report-label">Vaš izveštaj</div>
-                    <div
-                      class="existing-report ai-content"
-                      [innerHTML]="note.userReport | markdown"
-                    ></div>
-
-                    @if (note.aiScore !== null && note.aiScore !== undefined) {
-                      <div class="score-section">
-                        <div class="score-bar-container">
-                          <div class="score-bar-bg">
-                            <div
-                              class="score-bar-fill"
-                              [class.high]="note.aiScore >= 80"
-                              [class.medium]="note.aiScore >= 50 && note.aiScore < 80"
-                              [class.low]="note.aiScore < 50"
-                              [style.width.%]="note.aiScore"
-                            ></div>
-                          </div>
+                    <div class="report-collapse-header" (click)="toggleReportExpand(note.id)">
+                      <span class="report-label">Vaš izveštaj</span>
+                      <div class="report-collapse-right">
+                        @if (note.aiScore !== null && note.aiScore !== undefined) {
                           <span
-                            class="score-number"
+                            class="report-score-pill"
                             [class.high]="note.aiScore >= 80"
                             [class.medium]="note.aiScore >= 50 && note.aiScore < 80"
                             [class.low]="note.aiScore < 50"
-                            >{{ note.aiScore }}</span
+                            >{{ note.aiScore }}/100</span
                           >
-                        </div>
-                        @if (note.aiFeedback) {
-                          <div
-                            class="score-feedback ai-content"
-                            [innerHTML]="note.aiFeedback | markdown"
-                          ></div>
                         }
+                        <span class="report-collapse-chevron">{{
+                          expandedReports().has(note.id) ? '▼' : '▶'
+                        }}</span>
                       </div>
-                    } @else {
-                      <div class="report-actions">
-                        <button
-                          class="btn-score"
-                          [disabled]="scoringInProgress().has(note.id)"
-                          (click)="scoreReport(note.id)"
-                        >
-                          @if (scoringInProgress().has(note.id)) {
-                            <span class="scoring-spinner"></span> Ocenjujem...
-                          } @else {
-                            Dobij AI ocenu
+                    </div>
+
+                    @if (expandedReports().has(note.id)) {
+                      <div
+                        class="existing-report ai-content"
+                        [innerHTML]="note.userReport | markdown"
+                      ></div>
+
+                      @if (note.aiScore !== null && note.aiScore !== undefined) {
+                        <div class="score-section">
+                          <div class="score-bar-container">
+                            <div class="score-bar-bg">
+                              <div
+                                class="score-bar-fill"
+                                [class.high]="note.aiScore >= 80"
+                                [class.medium]="note.aiScore >= 50 && note.aiScore < 80"
+                                [class.low]="note.aiScore < 50"
+                                [style.width.%]="note.aiScore"
+                              ></div>
+                            </div>
+                            <span
+                              class="score-number"
+                              [class.high]="note.aiScore >= 80"
+                              [class.medium]="note.aiScore >= 50 && note.aiScore < 80"
+                              [class.low]="note.aiScore < 50"
+                              >{{ note.aiScore }}</span
+                            >
+                          </div>
+                          @if (note.aiFeedback) {
+                            <div
+                              class="score-feedback ai-content"
+                              [innerHTML]="note.aiFeedback | markdown"
+                            ></div>
                           }
-                        </button>
-                      </div>
+                        </div>
+                      } @else {
+                        <div class="report-actions">
+                          <button
+                            class="btn-score"
+                            [disabled]="scoringInProgress().has(note.id)"
+                            (click)="scoreReport(note.id)"
+                          >
+                            @if (scoringInProgress().has(note.id)) {
+                              <span class="scoring-spinner"></span> Ocenjujem...
+                            } @else {
+                              Dobij AI ocenu
+                            }
+                          </button>
+                        </div>
+                      }
                     }
                   </div>
                 }
 
                 @if (note.noteType === 'TASK' && note.status === 'COMPLETED' && note.userReport) {
-                  <app-agent-panel [note]="note" (noteUpdated)="loadNotes()"> </app-agent-panel>
+                  <app-job-panel [note]="note" (noteUpdated)="loadNotes()"></app-job-panel>
                 }
 
                 <!-- Comments thread -->
@@ -2248,6 +2302,7 @@ export class ConversationNotesComponent {
 
   readonly expandedNotes = signal<Set<string>>(new Set());
   readonly expandedSubtasks = signal<Set<string>>(new Set());
+  readonly expandedReports = signal<Set<string>>(new Set());
   readonly reportTexts = signal<Map<string, string>>(new Map());
   readonly scoringInProgress = signal<Set<string>>(new Set());
   readonly parallelCompletedCount = computed(
@@ -2419,6 +2474,18 @@ export class ConversationNotesComponent {
 
   toggleSubtaskExpand(noteId: string): void {
     this.expandedSubtasks.update((set) => {
+      const next = new Set(set);
+      if (next.has(noteId)) {
+        next.delete(noteId);
+      } else {
+        next.add(noteId);
+      }
+      return next;
+    });
+  }
+
+  toggleReportExpand(noteId: string): void {
+    this.expandedReports.update((set) => {
       const next = new Set(set);
       if (next.has(noteId)) {
         next.delete(noteId);
