@@ -10,6 +10,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -17,6 +18,7 @@ import type { CurrentUserPayload } from '../auth/strategies/jwt.strategy';
 import { NotesService } from './notes.service';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
 import { CreateCommentDto, UpdateCommentDto } from './dto/comment.dto';
+import { TaskHubQueryDto } from './dto/task-hub-query.dto';
 
 @Controller('v1/notes')
 @UseGuards(JwtAuthGuard)
@@ -56,6 +58,26 @@ export class NotesController {
   }
 
   /**
+   * Get all tasks for the Task Hub.
+   * Must be defined BEFORE parametric routes to avoid conflict with :id.
+   */
+  @Get('tasks')
+  async getAllTasks(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query() query: TaskHubQueryDto
+  ) {
+    const result = await this.notesService.getAllTasks(user.tenantId, {
+      status: query.status,
+      category: query.category,
+      search: query.search,
+      hasJobs: query.hasJobs === 'true',
+      page: query.page,
+      limit: query.limit,
+    });
+    return { data: result };
+  }
+
+  /**
    * Get notes for a specific conversation.
    */
   @Get('conversation/:conversationId')
@@ -81,6 +103,21 @@ export class NotesController {
   ) {
     const notes = await this.notesService.getByConcept(conceptId, user.userId, user.tenantId);
     return { data: notes };
+  }
+
+  /**
+   * Get a single note by ID (with children).
+   */
+  @Get(':id')
+  async getById(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') id: string
+  ) {
+    const note = await this.notesService.getNoteByIdWithChildren(id, user.tenantId);
+    if (!note) {
+      throw new NotFoundException(`Note ${id} not found`);
+    }
+    return { data: note };
   }
 
   /**

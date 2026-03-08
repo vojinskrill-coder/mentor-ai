@@ -11,6 +11,7 @@ import { AgentRegistryService } from './agent-registry.service';
 import { AgentPromptService } from './agent-prompt.service';
 import { JobPlannerService } from './job-planner.service';
 import { BudgetService } from './budget.service';
+import { AgentExecutionEventBus } from './agent-execution-event-bus.service';
 
 @Module({
   imports: [ConfigModule, TenantModule, AuthModule, AiGatewayModule, NotesModule],
@@ -22,7 +23,8 @@ import { BudgetService } from './budget.service';
     AgentPromptService,
     JobPlannerService,
     BudgetService,
+    AgentExecutionEventBus,
   ],
-  exports: [AgentExecutionService, JobPlannerService],
+  exports: [AgentExecutionService, JobPlannerService, AgentExecutionEventBus],
 })
 export class AgentExecutionModule {}

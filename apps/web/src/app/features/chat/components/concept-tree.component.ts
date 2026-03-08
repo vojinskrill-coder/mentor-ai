@@ -112,16 +112,16 @@ interface TreeRow {
         display: flex;
         align-items: center;
         gap: 6px;
-        padding: 5px 8px;
+        padding: 5px 8px 5px 4px;
         cursor: pointer;
         font-size: 12px;
         font-weight: 500;
         color: #a1a1a1;
         border-radius: 4px;
-        margin: 0 4px;
+        margin: 0 2px;
         background: none;
         border: none;
-        width: calc(100% - 8px);
+        width: calc(100% - 4px);
         text-align: left;
       }
       .tree-node:hover {
@@ -560,7 +560,7 @@ interface TreeRow {
             <button
               class="tree-node"
               [class.root-node]="row.depth === 0"
-              [style.padding-left.px]="12 + row.depth * 16"
+              [style.padding-left.px]="4 + row.depth * 14"
               (click)="toggleNode(row.node!.curriculumId)"
               role="treeitem"
               [attr.aria-expanded]="expandedNodes().has(row.node!.curriculumId)"
@@ -691,7 +691,7 @@ interface TreeRow {
               class="conversation-item"
               [class.active]="activeConversationId() === row.conversation!.id"
               [class.tree-item-loading]="loadingItemId() === row.conversation!.id"
-              [style.padding-left.px]="12 + row.depth * 16"
+              [style.padding-left.px]="4 + row.depth * 14"
               (click)="onConversationSelect(row.conversation!.id)"
             >
               <div style="display: flex; align-items: center; gap: 6px;">

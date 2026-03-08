@@ -22,6 +22,14 @@ import type {
   ParallelPopuniTaskDonePayload,
   ParallelPopuniBatchDonePayload,
   JobsPlannedPayload,
+  AgentStatusChangePayload,
+  AgentFormattingChunkPayload,
+  AgentFormattingCompletePayload,
+  AgentExecutingHeartbeatPayload,
+  AgentResultPayload,
+  AgentErrorPayload,
+  AgentTextChunkPayload,
+  AgentToolEventPayload,
 } from '@mentor-ai/shared/types';
 
 interface MessageReceivedData {
@@ -105,6 +113,19 @@ type ParallelPopuniProgressCallback = (data: ParallelPopuniProgressPayload) => v
 type ParallelPopuniTaskDoneCallback = (data: ParallelPopuniTaskDonePayload) => void;
 type ParallelPopuniBatchDoneCallback = (data: ParallelPopuniBatchDonePayload) => void;
 type JobsPlannedCallback = (data: JobsPlannedPayload) => void;
+type TaskAiWorkflowStartCallback = (data: { taskId: string; conversationId: string; message: string; auto: boolean }) => void;
+type TaskAiStepProgressCallback = (data: { taskId: string; conversationId: string; stepIndex: number; totalSteps: number; stepTitle: string; auto: boolean }) => void;
+type TaskAiStepCompleteCallback = (data: { taskId: string; conversationId: string; stepIndex: number; totalSteps: number; stepTitle: string; auto: boolean }) => void;
+type TaskScoringStartCallback = (data: { taskId: string }) => void;
+type ExecutionReplayCompleteCallback = (data: { executionId: string; eventCount: number }) => void;
+type AgentStatusChangeCallback = (data: AgentStatusChangePayload) => void;
+type AgentFormattingChunkCallback = (data: AgentFormattingChunkPayload) => void;
+type AgentFormattingCompleteCallback = (data: AgentFormattingCompletePayload) => void;
+type AgentHeartbeatCallback = (data: AgentExecutingHeartbeatPayload) => void;
+type AgentResultCallback = (data: AgentResultPayload) => void;
+type AgentErrorCallback = (data: AgentErrorPayload) => void;
+type AgentTextChunkCallback = (data: AgentTextChunkPayload) => void;
+type AgentToolEventCallback = (data: AgentToolEventPayload) => void;
 
 /** Execution persistence types for reconnect resilience */
 export interface ActiveExecution {
@@ -204,23 +225,28 @@ export class ChatWebsocketService {
   private parallelPopuniTaskDoneCallbacks: ParallelPopuniTaskDoneCallback[] = [];
   private parallelPopuniBatchDoneCallbacks: ParallelPopuniBatchDoneCallback[] = [];
   private jobsPlannedCallbacks: JobsPlannedCallback[] = [];
+  private taskAiWorkflowStartCallbacks: TaskAiWorkflowStartCallback[] = [];
+  private taskAiStepProgressCallbacks: TaskAiStepProgressCallback[] = [];
+  private taskAiStepCompleteCallbacks: TaskAiStepCompleteCallback[] = [];
+  private taskScoringStartCallbacks: TaskScoringStartCallback[] = [];
+  private executionReplayCompleteCallbacks: ExecutionReplayCompleteCallback[] = [];
+  private agentStatusChangeCallbacks: AgentStatusChangeCallback[] = [];
+  private agentFormattingChunkCallbacks: AgentFormattingChunkCallback[] = [];
+  private agentFormattingCompleteCallbacks: AgentFormattingCompleteCallback[] = [];
+  private agentHeartbeatCallbacks: AgentHeartbeatCallback[] = [];
+  private agentResultCallbacks: AgentResultCallback[] = [];
+  private agentErrorCallbacks: AgentErrorCallback[] = [];
+  private agentTextChunkCallbacks: AgentTextChunkCallback[] = [];
+  private agentToolEventCallbacks: AgentToolEventCallback[] = [];
 
   /**
    * Connects to the WebSocket server.
    * Uses the current auth token for authentication.
    */
   async connect(): Promise<void> {
-    if (this.socket?.connected) return;
-
-    // Cleanup old socket listeners to prevent duplicates on reconnect
-    if (this.socket) {
-      this.socket.removeAllListeners();
-      this.socket.disconnect();
-      this.socket = null;
-    }
-
-    // Clear callbacks from previous connection to prevent accumulation on reconnect
-    this.clearCallbacks();
+    // Already connected or connecting — don't interfere.
+    // Socket.io handles reconnection internally.
+    if (this.socket) return;
 
     const token = this.authService.getAccessToken();
     if (!token) {
@@ -490,6 +516,69 @@ export class ChatWebsocketService {
     this.socket.on('jobs:planned', (data: JobsPlannedPayload) => {
       this.jobsPlannedCallbacks.forEach((cb) => cb(data));
     });
+
+    // Task AI workflow events (auto-popuni with per-step progress)
+    this.socket.on('task:ai-workflow-start', (data: { taskId: string; conversationId: string; message: string; auto: boolean }) => {
+      this.taskAiWorkflowStartCallbacks.forEach((cb) => cb(data));
+    });
+
+    this.socket.on('task:ai-step-progress', (data: { taskId: string; conversationId: string; stepIndex: number; totalSteps: number; stepTitle: string; auto: boolean }) => {
+      this.taskAiStepProgressCallbacks.forEach((cb) => cb(data));
+    });
+
+    this.socket.on('task:ai-step-complete', (data: { taskId: string; conversationId: string; stepIndex: number; totalSteps: number; stepTitle: string; auto: boolean }) => {
+      this.taskAiStepCompleteCallbacks.forEach((cb) => cb(data));
+    });
+
+    // Scoring start event
+    this.socket.on('task:scoring-start', (data: { taskId: string }) => {
+      this.taskScoringStartCallbacks.forEach((cb) => cb(data));
+    });
+
+    // Execution replay complete
+    this.socket.on('execution:replay-complete', (data: { executionId: string; eventCount: number }) => {
+      this.executionReplayCompleteCallbacks.forEach((cb) => cb(data));
+    });
+
+    // Agent execution streaming events
+    // Use onAny as a catch-all to verify events arrive from the server
+    this.socket.onAny((eventName: string, ...args: unknown[]) => {
+      if (eventName.startsWith('agent:')) {
+        console.debug('[WS:agent]', eventName, args[0] && typeof args[0] === 'object' ? (args[0] as Record<string, unknown>)['executionId'] : '');
+      }
+    });
+
+    this.socket.on('agent:status-change', (data: AgentStatusChangePayload) => {
+      this.agentStatusChangeCallbacks.forEach((cb) => cb(data));
+    });
+
+    this.socket.on('agent:formatting-chunk', (data: AgentFormattingChunkPayload) => {
+      this.agentFormattingChunkCallbacks.forEach((cb) => cb(data));
+    });
+
+    this.socket.on('agent:formatting-complete', (data: AgentFormattingCompletePayload) => {
+      this.agentFormattingCompleteCallbacks.forEach((cb) => cb(data));
+    });
+
+    this.socket.on('agent:executing-heartbeat', (data: AgentExecutingHeartbeatPayload) => {
+      this.agentHeartbeatCallbacks.forEach((cb) => cb(data));
+    });
+
+    this.socket.on('agent:result', (data: AgentResultPayload) => {
+      this.agentResultCallbacks.forEach((cb) => cb(data));
+    });
+
+    this.socket.on('agent:error', (data: AgentErrorPayload) => {
+      this.agentErrorCallbacks.forEach((cb) => cb(data));
+    });
+
+    this.socket.on('agent:text-chunk', (data: AgentTextChunkPayload) => {
+      this.agentTextChunkCallbacks.forEach((cb) => cb(data));
+    });
+
+    this.socket.on('agent:tool-event', (data: AgentToolEventPayload) => {
+      this.agentToolEventCallbacks.forEach((cb) => cb(data));
+    });
   }
 
   /**
@@ -519,6 +608,7 @@ export class ChatWebsocketService {
 
   /**
    * Disconnects from the WebSocket server.
+   * Does NOT clear callbacks — they persist for app-wide listeners (app-shell).
    */
   disconnect(): void {
     if (this.socket) {
@@ -526,7 +616,19 @@ export class ChatWebsocketService {
       this.socket.disconnect();
       this.socket = null;
     }
-    this.clearCallbacks();
+  }
+
+  /**
+   * Force a fresh reconnection (preserves registered callbacks).
+   * Use for manual reconnect UI buttons.
+   */
+  forceReconnect(): void {
+    if (this.socket) {
+      this.socket.removeAllListeners();
+      this.socket.disconnect();
+      this.socket = null;
+    }
+    this.connect();
   }
 
   /**
@@ -989,6 +1091,110 @@ export class ChatWebsocketService {
     };
   }
 
+  onTaskAiWorkflowStart(callback: TaskAiWorkflowStartCallback): () => void {
+    this.taskAiWorkflowStartCallbacks.push(callback);
+    return () => {
+      const index = this.taskAiWorkflowStartCallbacks.indexOf(callback);
+      if (index > -1) this.taskAiWorkflowStartCallbacks.splice(index, 1);
+    };
+  }
+
+  onTaskAiStepProgress(callback: TaskAiStepProgressCallback): () => void {
+    this.taskAiStepProgressCallbacks.push(callback);
+    return () => {
+      const index = this.taskAiStepProgressCallbacks.indexOf(callback);
+      if (index > -1) this.taskAiStepProgressCallbacks.splice(index, 1);
+    };
+  }
+
+  onTaskAiStepComplete(callback: TaskAiStepCompleteCallback): () => void {
+    this.taskAiStepCompleteCallbacks.push(callback);
+    return () => {
+      const index = this.taskAiStepCompleteCallbacks.indexOf(callback);
+      if (index > -1) this.taskAiStepCompleteCallbacks.splice(index, 1);
+    };
+  }
+
+  onTaskScoringStart(callback: TaskScoringStartCallback): () => void {
+    this.taskScoringStartCallbacks.push(callback);
+    return () => {
+      const index = this.taskScoringStartCallbacks.indexOf(callback);
+      if (index > -1) this.taskScoringStartCallbacks.splice(index, 1);
+    };
+  }
+
+  onExecutionReplayComplete(callback: ExecutionReplayCompleteCallback): () => void {
+    this.executionReplayCompleteCallbacks.push(callback);
+    return () => {
+      const index = this.executionReplayCompleteCallbacks.indexOf(callback);
+      if (index > -1) this.executionReplayCompleteCallbacks.splice(index, 1);
+    };
+  }
+
+  onAgentStatusChange(callback: AgentStatusChangeCallback): () => void {
+    this.agentStatusChangeCallbacks.push(callback);
+    return () => {
+      const index = this.agentStatusChangeCallbacks.indexOf(callback);
+      if (index > -1) this.agentStatusChangeCallbacks.splice(index, 1);
+    };
+  }
+
+  onAgentFormattingChunk(callback: AgentFormattingChunkCallback): () => void {
+    this.agentFormattingChunkCallbacks.push(callback);
+    return () => {
+      const index = this.agentFormattingChunkCallbacks.indexOf(callback);
+      if (index > -1) this.agentFormattingChunkCallbacks.splice(index, 1);
+    };
+  }
+
+  onAgentFormattingComplete(callback: AgentFormattingCompleteCallback): () => void {
+    this.agentFormattingCompleteCallbacks.push(callback);
+    return () => {
+      const index = this.agentFormattingCompleteCallbacks.indexOf(callback);
+      if (index > -1) this.agentFormattingCompleteCallbacks.splice(index, 1);
+    };
+  }
+
+  onAgentHeartbeat(callback: AgentHeartbeatCallback): () => void {
+    this.agentHeartbeatCallbacks.push(callback);
+    return () => {
+      const index = this.agentHeartbeatCallbacks.indexOf(callback);
+      if (index > -1) this.agentHeartbeatCallbacks.splice(index, 1);
+    };
+  }
+
+  onAgentResult(callback: AgentResultCallback): () => void {
+    this.agentResultCallbacks.push(callback);
+    return () => {
+      const index = this.agentResultCallbacks.indexOf(callback);
+      if (index > -1) this.agentResultCallbacks.splice(index, 1);
+    };
+  }
+
+  onAgentError(callback: AgentErrorCallback): () => void {
+    this.agentErrorCallbacks.push(callback);
+    return () => {
+      const index = this.agentErrorCallbacks.indexOf(callback);
+      if (index > -1) this.agentErrorCallbacks.splice(index, 1);
+    };
+  }
+
+  onAgentTextChunk(callback: AgentTextChunkCallback): () => void {
+    this.agentTextChunkCallbacks.push(callback);
+    return () => {
+      const index = this.agentTextChunkCallbacks.indexOf(callback);
+      if (index > -1) this.agentTextChunkCallbacks.splice(index, 1);
+    };
+  }
+
+  onAgentToolEvent(callback: AgentToolEventCallback): () => void {
+    this.agentToolEventCallbacks.push(callback);
+    return () => {
+      const index = this.agentToolEventCallbacks.indexOf(callback);
+      if (index > -1) this.agentToolEventCallbacks.splice(index, 1);
+    };
+  }
+
   clearCallbacks(): void {
     // H6: Include messageDeletedCallbacks in cleanup to prevent accumulation on reconnect
     this.messageDeletedCallbacks = [];
@@ -1032,5 +1238,18 @@ export class ChatWebsocketService {
     this.parallelPopuniTaskDoneCallbacks = [];
     this.parallelPopuniBatchDoneCallbacks = [];
     this.jobsPlannedCallbacks = [];
+    this.taskAiWorkflowStartCallbacks = [];
+    this.taskAiStepProgressCallbacks = [];
+    this.taskAiStepCompleteCallbacks = [];
+    this.taskScoringStartCallbacks = [];
+    this.executionReplayCompleteCallbacks = [];
+    this.agentStatusChangeCallbacks = [];
+    this.agentFormattingChunkCallbacks = [];
+    this.agentFormattingCompleteCallbacks = [];
+    this.agentHeartbeatCallbacks = [];
+    this.agentResultCallbacks = [];
+    this.agentErrorCallbacks = [];
+    this.agentTextChunkCallbacks = [];
+    this.agentToolEventCallbacks = [];
   }
 }

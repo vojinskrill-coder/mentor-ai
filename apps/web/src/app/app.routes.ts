@@ -4,7 +4,7 @@ import { rolesGuard } from './core/auth/roles.guard';
 import { onboardingGuard, onboardingPageGuard } from './onboarding/onboarding.guard';
 
 export const appRoutes: Route[] = [
-  // Public routes
+  // Public routes (no shell)
   {
     path: 'login',
     loadComponent: () => import('./login/login.component').then((m) => m.LoginComponent),
@@ -40,64 +40,76 @@ export const appRoutes: Route[] = [
     loadComponent: () =>
       import('./two-factor/verify.component').then((m) => m.TwoFactorVerifyComponent),
   },
-  // Onboarding route (requires auth)
+  // Onboarding route (requires auth, no shell)
   {
     path: 'onboarding',
     loadComponent: () =>
       import('./onboarding/onboarding-wizard.component').then((m) => m.OnboardingWizardComponent),
     canActivate: [authGuard, onboardingPageGuard],
   },
-  // Protected routes (require auth + completed onboarding)
-  {
-    path: 'dashboard',
-    loadComponent: () =>
-      import('./dashboard/dashboard.component').then((m) => m.DashboardComponent),
-    canActivate: [authGuard, onboardingGuard],
-  },
-  {
-    path: 'team',
-    loadComponent: () => import('./team/team.component').then((m) => m.TeamComponent),
-    canActivate: [authGuard, rolesGuard(['TENANT_OWNER', 'ADMIN'])],
-  },
-  {
-    path: 'account-settings',
-    loadComponent: () =>
-      import('./account-settings/account-settings.component').then(
-        (m) => m.AccountSettingsComponent
-      ),
-    canActivate: [authGuard, rolesGuard(['TENANT_OWNER'])],
-  },
-  {
-    path: 'profile-settings',
-    loadComponent: () =>
-      import('./profile-settings/profile-settings.component').then(
-        (m) => m.ProfileSettingsComponent
-      ),
-    canActivate: [authGuard],
-  },
-  // Platform admin routes
-  {
-    path: 'admin/llm-config',
-    loadComponent: () =>
-      import('./platform-admin/llm-config/llm-config.component').then((m) => m.LlmConfigComponent),
-    canActivate: [authGuard, rolesGuard(['PLATFORM_OWNER'])],
-  },
-  // Chat routes
-  {
-    path: 'chat',
-    loadComponent: () => import('./features/chat/chat.component').then((m) => m.ChatComponent),
-    canActivate: [authGuard, onboardingGuard],
-  },
-  {
-    path: 'chat/:conversationId',
-    loadComponent: () => import('./features/chat/chat.component').then((m) => m.ChatComponent),
-    canActivate: [authGuard, onboardingGuard],
-  },
-  // Default route
+  // Protected routes wrapped in App Shell
   {
     path: '',
-    redirectTo: 'dashboard',
-    pathMatch: 'full',
+    loadComponent: () =>
+      import('./core/layout/app-shell.component').then((m) => m.AppShellComponent),
+    canActivate: [authGuard, onboardingGuard],
+    children: [
+      {
+        path: 'dashboard',
+        loadComponent: () =>
+          import('./dashboard/dashboard.component').then((m) => m.DashboardComponent),
+      },
+      {
+        path: 'chat',
+        loadComponent: () =>
+          import('./features/chat/chat.component').then((m) => m.ChatComponent),
+      },
+      {
+        path: 'chat/:conversationId',
+        loadComponent: () =>
+          import('./features/chat/chat.component').then((m) => m.ChatComponent),
+      },
+      {
+        path: 'tasks',
+        loadComponent: () =>
+          import('./features/tasks/task-hub.component').then((m) => m.TaskHubComponent),
+      },
+      {
+        path: 'team',
+        loadComponent: () => import('./team/team.component').then((m) => m.TeamComponent),
+        canActivate: [rolesGuard(['TENANT_OWNER', 'ADMIN'])],
+      },
+      {
+        path: 'account-settings',
+        loadComponent: () =>
+          import('./account-settings/account-settings.component').then(
+            (m) => m.AccountSettingsComponent
+          ),
+        canActivate: [rolesGuard(['TENANT_OWNER'])],
+      },
+      {
+        path: 'profile-settings',
+        loadComponent: () =>
+          import('./profile-settings/profile-settings.component').then(
+            (m) => m.ProfileSettingsComponent
+          ),
+      },
+      // Platform admin routes
+      {
+        path: 'admin/llm-config',
+        loadComponent: () =>
+          import('./platform-admin/llm-config/llm-config.component').then(
+            (m) => m.LlmConfigComponent
+          ),
+        canActivate: [rolesGuard(['PLATFORM_OWNER'])],
+      },
+      // Default redirect within shell
+      {
+        path: '',
+        redirectTo: 'dashboard',
+        pathMatch: 'full',
+      },
+    ],
   },
   // Catch-all: redirect unknown routes to dashboard
   {

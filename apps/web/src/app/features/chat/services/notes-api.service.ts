@@ -26,6 +26,13 @@ export class NotesApiService {
   /** Last error message for UI display */
   readonly lastError$ = signal<string | null>(null);
 
+  async getById(noteId: string): Promise<NoteItem> {
+    const response = await firstValueFrom(
+      this.http.get<NoteResponse>(`${this.baseUrl}/${noteId}`)
+    );
+    return response.data;
+  }
+
   async getByConversation(conversationId: string): Promise<NoteItem[]> {
     const response = await firstValueFrom(
       this.http.get<NotesResponse>(`${this.baseUrl}/conversation/${conversationId}`)

@@ -103,7 +103,11 @@ let TenantMiddleware = class TenantMiddleware {
         if (!tenant) {
             throw new _common.ForbiddenException(this.createRfc7807Error('tenant_not_found', 'Tenant Not Found', 'No tenant found for provided X-Tenant-Id header', correlationId));
         }
-        if (tenant.status !== _client.TenantStatus.ACTIVE) {
+        const allowedStatuses = [
+            _client.TenantStatus.ACTIVE,
+            _client.TenantStatus.ONBOARDING
+        ];
+        if (!allowedStatuses.includes(tenant.status)) {
             throw new _common.ForbiddenException(this.createRfc7807Error('tenant_not_active', 'Tenant Not Active', `Tenant is currently ${tenant.status.toLowerCase()}`, correlationId));
         }
         // Attach tenant ID to request for downstream use
@@ -129,7 +133,9 @@ let TenantMiddleware = class TenantMiddleware {
         this.excludedPaths = [
             '/health',
             '/api/health',
-            '/api/v1/health'
+            '/api/v1/health',
+            '/auth',
+            '/api/auth'
         ];
         this.resolvedDevTenantId = null;
     }

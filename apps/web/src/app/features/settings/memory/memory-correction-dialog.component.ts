@@ -51,14 +51,14 @@ export interface MemoryCorrectionResult {
         class="dialog-container"
         role="dialog"
         aria-modal="true"
-        [attr.aria-label]="'Correct memory about ' + (memory()?.subject ?? 'this topic')"
+        [attr.aria-label]="'Ispravi memoriju o ' + (memory()?.subject ?? 'ovoj temi')"
       >
         <div class="dialog-header">
-          <h2 class="dialog-title">Correct Memory</h2>
+          <h2 class="dialog-title">Ispravi memoriju</h2>
           <button
             type="button"
             class="close-button"
-            aria-label="Close dialog"
+            aria-label="Zatvori dijalog"
             (click)="onCancel()"
           >
             ✕
@@ -82,7 +82,7 @@ export interface MemoryCorrectionResult {
 
             <div class="form-group">
               <label for="original-content" class="form-label">
-                Original Content
+                Originalni sadržaj
               </label>
               <div id="original-content" class="original-content">
                 {{ memory()!.content }}
@@ -91,27 +91,27 @@ export interface MemoryCorrectionResult {
 
             <div class="form-group">
               <label for="corrected-content" class="form-label">
-                Corrected Content
+                Ispravljeni sadržaj
                 <span class="required">*</span>
               </label>
               <textarea
                 id="corrected-content"
                 class="form-textarea"
                 rows="4"
-                placeholder="Enter the corrected information..."
+                placeholder="Unesite ispravljene informacije..."
                 [(ngModel)]="correctedContent"
                 [attr.aria-invalid]="hasError$()"
               ></textarea>
               @if (hasError$()) {
                 <p class="error-text" role="alert">
-                  Please provide the corrected content
+                  Molimo unesite ispravljeni sadržaj
                 </p>
               }
             </div>
 
             <p class="info-text">
-              Your correction will replace the AI-extracted memory with your
-              updated information.
+              Vaša ispravka će zameniti AI-ekstraktovanu memoriju sa vašim
+              ažuriranim informacijama.
             </p>
           }
         </div>
@@ -122,7 +122,7 @@ export interface MemoryCorrectionResult {
             class="btn btn-secondary"
             (click)="onCancel()"
           >
-            Cancel
+            Otkaži
           </button>
           <button
             type="button"
@@ -132,9 +132,9 @@ export interface MemoryCorrectionResult {
           >
             @if (isSaving$()) {
               <span class="spinner" aria-hidden="true"></span>
-              Saving...
+              Čuvanje...
             } @else {
-              Save Correction
+              Sačuvaj ispravku
             }
           </button>
         </div>

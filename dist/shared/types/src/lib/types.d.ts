@@ -1504,3 +1504,124 @@ export interface AgentEnrichmentEntry {
     completedAt: string | null;
     error: string | null;
 }
+export declare enum AgentJobStatus {
+    PLANNED = "PLANNED",
+    RUNNING = "RUNNING",
+    COMPLETED = "COMPLETED",
+    FAILED = "FAILED"
+}
+export interface AgentJobItem {
+    id: string;
+    noteId: string;
+    agentType: AgentType;
+    order: number;
+    dependsOn: string[];
+    instruction: string;
+    status: AgentJobStatus;
+    executionId: string | null;
+    agentOutput: string | null;
+    error: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+export interface JobsForNoteResponse {
+    noteId: string;
+    jobs: AgentJobItem[];
+    dailySpentEur: number;
+    dailyLimitEur: number;
+    canProceed: boolean;
+}
+export interface JobExecuteResponse {
+    jobId: string;
+    executionId: string;
+}
+export interface JobsPlannedPayload {
+    noteId: string;
+    conversationId: string | null;
+    jobs: AgentJobItem[];
+}
+/** ============================================
+ *  Agent Execution Streaming Payloads
+ *  ============================================ */
+export interface AgentStatusChangePayload {
+    executionId: string;
+    jobId: string | null;
+    noteId: string;
+    agentType: string;
+    status: AgentExecutionStatus;
+    label: string;
+}
+export interface AgentFormattingChunkPayload {
+    executionId: string;
+    jobId: string | null;
+    chunk: string;
+    index: number;
+}
+export interface AgentFormattingCompletePayload {
+    executionId: string;
+    jobId: string | null;
+    promptLength: number;
+}
+export interface AgentExecutingHeartbeatPayload {
+    executionId: string;
+    jobId: string | null;
+    elapsedMs: number;
+    agentType: string;
+}
+export interface AgentResultPayload {
+    executionId: string;
+    jobId: string | null;
+    agentType: string;
+    output: string;
+    durationMs: number;
+}
+export interface AgentErrorPayload {
+    executionId: string;
+    jobId: string | null;
+    agentType: string;
+    error: string;
+}
+export interface AgentTextChunkPayload {
+    executionId: string;
+    jobId: string | null;
+    text: string;
+}
+export interface AgentToolEventPayload {
+    executionId: string;
+    jobId: string | null;
+    tool: string;
+    status: 'start' | 'end';
+    query?: string;
+}
+/** ============================================
+ *  Task Hub Types
+ *  ============================================ */
+/** A single agent job summary for task hub display */
+export interface TaskHubAgentJob {
+    id: string;
+    agentType: string;
+    status: string;
+    order: number;
+}
+/** Extended note item for task hub with concept and job info */
+export interface TaskHubItem extends NoteItem {
+    conceptName: string | null;
+    conceptCategory: string | null;
+    conversationId: string | null;
+    agentJobs: TaskHubAgentJob[];
+}
+/** Domain/category summary for task hub grouping */
+export interface DomainSummary {
+    category: string;
+    total: number;
+    pending: number;
+    completed: number;
+}
+/** Task hub paginated response */
+export interface TaskHubResponse {
+    tasks: TaskHubItem[];
+    total: number;
+    page: number;
+    limit: number;
+    domainSummary: DomainSummary[];
+}

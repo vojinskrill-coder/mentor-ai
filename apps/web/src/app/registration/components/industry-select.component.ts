@@ -1,87 +1,173 @@
 import { Component, forwardRef, Input, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { ControlValueAccessor, FormsModule, NG_VALUE_ACCESSOR } from '@angular/forms';
-import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideChevronDown, lucideCheck } from '@ng-icons/lucide';
 
 @Component({
   selector: 'app-industry-select',
   standalone: true,
-  imports: [CommonModule, FormsModule, NgIcon],
+  imports: [FormsModule],
   providers: [
-    provideIcons({ lucideChevronDown, lucideCheck }),
     {
       provide: NG_VALUE_ACCESSOR,
       useExisting: forwardRef(() => IndustrySelectComponent),
       multi: true,
     },
   ],
-  template: `
-    <div class="relative">
-      <button
-        type="button"
-        (click)="toggleDropdown()"
-        [class.ring-2]="isOpen()"
-        [class.ring-ring]="isOpen()"
-        class="w-full flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none"
-      >
-        <span [class.text-muted-foreground]="!value()">
-          {{ value() || 'Select an industry' }}
-        </span>
-        <ng-icon
-          name="lucideChevronDown"
-          class="h-4 w-4 text-muted-foreground transition-transform"
-          [class.rotate-180]="isOpen()"
-        />
-      </button>
-
-      @if (isOpen()) {
-        <div
-          class="absolute z-10 mt-1 w-full rounded-md border border-input bg-background shadow-lg max-h-60 overflow-auto"
-        >
-          <!-- Search input -->
-          <div class="p-2 border-b border-input">
-            <input
-              type="text"
-              [(ngModel)]="searchQuery"
-              (ngModelChange)="filterIndustries()"
-              placeholder="Search industries..."
-              class="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-          </div>
-
-          <!-- Options list -->
-          <ul class="py-1">
-            @for (industry of filteredIndustries(); track industry) {
-              <li>
-                <button
-                  type="button"
-                  (click)="selectIndustry(industry)"
-                  class="w-full flex items-center justify-between px-3 py-2 text-sm text-foreground hover:bg-accent"
-                  [class.bg-accent]="value() === industry"
-                >
-                  {{ industry }}
-                  @if (value() === industry) {
-                    <ng-icon name="lucideCheck" class="h-4 w-4 text-primary" />
-                  }
-                </button>
-              </li>
-            } @empty {
-              <li class="px-3 py-2 text-sm text-muted-foreground">
-                No industries found
-              </li>
-            }
-          </ul>
-        </div>
+  styles: [
+    `
+      :host {
+        display: block;
+        position: relative;
       }
-    </div>
+      .select-trigger {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid #2a2a2a;
+        background: #0d0d0d;
+        color: #fafafa;
+        font-size: 14px;
+        font-family: inherit;
+        cursor: pointer;
+        text-align: left;
+        transition: border-color 0.15s;
+      }
+      .select-trigger:focus {
+        outline: none;
+        border-color: #3b82f6;
+      }
+      .select-trigger.open {
+        border-color: #3b82f6;
+      }
+      .placeholder {
+        color: #9e9e9e;
+      }
+      .chevron {
+        width: 16px;
+        height: 16px;
+        color: #9e9e9e;
+        transition: transform 0.15s;
+        flex-shrink: 0;
+      }
+      .chevron.open {
+        transform: rotate(180deg);
+      }
 
-    <!-- Backdrop to close dropdown -->
+      /* Dropdown */
+      .dropdown {
+        position: absolute;
+        z-index: 10;
+        margin-top: 4px;
+        width: 100%;
+        max-height: 240px;
+        overflow: auto;
+        border-radius: 8px;
+        border: 1px solid #2a2a2a;
+        background: #1a1a1a;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      }
+      .search-wrapper {
+        padding: 8px;
+        border-bottom: 1px solid #2a2a2a;
+      }
+      .search-input {
+        width: 100%;
+        padding: 8px 10px;
+        border-radius: 6px;
+        border: 1px solid #2a2a2a;
+        background: #0d0d0d;
+        color: #fafafa;
+        font-size: 13px;
+        font-family: inherit;
+        box-sizing: border-box;
+      }
+      .search-input:focus {
+        outline: none;
+        border-color: #3b82f6;
+      }
+      .options-list {
+        list-style: none;
+        padding: 4px 0;
+        margin: 0;
+      }
+      .option-btn {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 8px 12px;
+        border: none;
+        background: transparent;
+        color: #fafafa;
+        font-size: 14px;
+        font-family: inherit;
+        cursor: pointer;
+        text-align: left;
+      }
+      .option-btn:hover {
+        background: #242424;
+      }
+      .option-btn.selected {
+        background: #242424;
+      }
+      .check-icon {
+        width: 16px;
+        height: 16px;
+        color: #3b82f6;
+      }
+      .empty-text {
+        padding: 8px 12px;
+        font-size: 13px;
+        color: #9e9e9e;
+      }
+
+      /* Backdrop */
+      .backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+      }
+    `,
+  ],
+  template: `
+    <button type="button" class="select-trigger" [class.open]="isOpen()" (click)="toggleDropdown()">
+      @if (value()) {
+        <span>{{ value() }}</span>
+      } @else {
+        <span class="placeholder">Izaberite industriju</span>
+      }
+      <svg class="chevron" [class.open]="isOpen()" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+      </svg>
+    </button>
+
     @if (isOpen()) {
-      <div
-        class="fixed inset-0 z-0"
-        (click)="closeDropdown()"
-      ></div>
+      <div class="dropdown">
+        <div class="search-wrapper">
+          <input type="text" class="search-input" [(ngModel)]="searchQuery"
+            (ngModelChange)="filterIndustries()" placeholder="Pretražite industrije..." />
+        </div>
+        <ul class="options-list">
+          @for (industry of filteredIndustries(); track industry) {
+            <li>
+              <button type="button" class="option-btn" [class.selected]="value() === industry"
+                (click)="selectIndustry(industry)">
+                {{ industry }}
+                @if (value() === industry) {
+                  <svg class="check-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                }
+              </button>
+            </li>
+          } @empty {
+            <li class="empty-text">Nije pronađena industrija</li>
+          }
+        </ul>
+      </div>
+      <div class="backdrop" (click)="closeDropdown()"></div>
     }
   `,
 })
@@ -94,7 +180,9 @@ export class IndustrySelectComponent implements ControlValueAccessor {
 
   searchQuery = '';
 
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
   private onChange: (value: string) => void = () => {};
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
   private onTouched: () => void = () => {};
 
   constructor() {

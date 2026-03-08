@@ -102,9 +102,11 @@
      Layout Dimensions
      ============================================ */
   --layout-sidebar-width: 280px;
+  --layout-app-sidebar-width: 220px;
   --layout-right-panel-width: 360px;
   --layout-header-height: 48px;
   --layout-chat-min-width: 480px;
+  --layout-content-max-width: 1440px;
 
   /* ============================================
      Typography - Font Families
@@ -509,6 +511,116 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================
+   Agent Result Content - Premium Markdown Rendering
+   ============================================ */
+.agent-result-content {
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  color: var(--color-text-primary);
+}
+.agent-result-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+}
+.agent-result-content th {
+  background: var(--color-bg-elevated);
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-subtle);
+  font-size: var(--text-small);
+}
+.agent-result-content td {
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-subtle);
+  font-size: var(--text-small);
+}
+.agent-result-content tr:nth-child(even) {
+  background: var(--color-bg-surface);
+}
+.agent-result-content pre {
+  background: var(--color-bg-surface);
+  padding: 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 16px 0;
+  border: 1px solid var(--color-border-subtle);
+}
+.agent-result-content code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.agent-result-content :not(pre) > code {
+  background: var(--color-bg-elevated);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.agent-result-content blockquote {
+  border-left: 3px solid var(--color-primary);
+  padding-left: 16px;
+  margin: 16px 0;
+  color: var(--color-text-secondary);
+}
+.agent-result-content img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 12px 0;
+}
+.agent-result-content a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+.agent-result-content a:hover {
+  text-decoration: underline;
+}
+.agent-result-content h1 {
+  font-size: var(--text-h1);
+  margin-top: 32px;
+  margin-bottom: 16px;
+}
+.agent-result-content h2,
+.agent-result-content h3 {
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding-bottom: 8px;
+  margin-top: 24px;
+  margin-bottom: 12px;
+}
+.agent-result-content h4 {
+  margin-top: 20px;
+  margin-bottom: 8px;
+}
+.agent-result-content ul,
+.agent-result-content ol {
+  padding-left: 24px;
+  margin: 12px 0;
+}
+.agent-result-content li {
+  margin-bottom: 4px;
+}
+.agent-result-content hr {
+  border: none;
+  border-top: 1px solid var(--color-border-subtle);
+  margin: 24px 0;
+}
+.agent-result-content p {
+  margin: 12px 0;
+}
+
+/* ============================================
+   Large Screen Responsiveness
+   ============================================ */
+@media (min-width: 1536px) {
+  .message-content {
+    max-width: 720px;
+  }
+  .chat-main {
+    max-width: 960px;
+    margin: 0 auto;
   }
 }
 

@@ -1,6 +1,5 @@
 import { Component, DestroyRef, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { LlmConfigService } from '../services/llm-config.service';
@@ -9,60 +8,25 @@ import { LlmProviderType, type LlmProviderStatus } from '@mentor-ai/shared/types
 @Component({
   selector: 'app-llm-config',
   standalone: true,
-  imports: [CommonModule, RouterLink, FormsModule],
+  imports: [CommonModule, FormsModule],
   styles: [
     `
       :host {
         display: block;
       }
-      .page {
-        min-height: 100vh;
-        background: #0d0d0d;
-        color: #fafafa;
-        font-family: 'Inter', system-ui, sans-serif;
-      }
 
-      /* Header */
-      .page-header {
-        border-bottom: 1px solid #2a2a2a;
-        background: #1a1a1a;
-      }
-      .header-inner {
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 16px 24px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-      .back-link {
-        color: #6b6b6b;
-        text-decoration: none;
-        display: flex;
-        align-items: center;
-      }
-      .back-link:hover {
-        color: #fafafa;
-      }
-      .back-link svg {
-        width: 20px;
-        height: 20px;
-      }
-      .header-icon svg {
-        width: 24px;
-        height: 24px;
-        color: #3b82f6;
-      }
+      /* Page title */
       .page-title {
         font-size: 20px;
         font-weight: 600;
+        padding: 16px 24px;
       }
 
       /* Main Content */
       .page-content {
         max-width: 800px;
         margin: 0 auto;
-        padding: 32px 24px;
+        padding: 0 24px 32px;
       }
 
       /* Loading */
@@ -367,39 +331,7 @@ import { LlmProviderType, type LlmProviderStatus } from '@mentor-ai/shared/types
     `,
   ],
   template: `
-    <div class="page">
-      <header class="page-header">
-        <div class="header-inner">
-          <a routerLink="/chat" class="back-link">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-          </a>
-          <span class="header-icon">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-              />
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-              />
-            </svg>
-          </span>
-          <h1 class="page-title">AI Provider Configuration</h1>
-        </div>
-      </header>
-
+      <h1 class="page-title">LLM Konfiguracija</h1>
       <div class="page-content">
         @if (isLoading$()) {
           <div class="loading-center">
@@ -1067,7 +999,6 @@ import { LlmProviderType, type LlmProviderStatus } from '@mentor-ai/shared/types
           </div>
         }
       </div>
-    </div>
   `,
 })
 export class LlmConfigComponent implements OnInit {

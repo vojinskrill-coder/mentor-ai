@@ -17,6 +17,7 @@ import { OpenClawClientService } from './openclaw-client.service';
 import { AgentPromptService } from './agent-prompt.service';
 import { AgentRegistryService } from './agent-registry.service';
 import { BudgetService } from './budget.service';
+import { AgentExecutionEventBus } from './agent-execution-event-bus.service';
 
 @Injectable()
 export class AgentExecutionService {
@@ -28,8 +29,30 @@ export class AgentExecutionService {
     private readonly openClawClient: OpenClawClientService,
     private readonly agentPrompt: AgentPromptService,
     private readonly registry: AgentRegistryService,
-    private readonly budgetService: BudgetService
+    private readonly budgetService: BudgetService,
+    private readonly eventBus: AgentExecutionEventBus
   ) {}
+
+  private emitAgentEvent(tenantId: string, eventName: string, payload: unknown): void {
+    this.eventBus.emit({ tenantId, eventName, payload });
+  }
+
+  private startHeartbeat(
+    executionId: string,
+    jobId: string | null,
+    agentType: string,
+    tenantId: string,
+    startTime: number
+  ): ReturnType<typeof setInterval> {
+    return setInterval(() => {
+      this.emitAgentEvent(tenantId, 'agent:executing-heartbeat', {
+        executionId,
+        jobId,
+        elapsedMs: Date.now() - startTime,
+        agentType,
+      });
+    }, 5000);
+  }
 
   async triggerAgent(
     noteId: string,
@@ -150,9 +173,17 @@ export class AgentExecutionService {
   ): Promise<void> {
     const openClawAgentId = this.registry.getOpenClawAgentId(agentType);
 
+    const agentLabel = this.registry.getAgent(agentType).label;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
+    let chunkIndex = 0;
+
     try {
       // Step 1: Format task into agent-specific instruction
       await this.updateStatus(executionId, 'FORMATTING');
+      this.emitAgentEvent(tenantId, 'agent:status-change', {
+        executionId, jobId: null, noteId: note.id, agentType, status: 'FORMATTING',
+        label: `${agentLabel}: Priprema instrukcija...`,
+      });
 
       const formattedPrompt = await this.agentPrompt.formatPrompt({
         agentType,
@@ -162,6 +193,15 @@ export class AgentExecutionService {
         expectedOutcome: note.expectedOutcome,
         tenantId,
         userId,
+        onChunk: (chunk) => {
+          this.emitAgentEvent(tenantId, 'agent:formatting-chunk', {
+            executionId, jobId: null, chunk, index: chunkIndex++,
+          });
+        },
+      });
+
+      this.emitAgentEvent(tenantId, 'agent:formatting-complete', {
+        executionId, jobId: null, promptLength: formattedPrompt.length,
       });
 
       await this.prisma.agentExecution.update({
@@ -171,16 +211,48 @@ export class AgentExecutionService {
 
       // Step 2: Send to OpenClaw with the correct agent
       await this.updateStatus(executionId, 'EXECUTING', { startedAt: new Date() });
+      this.emitAgentEvent(tenantId, 'agent:status-change', {
+        executionId, jobId: null, noteId: note.id, agentType, status: 'EXECUTING',
+        label: `${agentLabel}: Agent istražuje...`,
+      });
+      heartbeat = this.startHeartbeat(executionId, null, agentType, tenantId, Date.now());
 
       const result = await this.openClawClient.executeAgent(formattedPrompt, {
         agentId: openClawAgentId,
+        onText: (text) => {
+          this.emitAgentEvent(tenantId, 'agent:text-chunk', {
+            executionId, jobId: null, text,
+          });
+        },
+        onTool: (tool, status, query) => {
+          this.emitAgentEvent(tenantId, 'agent:tool-event', {
+            executionId, jobId: null, tool, status, query,
+          });
+        },
+        onStatus: (phase) => {
+          this.emitAgentEvent(tenantId, 'agent:status-change', {
+            executionId, jobId: null, noteId: note.id, agentType, status: 'EXECUTING',
+            label: `${agentLabel}: ${phase === 'running' ? 'Agent istražuje...' : phase}`,
+          });
+        },
       });
 
+      clearInterval(heartbeat);
+      heartbeat = null;
+
       if (!result.success) {
+        const errorMsg = result.error ?? 'Agent execution failed';
         await this.updateStatus(executionId, 'FAILED', {
-          error: result.error ?? 'Agent execution failed',
+          error: errorMsg,
           completedAt: new Date(),
           durationMs: result.durationMs,
+        });
+        this.emitAgentEvent(tenantId, 'agent:status-change', {
+          executionId, jobId: null, noteId: note.id, agentType, status: 'FAILED',
+          label: `${agentLabel}: Greška`,
+        });
+        this.emitAgentEvent(tenantId, 'agent:error', {
+          executionId, jobId: null, agentType, error: errorMsg,
         });
         return;
       }
@@ -213,6 +285,15 @@ export class AgentExecutionService {
         },
       });
 
+      this.emitAgentEvent(tenantId, 'agent:status-change', {
+        executionId, jobId: null, noteId: note.id, agentType, status: 'COMPLETED',
+        label: `${agentLabel}: Završeno`,
+      });
+      this.emitAgentEvent(tenantId, 'agent:result', {
+        executionId, jobId: null, agentType,
+        output: result.output, durationMs: result.durationMs,
+      });
+
       this.logger.log({
         message: 'Agent execution completed',
         executionId,
@@ -221,12 +302,22 @@ export class AgentExecutionService {
         actualCostEur: actualCost,
       });
     } catch (err) {
+      if (heartbeat) clearInterval(heartbeat);
+
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       this.logger.error({
         message: 'Agent pipeline error',
         executionId,
         agentType,
         error: errorMessage,
+      });
+
+      this.emitAgentEvent(tenantId, 'agent:status-change', {
+        executionId, jobId: null, noteId: note.id, agentType, status: 'FAILED',
+        label: `${agentLabel}: Greška`,
+      });
+      this.emitAgentEvent(tenantId, 'agent:error', {
+        executionId, jobId: null, agentType, error: errorMessage,
       });
 
       // Store error in enrichments too (atomic merge — safe under concurrency)
@@ -246,8 +337,6 @@ export class AgentExecutionService {
         error: errorMessage,
         completedAt: new Date(),
       });
-    } finally {
-      // No cleanup needed — concurrency is tracked via DB status
     }
   }
 
@@ -451,10 +540,17 @@ export class AgentExecutionService {
     reservedCostEur: number
   ): Promise<void> {
     const openClawAgentId = this.registry.getOpenClawAgentId(agentType);
+    const agentLabel = this.registry.getAgent(agentType).label;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
+    let chunkIndex = 0;
 
     try {
       // Step 1: Build enriched instruction with dependency context
       await this.updateStatus(executionId, 'FORMATTING');
+      this.emitAgentEvent(tenantId, 'agent:status-change', {
+        executionId, jobId, noteId: note.id, agentType, status: 'FORMATTING',
+        label: `${agentLabel}: Priprema instrukcija...`,
+      });
 
       const enrichedInstruction = dependencyContext
         ? `${jobInstruction}\n\nContext from previous agent results:\n${dependencyContext}`
@@ -468,6 +564,15 @@ export class AgentExecutionService {
         expectedOutcome: note.expectedOutcome,
         tenantId,
         userId,
+        onChunk: (chunk) => {
+          this.emitAgentEvent(tenantId, 'agent:formatting-chunk', {
+            executionId, jobId, chunk, index: chunkIndex++,
+          });
+        },
+      });
+
+      this.emitAgentEvent(tenantId, 'agent:formatting-complete', {
+        executionId, jobId, promptLength: formattedPrompt.length,
       });
 
       await this.prisma.agentExecution.update({
@@ -477,10 +582,34 @@ export class AgentExecutionService {
 
       // Step 2: Send to OpenClaw
       await this.updateStatus(executionId, 'EXECUTING', { startedAt: new Date() });
+      this.emitAgentEvent(tenantId, 'agent:status-change', {
+        executionId, jobId, noteId: note.id, agentType, status: 'EXECUTING',
+        label: `${agentLabel}: Agent istražuje...`,
+      });
+      heartbeat = this.startHeartbeat(executionId, jobId, agentType, tenantId, Date.now());
 
       const result = await this.openClawClient.executeAgent(formattedPrompt, {
         agentId: openClawAgentId,
+        onText: (text) => {
+          this.emitAgentEvent(tenantId, 'agent:text-chunk', {
+            executionId, jobId, text,
+          });
+        },
+        onTool: (tool, status, query) => {
+          this.emitAgentEvent(tenantId, 'agent:tool-event', {
+            executionId, jobId, tool, status, query,
+          });
+        },
+        onStatus: (phase) => {
+          this.emitAgentEvent(tenantId, 'agent:status-change', {
+            executionId, jobId, noteId: note.id, agentType, status: 'EXECUTING',
+            label: `${agentLabel}: ${phase === 'running' ? 'Agent istražuje...' : phase}`,
+          });
+        },
       });
+
+      clearInterval(heartbeat);
+      heartbeat = null;
 
       if (!result.success) {
         const errorMsg = result.error ?? 'Agent execution failed';
@@ -492,6 +621,13 @@ export class AgentExecutionService {
           error: errorMsg,
           completedAt: new Date(),
           durationMs: result.durationMs,
+        });
+        this.emitAgentEvent(tenantId, 'agent:status-change', {
+          executionId, jobId, noteId: note.id, agentType, status: 'FAILED',
+          label: `${agentLabel}: Greška`,
+        });
+        this.emitAgentEvent(tenantId, 'agent:error', {
+          executionId, jobId, agentType, error: errorMsg,
         });
         return;
       }
@@ -529,6 +665,15 @@ export class AgentExecutionService {
         },
       });
 
+      this.emitAgentEvent(tenantId, 'agent:status-change', {
+        executionId, jobId, noteId: note.id, agentType, status: 'COMPLETED',
+        label: `${agentLabel}: Završeno`,
+      });
+      this.emitAgentEvent(tenantId, 'agent:result', {
+        executionId, jobId, agentType,
+        output: result.output, durationMs: result.durationMs,
+      });
+
       this.logger.log({
         message: 'Job execution completed',
         jobId,
@@ -538,6 +683,8 @@ export class AgentExecutionService {
         actualCostEur: actualCost,
       });
     } catch (err) {
+      if (heartbeat) clearInterval(heartbeat);
+
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       this.logger.error({
         message: 'Job pipeline error',
@@ -545,6 +692,14 @@ export class AgentExecutionService {
         executionId,
         agentType,
         error: errorMessage,
+      });
+
+      this.emitAgentEvent(tenantId, 'agent:status-change', {
+        executionId, jobId, noteId: note.id, agentType, status: 'FAILED',
+        label: `${agentLabel}: Greška`,
+      });
+      this.emitAgentEvent(tenantId, 'agent:error', {
+        executionId, jobId, agentType, error: errorMessage,
       });
 
       try {

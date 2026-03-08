@@ -1,6 +1,5 @@
 import { Component, DestroyRef, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { forkJoin } from 'rxjs';
 import { InvitationService, InvitationResponse } from './services/invitation.service';
@@ -12,76 +11,28 @@ import {
 import { InviteDialogComponent } from './invite-dialog/invite-dialog.component';
 import { RemoveDialogComponent } from './remove-dialog/remove-dialog.component';
 import { AuthService } from '../core/auth/auth.service';
+import { ToastService } from '../core/services/toast.service';
 
 @Component({
   selector: 'app-team',
   standalone: true,
-  imports: [CommonModule, RouterLink, InviteDialogComponent, RemoveDialogComponent],
+  imports: [CommonModule, InviteDialogComponent, RemoveDialogComponent],
   styles: [
     `
       :host {
         display: block;
       }
-      .page {
-        min-height: 100vh;
-        background: #0d0d0d;
-        color: #fafafa;
-        font-family: 'Inter', system-ui, sans-serif;
-      }
 
-      /* Header */
-      .top-header {
-        border-bottom: 1px solid #2a2a2a;
-        background: #1a1a1a;
-      }
-      .header-inner {
-        max-width: 1024px;
-        margin: 0 auto;
-        padding: 16px;
+      /* Page header bar */
+      .page-header-bar {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        padding: 16px 24px;
       }
-      .header-left {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-      .header-left h1 {
-        font-size: 18px;
+      .page-header-bar h1 {
+        font-size: 20px;
         font-weight: 600;
-      }
-      .header-left svg {
-        width: 24px;
-        height: 24px;
-        color: #3b82f6;
-      }
-      .header-actions {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .settings-link {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 16px;
-        border-radius: 6px;
-        border: 1px solid #2a2a2a;
-        background: transparent;
-        color: #fafafa;
-        font-size: 13px;
-        font-weight: 500;
-        text-decoration: none;
-        font-family: inherit;
-        cursor: pointer;
-      }
-      .settings-link:hover {
-        background: #242424;
-      }
-      .settings-link svg {
-        width: 16px;
-        height: 16px;
       }
       .invite-btn {
         display: inline-flex;
@@ -109,31 +60,53 @@ import { AuthService } from '../core/auth/auth.service';
       .main-content {
         max-width: 1024px;
         margin: 0 auto;
-        padding: 32px 16px;
+        padding: 0 24px 32px;
       }
 
-      /* Loading */
-      .loading-state {
+      /* Skeleton loading */
+      .skeleton-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .skeleton-card {
         display: flex;
         align-items: center;
-        justify-content: center;
-        padding: 48px 0;
+        gap: 16px;
+        padding: 16px;
+        border-radius: 8px;
+        border: 1px solid #2a2a2a;
+        background: #1a1a1a;
       }
-      @keyframes spin {
-        from {
-          transform: rotate(0deg);
-        }
-        to {
-          transform: rotate(360deg);
-        }
-      }
-      .load-spinner {
-        width: 32px;
-        height: 32px;
-        border: 3px solid #2a2a2a;
-        border-top-color: #3b82f6;
+      .skeleton-avatar {
+        width: 40px;
+        height: 40px;
         border-radius: 50%;
-        animation: spin 0.8s linear infinite;
+        background: #242424;
+        flex-shrink: 0;
+      }
+      .skeleton-text {
+        flex: 1;
+      }
+      .skeleton-line {
+        height: 12px;
+        background: #242424;
+        border-radius: 4px;
+        margin-bottom: 8px;
+      }
+      .skeleton-line:last-child {
+        margin-bottom: 0;
+      }
+      .skeleton-line.w60 { width: 60%; }
+      .skeleton-line.w40 { width: 40%; }
+      .skeleton-line.w80 { width: 80%; }
+      @keyframes shimmer {
+        0% { opacity: 0.5; }
+        50% { opacity: 1; }
+        100% { opacity: 0.5; }
+      }
+      .skeleton-card {
+        animation: shimmer 1.5s ease-in-out infinite;
       }
 
       /* Section */
@@ -398,59 +371,33 @@ import { AuthService } from '../core/auth/auth.service';
     `,
   ],
   template: `
-    <div class="page">
-      <header class="top-header">
-        <div class="header-inner">
-          <div class="header-left">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-              />
-            </svg>
-            <h1>Upravljanje timom</h1>
-          </div>
-          <div class="header-actions">
-            @if (authService.currentUser()?.role === 'TENANT_OWNER') {
-              <a routerLink="/account-settings" class="settings-link">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                  />
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
-                Podešavanja naloga
-              </a>
-            }
-            <button class="invite-btn" (click)="showInviteDialog$.set(true)">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
-                />
-              </svg>
-              Pozovi člana
-            </button>
-          </div>
-        </div>
-      </header>
+      <div class="page-header-bar">
+        <h1>Upravljanje timom</h1>
+        <button class="invite-btn" (click)="showInviteDialog$.set(true)">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
+            />
+          </svg>
+          Pozovi člana
+        </button>
+      </div>
 
       <main class="main-content">
         @if (isLoading$()) {
-          <div class="loading-state">
-            <div class="load-spinner"></div>
+          <div class="skeleton-list">
+            @for (i of [1, 2, 3]; track i) {
+              <div class="skeleton-card">
+                <div class="skeleton-avatar"></div>
+                <div class="skeleton-text">
+                  <div class="skeleton-line w60"></div>
+                  <div class="skeleton-line w40"></div>
+                </div>
+              </div>
+            }
           </div>
         } @else {
           @if (loadError$()) {
@@ -621,7 +568,6 @@ import { AuthService } from '../core/auth/auth.service';
           }
         }
       </main>
-    </div>
 
     @if (showInviteDialog$()) {
       <app-invite-dialog (close)="onInviteDialogClose($event)" />
@@ -642,6 +588,7 @@ export class TeamComponent implements OnInit {
   private readonly invitationService = inject(InvitationService);
   private readonly teamMembersService = inject(TeamMembersService);
   protected readonly authService = inject(AuthService);
+  private readonly toastService = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly isLoading$ = signal(true);
@@ -707,6 +654,7 @@ export class TeamComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
+          this.toastService.success('Poziv je opozvan');
           this.loadInvitations();
         },
       });
@@ -719,7 +667,7 @@ export class TeamComponent implements OnInit {
 
   onRemoveDialogClose(strategy: RemovalStrategy | false): void {
     if (strategy && this.memberToRemove$()) {
-      const member = this.memberToRemove$()!;
+      const member = this.memberToRemove$() as TeamMemberResponse;
       this.removalError$.set('');
       this.teamMembersService
         .removeMember(member.id, strategy)
@@ -728,6 +676,7 @@ export class TeamComponent implements OnInit {
           next: () => {
             this.memberToRemove$.set(null);
             this.removalError$.set('');
+            this.toastService.success('Član tima je uklonjen');
             this.loadMembers();
           },
           error: (err: Error) => {

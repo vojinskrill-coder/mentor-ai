@@ -1,170 +1,349 @@
 import { Component, DestroyRef, inject, signal, OnInit, OnDestroy } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { timer, switchMap, takeWhile } from 'rxjs';
-import { BrnButton } from '@spartan-ng/brain/button';
-import { NgIcon, provideIcons } from '@ng-icons/core';
-import {
-  lucideDownload,
-  lucideLoader2,
-  lucideFileJson,
-  lucideFileText,
-  lucideFile,
-  lucideAlertTriangle,
-  lucideCheckCircle,
-  lucideClock,
-  lucideShieldCheck,
-} from '@ng-icons/lucide';
 import { DataExportService } from '../services/data-export.service';
 import type { DataExportResponse, DataExportRequest, ExportFormat } from '@mentor-ai/shared/types';
 
 @Component({
   selector: 'app-export-section',
   standalone: true,
-  imports: [CommonModule, BrnButton, NgIcon],
-  providers: [
-    provideIcons({
-      lucideDownload,
-      lucideLoader2,
-      lucideFileJson,
-      lucideFileText,
-      lucideFile,
-      lucideAlertTriangle,
-      lucideCheckCircle,
-      lucideClock,
-      lucideShieldCheck,
-    }),
+  styles: [
+    `
+      .section-card {
+        background: #1a1a1a;
+        border: 1px solid #2a2a2a;
+        border-radius: 12px;
+        padding: 24px;
+      }
+      .section-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+      .section-header svg {
+        width: 20px;
+        height: 20px;
+        color: #3b82f6;
+        flex-shrink: 0;
+      }
+      .section-title {
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .section-desc {
+        font-size: 14px;
+        color: #9e9e9e;
+        line-height: 1.5;
+        margin-bottom: 24px;
+      }
+
+      /* Form fields */
+      .field-label {
+        font-size: 13px;
+        font-weight: 500;
+        margin-bottom: 8px;
+        display: block;
+      }
+      .radio-group,
+      .checkbox-group {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+      }
+      .radio-item,
+      .checkbox-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      .radio-item input,
+      .checkbox-item input {
+        accent-color: #3b82f6;
+        cursor: pointer;
+      }
+      .fmt-icon {
+        width: 16px;
+        height: 16px;
+        color: #9e9e9e;
+      }
+
+      /* Export button */
+      .export-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 20px;
+        border-radius: 8px;
+        border: none;
+        background: #3b82f6;
+        color: white;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        font-family: inherit;
+        transition: background 0.15s;
+      }
+      .export-btn:hover:not(:disabled) {
+        background: #2563eb;
+      }
+      .export-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .export-btn svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      /* Spinner */
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      .btn-spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+      }
+
+      /* Error */
+      .error-banner {
+        margin-top: 16px;
+        padding: 12px;
+        border-radius: 8px;
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        color: #f87171;
+        font-size: 13px;
+      }
+
+      /* Export history */
+      .history-section {
+        margin-top: 24px;
+      }
+      .history-title {
+        font-size: 14px;
+        font-weight: 500;
+        margin-bottom: 12px;
+      }
+      .history-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .history-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px;
+        border-radius: 8px;
+        border: 1px solid #2a2a2a;
+        background: #0d0d0d;
+      }
+      .history-left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .history-icon {
+        width: 20px;
+        height: 20px;
+        color: #9e9e9e;
+      }
+      .history-format {
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .history-meta {
+        font-size: 12px;
+        color: #9e9e9e;
+        margin-top: 2px;
+      }
+      .history-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      /* Status badges */
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .status-badge svg {
+        width: 14px;
+        height: 14px;
+      }
+      .status-completed {
+        color: #4ade80;
+      }
+      .status-pending {
+        color: #fbbf24;
+      }
+      .status-processing {
+        color: #60a5fa;
+      }
+      .status-failed {
+        color: #f87171;
+      }
+      .status-expired {
+        color: #9e9e9e;
+      }
+
+      /* Download button */
+      .download-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 6px 14px;
+        border-radius: 6px;
+        border: none;
+        background: #3b82f6;
+        color: white;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        font-family: inherit;
+        text-decoration: none;
+      }
+      .download-btn:hover {
+        background: #2563eb;
+      }
+
+      .processing-spinner {
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(96, 165, 250, 0.3);
+        border-top-color: #60a5fa;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+      }
+    `,
   ],
   template: `
-    <section class="rounded-lg border bg-card p-6">
-      <div class="flex items-center gap-2 mb-4">
-        <ng-icon name="lucideShieldCheck" class="h-5 w-5 text-primary" />
-        <h2 class="text-lg font-semibold text-foreground">Export My Data</h2>
+    <section class="section-card">
+      <div class="section-header">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+        </svg>
+        <h2 class="section-title">Izvoz podataka</h2>
       </div>
-
-      <p class="text-sm text-muted-foreground mb-6">
-        Download a copy of your data for compliance or migration. Export files are encrypted
-        at rest and available for 24 hours.
+      <p class="section-desc">
+        Preuzmite kopiju vaših podataka za usklađenost ili migraciju. Fajlovi su šifrovani i dostupni 24 sata.
       </p>
 
-      <!-- Format Selection -->
-      <div class="mb-4">
-        <label class="text-sm font-medium text-foreground mb-2 block">Format</label>
-        <div class="flex gap-4">
-          @for (fmt of formats; track fmt.value) {
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="format"
-                [value]="fmt.value"
-                [checked]="selectedFormat$() === fmt.value"
-                (change)="selectedFormat$.set(fmt.value)"
-                class="accent-primary"
-              />
-              <ng-icon [name]="fmt.icon" class="h-4 w-4 text-muted-foreground" />
-              <span class="text-sm text-foreground">{{ fmt.label }}</span>
-            </label>
-          }
-        </div>
+      <!-- Format -->
+      <label class="field-label">Format</label>
+      <div class="radio-group">
+        @for (fmt of formats; track fmt.value) {
+          <label class="radio-item">
+            <input type="radio" name="format" [value]="fmt.value"
+              [checked]="selectedFormat$() === fmt.value"
+              (change)="selectedFormat$.set(fmt.value)" />
+            {{ fmt.label }}
+          </label>
+        }
       </div>
 
-      <!-- Data Type Selection -->
-      <div class="mb-6">
-        <label class="text-sm font-medium text-foreground mb-2 block">Data to include</label>
-        <div class="flex gap-4">
-          @for (dt of dataTypeOptions; track dt.value) {
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                [checked]="isDataTypeSelected(dt.value)"
-                (change)="toggleDataType(dt.value)"
-                class="accent-primary"
-              />
-              <span class="text-sm text-foreground">{{ dt.label }}</span>
-            </label>
-          }
-        </div>
+      <!-- Data types -->
+      <label class="field-label">Podaci za uključivanje</label>
+      <div class="checkbox-group">
+        @for (dt of dataTypeOptions; track dt.value) {
+          <label class="checkbox-item">
+            <input type="checkbox"
+              [checked]="isDataTypeSelected(dt.value)"
+              (change)="toggleDataType(dt.value)" />
+            {{ dt.label }}
+          </label>
+        }
       </div>
 
-      <!-- Export Button -->
-      <button
-        brnButton
-        (click)="onExport()"
-        [disabled]="isExporting$()"
-        class="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-      >
+      <!-- Export button -->
+      <button class="export-btn" (click)="onExport()" [disabled]="isExporting$()">
         @if (isExporting$()) {
-          <ng-icon name="lucideLoader2" class="h-4 w-4 animate-spin" />
-          Exporting...
+          <span class="btn-spinner"></span>
+          Izvoz u toku...
         } @else {
-          <ng-icon name="lucideDownload" class="h-4 w-4" />
-          Export My Data
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Izvezi podatke
         }
       </button>
 
-      <!-- Error Message -->
       @if (errorMessage$()) {
-        <div class="mt-4 rounded-md bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-          {{ errorMessage$() }}
-        </div>
+        <div class="error-banner">{{ errorMessage$() }}</div>
       }
 
-      <!-- Export History -->
+      <!-- Export history -->
       @if (exports$().length > 0) {
-        <div class="mt-6">
-          <h3 class="text-sm font-medium text-foreground mb-3">Export History</h3>
-          <div class="space-y-2">
+        <div class="history-section">
+          <h3 class="history-title">Istorija izvoza</h3>
+          <div class="history-list">
             @for (exp of exports$(); track exp.exportId) {
-              <div class="flex items-center justify-between rounded-md border p-3">
-                <div class="flex items-center gap-3">
-                  <ng-icon
-                    [name]="getFormatIcon(exp.format)"
-                    class="h-5 w-5 text-muted-foreground"
-                  />
+              <div class="history-item">
+                <div class="history-left">
+                  <svg class="history-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
                   <div>
-                    <p class="text-sm font-medium text-foreground">{{ exp.format }}</p>
-                    <p class="text-xs text-muted-foreground">
+                    <div class="history-format">{{ exp.format }}</div>
+                    <div class="history-meta">
                       {{ formatDate(exp.requestedAt) }}
                       @if (exp.fileSize) {
                         · {{ formatSize(exp.fileSize) }}
                       }
-                    </p>
+                    </div>
                   </div>
                 </div>
-                <div class="flex items-center gap-2">
+                <div class="history-right">
                   @switch (exp.status) {
                     @case ('COMPLETED') {
-                      <span class="inline-flex items-center gap-1 text-xs text-green-600">
-                        <ng-icon name="lucideCheckCircle" class="h-3.5 w-3.5" />
-                        Ready
+                      <span class="status-badge status-completed">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Spremno
                       </span>
-                      <a
-                        [href]="exp.downloadUrl"
-                        class="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                      >
-                        Download
-                      </a>
+                      <a [href]="exp.downloadUrl" class="download-btn">Preuzmi</a>
                     }
                     @case ('PENDING') {
-                      <span class="inline-flex items-center gap-1 text-xs text-amber-600">
-                        <ng-icon name="lucideClock" class="h-3.5 w-3.5" />
-                        Queued
+                      <span class="status-badge status-pending">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Na čekanju
                       </span>
                     }
                     @case ('PROCESSING') {
-                      <span class="inline-flex items-center gap-1 text-xs text-blue-600">
-                        <ng-icon name="lucideLoader2" class="h-3.5 w-3.5 animate-spin" />
-                        Processing
+                      <span class="status-badge status-processing">
+                        <span class="processing-spinner"></span>
+                        Obrada...
                       </span>
                     }
                     @case ('FAILED') {
-                      <span class="inline-flex items-center gap-1 text-xs text-destructive">
-                        <ng-icon name="lucideAlertTriangle" class="h-3.5 w-3.5" />
-                        Failed
+                      <span class="status-badge status-failed">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        Neuspelo
                       </span>
                     }
                     @case ('EXPIRED') {
-                      <span class="text-xs text-muted-foreground">Expired</span>
+                      <span class="status-badge status-expired">Isteklo</span>
                     }
                   }
                 </div>
@@ -188,15 +367,15 @@ export class ExportSectionComponent implements OnInit, OnDestroy {
   private pollingActive = false;
 
   readonly formats = [
-    { value: 'JSON', label: 'JSON', icon: 'lucideFileJson' },
-    { value: 'MARKDOWN', label: 'Markdown', icon: 'lucideFileText' },
-    { value: 'PDF', label: 'PDF', icon: 'lucideFile' },
+    { value: 'JSON', label: 'JSON' },
+    { value: 'MARKDOWN', label: 'Markdown' },
+    { value: 'PDF', label: 'PDF' },
   ];
 
   readonly dataTypeOptions = [
-    { value: 'all', label: 'All Data' },
-    { value: 'profile', label: 'Profile' },
-    { value: 'invitations', label: 'Invitations' },
+    { value: 'all', label: 'Svi podaci' },
+    { value: 'profile', label: 'Profil' },
+    { value: 'invitations', label: 'Pozivi' },
   ];
 
   ngOnInit(): void {
@@ -217,7 +396,6 @@ export class ExportSectionComponent implements OnInit, OnDestroy {
       this.selectedDataTypes$.set(['all']);
       return;
     }
-    // Remove 'all' if selecting specific types
     const withoutAll = current.filter((t) => t !== 'all');
     if (withoutAll.includes(value)) {
       const filtered = withoutAll.filter((t) => t !== value);
@@ -279,7 +457,6 @@ export class ExportSectionComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (res) => {
           this.exports$.set(res.data);
-          // Stop polling if no pending/processing exports
           const hasActive = res.data.some(
             (e) => e.status === 'PENDING' || e.status === 'PROCESSING'
           );
@@ -290,21 +467,8 @@ export class ExportSectionComponent implements OnInit, OnDestroy {
       });
   }
 
-  getFormatIcon(format: string): string {
-    switch (format) {
-      case 'JSON':
-        return 'lucideFileJson';
-      case 'MARKDOWN':
-        return 'lucideFileText';
-      case 'PDF':
-        return 'lucideFile';
-      default:
-        return 'lucideFile';
-    }
-  }
-
   formatDate(dateStr: string): string {
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    return new Date(dateStr).toLocaleDateString('sr-Latn', {
       month: 'short',
       day: 'numeric',
       hour: 'numeric',

@@ -1,60 +1,120 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideUpload, lucideX, lucideImage } from '@ng-icons/lucide';
 
 @Component({
   selector: 'app-file-upload-preview',
   standalone: true,
-  imports: [CommonModule, NgIcon],
-  providers: [provideIcons({ lucideUpload, lucideX, lucideImage })],
+  styles: [
+    `
+      .preview-wrapper {
+        display: inline-block;
+        position: relative;
+      }
+      .preview-img {
+        width: 80px;
+        height: 80px;
+        border-radius: 8px;
+        object-fit: cover;
+        border: 1px solid #2a2a2a;
+      }
+      .remove-btn {
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: none;
+        background: #ef4444;
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        padding: 0;
+      }
+      .remove-btn:hover {
+        background: #dc2626;
+      }
+      .remove-btn svg {
+        width: 12px;
+        height: 12px;
+      }
+
+      .upload-zone {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 2px dashed #2a2a2a;
+        border-radius: 8px;
+        padding: 24px;
+        cursor: pointer;
+        transition: border-color 0.15s;
+      }
+      .upload-zone:hover {
+        border-color: rgba(59, 130, 246, 0.5);
+      }
+      .upload-content {
+        text-align: center;
+      }
+      .upload-icon {
+        width: 32px;
+        height: 32px;
+        color: #9e9e9e;
+        margin: 0 auto 8px;
+      }
+      .upload-text {
+        font-size: 14px;
+        margin: 0;
+      }
+      .upload-link {
+        font-weight: 500;
+        color: #3b82f6;
+      }
+      .upload-hint {
+        font-size: 12px;
+        color: #9e9e9e;
+        margin-top: 4px;
+      }
+      .error-text {
+        font-size: 13px;
+        color: #ef4444;
+        margin-top: 4px;
+      }
+      .file-input {
+        display: none;
+      }
+    `,
+  ],
   template: `
     @if (previewUrl) {
-      <!-- Preview state -->
-      <div class="relative inline-block">
-        <img
-          [src]="previewUrl"
-          alt="Company icon preview"
-          class="h-20 w-20 rounded-lg object-cover border border-input"
-        />
-        <button
-          type="button"
-          (click)="removeFile()"
-          class="absolute -top-2 -right-2 rounded-full bg-destructive p-1 text-destructive-foreground hover:bg-destructive/90"
-        >
-          <ng-icon name="lucideX" class="h-3 w-3" />
+      <div class="preview-wrapper">
+        <img [src]="previewUrl" alt="Pregled ikonice kompanije" class="preview-img" />
+        <button type="button" class="remove-btn" (click)="removeFile()">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
         </button>
       </div>
     } @else {
-      <!-- Upload state -->
-      <div
-        class="flex items-center justify-center border-2 border-dashed border-input rounded-lg p-6 hover:border-primary/50 transition-colors cursor-pointer"
-        (click)="fileInput.click()"
-        (dragover)="onDragOver($event)"
-        (drop)="onDrop($event)"
-      >
-        <div class="text-center">
-          <ng-icon name="lucideImage" class="mx-auto h-8 w-8 text-muted-foreground" />
-          <p class="mt-2 text-sm text-foreground">
-            <span class="font-medium text-primary">Click to upload</span>
-            or drag and drop
+      <div class="upload-zone" (click)="fileInput.click()" (dragover)="onDragOver($event)" (drop)="onDrop($event)">
+        <div class="upload-content">
+          <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <p class="upload-text">
+            <span class="upload-link">Kliknite za otpremanje</span> ili prevucite
           </p>
-          <p class="text-xs text-muted-foreground">PNG or JPG (max. 2MB)</p>
+          <p class="upload-hint">PNG ili JPG (maks. 2MB)</p>
         </div>
       </div>
     }
 
     @if (error) {
-      <p class="mt-1 text-sm text-destructive">{{ error }}</p>
+      <p class="error-text">{{ error }}</p>
     }
 
-    <input
-      #fileInput
-      type="file"
-      accept="image/png,image/jpeg,image/jpg"
-      class="hidden"
-      (change)="onFileChange($event)"
-    />
+    <input #fileInput type="file" accept="image/png,image/jpeg,image/jpg" class="file-input" (change)="onFileChange($event)" />
   `,
 })
 export class FileUploadPreviewComponent {

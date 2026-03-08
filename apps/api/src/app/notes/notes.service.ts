@@ -8,7 +8,7 @@ import {
 import { createId } from '@paralleldrive/cuid2';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
-import type { NoteItem } from '@mentor-ai/shared/types';
+import type { NoteItem, TaskHubItem, TaskHubResponse, DomainSummary, TaskHubAgentJob } from '@mentor-ai/shared/types';
 import { AiGatewayService } from '../ai-gateway/ai-gateway.service';
 
 /**
@@ -130,6 +130,20 @@ export class NotesService {
         tenantId,
       },
     });
+  }
+
+  /**
+   * Gets a single note by ID with children, mapped to NoteItem.
+   */
+  async getNoteByIdWithChildren(noteId: string, tenantId: string): Promise<NoteItem | null> {
+    const note = await this.prisma.note.findFirst({
+      where: { id: noteId, tenantId },
+      include: {
+        children: { orderBy: { workflowStepNumber: 'asc' } },
+      },
+    });
+    if (!note) return null;
+    return this.mapToNoteItemWithChildren(note);
   }
 
   /**
@@ -914,6 +928,149 @@ Odgovori ISKLJUČIVO u JSON formatu:
     }
 
     await this.prisma.note.delete({ where: { id: commentId } });
+  }
+
+  /**
+   * Get all tasks for the Task Hub with concept info, agent jobs, filtering, and pagination.
+   */
+  async getAllTasks(
+    tenantId: string,
+    options: {
+      status?: string;
+      category?: string;
+      search?: string;
+      hasJobs?: boolean;
+      page?: number;
+      limit?: number;
+    } = {}
+  ): Promise<TaskHubResponse> {
+    const page = Math.max(1, options.page || 1);
+    const limit = Math.min(100, Math.max(1, options.limit || 50));
+    const skip = (page - 1) * limit;
+
+    // Build where clause — Note has no FK to Concept (cross-DB), so category filter done post-query
+    const where: Record<string, unknown> = {
+      tenantId,
+      noteType: NoteType.TASK,
+      parentNoteId: null, // only top-level tasks
+    };
+
+    if (options.status) {
+      where.status = options.status;
+    }
+
+    if (options.search) {
+      where.title = { contains: options.search, mode: 'insensitive' };
+    }
+
+    // If filtering by category, first get matching conceptIds
+    if (options.category) {
+      const matchingConcepts = await this.prisma.concept.findMany({
+        where: { category: { contains: options.category, mode: 'insensitive' } },
+        select: { id: true },
+      });
+      where.conceptId = { in: matchingConcepts.map((c) => c.id) };
+    }
+
+    // If hasJobs filter is enabled, restrict to tasks that have agent jobs
+    if (options.hasJobs) {
+      const noteIdsWithJobs = await this.prisma.agentJob.findMany({
+        where: { tenantId },
+        select: { noteId: true },
+        distinct: ['noteId'],
+      });
+      where.id = { in: noteIdsWithJobs.map((j) => j.noteId) };
+    }
+
+    // Fetch tasks
+    const [tasks, total] = await Promise.all([
+      this.prisma.note.findMany({
+        where,
+        include: {
+          children: { orderBy: { workflowStepNumber: 'asc' } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.note.count({ where }),
+    ]);
+
+    // Fetch concept info for all tasks that have conceptId
+    const conceptIds = [...new Set(tasks.map((t) => t.conceptId).filter(Boolean))] as string[];
+    const concepts = conceptIds.length > 0
+      ? await this.prisma.concept.findMany({
+          where: { id: { in: conceptIds } },
+          select: { id: true, name: true, category: true },
+        })
+      : [];
+    const conceptMap = new Map(concepts.map((c) => [c.id, c]));
+
+    // Fetch agent jobs for all returned tasks
+    const taskIds = tasks.map((t) => t.id);
+    const agentJobs = taskIds.length > 0
+      ? await this.prisma.agentJob.findMany({
+          where: { noteId: { in: taskIds } },
+          select: { id: true, noteId: true, agentType: true, status: true, order: true },
+          orderBy: { order: 'asc' },
+        })
+      : [];
+
+    // Group jobs by noteId
+    const jobsByNote = new Map<string, TaskHubAgentJob[]>();
+    for (const job of agentJobs) {
+      const list = jobsByNote.get(job.noteId) || [];
+      list.push({ id: job.id, agentType: job.agentType, status: job.status, order: job.order });
+      jobsByNote.set(job.noteId, list);
+    }
+
+    // Map tasks to TaskHubItem
+    const hubTasks: TaskHubItem[] = tasks.map((task) => {
+      const concept = task.conceptId ? conceptMap.get(task.conceptId) : null;
+      return {
+        ...this.mapToNoteItemWithChildren(task),
+        conceptName: concept?.name ?? null,
+        conceptCategory: concept?.category ?? null,
+        agentJobs: jobsByNote.get(task.id) || [],
+      };
+    });
+
+    // Build domain summary: get category-level aggregation for all tasks in tenant
+    const allTasksForSummary = await this.prisma.note.findMany({
+      where: {
+        tenantId,
+        noteType: NoteType.TASK,
+        parentNoteId: null,
+        conceptId: { not: null },
+      },
+      select: { status: true, conceptId: true },
+    });
+
+    // Fetch concepts for summary
+    const summaryConceptIds = [...new Set(allTasksForSummary.map((t) => t.conceptId!))] as string[];
+    const summaryConcepts = summaryConceptIds.length > 0
+      ? await this.prisma.concept.findMany({
+          where: { id: { in: summaryConceptIds } },
+          select: { id: true, category: true },
+        })
+      : [];
+    const summaryCategoryMap = new Map(summaryConcepts.map((c) => [c.id, c.category]));
+
+    const categoryAgg = new Map<string, { total: number; pending: number; completed: number }>();
+    for (const ct of allTasksForSummary) {
+      const cat = (ct.conceptId ? summaryCategoryMap.get(ct.conceptId) : null) || 'Ostalo';
+      const entry = categoryAgg.get(cat) || { total: 0, pending: 0, completed: 0 };
+      entry.total++;
+      if (ct.status === NoteStatus.PENDING) entry.pending++;
+      if (ct.status === NoteStatus.COMPLETED) entry.completed++;
+      categoryAgg.set(cat, entry);
+    }
+
+    const domainSummary: DomainSummary[] = Array.from(categoryAgg.entries())
+      .map(([category, counts]) => ({ category, ...counts }))
+      .sort((a, b) => b.total - a.total);
+
+    return { tasks: hubTasks, total, page, limit, domainSummary };
   }
 
   private mapToNoteItem(note: {

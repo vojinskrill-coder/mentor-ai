@@ -1,7 +1,6 @@
-import { Component, inject } from '@angular/core';
+import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { AuthService } from '../core/auth/auth.service';
 
 @Component({
   selector: 'app-dashboard',
@@ -12,71 +11,17 @@ import { AuthService } from '../core/auth/auth.service';
       :host {
         display: block;
       }
-      .page {
-        min-height: 100vh;
-        background: #0d0d0d;
-        color: #fafafa;
-        font-family: 'Inter', system-ui, sans-serif;
-      }
-
-      /* Header */
-      .top-header {
-        height: 48px;
-        border-bottom: 1px solid #2a2a2a;
-        background: #1a1a1a;
-      }
-      .header-inner {
-        max-width: 1024px;
-        margin: 0 auto;
-        padding: 0 16px;
-        height: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-      .header-left {
-        display: flex;
-        align-items: center;
-        gap: 24px;
-      }
-      .header-left h1 {
-        font-size: 15px;
-        font-weight: 600;
-      }
-      .nav-links {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-      }
-      .nav-links a {
-        font-size: 13px;
-        font-weight: 500;
-        color: #9e9e9e;
-        text-decoration: none;
-      }
-      .nav-links a:hover {
-        color: #fafafa;
-      }
-      .logout-btn {
-        background: #242424;
-        border: none;
-        color: #fafafa;
-        padding: 6px 16px;
-        border-radius: 6px;
-        font-size: 13px;
-        font-weight: 500;
-        cursor: pointer;
-        font-family: inherit;
-      }
-      .logout-btn:hover {
-        background: #2a2a2a;
-      }
 
       /* Main */
       .main {
         max-width: 1024px;
         margin: 0 auto;
-        padding: 32px 16px;
+        padding: 32px 24px;
+      }
+      @media (min-width: 1440px) {
+        .main {
+          max-width: 1200px;
+        }
       }
 
       /* Welcome Card */
@@ -243,21 +188,6 @@ import { AuthService } from '../core/auth/auth.service';
     `,
   ],
   template: `
-    <div class="page">
-      <header class="top-header">
-        <div class="header-inner">
-          <div class="header-left">
-            <h1>Mentor AI</h1>
-            <nav class="nav-links">
-              <a routerLink="/chat">Razgovor</a>
-              <a routerLink="/team">Tim</a>
-              <a routerLink="/admin/llm-config">Podešavanja</a>
-            </nav>
-          </div>
-          <button class="logout-btn" (click)="logout()">Odjava</button>
-        </div>
-      </header>
-
       <main class="main" role="main" aria-label="Kontrolna tabla">
         <!-- Welcome Card -->
         <div class="welcome-card">
@@ -417,13 +347,6 @@ import { AuthService } from '../core/auth/auth.service';
           </div>
         </div>
       </main>
-    </div>
   `,
 })
-export class DashboardComponent {
-  private readonly authService = inject(AuthService);
-
-  logout(): void {
-    this.authService.logout();
-  }
-}
+export class DashboardComponent {}

@@ -31,6 +31,7 @@ import { BusinessContextService } from '../knowledge/services/business-context.s
 import { ExecutionStateService } from '../execution/execution-state.service';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { JobPlannerService } from '../agent-execution/job-planner.service';
+import { AgentExecutionEventBus } from '../agent-execution/agent-execution-event-bus.service';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { createId } from '@paralleldrive/cuid2';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
@@ -115,7 +116,8 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     private readonly businessContextService: BusinessContextService,
     private readonly executionStateService: ExecutionStateService,
     private readonly attachmentsService: AttachmentsService,
-    private readonly jobPlannerService: JobPlannerService
+    private readonly jobPlannerService: JobPlannerService,
+    private readonly agentEventBus: AgentExecutionEventBus
   ) {
     this.auth0Domain = this.configService.get<string>('AUTH0_DOMAIN') ?? '';
     this.auth0Audience = this.configService.get<string>('AUTH0_AUDIENCE') ?? '';
@@ -174,6 +176,29 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
         );
       }
     }
+
+    // Subscribe to agent execution events and broadcast to tenant rooms
+    this.agentEventBus.onEvent((event) => {
+      try {
+        if (this.server) {
+          const room = `tenant:${event.tenantId}`;
+          const socketsInRoom = this.server.sockets?.adapter?.rooms?.get(room)?.size ?? 0;
+          this.logger.debug({
+            message: 'Broadcasting agent event',
+            eventName: event.eventName,
+            room,
+            socketsInRoom,
+          });
+          this.server.to(room).emit(event.eventName, event.payload);
+        }
+      } catch (err) {
+        this.logger.error({
+          message: 'Failed to broadcast agent event',
+          eventName: event.eventName,
+          error: err instanceof Error ? err.message : 'Unknown',
+        });
+      }
+    });
 
     // Daily event journal cleanup
     setInterval(

@@ -13,6 +13,7 @@ const _ts_metadata = require("@swc/helpers/_/_ts_metadata");
 const _common = require("@nestjs/common");
 const _config = require("@nestjs/config");
 const _client = require("@prisma/client");
+const _platformprismaservice = require("./platform-prisma.service");
 const DEFAULT_POOL_CONFIG = {
     max: 10,
     idleTimeoutMs: 30000,
@@ -43,7 +44,7 @@ let TenantPrismaService = class TenantPrismaService {
         return client;
     }
     async createClient(tenantId) {
-        const dbUrl = this.getTenantDbUrl(tenantId);
+        const dbUrl = await this.getTenantDbUrlAsync(tenantId);
         const client = new _client.PrismaClient({
             datasources: {
                 db: {
@@ -92,15 +93,55 @@ let TenantPrismaService = class TenantPrismaService {
         // Connect in background - client will auto-connect on first query
         return client;
     }
+    async getTenantDbUrlAsync(tenantId) {
+        // Dev mode: use the platform DATABASE_URL for all tenants (single-database mode)
+        const devMode = this.configService.get('DEV_MODE') === 'true';
+        if (devMode) {
+            const platformUrl = this.configService.get('DATABASE_URL');
+            if (platformUrl) return platformUrl;
+        }
+        // Check cache first
+        const cached = this.dbUrlCache.get(tenantId);
+        if (cached) return cached;
+        // Look up the tenant's dbUrl from the registry
+        try {
+            const registry = await this.platformPrisma.tenantRegistry.findUnique({
+                where: {
+                    id: tenantId
+                },
+                select: {
+                    dbUrl: true
+                }
+            });
+            if (registry == null ? void 0 : registry.dbUrl) {
+                this.dbUrlCache.set(tenantId, registry.dbUrl);
+                return registry.dbUrl;
+            }
+        } catch (e) {
+        // Registry lookup failed — fall through to fallback
+        }
+        // Fallback: use platform DATABASE_URL (single-DB setup)
+        const platformUrl = this.configService.get('DATABASE_URL');
+        if (platformUrl) return platformUrl;
+        // Last resort: construct from TENANT_DB_* env vars
+        return this.buildTenantDbUrl(tenantId);
+    }
     getTenantDbUrl(tenantId) {
         // Dev mode: use the platform DATABASE_URL for all tenants (single-database mode)
         const devMode = this.configService.get('DEV_MODE') === 'true';
         if (devMode) {
             const platformUrl = this.configService.get('DATABASE_URL');
-            if (platformUrl) {
-                return platformUrl;
-            }
+            if (platformUrl) return platformUrl;
         }
+        // Check cache
+        const cached = this.dbUrlCache.get(tenantId);
+        if (cached) return cached;
+        // Fallback: use platform DATABASE_URL (single-DB setup)
+        const platformUrl = this.configService.get('DATABASE_URL');
+        if (platformUrl) return platformUrl;
+        return this.buildTenantDbUrl(tenantId);
+    }
+    buildTenantDbUrl(tenantId) {
         var _this_configService_get;
         const host = (_this_configService_get = this.configService.get('TENANT_DB_HOST')) != null ? _this_configService_get : 'localhost';
         var _this_configService_get1;
@@ -161,10 +202,12 @@ let TenantPrismaService = class TenantPrismaService {
         await Promise.all(disconnectPromises);
         this.clients.clear();
     }
-    constructor(configService){
+    constructor(configService, platformPrisma){
         this.configService = configService;
+        this.platformPrisma = platformPrisma;
         this.clients = new Map();
         this.cleanupInterval = null;
+        this.dbUrlCache = new Map();
         var _this_configService_get, _this_configService_get1, _this_configService_get2;
         this.poolConfig = {
             max: (_this_configService_get = this.configService.get('TENANT_DB_POOL_MAX')) != null ? _this_configService_get : DEFAULT_POOL_CONFIG.max,
@@ -178,7 +221,8 @@ TenantPrismaService = _ts_decorate._([
     (0, _common.Injectable)(),
     _ts_metadata._("design:type", Function),
     _ts_metadata._("design:paramtypes", [
-        typeof _config.ConfigService === "undefined" ? Object : _config.ConfigService
+        typeof _config.ConfigService === "undefined" ? Object : _config.ConfigService,
+        typeof _platformprismaservice.PlatformPrismaService === "undefined" ? Object : _platformprismaservice.PlatformPrismaService
     ])
 ], TenantPrismaService);
 

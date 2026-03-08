@@ -15,6 +15,8 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import type { NoteItem, AgentJobItem } from '@mentor-ai/shared/types';
 import { AgentExecutionApiService } from '../services/agent-execution-api.service';
+import { ExecutionPanelService } from '../../../core/services/execution-panel.service';
+import { ChatWebsocketService } from '../services/chat-websocket.service';
 
 const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> = {
   web_search: { label: 'Online istraživanje', icon: '🔍', cost: 0.5 },
@@ -694,6 +696,15 @@ export class JobPanelComponent implements OnInit, OnDestroy {
   noteUpdated = output<void>();
 
   private readonly agentApi = inject(AgentExecutionApiService);
+  private readonly execPanel = inject(ExecutionPanelService);
+  private readonly wsService = inject(ChatWebsocketService);
+
+  /** Maps jobId → activity feed entry ID for real-time panel updates */
+  private readonly jobEntryIds = new Map<string, string>();
+  /** Maps executionId → jobId for reverse lookup from WS events */
+  private readonly execToJobMap = new Map<string, string>();
+  /** WS unsubscribe functions */
+  private readonly wsUnsubs: (() => void)[] = [];
 
   jobs = signal<AgentJobItem[]>([]);
   loading = signal(false);
@@ -747,6 +758,101 @@ export class JobPanelComponent implements OnInit, OnDestroy {
       this.lastLoadedNoteRef = noteRef;
       untracked(() => this.loadJobs());
     });
+
+    // ── WebSocket-driven agent execution updates ──
+    this.wsUnsubs.push(
+      this.wsService.onAgentStatusChange((data) => {
+        const jobId = this.findJobByExecOrJobId(data.executionId, data.jobId);
+        if (!jobId) return;
+
+        if (data.status === 'COMPLETED' || data.status === 'FAILED') {
+          const current = new Map(this.runningJobs());
+          current.delete(jobId);
+          this.runningJobs.set(current);
+          if (current.size === 0) this.stopElapsedTimer();
+          // Also reload + emit so the job card updates
+          this.loadJobs();
+          this.noteUpdated.emit();
+        } else {
+          const current = new Map(this.runningJobs());
+          const existing = current.get(jobId);
+          current.set(jobId, {
+            executionId: data.executionId,
+            phase: data.label,
+            startedAt: existing?.startedAt ?? Date.now(),
+          });
+          this.runningJobs.set(current);
+
+          const eid = this.jobEntryIds.get(jobId);
+          if (eid) this.execPanel.updateEntry(eid, { detail: data.label });
+        }
+      }),
+
+      this.wsService.onAgentHeartbeat((data) => {
+        const jobId = this.findJobByExecOrJobId(data.executionId, data.jobId);
+        if (!jobId) return;
+        const current = new Map(this.runningJobs());
+        const existing = current.get(jobId);
+        if (existing) {
+          const sec = Math.floor(data.elapsedMs / 1000);
+          const m = Math.floor(sec / 60);
+          const s = sec % 60;
+          current.set(jobId, {
+            ...existing,
+            phase: `Agent istražuje... (${m > 0 ? m + 'm ' : ''}${s}s)`,
+          });
+          this.runningJobs.set(current);
+        }
+      }),
+
+      this.wsService.onAgentResult((data) => {
+        const jobId = this.findJobByExecOrJobId(data.executionId, data.jobId);
+        if (!jobId) return;
+
+        // Clean up running state
+        const current = new Map(this.runningJobs());
+        current.delete(jobId);
+        this.runningJobs.set(current);
+        this.cleanupJobPolling(jobId);
+        if (current.size === 0) this.stopElapsedTimer();
+
+        // Update activity feed
+        const eid = this.jobEntryIds.get(jobId);
+        if (eid) {
+          this.execPanel.completeEntry(eid, `Završeno za ${Math.floor(data.durationMs / 1000)}s`);
+          this.jobEntryIds.delete(jobId);
+        }
+        this.execToJobMap.delete(data.executionId);
+
+        // Refresh jobs to get updated status + output
+        this.loadJobs();
+        this.noteUpdated.emit();
+      }),
+
+      this.wsService.onAgentError((data) => {
+        const jobId = this.findJobByExecOrJobId(data.executionId, data.jobId);
+        if (!jobId) return;
+
+        // Clean up running state
+        const current = new Map(this.runningJobs());
+        current.delete(jobId);
+        this.runningJobs.set(current);
+        this.cleanupJobPolling(jobId);
+        if (current.size === 0) this.stopElapsedTimer();
+
+        // Update activity feed
+        const eid = this.jobEntryIds.get(jobId);
+        if (eid) {
+          this.execPanel.failEntry(eid, data.error);
+          this.jobEntryIds.delete(jobId);
+        }
+        this.execToJobMap.delete(data.executionId);
+
+        // Refresh jobs
+        this.loadJobs();
+        this.noteUpdated.emit();
+      })
+    );
   }
 
   ngOnInit(): void {
@@ -762,6 +868,9 @@ export class JobPanelComponent implements OnInit, OnDestroy {
     this.pollRetryCounts.clear();
     this.pollErrorCounts.clear();
     this.stopElapsedTimer();
+    // Clean up WS subscriptions
+    for (const unsub of this.wsUnsubs) unsub();
+    this.wsUnsubs.length = 0;
   }
 
   getIcon(agentType: string): string {
@@ -883,6 +992,16 @@ export class JobPanelComponent implements OnInit, OnDestroy {
 
   async onExecuteJob(job: AgentJobItem): Promise<void> {
     this.globalError.set(null);
+
+    // Add activity feed entry for this agent execution
+    const entryId = this.execPanel.addEntry(
+      'agent-job',
+      `${this.getLabel(job.agentType)}`,
+      'running',
+      'Pokretanje agenta...'
+    );
+    this.jobEntryIds.set(job.id, entryId);
+
     try {
       const { executionId } = await this.agentApi.executeJob(job.id);
 
@@ -899,13 +1018,24 @@ export class JobPanelComponent implements OnInit, OnDestroy {
       this.runningJobs.set(current);
       this.startElapsedTimer();
 
-      // Start polling
-      this.pollRetryCounts.delete(job.id);
-      this.pollErrorCounts.delete(job.id);
-      this.pollJobExecution(job.id, executionId);
+      // Map executionId → jobId for WS event reverse lookup
+      this.execToJobMap.set(executionId, job.id);
+
+      // Use WS-driven updates when connected, fall back to polling otherwise
+      if (this.wsService.connectionState$() !== 'connected') {
+        this.pollRetryCounts.delete(job.id);
+        this.pollErrorCounts.delete(job.id);
+        this.pollJobExecution(job.id, executionId);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Greška pri pokretanju zadatka';
       this.globalError.set(message);
+      // Update activity feed with error
+      const eid = this.jobEntryIds.get(job.id);
+      if (eid) {
+        this.execPanel.failEntry(eid, message);
+        this.jobEntryIds.delete(job.id);
+      }
     }
   }
 
@@ -944,6 +1074,11 @@ export class JobPanelComponent implements OnInit, OnDestroy {
             startedAt: existing?.startedAt ?? Date.now(),
           });
           this.runningJobs.set(current);
+
+          // Update activity feed with current phase
+          const eid = this.jobEntryIds.get(jobId);
+          if (eid) this.execPanel.updateEntry(eid, { detail: phase });
+
           this.pollJobExecution(jobId, executionId);
         } else {
           // COMPLETED or FAILED — refresh jobs from server
@@ -954,6 +1089,17 @@ export class JobPanelComponent implements OnInit, OnDestroy {
           this.pollRetryCounts.delete(jobId);
           this.pollErrorCounts.delete(jobId);
           if (current.size === 0) this.stopElapsedTimer();
+
+          // Update activity feed
+          const eid = this.jobEntryIds.get(jobId);
+          if (eid) {
+            if (exec.status === 'COMPLETED') {
+              this.execPanel.completeEntry(eid, 'Agent završio');
+            } else {
+              this.execPanel.failEntry(eid, 'Agent neuspešan');
+            }
+            this.jobEntryIds.delete(jobId);
+          }
 
           // Refresh all jobs to get updated status + output
           await this.loadJobs();
@@ -983,6 +1129,30 @@ export class JobPanelComponent implements OnInit, OnDestroy {
     if (current.size === 0) this.stopElapsedTimer();
     this.updateJobStatus(jobId, 'FAILED');
     this.globalError.set(errorMessage);
+
+    // Update activity feed
+    const eid = this.jobEntryIds.get(jobId);
+    if (eid) {
+      this.execPanel.failEntry(eid, errorMessage);
+      this.jobEntryIds.delete(jobId);
+    }
+  }
+
+  /** Resolve a jobId from WS event data (executionId or direct jobId) */
+  private findJobByExecOrJobId(executionId: string, jobId: string | null): string | null {
+    // Direct match
+    if (jobId && this.jobs().some((j) => j.id === jobId)) return jobId;
+    // Reverse lookup from execToJobMap
+    return this.execToJobMap.get(executionId) ?? null;
+  }
+
+  /** Stop polling for a job without emitting errors */
+  private cleanupJobPolling(jobId: string): void {
+    const timer = this.pollTimers.get(jobId);
+    if (timer) clearTimeout(timer);
+    this.pollTimers.delete(jobId);
+    this.pollRetryCounts.delete(jobId);
+    this.pollErrorCounts.delete(jobId);
   }
 
   private updateJobStatus(jobId: string, status: string, executionId?: string): void {

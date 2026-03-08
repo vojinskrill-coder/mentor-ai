@@ -38,17 +38,17 @@ const team_module_1 = __webpack_require__(126);
 const llm_config_module_1 = __webpack_require__(74);
 const ai_gateway_module_1 = __webpack_require__(88);
 const conversation_module_1 = __webpack_require__(131);
-const onboarding_module_1 = __webpack_require__(168);
-const personas_module_1 = __webpack_require__(174);
+const onboarding_module_1 = __webpack_require__(180);
+const personas_module_1 = __webpack_require__(186);
 const knowledge_module_1 = __webpack_require__(73);
-const memory_module_1 = __webpack_require__(136);
-const qdrant_module_1 = __webpack_require__(177);
-const web_search_module_1 = __webpack_require__(145);
-const admin_module_1 = __webpack_require__(178);
-const execution_module_1 = __webpack_require__(147);
-const attachments_module_1 = __webpack_require__(152);
-const pdf_export_module_1 = __webpack_require__(182);
-const agent_execution_module_1 = __webpack_require__(193);
+const memory_module_1 = __webpack_require__(137);
+const qdrant_module_1 = __webpack_require__(189);
+const web_search_module_1 = __webpack_require__(146);
+const admin_module_1 = __webpack_require__(190);
+const execution_module_1 = __webpack_require__(148);
+const attachments_module_1 = __webpack_require__(153);
+const pdf_export_module_1 = __webpack_require__(194);
+const agent_execution_module_1 = __webpack_require__(160);
 // Serve Angular static files in production (combined deploy)
 const staticPath = (0, path_1.join)(__dirname, '..', '..', 'web', 'browser');
 const serveStaticImports = (0, fs_1.existsSync)(staticPath)
@@ -185,8 +185,10 @@ let TenantPrismaService = class TenantPrismaService {
         this.dbUrlCache = new Map();
         this.poolConfig = {
             max: this.configService.get('TENANT_DB_POOL_MAX') ?? DEFAULT_POOL_CONFIG.max,
-            idleTimeoutMs: this.configService.get('TENANT_DB_IDLE_TIMEOUT_MS') ?? DEFAULT_POOL_CONFIG.idleTimeoutMs,
-            acquireTimeoutMs: this.configService.get('TENANT_DB_ACQUIRE_TIMEOUT_MS') ?? DEFAULT_POOL_CONFIG.acquireTimeoutMs,
+            idleTimeoutMs: this.configService.get('TENANT_DB_IDLE_TIMEOUT_MS') ??
+                DEFAULT_POOL_CONFIG.idleTimeoutMs,
+            acquireTimeoutMs: this.configService.get('TENANT_DB_ACQUIRE_TIMEOUT_MS') ??
+                DEFAULT_POOL_CONFIG.acquireTimeoutMs,
         };
         this.startIdleCleanup();
     }
@@ -444,7 +446,13 @@ let TenantMiddleware = class TenantMiddleware {
         this.platformPrisma = platformPrisma;
         this.configService = configService;
         // Paths that don't require tenant context (e.g., health checks, auth, platform admin)
-        this.excludedPaths = ['/health', '/api/health', '/api/v1/health', '/auth', '/api/auth'];
+        this.excludedPaths = [
+            '/health',
+            '/api/health',
+            '/api/v1/health',
+            '/auth',
+            '/api/auth',
+        ];
         /** Cached dev tenant ID resolved from DB */
         this.resolvedDevTenantId = null;
     }
@@ -5050,7 +5058,7 @@ tslib_1.__exportStar(__webpack_require__(86), exports);
  * These types are used across both frontend (Angular) and backend (NestJS)
  */
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.AgentType = exports.AgentExecutionStatus = exports.NoteStatus = exports.NoteType = exports.MEMORY_TYPE_LABELS = exports.MEMORY_TYPE_COLORS = exports.MemorySource = exports.MemoryType = exports.ConceptSource = exports.RelationshipType = exports.ConceptCategory = exports.CONFIDENCE_COLORS = exports.ConfidenceLevel = exports.PERSONA_NAMES = exports.PERSONA_COLORS = exports.PersonaType = exports.CircuitBreakerState = exports.MessageRole = exports.LlmProviderType = exports.TenantStatus = exports.ExportStatus = exports.ExportFormat = exports.INDUSTRIES = exports.Department = exports.InvitationStatus = void 0;
+exports.AgentJobStatus = exports.AgentType = exports.AgentExecutionStatus = exports.NoteStatus = exports.NoteType = exports.MEMORY_TYPE_LABELS = exports.MEMORY_TYPE_COLORS = exports.MemorySource = exports.MemoryType = exports.ConceptSource = exports.RelationshipType = exports.ConceptCategory = exports.CONFIDENCE_COLORS = exports.ConfidenceLevel = exports.PERSONA_NAMES = exports.PERSONA_COLORS = exports.PersonaType = exports.CircuitBreakerState = exports.MessageRole = exports.LlmProviderType = exports.TenantStatus = exports.ExportStatus = exports.ExportFormat = exports.INDUSTRIES = exports.Department = exports.InvitationStatus = void 0;
 /** Invitation status */
 var InvitationStatus;
 (function (InvitationStatus) {
@@ -5348,6 +5356,14 @@ var AgentType;
     AgentType["SALES"] = "sales";
     AgentType["FINANCIAL"] = "financial";
 })(AgentType || (exports.AgentType = AgentType = {}));
+// --- Agent Job Pipeline ---
+var AgentJobStatus;
+(function (AgentJobStatus) {
+    AgentJobStatus["PLANNED"] = "PLANNED";
+    AgentJobStatus["RUNNING"] = "RUNNING";
+    AgentJobStatus["COMPLETED"] = "COMPLETED";
+    AgentJobStatus["FAILED"] = "FAILED";
+})(AgentJobStatus || (exports.AgentJobStatus = AgentJobStatus = {}));
 
 
 /***/ }),
@@ -11851,7 +11867,13 @@ exports.DEPARTMENT_CATEGORY_MAP = {
     [prisma_1.Department.MARKETING]: ['Marketing', 'Digitalni Marketing'],
     [prisma_1.Department.FINANCE]: ['Finansije', 'Računovodstvo'],
     [prisma_1.Department.SALES]: ['Prodaja', 'Odnosi sa Klijentima'],
-    [prisma_1.Department.OPERATIONS]: ['Operacije', 'Operacije i Proizvodnja', 'Preduzetništvo', 'Menadžment', 'Sistemi'],
+    [prisma_1.Department.OPERATIONS]: [
+        'Operacije',
+        'Operacije i Proizvodnja',
+        'Preduzetništvo',
+        'Menadžment',
+        'Sistemi',
+    ],
     [prisma_1.Department.TECHNOLOGY]: ['Tehnologija', 'Inovacije', 'Sistemi'],
     [prisma_1.Department.STRATEGY]: ['Strategija', 'Poslovni Modeli', 'Liderstvo'],
     [prisma_1.Department.LEGAL]: ['Menadžment'],
@@ -13795,14 +13817,15 @@ const auth_module_1 = __webpack_require__(41);
 const ai_gateway_module_1 = __webpack_require__(88);
 const notes_module_1 = __webpack_require__(132);
 const knowledge_module_1 = __webpack_require__(73);
-const memory_module_1 = __webpack_require__(136);
-const workflow_module_1 = __webpack_require__(144);
-const web_search_module_1 = __webpack_require__(145);
-const execution_module_1 = __webpack_require__(147);
-const attachments_module_1 = __webpack_require__(152);
-const conversation_controller_1 = __webpack_require__(159);
-const conversation_service_1 = __webpack_require__(160);
-const conversation_gateway_1 = __webpack_require__(164);
+const memory_module_1 = __webpack_require__(137);
+const workflow_module_1 = __webpack_require__(145);
+const web_search_module_1 = __webpack_require__(146);
+const execution_module_1 = __webpack_require__(148);
+const attachments_module_1 = __webpack_require__(153);
+const agent_execution_module_1 = __webpack_require__(160);
+const conversation_controller_1 = __webpack_require__(171);
+const conversation_service_1 = __webpack_require__(172);
+const conversation_gateway_1 = __webpack_require__(176);
 let ConversationModule = class ConversationModule {
 };
 exports.ConversationModule = ConversationModule;
@@ -13820,6 +13843,7 @@ exports.ConversationModule = ConversationModule = tslib_1.__decorate([
             web_search_module_1.WebSearchModule,
             execution_module_1.ExecutionModule,
             attachments_module_1.AttachmentsModule,
+            agent_execution_module_1.AgentExecutionModule,
         ],
         controllers: [conversation_controller_1.ConversationController],
         providers: [conversation_service_1.ConversationService, conversation_gateway_1.ConversationGateway],
@@ -13949,6 +13973,20 @@ let NotesService = NotesService_1 = class NotesService {
                 tenantId,
             },
         });
+    }
+    /**
+     * Gets a single note by ID with children, mapped to NoteItem.
+     */
+    async getNoteByIdWithChildren(noteId, tenantId) {
+        const note = await this.prisma.note.findFirst({
+            where: { id: noteId, tenantId },
+            include: {
+                children: { orderBy: { workflowStepNumber: 'asc' } },
+            },
+        });
+        if (!note)
+            return null;
+        return this.mapToNoteItemWithChildren(note);
     }
     /**
      * Gets all notes for a user.
@@ -14599,6 +14637,125 @@ Odgovori ISKLJUČIVO u JSON formatu:
         }
         await this.prisma.note.delete({ where: { id: commentId } });
     }
+    /**
+     * Get all tasks for the Task Hub with concept info, agent jobs, filtering, and pagination.
+     */
+    async getAllTasks(tenantId, options = {}) {
+        const page = Math.max(1, options.page || 1);
+        const limit = Math.min(100, Math.max(1, options.limit || 50));
+        const skip = (page - 1) * limit;
+        // Build where clause — Note has no FK to Concept (cross-DB), so category filter done post-query
+        const where = {
+            tenantId,
+            noteType: prisma_1.NoteType.TASK,
+            parentNoteId: null, // only top-level tasks
+        };
+        if (options.status) {
+            where.status = options.status;
+        }
+        if (options.search) {
+            where.title = { contains: options.search, mode: 'insensitive' };
+        }
+        // If filtering by category, first get matching conceptIds
+        if (options.category) {
+            const matchingConcepts = await this.prisma.concept.findMany({
+                where: { category: { contains: options.category, mode: 'insensitive' } },
+                select: { id: true },
+            });
+            where.conceptId = { in: matchingConcepts.map((c) => c.id) };
+        }
+        // If hasJobs filter is enabled, restrict to tasks that have agent jobs
+        if (options.hasJobs) {
+            const noteIdsWithJobs = await this.prisma.agentJob.findMany({
+                where: { tenantId },
+                select: { noteId: true },
+                distinct: ['noteId'],
+            });
+            where.id = { in: noteIdsWithJobs.map((j) => j.noteId) };
+        }
+        // Fetch tasks
+        const [tasks, total] = await Promise.all([
+            this.prisma.note.findMany({
+                where,
+                include: {
+                    children: { orderBy: { workflowStepNumber: 'asc' } },
+                },
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
+            }),
+            this.prisma.note.count({ where }),
+        ]);
+        // Fetch concept info for all tasks that have conceptId
+        const conceptIds = [...new Set(tasks.map((t) => t.conceptId).filter(Boolean))];
+        const concepts = conceptIds.length > 0
+            ? await this.prisma.concept.findMany({
+                where: { id: { in: conceptIds } },
+                select: { id: true, name: true, category: true },
+            })
+            : [];
+        const conceptMap = new Map(concepts.map((c) => [c.id, c]));
+        // Fetch agent jobs for all returned tasks
+        const taskIds = tasks.map((t) => t.id);
+        const agentJobs = taskIds.length > 0
+            ? await this.prisma.agentJob.findMany({
+                where: { noteId: { in: taskIds } },
+                select: { id: true, noteId: true, agentType: true, status: true, order: true },
+                orderBy: { order: 'asc' },
+            })
+            : [];
+        // Group jobs by noteId
+        const jobsByNote = new Map();
+        for (const job of agentJobs) {
+            const list = jobsByNote.get(job.noteId) || [];
+            list.push({ id: job.id, agentType: job.agentType, status: job.status, order: job.order });
+            jobsByNote.set(job.noteId, list);
+        }
+        // Map tasks to TaskHubItem
+        const hubTasks = tasks.map((task) => {
+            const concept = task.conceptId ? conceptMap.get(task.conceptId) : null;
+            return {
+                ...this.mapToNoteItemWithChildren(task),
+                conceptName: concept?.name ?? null,
+                conceptCategory: concept?.category ?? null,
+                agentJobs: jobsByNote.get(task.id) || [],
+            };
+        });
+        // Build domain summary: get category-level aggregation for all tasks in tenant
+        const allTasksForSummary = await this.prisma.note.findMany({
+            where: {
+                tenantId,
+                noteType: prisma_1.NoteType.TASK,
+                parentNoteId: null,
+                conceptId: { not: null },
+            },
+            select: { status: true, conceptId: true },
+        });
+        // Fetch concepts for summary
+        const summaryConceptIds = [...new Set(allTasksForSummary.map((t) => t.conceptId))];
+        const summaryConcepts = summaryConceptIds.length > 0
+            ? await this.prisma.concept.findMany({
+                where: { id: { in: summaryConceptIds } },
+                select: { id: true, category: true },
+            })
+            : [];
+        const summaryCategoryMap = new Map(summaryConcepts.map((c) => [c.id, c.category]));
+        const categoryAgg = new Map();
+        for (const ct of allTasksForSummary) {
+            const cat = (ct.conceptId ? summaryCategoryMap.get(ct.conceptId) : null) || 'Ostalo';
+            const entry = categoryAgg.get(cat) || { total: 0, pending: 0, completed: 0 };
+            entry.total++;
+            if (ct.status === prisma_1.NoteStatus.PENDING)
+                entry.pending++;
+            if (ct.status === prisma_1.NoteStatus.COMPLETED)
+                entry.completed++;
+            categoryAgg.set(cat, entry);
+        }
+        const domainSummary = Array.from(categoryAgg.entries())
+            .map(([category, counts]) => ({ category, ...counts }))
+            .sort((a, b) => b.total - a.total);
+        return { tasks: hubTasks, total, page, limit, domainSummary };
+    }
     mapToNoteItem(note) {
         return {
             id: note.id,
@@ -14642,7 +14799,7 @@ exports.NotesService = NotesService = NotesService_1 = tslib_1.__decorate([
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
-var _a, _b, _c;
+var _a, _b, _c, _d;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.NotesController = void 0;
 const tslib_1 = __webpack_require__(4);
@@ -14652,6 +14809,7 @@ const current_user_decorator_1 = __webpack_require__(48);
 const notes_service_1 = __webpack_require__(133);
 const prisma_1 = __webpack_require__(35);
 const comment_dto_1 = __webpack_require__(135);
+const task_hub_query_dto_1 = __webpack_require__(136);
 let NotesController = class NotesController {
     constructor(notesService) {
         this.notesService = notesService;
@@ -14674,6 +14832,21 @@ let NotesController = class NotesController {
         return { data: result };
     }
     /**
+     * Get all tasks for the Task Hub.
+     * Must be defined BEFORE parametric routes to avoid conflict with :id.
+     */
+    async getAllTasks(user, query) {
+        const result = await this.notesService.getAllTasks(user.tenantId, {
+            status: query.status,
+            category: query.category,
+            search: query.search,
+            hasJobs: query.hasJobs === 'true',
+            page: query.page,
+            limit: query.limit,
+        });
+        return { data: result };
+    }
+    /**
      * Get notes for a specific conversation.
      */
     async getByConversation(user, conversationId) {
@@ -14686,6 +14859,16 @@ let NotesController = class NotesController {
     async getByConcept(user, conceptId) {
         const notes = await this.notesService.getByConcept(conceptId, user.userId, user.tenantId);
         return { data: notes };
+    }
+    /**
+     * Get a single note by ID (with children).
+     */
+    async getById(user, id) {
+        const note = await this.notesService.getNoteByIdWithChildren(id, user.tenantId);
+        if (!note) {
+            throw new common_1.NotFoundException(`Note ${id} not found`);
+        }
+        return { data: note };
     }
     /**
      * Update a note's status (toggle task completion).
@@ -14770,6 +14953,14 @@ tslib_1.__decorate([
     tslib_1.__metadata("design:returntype", Promise)
 ], NotesController.prototype, "createNote", null);
 tslib_1.__decorate([
+    (0, common_1.Get)('tasks'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Query)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, typeof (_b = typeof task_hub_query_dto_1.TaskHubQueryDto !== "undefined" && task_hub_query_dto_1.TaskHubQueryDto) === "function" ? _b : Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], NotesController.prototype, "getAllTasks", null);
+tslib_1.__decorate([
     (0, common_1.Get)('conversation/:conversationId'),
     tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
     tslib_1.__param(1, (0, common_1.Param)('conversationId')),
@@ -14785,6 +14976,14 @@ tslib_1.__decorate([
     tslib_1.__metadata("design:paramtypes", [Object, String]),
     tslib_1.__metadata("design:returntype", Promise)
 ], NotesController.prototype, "getByConcept", null);
+tslib_1.__decorate([
+    (0, common_1.Get)(':id'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Param)('id')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], NotesController.prototype, "getById", null);
 tslib_1.__decorate([
     (0, common_1.Patch)(':id/status'),
     tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
@@ -14835,7 +15034,7 @@ tslib_1.__decorate([
     tslib_1.__param(1, (0, common_1.Param)('taskId')),
     tslib_1.__param(2, (0, common_1.Body)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object, String, typeof (_b = typeof comment_dto_1.CreateCommentDto !== "undefined" && comment_dto_1.CreateCommentDto) === "function" ? _b : Object]),
+    tslib_1.__metadata("design:paramtypes", [Object, String, typeof (_c = typeof comment_dto_1.CreateCommentDto !== "undefined" && comment_dto_1.CreateCommentDto) === "function" ? _c : Object]),
     tslib_1.__metadata("design:returntype", Promise)
 ], NotesController.prototype, "createComment", null);
 tslib_1.__decorate([
@@ -14854,7 +15053,7 @@ tslib_1.__decorate([
     tslib_1.__param(1, (0, common_1.Param)('commentId')),
     tslib_1.__param(2, (0, common_1.Body)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object, String, typeof (_c = typeof comment_dto_1.UpdateCommentDto !== "undefined" && comment_dto_1.UpdateCommentDto) === "function" ? _c : Object]),
+    tslib_1.__metadata("design:paramtypes", [Object, String, typeof (_d = typeof comment_dto_1.UpdateCommentDto !== "undefined" && comment_dto_1.UpdateCommentDto) === "function" ? _d : Object]),
     tslib_1.__metadata("design:returntype", Promise)
 ], NotesController.prototype, "updateComment", null);
 tslib_1.__decorate([
@@ -14923,17 +15122,67 @@ tslib_1.__decorate([
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.TaskHubQueryDto = void 0;
+const tslib_1 = __webpack_require__(4);
+const class_validator_1 = __webpack_require__(38);
+const class_transformer_1 = __webpack_require__(84);
+class TaskHubQueryDto {
+}
+exports.TaskHubQueryDto = TaskHubQueryDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], TaskHubQueryDto.prototype, "status", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], TaskHubQueryDto.prototype, "category", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], TaskHubQueryDto.prototype, "search", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBooleanString)(),
+    tslib_1.__metadata("design:type", String)
+], TaskHubQueryDto.prototype, "hasJobs", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    tslib_1.__metadata("design:type", Number)
+], TaskHubQueryDto.prototype, "page", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    (0, class_validator_1.Max)(100),
+    tslib_1.__metadata("design:type", Number)
+], TaskHubQueryDto.prototype, "limit", void 0);
+
+
+/***/ }),
+/* 137 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.MemoryModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const tenant_context_1 = __webpack_require__(9);
 const auth_module_1 = __webpack_require__(41);
-const memory_controller_1 = __webpack_require__(137);
-const memory_service_1 = __webpack_require__(138);
-const memory_extraction_service_1 = __webpack_require__(141);
-const memory_embedding_service_1 = __webpack_require__(142);
-const memory_context_builder_service_1 = __webpack_require__(143);
+const memory_controller_1 = __webpack_require__(138);
+const memory_service_1 = __webpack_require__(139);
+const memory_extraction_service_1 = __webpack_require__(142);
+const memory_embedding_service_1 = __webpack_require__(143);
+const memory_context_builder_service_1 = __webpack_require__(144);
 const llm_config_module_1 = __webpack_require__(74);
 /**
  * Module for persistent memory across conversations.
@@ -14970,7 +15219,7 @@ exports.MemoryModule = MemoryModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 137 */
+/* 138 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -14983,9 +15232,9 @@ const common_1 = __webpack_require__(1);
 const class_validator_1 = __webpack_require__(38);
 const jwt_auth_guard_1 = __webpack_require__(46);
 const current_user_decorator_1 = __webpack_require__(48);
-const memory_service_1 = __webpack_require__(138);
-const create_memory_dto_1 = __webpack_require__(139);
-const update_memory_dto_1 = __webpack_require__(140);
+const memory_service_1 = __webpack_require__(139);
+const create_memory_dto_1 = __webpack_require__(140);
+const update_memory_dto_1 = __webpack_require__(141);
 /**
  * Request body for forgetting all memories.
  * Requires typing "FORGET" to confirm deletion.
@@ -15194,7 +15443,7 @@ exports.MemoryController = MemoryController = MemoryController_1 = tslib_1.__dec
 
 
 /***/ }),
-/* 138 */
+/* 139 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -15520,7 +15769,7 @@ exports.MemoryService = MemoryService = MemoryService_1 = tslib_1.__decorate([
 
 
 /***/ }),
-/* 139 */
+/* 140 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -15568,7 +15817,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 140 */
+/* 141 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -15595,7 +15844,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 141 */
+/* 142 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -15606,8 +15855,8 @@ exports.MemoryExtractionService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const memory_service_1 = __webpack_require__(138);
-const memory_embedding_service_1 = __webpack_require__(142);
+const memory_service_1 = __webpack_require__(139);
+const memory_embedding_service_1 = __webpack_require__(143);
 const llm_config_service_1 = __webpack_require__(76);
 const types_1 = __webpack_require__(85);
 /**
@@ -15945,7 +16194,7 @@ exports.MemoryExtractionService = MemoryExtractionService = MemoryExtractionServ
 
 
 /***/ }),
-/* 142 */
+/* 143 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -15955,7 +16204,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.MemoryEmbeddingService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const memory_service_1 = __webpack_require__(138);
+const memory_service_1 = __webpack_require__(139);
 const qdrant_client_service_1 = __webpack_require__(112);
 /** OpenAI API endpoint for embeddings */
 const OPENAI_EMBEDDINGS_URL = 'https://api.openai.com/v1/embeddings';
@@ -16228,7 +16477,7 @@ exports.MemoryEmbeddingService = MemoryEmbeddingService = MemoryEmbeddingService
 
 
 /***/ }),
-/* 143 */
+/* 144 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -16238,7 +16487,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.MemoryContextBuilderService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const memory_embedding_service_1 = __webpack_require__(142);
+const memory_embedding_service_1 = __webpack_require__(143);
 /**
  * Service for building memory context for AI prompts.
  * Formats relevant memories for RAG injection.
@@ -16412,7 +16661,7 @@ exports.MemoryContextBuilderService = MemoryContextBuilderService = MemoryContex
 
 
 /***/ }),
-/* 144 */
+/* 145 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -16424,11 +16673,11 @@ const tenant_context_1 = __webpack_require__(9);
 const knowledge_module_1 = __webpack_require__(73);
 const ai_gateway_module_1 = __webpack_require__(88);
 const notes_module_1 = __webpack_require__(132);
-const web_search_module_1 = __webpack_require__(145);
-const execution_module_1 = __webpack_require__(147);
-const workflow_service_1 = __webpack_require__(149);
-const yolo_scheduler_service_1 = __webpack_require__(151);
-const prompt_checker_service_1 = __webpack_require__(150);
+const web_search_module_1 = __webpack_require__(146);
+const execution_module_1 = __webpack_require__(148);
+const workflow_service_1 = __webpack_require__(150);
+const yolo_scheduler_service_1 = __webpack_require__(152);
+const prompt_checker_service_1 = __webpack_require__(151);
 let WorkflowModule = class WorkflowModule {
 };
 exports.WorkflowModule = WorkflowModule;
@@ -16449,7 +16698,7 @@ exports.WorkflowModule = WorkflowModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 145 */
+/* 146 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -16458,7 +16707,7 @@ exports.WebSearchModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const web_search_service_1 = __webpack_require__(146);
+const web_search_service_1 = __webpack_require__(147);
 let WebSearchModule = class WebSearchModule {
 };
 exports.WebSearchModule = WebSearchModule;
@@ -16472,7 +16721,7 @@ exports.WebSearchModule = WebSearchModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 146 */
+/* 147 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -16703,7 +16952,7 @@ exports.WebSearchService = WebSearchService = WebSearchService_1 = tslib_1.__dec
 
 
 /***/ }),
-/* 147 */
+/* 148 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -16712,7 +16961,7 @@ exports.ExecutionModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const execution_state_service_1 = __webpack_require__(148);
+const execution_state_service_1 = __webpack_require__(149);
 let ExecutionModule = class ExecutionModule {
 };
 exports.ExecutionModule = ExecutionModule;
@@ -16726,7 +16975,7 @@ exports.ExecutionModule = ExecutionModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 148 */
+/* 149 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -16924,7 +17173,7 @@ exports.ExecutionStateService = ExecutionStateService = ExecutionStateService_1 
 
 
 /***/ }),
-/* 149 */
+/* 150 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -16943,10 +17192,10 @@ const citation_injector_service_1 = __webpack_require__(114);
 const citation_service_1 = __webpack_require__(107);
 const ai_gateway_service_1 = __webpack_require__(89);
 const notes_service_1 = __webpack_require__(133);
-const web_search_service_1 = __webpack_require__(146);
+const web_search_service_1 = __webpack_require__(147);
 const business_context_service_1 = __webpack_require__(119);
 const concept_relevance_service_1 = __webpack_require__(120);
-const prompt_checker_service_1 = __webpack_require__(150);
+const prompt_checker_service_1 = __webpack_require__(151);
 const persona_prompts_1 = __webpack_require__(92);
 const department_categories_1 = __webpack_require__(118);
 const MAX_RECURSION_DEPTH = 10;
@@ -17128,7 +17377,7 @@ Vrati JSON niz koraka. Svaki korak mora imati:
 - estimatedMinutes (celobrojna vrednost)
 - departmentTag (opciono: "CFO", "CMO", "CTO", "OPERATIONS", "LEGAL", "CREATIVE")
 
-Generiši 3-6 koraka. Poredaj logički prema zadatku.`;
+Generiši tačno 3 koraka. Poredaj logički prema zadatku.`;
         // Pre-generation prompt quality check
         let finalWorkflowPrompt = prompt;
         try {
@@ -17212,13 +17461,11 @@ Vrati JSON niz koraka. Svaki korak mora imati:
 - estimatedMinutes (celobrojna vrednost, realna procena)
 - departmentTag (opciono: "CFO", "CMO", "CTO", "OPERATIONS", "LEGAL", "CREATIVE")
 
-Generiši 4-6 koraka. Redosled:
+Generiši 3-4 koraka. Redosled:
 1. Dijagnostika/analiza trenutnog stanja
-2. Istraživanje tržišta/konkurencije (ako je relevantno)
-3. Strateško planiranje
-4. Akcioni plan sa konkretnim koracima
-5. KPI i sistem merenja (ako je relevantno)
-6. Implementacioni roadmap`;
+2. Strateško planiranje i akcioni plan
+3. Implementacioni plan sa KPI merenjem
+4. (opciono, samo za složene teme) Istraživanje tržišta/konkurencije`;
         return prompt;
     }
     parseWorkflowSteps(response) {
@@ -17632,7 +17879,7 @@ Generiši 4-6 koraka. Redosled:
      * Queries embeddings to find relevant concepts, loads full knowledge, and produces
      * actionable deliverables (not instructions). Citations come from known input concepts.
      */
-    async executeStepAutonomous(step, conversationId, userId, tenantId, onChunk, completedSummaries = [], preloadedWorkflowSteps) {
+    async executeStepAutonomous(step, conversationId, userId, tenantId, onChunk, completedSummaries = [], preloadedWorkflowSteps, cachedContext) {
         // Use preloaded steps when available (e.g., from parallel-popuni which generates
         // task-specific workflows that may differ from the cached generic workflow).
         // Fall back to loading/generating the workflow from cache.
@@ -17698,11 +17945,13 @@ Generiši 4-6 koraka. Redosled:
             }
         }
         conceptKnowledge += '\n--- KRAJ BAZE ZNANJA ---';
-        // 3. Load business context
-        const tenant = await this.prisma.tenant.findUnique({
-            where: { id: tenantId },
-            select: { name: true, industry: true, description: true },
-        });
+        // 3. Load business context (use cachedContext when available to avoid per-step DB lookups)
+        const tenant = cachedContext?.tenant !== undefined
+            ? cachedContext.tenant
+            : await this.prisma.tenant.findUnique({
+                where: { id: tenantId },
+                select: { name: true, industry: true, description: true },
+            });
         let businessInfo = '';
         if (tenant) {
             businessInfo = `\n\n--- POSLOVNI KONTEKST ---\nKompanija: ${tenant.name}`;
@@ -17714,15 +17963,20 @@ Generiši 4-6 koraka. Redosled:
         }
         // 3.2 Story 3.2: Load tenant-wide Business Brain context (all memories)
         let brainContext = '';
-        try {
-            brainContext = await this.businessContextService.getBusinessContext(tenantId);
+        if (cachedContext?.brainContext !== undefined) {
+            brainContext = cachedContext.brainContext;
         }
-        catch (err) {
-            this.logger.warn({
-                message: 'Business context load failed (non-blocking)',
-                tenantId,
-                error: err instanceof Error ? err.message : 'Unknown',
-            });
+        else {
+            try {
+                brainContext = await this.businessContextService.getBusinessContext(tenantId);
+            }
+            catch (err) {
+                this.logger.warn({
+                    message: 'Business context load failed (non-blocking)',
+                    tenantId,
+                    error: err instanceof Error ? err.message : 'Unknown',
+                });
+            }
         }
         // 3.3 Load originating conversation messages for task-specific context
         let conversationContext = '';
@@ -18106,7 +18360,7 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${taskSpecificContex
             if (!visibleCategories)
                 return true;
             const stripped = r.concept.category.replace(/^\d+\.\s*/, '').trim();
-            return visibleCategories.includes(r.concept.category) || visibleCategories.includes(stripped);
+            return (visibleCategories.includes(r.concept.category) || visibleCategories.includes(stripped));
         });
         // Story 3.3 AC5: Relevance scoring — filter by business relevance
         const tenant = await this.prisma.tenant.findUnique({
@@ -18190,7 +18444,7 @@ exports.WorkflowService = WorkflowService = WorkflowService_1 = tslib_1.__decora
 
 
 /***/ }),
-/* 150 */
+/* 151 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -18203,7 +18457,7 @@ const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const axios_1 = tslib_1.__importDefault(__webpack_require__(57));
 const ai_gateway_service_1 = __webpack_require__(89);
-const web_search_service_1 = __webpack_require__(146);
+const web_search_service_1 = __webpack_require__(147);
 /** Maximum rewrite cycles before force pass-through */
 const MAX_REWRITE_CYCLES = 2;
 /** Timeout for URL HEAD requests (ms) */
@@ -18514,7 +18768,7 @@ exports.PromptCheckerService = PromptCheckerService = PromptCheckerService_1 = t
 
 
 /***/ }),
-/* 151 */
+/* 152 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -18527,7 +18781,7 @@ const common_1 = __webpack_require__(1);
 const cuid2_1 = __webpack_require__(32);
 const tenant_context_1 = __webpack_require__(9);
 const prisma_1 = __webpack_require__(35);
-const workflow_service_1 = __webpack_require__(149);
+const workflow_service_1 = __webpack_require__(150);
 const notes_service_1 = __webpack_require__(133);
 const concept_service_1 = __webpack_require__(105);
 const concept_matching_service_1 = __webpack_require__(110);
@@ -19259,7 +19513,7 @@ exports.YoloSchedulerService = YoloSchedulerService = YoloSchedulerService_1 = t
 
 
 /***/ }),
-/* 152 */
+/* 153 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -19268,8 +19522,8 @@ exports.AttachmentsModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
-const attachments_controller_1 = __webpack_require__(153);
-const attachments_service_1 = __webpack_require__(155);
+const attachments_controller_1 = __webpack_require__(154);
+const attachments_service_1 = __webpack_require__(156);
 let AttachmentsModule = class AttachmentsModule {
 };
 exports.AttachmentsModule = AttachmentsModule;
@@ -19284,7 +19538,7 @@ exports.AttachmentsModule = AttachmentsModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 153 */
+/* 154 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -19294,10 +19548,10 @@ exports.AttachmentsController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const platform_express_1 = __webpack_require__(27);
-const express_1 = __webpack_require__(154);
+const express_1 = __webpack_require__(155);
 const jwt_auth_guard_1 = __webpack_require__(46);
 const current_user_decorator_1 = __webpack_require__(48);
-const attachments_service_1 = __webpack_require__(155);
+const attachments_service_1 = __webpack_require__(156);
 let AttachmentsController = class AttachmentsController {
     constructor(attachmentsService) {
         this.attachmentsService = attachmentsService;
@@ -19347,13 +19601,13 @@ exports.AttachmentsController = AttachmentsController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 154 */
+/* 155 */
 /***/ ((module) => {
 
 module.exports = require("express");
 
 /***/ }),
-/* 155 */
+/* 156 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -19510,7 +19764,7 @@ let AttachmentsService = AttachmentsService_1 = class AttachmentsService {
         let text = null;
         switch (mimeType) {
             case 'application/pdf': {
-                const pdfParse = __webpack_require__(156);
+                const pdfParse = __webpack_require__(157);
                 const result = await pdfParse(buffer);
                 text = result.text;
                 break;
@@ -19521,7 +19775,7 @@ let AttachmentsService = AttachmentsService_1 = class AttachmentsService {
                 break;
             }
             case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': {
-                const XLSX = __webpack_require__(157);
+                const XLSX = __webpack_require__(158);
                 const workbook = XLSX.read(buffer, { type: 'buffer' });
                 const sheets = [];
                 for (const name of workbook.SheetNames) {
@@ -19532,7 +19786,7 @@ let AttachmentsService = AttachmentsService_1 = class AttachmentsService {
                 break;
             }
             case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': {
-                const mammoth = __webpack_require__(158);
+                const mammoth = __webpack_require__(159);
                 const result = await mammoth.extractRawText({ buffer });
                 text = result.value;
                 break;
@@ -19558,25 +19812,1736 @@ exports.AttachmentsService = AttachmentsService = AttachmentsService_1 = tslib_1
 
 
 /***/ }),
-/* 156 */
+/* 157 */
 /***/ ((module) => {
 
 module.exports = require("pdf-parse");
 
 /***/ }),
-/* 157 */
+/* 158 */
 /***/ ((module) => {
 
 module.exports = require("xlsx");
 
 /***/ }),
-/* 158 */
+/* 159 */
 /***/ ((module) => {
 
 module.exports = require("mammoth");
 
 /***/ }),
-/* 159 */
+/* 160 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AgentExecutionModule = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const tenant_context_1 = __webpack_require__(9);
+const auth_module_1 = __webpack_require__(41);
+const ai_gateway_module_1 = __webpack_require__(88);
+const notes_module_1 = __webpack_require__(132);
+const agent_execution_service_1 = __webpack_require__(161);
+const agent_execution_controller_1 = __webpack_require__(169);
+const openclaw_client_service_1 = __webpack_require__(162);
+const agent_registry_service_1 = __webpack_require__(165);
+const agent_prompt_service_1 = __webpack_require__(164);
+const job_planner_service_1 = __webpack_require__(170);
+const budget_service_1 = __webpack_require__(166);
+const agent_execution_event_bus_service_1 = __webpack_require__(167);
+let AgentExecutionModule = class AgentExecutionModule {
+};
+exports.AgentExecutionModule = AgentExecutionModule;
+exports.AgentExecutionModule = AgentExecutionModule = tslib_1.__decorate([
+    (0, common_1.Module)({
+        imports: [config_1.ConfigModule, tenant_context_1.TenantModule, auth_module_1.AuthModule, ai_gateway_module_1.AiGatewayModule, notes_module_1.NotesModule],
+        controllers: [agent_execution_controller_1.AgentExecutionController],
+        providers: [
+            agent_execution_service_1.AgentExecutionService,
+            openclaw_client_service_1.OpenClawClientService,
+            agent_registry_service_1.AgentRegistryService,
+            agent_prompt_service_1.AgentPromptService,
+            job_planner_service_1.JobPlannerService,
+            budget_service_1.BudgetService,
+            agent_execution_event_bus_service_1.AgentExecutionEventBus,
+        ],
+        exports: [agent_execution_service_1.AgentExecutionService, job_planner_service_1.JobPlannerService, agent_execution_event_bus_service_1.AgentExecutionEventBus],
+    })
+], AgentExecutionModule);
+
+
+/***/ }),
+/* 161 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var AgentExecutionService_1;
+var _a, _b, _c, _d, _e, _f;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AgentExecutionService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const tenant_context_1 = __webpack_require__(9);
+const cuid2_1 = __webpack_require__(32);
+const types_1 = __webpack_require__(85);
+const openclaw_client_service_1 = __webpack_require__(162);
+const agent_prompt_service_1 = __webpack_require__(164);
+const agent_registry_service_1 = __webpack_require__(165);
+const budget_service_1 = __webpack_require__(166);
+const agent_execution_event_bus_service_1 = __webpack_require__(167);
+let AgentExecutionService = AgentExecutionService_1 = class AgentExecutionService {
+    constructor(prisma, openClawClient, agentPrompt, registry, budgetService, eventBus) {
+        this.prisma = prisma;
+        this.openClawClient = openClawClient;
+        this.agentPrompt = agentPrompt;
+        this.registry = registry;
+        this.budgetService = budgetService;
+        this.eventBus = eventBus;
+        this.logger = new common_1.Logger(AgentExecutionService_1.name);
+        this.MAX_CONCURRENT_PER_TENANT = 3;
+        this.VALID_STATUSES = new Set(Object.values(types_1.AgentExecutionStatus));
+    }
+    emitAgentEvent(tenantId, eventName, payload) {
+        this.eventBus.emit({ tenantId, eventName, payload });
+    }
+    startHeartbeat(executionId, jobId, agentType, tenantId, startTime) {
+        return setInterval(() => {
+            this.emitAgentEvent(tenantId, 'agent:executing-heartbeat', {
+                executionId,
+                jobId,
+                elapsedMs: Date.now() - startTime,
+                agentType,
+            });
+        }, 5000);
+    }
+    async triggerAgent(noteId, agentType, userId, tenantId) {
+        // Validate agent type
+        const agentDef = this.registry.getAgent(agentType);
+        // Verify note
+        const note = await this.prisma.note.findFirst({
+            where: { id: noteId, tenantId },
+        });
+        if (!note) {
+            throw new common_1.NotFoundException(`Note ${noteId} not found`);
+        }
+        if (!note.userReport) {
+            throw new common_1.BadRequestException('Task has no completed report');
+        }
+        // Check OpenClaw config
+        if (!this.openClawClient.isConfigured()) {
+            throw new common_1.BadRequestException('Agent execution is not configured');
+        }
+        // Check for existing active execution on this note+agentType
+        const existingActive = await this.prisma.agentExecution.findFirst({
+            where: {
+                noteId,
+                tenantId,
+                agentType,
+                status: { in: ['PENDING', 'FORMATTING', 'EXECUTING'] },
+            },
+        });
+        if (existingActive) {
+            throw new common_1.BadRequestException(`${agentDef.label} is already in progress for this task`);
+        }
+        // Check budget
+        const canSpend = await this.budgetService.canSpend(tenantId);
+        if (!canSpend) {
+            throw new common_1.ForbiddenException('Daily budget exceeded');
+        }
+        // Check concurrency via DB count (safe across multiple instances)
+        const activeCount = await this.prisma.agentExecution.count({
+            where: {
+                tenantId,
+                status: { in: ['PENDING', 'FORMATTING', 'EXECUTING'] },
+            },
+        });
+        if (activeCount >= this.MAX_CONCURRENT_PER_TENANT) {
+            throw new common_1.BadRequestException(`Maximum ${this.MAX_CONCURRENT_PER_TENANT} concurrent agent executions`);
+        }
+        // Create execution record + reserve budget
+        const executionId = `agx_${(0, cuid2_1.createId)()}`;
+        const estimatedCost = agentDef.estimatedCostEur;
+        await this.prisma.agentExecution.create({
+            data: {
+                id: executionId,
+                tenantId,
+                userId,
+                noteId,
+                status: 'PENDING',
+                agentType,
+                estimatedCostEur: estimatedCost,
+            },
+        });
+        await this.budgetService.recordSpend(tenantId, estimatedCost);
+        this.logger.log({
+            message: 'Agent triggered',
+            executionId,
+            noteId,
+            agentType,
+            userId,
+            tenantId,
+            reservedCostEur: estimatedCost,
+        });
+        // Fire-and-forget async pipeline
+        this.executeAgentPipeline(executionId, agentType, note, userId, tenantId, estimatedCost).catch((err) => {
+            this.logger.error({
+                message: 'Agent pipeline failed unexpectedly',
+                executionId,
+                agentType,
+                error: err.message,
+            });
+        });
+        return { executionId };
+    }
+    async executeAgentPipeline(executionId, agentType, note, userId, tenantId, reservedCostEur) {
+        const openClawAgentId = this.registry.getOpenClawAgentId(agentType);
+        const agentLabel = this.registry.getAgent(agentType).label;
+        let heartbeat = null;
+        let chunkIndex = 0;
+        try {
+            // Step 1: Format task into agent-specific instruction
+            await this.updateStatus(executionId, 'FORMATTING');
+            this.emitAgentEvent(tenantId, 'agent:status-change', {
+                executionId, jobId: null, noteId: note.id, agentType, status: 'FORMATTING',
+                label: `${agentLabel}: Priprema instrukcija...`,
+            });
+            const formattedPrompt = await this.agentPrompt.formatPrompt({
+                agentType,
+                taskTitle: note.title,
+                taskContent: note.content,
+                userReport: note.userReport,
+                expectedOutcome: note.expectedOutcome,
+                tenantId,
+                userId,
+                onChunk: (chunk) => {
+                    this.emitAgentEvent(tenantId, 'agent:formatting-chunk', {
+                        executionId, jobId: null, chunk, index: chunkIndex++,
+                    });
+                },
+            });
+            this.emitAgentEvent(tenantId, 'agent:formatting-complete', {
+                executionId, jobId: null, promptLength: formattedPrompt.length,
+            });
+            await this.prisma.agentExecution.update({
+                where: { id: executionId },
+                data: { formattedPrompt },
+            });
+            // Step 2: Send to OpenClaw with the correct agent
+            await this.updateStatus(executionId, 'EXECUTING', { startedAt: new Date() });
+            this.emitAgentEvent(tenantId, 'agent:status-change', {
+                executionId, jobId: null, noteId: note.id, agentType, status: 'EXECUTING',
+                label: `${agentLabel}: Agent istražuje...`,
+            });
+            heartbeat = this.startHeartbeat(executionId, null, agentType, tenantId, Date.now());
+            const result = await this.openClawClient.executeAgent(formattedPrompt, {
+                agentId: openClawAgentId,
+                onText: (text) => {
+                    this.emitAgentEvent(tenantId, 'agent:text-chunk', {
+                        executionId, jobId: null, text,
+                    });
+                },
+                onTool: (tool, status, query) => {
+                    this.emitAgentEvent(tenantId, 'agent:tool-event', {
+                        executionId, jobId: null, tool, status, query,
+                    });
+                },
+                onStatus: (phase) => {
+                    this.emitAgentEvent(tenantId, 'agent:status-change', {
+                        executionId, jobId: null, noteId: note.id, agentType, status: 'EXECUTING',
+                        label: `${agentLabel}: ${phase === 'running' ? 'Agent istražuje...' : phase}`,
+                    });
+                },
+            });
+            clearInterval(heartbeat);
+            heartbeat = null;
+            if (!result.success) {
+                const errorMsg = result.error ?? 'Agent execution failed';
+                await this.updateStatus(executionId, 'FAILED', {
+                    error: errorMsg,
+                    completedAt: new Date(),
+                    durationMs: result.durationMs,
+                });
+                this.emitAgentEvent(tenantId, 'agent:status-change', {
+                    executionId, jobId: null, noteId: note.id, agentType, status: 'FAILED',
+                    label: `${agentLabel}: Greška`,
+                });
+                this.emitAgentEvent(tenantId, 'agent:error', {
+                    executionId, jobId: null, agentType, error: errorMsg,
+                });
+                return;
+            }
+            // Step 3: Store results in Note.agentEnrichments JSON (atomic merge)
+            await this.mergeEnrichment(note.id, agentType, {
+                executionId,
+                status: types_1.AgentExecutionStatus.COMPLETED,
+                result: result.output,
+                completedAt: new Date().toISOString(),
+                error: null,
+            });
+            // Step 4: Calculate cost and adjust budget
+            const actualCost = this.estimateActualCost(result.usage);
+            const costDifference = actualCost - reservedCostEur;
+            if (Math.abs(costDifference) > 0.0001) {
+                await this.budgetService.recordSpend(tenantId, costDifference);
+            }
+            // Step 5: Mark completed
+            await this.prisma.agentExecution.update({
+                where: { id: executionId },
+                data: {
+                    status: 'COMPLETED',
+                    agentOutput: result.output,
+                    actualCostEur: actualCost,
+                    completedAt: new Date(),
+                    durationMs: result.durationMs,
+                },
+            });
+            this.emitAgentEvent(tenantId, 'agent:status-change', {
+                executionId, jobId: null, noteId: note.id, agentType, status: 'COMPLETED',
+                label: `${agentLabel}: Završeno`,
+            });
+            this.emitAgentEvent(tenantId, 'agent:result', {
+                executionId, jobId: null, agentType,
+                output: result.output, durationMs: result.durationMs,
+            });
+            this.logger.log({
+                message: 'Agent execution completed',
+                executionId,
+                agentType,
+                durationMs: result.durationMs,
+                actualCostEur: actualCost,
+            });
+        }
+        catch (err) {
+            if (heartbeat)
+                clearInterval(heartbeat);
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            this.logger.error({
+                message: 'Agent pipeline error',
+                executionId,
+                agentType,
+                error: errorMessage,
+            });
+            this.emitAgentEvent(tenantId, 'agent:status-change', {
+                executionId, jobId: null, noteId: note.id, agentType, status: 'FAILED',
+                label: `${agentLabel}: Greška`,
+            });
+            this.emitAgentEvent(tenantId, 'agent:error', {
+                executionId, jobId: null, agentType, error: errorMessage,
+            });
+            // Store error in enrichments too (atomic merge — safe under concurrency)
+            try {
+                await this.mergeEnrichment(note.id, agentType, {
+                    executionId,
+                    status: types_1.AgentExecutionStatus.FAILED,
+                    result: null,
+                    completedAt: new Date().toISOString(),
+                    error: errorMessage,
+                });
+            }
+            catch {
+                /* best-effort */
+            }
+            await this.updateStatus(executionId, 'FAILED', {
+                error: errorMessage,
+                completedAt: new Date(),
+            });
+        }
+    }
+    async updateStatus(executionId, status, extra) {
+        await this.prisma.agentExecution.update({
+            where: { id: executionId },
+            data: { status, ...extra },
+        });
+    }
+    /**
+     * Atomically merges an enrichment entry into Note.agentEnrichments JSON
+     * using PostgreSQL jsonb || operator. Prevents race conditions when
+     * multiple agents write to the same note concurrently.
+     *
+     * NOTE: Uses raw SQL intentionally to get atomic JSONB merge semantics.
+     * This bypasses Prisma middleware (logging, hooks, @updatedAt).
+     * We manually set updated_at to compensate.
+     */
+    async mergeEnrichment(noteId, agentType, entry) {
+        const patch = JSON.stringify({ [agentType]: entry });
+        await this.prisma.$executeRaw `
+      UPDATE notes
+      SET agent_enrichments = COALESCE(agent_enrichments, '{}'::jsonb) || ${patch}::jsonb,
+          updated_at = NOW()
+      WHERE id = ${noteId}
+    `;
+    }
+    estimateActualCost(usage) {
+        if (!usage?.total)
+            return this.budgetService.getEstimatedCost();
+        const inputCost = ((usage.input ?? 0) / 1_000_000) * 0.27;
+        const outputCost = ((usage.output ?? 0) / 1_000_000) * 1.1;
+        const fetchCost = 0.03;
+        return Math.round((inputCost + outputCost + fetchCost) * 10000) / 10000;
+    }
+    // --- Agent Job Pipeline ---
+    async executeJob(jobId, userId, tenantId) {
+        // Load and validate job
+        const job = await this.prisma.agentJob.findFirst({
+            where: { id: jobId, tenantId },
+        });
+        if (!job) {
+            throw new common_1.NotFoundException(`Job ${jobId} not found`);
+        }
+        if (job.status !== 'PLANNED') {
+            throw new common_1.BadRequestException(`Job is already ${job.status.toLowerCase()}`);
+        }
+        // Check all dependencies are COMPLETED
+        if (job.dependsOn.length > 0) {
+            const depJobs = await this.prisma.agentJob.findMany({
+                where: { id: { in: job.dependsOn } },
+            });
+            const allCompleted = depJobs.every((d) => d.status === 'COMPLETED');
+            if (!allCompleted) {
+                throw new common_1.BadRequestException('Dependency jobs not yet completed');
+            }
+        }
+        // Load parent note
+        const note = await this.prisma.note.findFirst({
+            where: { id: job.noteId, tenantId },
+        });
+        if (!note) {
+            throw new common_1.NotFoundException(`Note ${job.noteId} not found`);
+        }
+        // Validate agent type, config, budget
+        const agentType = job.agentType;
+        const agentDef = this.registry.getAgent(agentType);
+        if (!this.openClawClient.isConfigured()) {
+            throw new common_1.BadRequestException('Agent execution is not configured');
+        }
+        const canSpend = await this.budgetService.canSpend(tenantId);
+        if (!canSpend) {
+            throw new common_1.ForbiddenException('Daily budget exceeded');
+        }
+        // Check concurrency
+        const activeCount = await this.prisma.agentExecution.count({
+            where: {
+                tenantId,
+                status: { in: ['PENDING', 'FORMATTING', 'EXECUTING'] },
+            },
+        });
+        if (activeCount >= this.MAX_CONCURRENT_PER_TENANT) {
+            throw new common_1.BadRequestException(`Maximum ${this.MAX_CONCURRENT_PER_TENANT} concurrent agent executions`);
+        }
+        // Create execution record + reserve budget
+        const executionId = `agx_${(0, cuid2_1.createId)()}`;
+        const estimatedCost = agentDef.estimatedCostEur;
+        await this.prisma.agentExecution.create({
+            data: {
+                id: executionId,
+                tenantId,
+                userId,
+                noteId: job.noteId,
+                status: 'PENDING',
+                agentType,
+                estimatedCostEur: estimatedCost,
+            },
+        });
+        await this.budgetService.recordSpend(tenantId, estimatedCost);
+        // Update job: RUNNING + link execution
+        await this.prisma.agentJob.update({
+            where: { id: jobId },
+            data: { status: 'RUNNING', executionId },
+        });
+        this.logger.log({
+            message: 'Job execution triggered',
+            jobId,
+            executionId,
+            agentType,
+            noteId: job.noteId,
+        });
+        // Gather dependency context
+        let dependencyContext = '';
+        if (job.dependsOn.length > 0) {
+            const depJobs = await this.prisma.agentJob.findMany({
+                where: { id: { in: job.dependsOn }, status: 'COMPLETED' },
+                orderBy: { order: 'asc' },
+            });
+            for (const dep of depJobs) {
+                if (dep.agentOutput) {
+                    const depLabel = this.registry.getAgent(dep.agentType).label;
+                    dependencyContext += `\n--- Previous Result: ${depLabel} ---\n${dep.agentOutput}\n--- End ---\n`;
+                }
+            }
+            this.logger.log({
+                message: 'Dependency context gathered',
+                jobId,
+                dependencyCount: depJobs.length,
+                contextLength: dependencyContext.length,
+            });
+        }
+        // Fire-and-forget
+        this.executeJobPipeline(executionId, jobId, agentType, note, job.instruction, dependencyContext, userId, tenantId, estimatedCost).catch((err) => {
+            this.logger.error({
+                message: 'Job pipeline failed unexpectedly',
+                jobId,
+                executionId,
+                error: err.message,
+            });
+        });
+        return { jobId, executionId };
+    }
+    async executeJobPipeline(executionId, jobId, agentType, note, jobInstruction, dependencyContext, userId, tenantId, reservedCostEur) {
+        const openClawAgentId = this.registry.getOpenClawAgentId(agentType);
+        const agentLabel = this.registry.getAgent(agentType).label;
+        let heartbeat = null;
+        let chunkIndex = 0;
+        try {
+            // Step 1: Build enriched instruction with dependency context
+            await this.updateStatus(executionId, 'FORMATTING');
+            this.emitAgentEvent(tenantId, 'agent:status-change', {
+                executionId, jobId, noteId: note.id, agentType, status: 'FORMATTING',
+                label: `${agentLabel}: Priprema instrukcija...`,
+            });
+            const enrichedInstruction = dependencyContext
+                ? `${jobInstruction}\n\nContext from previous agent results:\n${dependencyContext}`
+                : jobInstruction;
+            const formattedPrompt = await this.agentPrompt.formatPrompt({
+                agentType,
+                taskTitle: note.title,
+                taskContent: enrichedInstruction,
+                userReport: note.userReport,
+                expectedOutcome: note.expectedOutcome,
+                tenantId,
+                userId,
+                onChunk: (chunk) => {
+                    this.emitAgentEvent(tenantId, 'agent:formatting-chunk', {
+                        executionId, jobId, chunk, index: chunkIndex++,
+                    });
+                },
+            });
+            this.emitAgentEvent(tenantId, 'agent:formatting-complete', {
+                executionId, jobId, promptLength: formattedPrompt.length,
+            });
+            await this.prisma.agentExecution.update({
+                where: { id: executionId },
+                data: { formattedPrompt },
+            });
+            // Step 2: Send to OpenClaw
+            await this.updateStatus(executionId, 'EXECUTING', { startedAt: new Date() });
+            this.emitAgentEvent(tenantId, 'agent:status-change', {
+                executionId, jobId, noteId: note.id, agentType, status: 'EXECUTING',
+                label: `${agentLabel}: Agent istražuje...`,
+            });
+            heartbeat = this.startHeartbeat(executionId, jobId, agentType, tenantId, Date.now());
+            const result = await this.openClawClient.executeAgent(formattedPrompt, {
+                agentId: openClawAgentId,
+                onText: (text) => {
+                    this.emitAgentEvent(tenantId, 'agent:text-chunk', {
+                        executionId, jobId, text,
+                    });
+                },
+                onTool: (tool, status, query) => {
+                    this.emitAgentEvent(tenantId, 'agent:tool-event', {
+                        executionId, jobId, tool, status, query,
+                    });
+                },
+                onStatus: (phase) => {
+                    this.emitAgentEvent(tenantId, 'agent:status-change', {
+                        executionId, jobId, noteId: note.id, agentType, status: 'EXECUTING',
+                        label: `${agentLabel}: ${phase === 'running' ? 'Agent istražuje...' : phase}`,
+                    });
+                },
+            });
+            clearInterval(heartbeat);
+            heartbeat = null;
+            if (!result.success) {
+                const errorMsg = result.error ?? 'Agent execution failed';
+                await this.prisma.agentJob.update({
+                    where: { id: jobId },
+                    data: { status: 'FAILED', error: errorMsg },
+                });
+                await this.updateStatus(executionId, 'FAILED', {
+                    error: errorMsg,
+                    completedAt: new Date(),
+                    durationMs: result.durationMs,
+                });
+                this.emitAgentEvent(tenantId, 'agent:status-change', {
+                    executionId, jobId, noteId: note.id, agentType, status: 'FAILED',
+                    label: `${agentLabel}: Greška`,
+                });
+                this.emitAgentEvent(tenantId, 'agent:error', {
+                    executionId, jobId, agentType, error: errorMsg,
+                });
+                return;
+            }
+            // Step 3: Store result in both AgentJob and Note enrichments
+            await this.prisma.agentJob.update({
+                where: { id: jobId },
+                data: { status: 'COMPLETED', agentOutput: result.output },
+            });
+            await this.mergeEnrichment(note.id, agentType, {
+                executionId,
+                status: types_1.AgentExecutionStatus.COMPLETED,
+                result: result.output,
+                completedAt: new Date().toISOString(),
+                error: null,
+            });
+            // Step 4: Cost adjustment
+            const actualCost = this.estimateActualCost(result.usage);
+            const costDifference = actualCost - reservedCostEur;
+            if (Math.abs(costDifference) > 0.0001) {
+                await this.budgetService.recordSpend(tenantId, costDifference);
+            }
+            // Step 5: Mark execution completed
+            await this.prisma.agentExecution.update({
+                where: { id: executionId },
+                data: {
+                    status: 'COMPLETED',
+                    agentOutput: result.output,
+                    actualCostEur: actualCost,
+                    completedAt: new Date(),
+                    durationMs: result.durationMs,
+                },
+            });
+            this.emitAgentEvent(tenantId, 'agent:status-change', {
+                executionId, jobId, noteId: note.id, agentType, status: 'COMPLETED',
+                label: `${agentLabel}: Završeno`,
+            });
+            this.emitAgentEvent(tenantId, 'agent:result', {
+                executionId, jobId, agentType,
+                output: result.output, durationMs: result.durationMs,
+            });
+            this.logger.log({
+                message: 'Job execution completed',
+                jobId,
+                executionId,
+                agentType,
+                durationMs: result.durationMs,
+                actualCostEur: actualCost,
+            });
+        }
+        catch (err) {
+            if (heartbeat)
+                clearInterval(heartbeat);
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            this.logger.error({
+                message: 'Job pipeline error',
+                jobId,
+                executionId,
+                agentType,
+                error: errorMessage,
+            });
+            this.emitAgentEvent(tenantId, 'agent:status-change', {
+                executionId, jobId, noteId: note.id, agentType, status: 'FAILED',
+                label: `${agentLabel}: Greška`,
+            });
+            this.emitAgentEvent(tenantId, 'agent:error', {
+                executionId, jobId, agentType, error: errorMessage,
+            });
+            try {
+                await this.prisma.agentJob.update({
+                    where: { id: jobId },
+                    data: { status: 'FAILED', error: errorMessage },
+                });
+                await this.mergeEnrichment(note.id, agentType, {
+                    executionId,
+                    status: types_1.AgentExecutionStatus.FAILED,
+                    result: null,
+                    completedAt: new Date().toISOString(),
+                    error: errorMessage,
+                });
+            }
+            catch {
+                /* best-effort */
+            }
+            await this.updateStatus(executionId, 'FAILED', {
+                error: errorMessage,
+                completedAt: new Date(),
+            });
+        }
+    }
+    async getExecution(executionId, tenantId) {
+        const exec = await this.prisma.agentExecution.findFirst({
+            where: { id: executionId, tenantId },
+        });
+        if (!exec)
+            return null;
+        return this.mapToResponse(exec);
+    }
+    async getExecutionsByNote(noteId, tenantId) {
+        const executions = await this.prisma.agentExecution.findMany({
+            where: { noteId, tenantId },
+            orderBy: { createdAt: 'desc' },
+        });
+        return executions.map((e) => this.mapToResponse(e));
+    }
+    mapToResponse(exec) {
+        let status = exec.status;
+        if (!this.VALID_STATUSES.has(status)) {
+            this.logger.warn({
+                message: 'Unknown execution status in DB',
+                executionId: exec.id,
+                status: exec.status,
+            });
+            status = types_1.AgentExecutionStatus.FAILED;
+        }
+        return {
+            id: exec.id,
+            noteId: exec.noteId,
+            resultNoteId: exec.resultNoteId,
+            status,
+            agentType: exec.agentType,
+            estimatedCostEur: exec.estimatedCostEur ? Number(exec.estimatedCostEur) : null,
+            actualCostEur: exec.actualCostEur ? Number(exec.actualCostEur) : null,
+            error: exec.error,
+            durationMs: exec.durationMs,
+            createdAt: exec.createdAt.toISOString(),
+            completedAt: exec.completedAt?.toISOString() ?? null,
+        };
+    }
+};
+exports.AgentExecutionService = AgentExecutionService;
+exports.AgentExecutionService = AgentExecutionService = AgentExecutionService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof openclaw_client_service_1.OpenClawClientService !== "undefined" && openclaw_client_service_1.OpenClawClientService) === "function" ? _b : Object, typeof (_c = typeof agent_prompt_service_1.AgentPromptService !== "undefined" && agent_prompt_service_1.AgentPromptService) === "function" ? _c : Object, typeof (_d = typeof agent_registry_service_1.AgentRegistryService !== "undefined" && agent_registry_service_1.AgentRegistryService) === "function" ? _d : Object, typeof (_e = typeof budget_service_1.BudgetService !== "undefined" && budget_service_1.BudgetService) === "function" ? _e : Object, typeof (_f = typeof agent_execution_event_bus_service_1.AgentExecutionEventBus !== "undefined" && agent_execution_event_bus_service_1.AgentExecutionEventBus) === "function" ? _f : Object])
+], AgentExecutionService);
+
+
+/***/ }),
+/* 162 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var OpenClawClientService_1;
+var _a;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.OpenClawClientService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const undici_1 = __webpack_require__(163);
+let OpenClawClientService = OpenClawClientService_1 = class OpenClawClientService {
+    constructor(configService) {
+        this.configService = configService;
+        this.logger = new common_1.Logger(OpenClawClientService_1.name);
+        this.relayUrl = this.configService.get('OPENCLAW_RELAY_URL') ?? '';
+        this.authToken = this.configService.get('OPENCLAW_AUTH_TOKEN') ?? '';
+        this.timeoutSeconds = parseInt(this.configService.get('OPENCLAW_TIMEOUT_SECONDS') ?? '600', 10);
+        // Derive streaming URL: /execute → /stream
+        this.supportsStreaming = true;
+        // undici Agent with extended timeouts
+        const timeoutMs = (this.timeoutSeconds + 60) * 1000;
+        this.dispatcher = new undici_1.Agent({
+            headersTimeout: timeoutMs,
+            bodyTimeout: timeoutMs,
+            connectTimeout: 30_000,
+            keepAliveTimeout: timeoutMs,
+        });
+    }
+    isConfigured() {
+        return !!this.authToken && !!this.relayUrl;
+    }
+    getStreamUrl() {
+        // Replace /execute with /stream in the relay URL
+        return this.relayUrl.replace(/\/execute\/?$/, '/stream');
+    }
+    /**
+     * Execute agent with real-time SSE streaming.
+     * Falls back to blocking HTTP POST if streaming fails.
+     */
+    async executeAgent(message, options) {
+        const agentId = options?.agentId ?? 'main';
+        const timeout = options?.timeoutSeconds ?? this.timeoutSeconds;
+        const hasCallbacks = !!(options?.onText || options?.onTool || options?.onStatus);
+        // Try SSE streaming first when callbacks are provided
+        if (hasCallbacks && this.supportsStreaming) {
+            try {
+                return await this.executeAgentStreaming(message, agentId, timeout, {
+                    onText: options?.onText,
+                    onTool: options?.onTool,
+                    onStatus: options?.onStatus,
+                });
+            }
+            catch (err) {
+                const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+                this.logger.warn({
+                    message: 'SSE streaming failed, falling back to blocking request',
+                    error: errorMsg,
+                    agentId,
+                });
+                // Fall through to blocking request
+            }
+        }
+        return this.executeAgentBlocking(message, agentId, timeout);
+    }
+    /**
+     * SSE streaming execution — connects to /stream endpoint,
+     * parses Server-Sent Events, and invokes callbacks in real-time.
+     */
+    async executeAgentStreaming(message, agentId, timeout, callbacks) {
+        const streamUrl = this.getStreamUrl();
+        this.logger.log({
+            message: 'SSE streaming to OpenClaw relay',
+            url: streamUrl,
+            agentId,
+            msgLength: message.length,
+        });
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), (timeout + 60) * 1000);
+        try {
+            const response = await (0, undici_1.fetch)(streamUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.authToken}`,
+                    'Accept': 'text/event-stream',
+                },
+                body: JSON.stringify({ message, agentId, timeoutSeconds: timeout }),
+                signal: controller.signal,
+                dispatcher: this.dispatcher,
+            });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('text/event-stream')) {
+                // Server doesn't support streaming — parse as JSON and return
+                const data = (await response.json());
+                return data;
+            }
+            // Parse SSE stream — cast needed: undici Response uses stream/web types
+            return await this.parseSSEStream(response, callbacks);
+        }
+        finally {
+            clearTimeout(timer);
+        }
+    }
+    /**
+     * Parse SSE event stream from the relay and invoke callbacks.
+     * Returns the final result when the stream completes.
+     */
+    async parseSSEStream(response, callbacks) {
+        if (!response.body) {
+            return { success: false, output: '', durationMs: 0, error: 'Empty response body' };
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let finalResult = null;
+        const safeCallback = (fn) => {
+            try {
+                fn();
+            }
+            catch (err) {
+                this.logger.warn({
+                    message: 'SSE callback threw',
+                    error: err instanceof Error ? err.message : 'Unknown',
+                });
+            }
+        };
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done)
+                    break;
+                buffer += decoder.decode(value, { stream: true });
+                // Process complete SSE messages (delimited by double newlines)
+                let boundary;
+                while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+                    const rawMessage = buffer.substring(0, boundary);
+                    buffer = buffer.substring(boundary + 2);
+                    const event = this.parseSSEMessage(rawMessage);
+                    if (!event)
+                        continue;
+                    switch (event.type) {
+                        case 'stdout':
+                            safeCallback(() => callbacks.onText?.(event.data['text']));
+                            break;
+                        case 'tool':
+                            safeCallback(() => callbacks.onTool?.(event.data['tool'], event.data['status'], event.data['query']));
+                            break;
+                        case 'status':
+                            safeCallback(() => callbacks.onStatus?.(event.data['phase']));
+                            break;
+                        case 'result':
+                            finalResult = {
+                                success: event.data['success'],
+                                output: event.data['output'],
+                                durationMs: event.data['durationMs'],
+                                usage: event.data['usage'],
+                                runId: event.data['runId'],
+                                error: event.data['error'],
+                            };
+                            break;
+                        case 'error':
+                            if (!finalResult) {
+                                finalResult = {
+                                    success: false,
+                                    output: '',
+                                    durationMs: 0,
+                                    error: event.data['error'],
+                                };
+                            }
+                            break;
+                    }
+                }
+            }
+        }
+        finally {
+            reader.releaseLock();
+        }
+        if (!finalResult) {
+            return { success: false, output: '', durationMs: 0, error: 'No result received from stream' };
+        }
+        this.logger.log({
+            message: 'SSE streaming completed',
+            success: finalResult.success,
+            outputLength: finalResult.output.length,
+            durationMs: finalResult.durationMs,
+        });
+        return finalResult;
+    }
+    /**
+     * Parse a single SSE message block into an event.
+     * Format: "event: <type>\ndata: <json>"
+     */
+    parseSSEMessage(raw) {
+        let eventType = '';
+        let dataStr = '';
+        for (const line of raw.split('\n')) {
+            if (line.startsWith('event: ')) {
+                eventType = line.substring(7).trim();
+            }
+            else if (line.startsWith('data: ')) {
+                dataStr = line.substring(6);
+            }
+        }
+        if (!eventType || !dataStr)
+            return null;
+        try {
+            const data = JSON.parse(dataStr);
+            return { type: eventType, data };
+        }
+        catch {
+            return null;
+        }
+    }
+    /**
+     * Blocking HTTP POST execution (original approach, used as fallback).
+     */
+    async executeAgentBlocking(message, agentId, timeout) {
+        this.logger.log({
+            message: 'Blocking request to OpenClaw relay',
+            agentId,
+            msgLength: message.length,
+            timeoutSeconds: timeout,
+        });
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), (timeout + 60) * 1000);
+        try {
+            const response = await (0, undici_1.fetch)(this.relayUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${this.authToken}`,
+                },
+                body: JSON.stringify({ message, agentId, timeoutSeconds: timeout }),
+                signal: controller.signal,
+                dispatcher: this.dispatcher,
+            });
+            const data = (await response.json());
+            if (!response.ok) {
+                this.logger.error({
+                    message: 'OpenClaw relay error',
+                    status: response.status,
+                    error: data['error'],
+                });
+                return {
+                    success: false,
+                    output: '',
+                    durationMs: data['durationMs'] ?? 0,
+                    error: data['error'] ?? `HTTP ${response.status}`,
+                };
+            }
+            this.logger.log({
+                message: 'OpenClaw relay success',
+                durationMs: data['durationMs'],
+                outputLength: data['output']?.length ?? 0,
+                runId: data['runId'],
+            });
+            return data;
+        }
+        catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            const cause = err instanceof Error && err.cause ? String(err.cause) : undefined;
+            this.logger.error({
+                message: 'OpenClaw relay call failed',
+                error: errorMessage,
+                cause,
+                agentId,
+                timeoutSeconds: timeout,
+            });
+            return {
+                success: false,
+                output: '',
+                durationMs: 0,
+                error: cause ? `${errorMessage}: ${cause}` : errorMessage,
+            };
+        }
+        finally {
+            clearTimeout(timer);
+        }
+    }
+};
+exports.OpenClawClientService = OpenClawClientService;
+exports.OpenClawClientService = OpenClawClientService = OpenClawClientService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object])
+], OpenClawClientService);
+
+
+/***/ }),
+/* 163 */
+/***/ ((module) => {
+
+module.exports = require("undici");
+
+/***/ }),
+/* 164 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var AgentPromptService_1;
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AgentPromptService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const ai_gateway_service_1 = __webpack_require__(89);
+const agent_registry_service_1 = __webpack_require__(165);
+let AgentPromptService = AgentPromptService_1 = class AgentPromptService {
+    constructor(aiGateway, registry) {
+        this.aiGateway = aiGateway;
+        this.registry = registry;
+        this.logger = new common_1.Logger(AgentPromptService_1.name);
+    }
+    /**
+     * Generates a per-agent-type prompt for the OpenClaw agent.
+     * Uses AiGatewayService which automatically injects tenant memories
+     * (company name, industry, brand, goals, style, target audience).
+     */
+    async formatPrompt(params) {
+        const { agentType, taskTitle, taskContent, userReport, expectedOutcome, tenantId, userId } = params;
+        const agentDef = this.registry.getAgent(agentType);
+        const userMessage = `Task: ${taskTitle}
+
+Description: ${taskContent}
+
+${expectedOutcome ? `Expected Outcome: ${expectedOutcome}\n` : ''}User's Completed Report:
+${userReport.substring(0, 3000)}
+
+Based on this task report and the business context from memories, generate a direct execution instruction for the ${agentDef.label} agent. The agent should ACT on this — execute its tools, produce deliverables, and return results. Not analyze or plan.`;
+        const messages = [
+            { role: 'system', content: agentDef.systemPrompt },
+            { role: 'user', content: userMessage },
+        ];
+        let result = '';
+        await this.aiGateway.streamCompletionWithContext(messages, {
+            tenantId,
+            userId,
+            skipRateLimit: true,
+            skipQuotaCheck: true,
+        }, (chunk) => {
+            result += chunk;
+            params.onChunk?.(chunk);
+        });
+        this.logger.log({
+            message: 'Prompt formatted for agent',
+            agentType,
+            taskTitle,
+            instructionLength: result.length,
+        });
+        return result.trim();
+    }
+};
+exports.AgentPromptService = AgentPromptService;
+exports.AgentPromptService = AgentPromptService = AgentPromptService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _a : Object, typeof (_b = typeof agent_registry_service_1.AgentRegistryService !== "undefined" && agent_registry_service_1.AgentRegistryService) === "function" ? _b : Object])
+], AgentPromptService);
+
+
+/***/ }),
+/* 165 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AgentRegistryService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const types_1 = __webpack_require__(85);
+let AgentRegistryService = class AgentRegistryService {
+    constructor() {
+        this.agents = new Map([
+            [
+                types_1.AgentType.WEB_SEARCH,
+                {
+                    type: types_1.AgentType.WEB_SEARCH,
+                    openClawAgentId: 'web-search',
+                    label: 'Online istraživanje',
+                    description: 'Pretražuje internet za relevantne informacije, trendove i izvore',
+                    icon: '🔍',
+                    estimatedCostEur: 0.5,
+                    systemPrompt: `You write a direct execution instruction for a web research agent. The agent has tools: web_search, web_fetch, browser.
+
+Given the task report and business context (injected from memories), write an instruction that tells the agent EXACTLY what to search for and what data to return.
+
+Your output instruction MUST:
+- List 3-5 specific web searches to execute (exact search queries)
+- Name specific competitor websites to analyze with web_fetch
+- Specify the exact data points to extract (prices, stats, market size, trends)
+- Tell the agent to cite every finding with a source URL
+- Tell the agent to write ALL output in Serbian language
+- Tell the agent to format output as clean markdown with tables and sections (NO code blocks, NO HTML tags)
+
+Write in English. Output ONLY the instruction text, under 500 words.`,
+                },
+            ],
+            [
+                types_1.AgentType.CONTENT,
+                {
+                    type: types_1.AgentType.CONTENT,
+                    openClawAgentId: 'content',
+                    label: 'Kreiranje sadržaja',
+                    description: 'Kreira gotov sadržaj sa tekstom i slikama',
+                    icon: '✏️',
+                    estimatedCostEur: 0.5,
+                    systemPrompt: `You write a direct execution instruction for a content creation agent. The agent has tools: web_search, web_fetch, exec.
+
+MANDATORY TOOL — IMAGE GENERATION:
+The agent MUST generate images for every content piece. The exact command is:
+FAL_IMAGE_SIZE=square_hd fal-generate "prompt here in English"
+Available sizes: square_hd, landscape_4_3, landscape_16_9, portrait_4_3, portrait_16_9
+The command returns an image URL on stdout. The agent must embed it as: ![description](returned_url)
+
+Given the task report and business context (injected from memories), write an instruction that tells the agent:
+1. First analyze the company's visual identity by fetching their website/social media with web_fetch
+2. Create a visual brief (colors, style, lighting, aesthetic) based on the analysis
+3. For EACH content piece: write the full text AND generate at least one matching image using the exec command above
+4. Format ALL output as clean markdown — NOT HTML, NOT code blocks
+5. Use ![description](url) for images — NEVER use <img> HTML tags
+6. Write ALL text content in Serbian language
+7. Include headlines, body copy, CTAs, hashtags, posting schedule
+
+CRITICAL FORMAT RULES for the agent:
+- Output must be pure markdown, never wrap content in \`\`\`html code blocks
+- Images must use markdown syntax: ![opis](url)
+- Tables use markdown pipe syntax
+- No raw HTML anywhere in the output
+
+Write in English. Output ONLY the instruction text, under 600 words.`,
+                },
+            ],
+            [
+                types_1.AgentType.MARKETING,
+                {
+                    type: types_1.AgentType.MARKETING,
+                    openClawAgentId: 'marketing',
+                    label: 'Marketing analiza',
+                    description: 'Analizira tržište, kreira vizuelni sadržaj sa AI slikama',
+                    icon: '📈',
+                    estimatedCostEur: 0.5,
+                    systemPrompt: `You write a direct execution instruction for a marketing strategy agent. The agent has tools: web_search, web_fetch, exec.
+
+MANDATORY TOOL — IMAGE GENERATION (when task involves content/visuals):
+The agent MUST generate images using exec:
+FAL_IMAGE_SIZE=square_hd fal-generate "prompt in English"
+Available sizes: square_hd, landscape_4_3, landscape_16_9, portrait_4_3, portrait_16_9
+Embed result as: ![description](returned_url)
+
+Given the task report and business context (injected from memories), write an instruction that tells the agent:
+1. What specific market data to find via web_search (competitors, pricing, market share — use exact search queries)
+2. What analysis frameworks to apply (SWOT, competitive positioning, segmentation)
+3. If the task involves content: generate at least 2 images using the exec command above
+4. Format ALL output as clean markdown with tables, sections, source URLs
+5. Write ALL output in Serbian language
+6. Use markdown image syntax ![opis](url) — never HTML <img> tags
+7. Never wrap output in code blocks
+
+Write in English. Output ONLY the instruction text, under 600 words.`,
+                },
+            ],
+            [
+                types_1.AgentType.SALES,
+                {
+                    type: types_1.AgentType.SALES,
+                    openClawAgentId: 'sales',
+                    label: 'Prodajna strategija',
+                    description: 'Kreira prodajne planove i šalje personalizovane emailove',
+                    icon: '💼',
+                    estimatedCostEur: 0.5,
+                    systemPrompt: `You write a direct execution instruction for a sales strategy agent. The agent has tools: web_search, web_fetch, exec.
+
+MANDATORY TOOL — EMAIL SENDING:
+The agent MUST send at least one personalized email per execution. The exact command is:
+agentmail-send --to "vojinskrill@gmail.com" --subject "Subject here" --text "Email body here"
+The agent must compose the email content based on the task context, then execute the command to send it.
+After sending, the agent must include the sent email content and confirmation in its output.
+
+Given the task report and business context (injected from memories), write an instruction that tells the agent:
+1. What sales data to research via web_search (competitor pricing, market positioning)
+2. What sales strategy to create (target profile, approach, objection handling, pricing)
+3. What email(s) to compose and send — specify the email purpose (cold outreach, follow-up, proposal, etc.)
+4. The email content must be personalized to the business context and task — NOT generic
+5. The agent MUST use the agentmail-send exec command to actually send each email
+6. Format ALL output as clean markdown with tables and sections
+7. Write ALL output in Serbian language
+8. Include a "Poslati Emailovi" section showing each sent email with subject, body, and send confirmation
+
+CRITICAL: The instruction MUST contain the exact agentmail-send command syntax. Do not omit email sending.
+
+Write in English. Output ONLY the instruction text, under 600 words.`,
+                },
+            ],
+            [
+                types_1.AgentType.FINANCIAL,
+                {
+                    type: types_1.AgentType.FINANCIAL,
+                    openClawAgentId: 'financial',
+                    label: 'Finansijska analiza',
+                    description: 'Računanje ROI, budžetska analiza i finansijsko planiranje',
+                    icon: '💰',
+                    estimatedCostEur: 0.5,
+                    systemPrompt: `You write a direct execution instruction for a financial analyst agent. The agent has tools: web_search, web_fetch.
+
+Given the task report and business context (injected from memories), write an instruction that tells the agent:
+1. What specific financials to calculate (ROI, break-even, margins, projections) with exact formulas
+2. What industry benchmarks to search for via web_search (exact search queries for costs, margins, growth rates)
+3. To build tables with actual numbers — not qualitative descriptions
+4. To include scenario analysis (optimistic, realistic, pessimistic)
+5. To include risk assessment with probability and financial impact
+6. Format ALL output as clean markdown with tables and sections
+7. Write ALL output in Serbian language
+8. Cite every benchmark with source URL
+
+Write in English. Output ONLY the instruction text, under 500 words.`,
+                },
+            ],
+        ]);
+    }
+    getAgent(type) {
+        const agent = this.agents.get(type);
+        if (!agent) {
+            throw new Error(`Unknown agent type: ${type}`);
+        }
+        return agent;
+    }
+    getAllAgents() {
+        return Array.from(this.agents.values());
+    }
+    getAgentLabel(type) {
+        return this.getAgent(type).label;
+    }
+    getOpenClawAgentId(type) {
+        return this.getAgent(type).openClawAgentId;
+    }
+    getAllAgentTypeInfos() {
+        return this.getAllAgents().map((a) => ({
+            type: a.type,
+            label: a.label,
+            description: a.description,
+            icon: a.icon,
+            estimatedCostEur: a.estimatedCostEur,
+        }));
+    }
+};
+exports.AgentRegistryService = AgentRegistryService;
+exports.AgentRegistryService = AgentRegistryService = tslib_1.__decorate([
+    (0, common_1.Injectable)()
+], AgentRegistryService);
+
+
+/***/ }),
+/* 166 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var BudgetService_1;
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BudgetService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const tenant_context_1 = __webpack_require__(9);
+const library_1 = __webpack_require__(99);
+let BudgetService = BudgetService_1 = class BudgetService {
+    constructor(prisma, configService) {
+        this.prisma = prisma;
+        this.configService = configService;
+        this.logger = new common_1.Logger(BudgetService_1.name);
+        this.dailyLimitEur = parseFloat(this.configService.get('AGENT_DAILY_BUDGET_EUR') ?? '20');
+        this.estimatedCostEur = parseFloat(this.configService.get('AGENT_ESTIMATED_COST_EUR') ?? '0.50');
+    }
+    getEstimatedCost() {
+        return this.estimatedCostEur;
+    }
+    getDailyLimit() {
+        return this.dailyLimitEur;
+    }
+    async getDailySpent(tenantId) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const budget = await this.prisma.agentDailyBudget.findUnique({
+            where: { tenantId_date: { tenantId, date: today } },
+        });
+        return {
+            spentEur: budget ? Number(budget.spentEur) : 0,
+            limitEur: budget ? Number(budget.limitEur) : this.dailyLimitEur,
+        };
+    }
+    async canSpend(tenantId, amount) {
+        const cost = amount ?? this.estimatedCostEur;
+        const { spentEur, limitEur } = await this.getDailySpent(tenantId);
+        return spentEur + cost <= limitEur;
+    }
+    async recordSpend(tenantId, amountEur) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        await this.prisma.agentDailyBudget.upsert({
+            where: { tenantId_date: { tenantId, date: today } },
+            update: {
+                spentEur: { increment: new library_1.Decimal(amountEur) },
+            },
+            create: {
+                tenantId,
+                date: today,
+                spentEur: new library_1.Decimal(amountEur),
+                limitEur: new library_1.Decimal(this.dailyLimitEur),
+            },
+        });
+        this.logger.log({
+            message: 'Budget spend recorded',
+            tenantId,
+            amountEur,
+        });
+    }
+};
+exports.BudgetService = BudgetService;
+exports.BudgetService = BudgetService = BudgetService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _b : Object])
+], BudgetService);
+
+
+/***/ }),
+/* 167 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var AgentExecutionEventBus_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AgentExecutionEventBus = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const events_1 = __webpack_require__(168);
+let AgentExecutionEventBus = AgentExecutionEventBus_1 = class AgentExecutionEventBus {
+    constructor() {
+        this.logger = new common_1.Logger(AgentExecutionEventBus_1.name);
+        this.emitter = new events_1.EventEmitter();
+        this.listenerCount = 0;
+        this.emitter.setMaxListeners(20);
+    }
+    emit(event) {
+        if (event.eventName !== 'agent:text-chunk' && event.eventName !== 'agent:executing-heartbeat') {
+            this.logger.debug({
+                message: 'EventBus emit',
+                eventName: event.eventName,
+                tenantId: event.tenantId,
+                listeners: this.listenerCount,
+            });
+        }
+        try {
+            this.emitter.emit('agent-event', event);
+        }
+        catch (err) {
+            this.logger.error({
+                message: 'EventBus listener threw',
+                eventName: event.eventName,
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+        }
+    }
+    onEvent(handler) {
+        this.listenerCount++;
+        this.logger.log({ message: 'EventBus listener registered', totalListeners: this.listenerCount });
+        this.emitter.on('agent-event', handler);
+    }
+};
+exports.AgentExecutionEventBus = AgentExecutionEventBus;
+exports.AgentExecutionEventBus = AgentExecutionEventBus = AgentExecutionEventBus_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [])
+], AgentExecutionEventBus);
+
+
+/***/ }),
+/* 168 */
+/***/ ((module) => {
+
+module.exports = require("events");
+
+/***/ }),
+/* 169 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var _a, _b, _c;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AgentExecutionController = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const jwt_auth_guard_1 = __webpack_require__(46);
+const current_user_decorator_1 = __webpack_require__(48);
+const agent_execution_service_1 = __webpack_require__(161);
+const job_planner_service_1 = __webpack_require__(170);
+const budget_service_1 = __webpack_require__(166);
+const types_1 = __webpack_require__(85);
+let AgentExecutionController = class AgentExecutionController {
+    constructor(agentExecutionService, jobPlannerService, budgetService) {
+        this.agentExecutionService = agentExecutionService;
+        this.jobPlannerService = jobPlannerService;
+        this.budgetService = budgetService;
+    }
+    async getTodaysBudget(user) {
+        const { spentEur, limitEur } = await this.budgetService.getDailySpent(user.tenantId);
+        return { data: { spentEur, limitEur } };
+    }
+    async triggerAgent(noteId, agentType, user) {
+        const validTypes = Object.values(types_1.AgentType);
+        if (!validTypes.includes(agentType)) {
+            throw new common_1.BadRequestException(`Invalid agent type: ${agentType}`);
+        }
+        const result = await this.agentExecutionService.triggerAgent(noteId, agentType, user.userId, user.tenantId);
+        return { data: result };
+    }
+    async getExecutionsByNote(noteId, user) {
+        const executions = await this.agentExecutionService.getExecutionsByNote(noteId, user.tenantId);
+        return { data: executions };
+    }
+    async getJobsForNote(noteId, user) {
+        const jobs = await this.jobPlannerService.getJobsForNote(noteId, user.tenantId);
+        const budget = await this.budgetService.getDailySpent(user.tenantId);
+        const estimatedCost = this.budgetService.getEstimatedCost();
+        return {
+            data: {
+                noteId,
+                jobs,
+                dailySpentEur: budget.spentEur,
+                dailyLimitEur: budget.limitEur,
+                canProceed: budget.spentEur + estimatedCost <= budget.limitEur,
+            },
+        };
+    }
+    async executeJob(jobId, user) {
+        const result = await this.agentExecutionService.executeJob(jobId, user.userId, user.tenantId);
+        return { data: result };
+    }
+    async getExecution(executionId, user) {
+        const execution = await this.agentExecutionService.getExecution(executionId, user.tenantId);
+        if (!execution) {
+            throw new common_1.NotFoundException(`Execution ${executionId} not found`);
+        }
+        return { data: execution };
+    }
+};
+exports.AgentExecutionController = AgentExecutionController;
+tslib_1.__decorate([
+    (0, common_1.Get)('budget/today'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "getTodaysBudget", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('trigger/:noteId/:agentType'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
+    tslib_1.__param(0, (0, common_1.Param)('noteId')),
+    tslib_1.__param(1, (0, common_1.Param)('agentType')),
+    tslib_1.__param(2, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "triggerAgent", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('note/:noteId'),
+    tslib_1.__param(0, (0, common_1.Param)('noteId')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "getExecutionsByNote", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('jobs/:noteId'),
+    tslib_1.__param(0, (0, common_1.Param)('noteId')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "getJobsForNote", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('jobs/:jobId/execute'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
+    tslib_1.__param(0, (0, common_1.Param)('jobId')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "executeJob", null);
+tslib_1.__decorate([
+    (0, common_1.Get)(':executionId'),
+    tslib_1.__param(0, (0, common_1.Param)('executionId')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "getExecution", null);
+exports.AgentExecutionController = AgentExecutionController = tslib_1.__decorate([
+    (0, common_1.Controller)('v1/agent-execution'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof agent_execution_service_1.AgentExecutionService !== "undefined" && agent_execution_service_1.AgentExecutionService) === "function" ? _a : Object, typeof (_b = typeof job_planner_service_1.JobPlannerService !== "undefined" && job_planner_service_1.JobPlannerService) === "function" ? _b : Object, typeof (_c = typeof budget_service_1.BudgetService !== "undefined" && budget_service_1.BudgetService) === "function" ? _c : Object])
+], AgentExecutionController);
+
+
+/***/ }),
+/* 170 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var JobPlannerService_1;
+var _a, _b, _c;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.JobPlannerService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const tenant_context_1 = __webpack_require__(9);
+const cuid2_1 = __webpack_require__(32);
+const ai_gateway_service_1 = __webpack_require__(89);
+const agent_registry_service_1 = __webpack_require__(165);
+const types_1 = __webpack_require__(85);
+let JobPlannerService = JobPlannerService_1 = class JobPlannerService {
+    constructor(prisma, aiGateway, registry) {
+        this.prisma = prisma;
+        this.aiGateway = aiGateway;
+        this.registry = registry;
+        this.logger = new common_1.Logger(JobPlannerService_1.name);
+    }
+    /**
+     * Analyzes a scored task report and creates ordered, dependent agent jobs.
+     * Uses LLM to determine which agents are relevant and what they should do.
+     * Automatically injects tenant business context via AiGatewayService.
+     */
+    async planJobs(noteId, tenantId, userId) {
+        const note = await this.prisma.note.findFirst({
+            where: { id: noteId, tenantId },
+        });
+        if (!note || !note.userReport) {
+            this.logger.warn({ message: 'Cannot plan jobs — note or report missing', noteId });
+            return [];
+        }
+        // Guard against duplicate planning — return existing jobs if already planned
+        const existingJobs = await this.getJobsForNote(noteId, tenantId);
+        if (existingJobs.length > 0) {
+            this.logger.log({
+                message: 'Jobs already exist for note, skipping planning',
+                noteId,
+                jobCount: existingJobs.length,
+            });
+            return existingJobs;
+        }
+        const agentDescriptions = this.registry
+            .getAllAgents()
+            .map((a) => `- ${a.type}: ${a.label} — ${a.description}`)
+            .join('\n');
+        const systemPrompt = `You are a business operations planner. Given a completed task report, create an execution plan of AI agent jobs that will produce concrete deliverables.
+
+Available agent types:
+${agentDescriptions}
+
+Rules:
+- Create 2-4 jobs ONLY if agents genuinely add value — if nothing is useful, return an empty array []
+- Jobs execute sequentially: later jobs receive outputs from earlier jobs as context
+- Common chains: web_search → content, web_search → marketing, web_search → sales
+- Each job instruction MUST be specific to this task and reference the business context (company name, industry, products, target audience)
+- Instructions must tell agents WHAT to do, not analyze — they should execute their tools and produce deliverables
+- Write instructions in English (agents will produce Serbian output)
+- Respond ONLY with a JSON array, no other text
+
+Output format:
+[{"agentType":"web_search","order":1,"dependsOnOrders":[],"instruction":"Research..."},{"agentType":"content","order":2,"dependsOnOrders":[1],"instruction":"Using the research results, create..."}]
+
+If no agents are relevant, return: []`;
+        const userMessage = `Task: ${note.title}
+
+Description: ${note.content.substring(0, 500)}
+
+${note.expectedOutcome ? `Expected Outcome: ${note.expectedOutcome}\n` : ''}Completed Report (first 2000 chars):
+${note.userReport.substring(0, 2000)}
+
+Create an execution plan of agent jobs for this task. Return JSON array only.`;
+        const messages = [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage },
+        ];
+        let result = '';
+        try {
+            await this.aiGateway.streamCompletionWithContext(messages, {
+                tenantId,
+                userId,
+                skipRateLimit: true,
+                skipQuotaCheck: true,
+            }, (chunk) => {
+                result += chunk;
+            });
+            const jsonMatch = result.match(/\[[\s\S]*\]/);
+            if (!jsonMatch) {
+                this.logger.warn({
+                    message: 'No JSON array found in job plan response',
+                    result: result.substring(0, 200),
+                });
+                return this.createDefaultJobs(noteId, tenantId, userId, note.title, note.userReport);
+            }
+            const parsed = JSON.parse(jsonMatch[0]);
+            // If LLM returned empty array, no jobs needed
+            if (parsed.length === 0) {
+                this.logger.log({ message: 'LLM determined no agent jobs needed', noteId });
+                return [];
+            }
+            const validTypes = Object.values(types_1.AgentType);
+            const validJobs = parsed
+                .filter((j) => validTypes.includes(j.agentType) && j.instruction?.length > 10)
+                .sort((a, b) => a.order - b.order)
+                .slice(0, 4);
+            if (validJobs.length === 0) {
+                return this.createDefaultJobs(noteId, tenantId, userId, note.title, note.userReport);
+            }
+            return await this.persistJobs(validJobs, noteId, tenantId, userId);
+        }
+        catch (err) {
+            this.logger.error({
+                message: 'Failed to plan jobs',
+                noteId,
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+            return this.createDefaultJobs(noteId, tenantId, userId, note.title, note.userReport);
+        }
+    }
+    /**
+     * Persist parsed LLM job plan into AgentJob rows.
+     * Pre-generates IDs, resolves order-based dependencies to IDs, batch creates.
+     */
+    async persistJobs(jobs, noteId, tenantId, userId) {
+        // Pre-generate IDs and build original-order→ID map BEFORE renormalizing
+        const jobsWithIds = jobs.map((j, idx) => ({
+            ...j,
+            id: `ajob_${(0, cuid2_1.createId)()}`,
+            originalOrder: j.order,
+            order: idx + 1, // Normalize to 1-based sequential
+        }));
+        // Map from ORIGINAL LLM order to ID (so dependsOnOrders references resolve correctly)
+        const orderToId = new Map(jobsWithIds.map((j) => [j.originalOrder, j.id]));
+        // Resolve dependsOnOrders to actual IDs
+        const jobData = jobsWithIds.map((j) => ({
+            id: j.id,
+            noteId,
+            tenantId,
+            userId,
+            agentType: j.agentType,
+            order: j.order,
+            dependsOn: j.dependsOnOrders
+                .map((depOrder) => orderToId.get(depOrder))
+                .filter((id) => !!id),
+            instruction: j.instruction,
+            status: 'PLANNED',
+        }));
+        // Batch create in transaction
+        await this.prisma.$transaction(jobData.map((data) => this.prisma.agentJob.create({ data })));
+        this.logger.log({
+            message: 'Agent jobs planned',
+            noteId,
+            jobCount: jobData.length,
+            types: jobData.map((j) => j.agentType),
+        });
+        return this.getJobsForNote(noteId, tenantId);
+    }
+    /**
+     * Fallback: create a simple web_search → content chain.
+     */
+    async createDefaultJobs(noteId, tenantId, userId, taskTitle, userReport) {
+        const searchId = `ajob_${(0, cuid2_1.createId)()}`;
+        const contentId = `ajob_${(0, cuid2_1.createId)()}`;
+        await this.prisma.$transaction([
+            this.prisma.agentJob.create({
+                data: {
+                    id: searchId,
+                    noteId,
+                    tenantId,
+                    userId,
+                    agentType: types_1.AgentType.WEB_SEARCH,
+                    order: 1,
+                    dependsOn: [],
+                    instruction: `Research the topic "${taskTitle}" — find market data, competitors, pricing, and trends relevant to the business. Report: ${userReport.substring(0, 500)}`,
+                    status: 'PLANNED',
+                },
+            }),
+            this.prisma.agentJob.create({
+                data: {
+                    id: contentId,
+                    noteId,
+                    tenantId,
+                    userId,
+                    agentType: types_1.AgentType.CONTENT,
+                    order: 2,
+                    dependsOn: [searchId],
+                    instruction: `Using the research results from the previous step, create actionable content deliverables for "${taskTitle}". Include blog posts, social media content, or marketing materials as appropriate.`,
+                    status: 'PLANNED',
+                },
+            }),
+        ]);
+        return this.getJobsForNote(noteId, tenantId);
+    }
+    /**
+     * Returns all jobs for a note, ordered by execution order.
+     */
+    async getJobsForNote(noteId, tenantId) {
+        const jobs = await this.prisma.agentJob.findMany({
+            where: { noteId, tenantId },
+            orderBy: { order: 'asc' },
+        });
+        return jobs.map((j) => ({
+            id: j.id,
+            noteId: j.noteId,
+            agentType: j.agentType,
+            order: j.order,
+            dependsOn: j.dependsOn,
+            instruction: j.instruction,
+            status: j.status,
+            executionId: j.executionId,
+            agentOutput: j.agentOutput,
+            error: j.error,
+            createdAt: j.createdAt.toISOString(),
+            updatedAt: j.updatedAt.toISOString(),
+        }));
+    }
+};
+exports.JobPlannerService = JobPlannerService;
+exports.JobPlannerService = JobPlannerService = JobPlannerService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof agent_registry_service_1.AgentRegistryService !== "undefined" && agent_registry_service_1.AgentRegistryService) === "function" ? _c : Object])
+], JobPlannerService);
+
+
+/***/ }),
+/* 171 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -19588,10 +21553,10 @@ const common_1 = __webpack_require__(1);
 const jwt_auth_guard_1 = __webpack_require__(46);
 const department_guard_1 = __webpack_require__(122);
 const current_user_decorator_1 = __webpack_require__(48);
-const conversation_service_1 = __webpack_require__(160);
-const create_conversation_dto_1 = __webpack_require__(161);
-const update_conversation_dto_1 = __webpack_require__(162);
-const update_persona_dto_1 = __webpack_require__(163);
+const conversation_service_1 = __webpack_require__(172);
+const create_conversation_dto_1 = __webpack_require__(173);
+const update_conversation_dto_1 = __webpack_require__(174);
+const update_persona_dto_1 = __webpack_require__(175);
 const curriculum_service_1 = __webpack_require__(108);
 const concept_service_1 = __webpack_require__(105);
 /**
@@ -19763,7 +21728,7 @@ exports.ConversationController = ConversationController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 160 */
+/* 172 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -20081,14 +22046,18 @@ let ConversationService = ConversationService_1 = class ConversationService {
      */
     async getBrainTree(tenantId, userId, department, role) {
         const prisma = await this.tenantPrisma.getClient(tenantId);
+        // 2. Determine ownership scope
+        const isOwner = role === 'PLATFORM_OWNER' || role === 'TENANT_OWNER' || !department;
         // 1. Get conversations for linking (to enable "Pogledaj" navigation)
+        // Non-owners only see their own conversations; owners see all for oversight
         const convRows = await prisma.conversation.findMany({
-            where: { conceptId: { not: null } },
+            where: {
+                conceptId: { not: null },
+                ...(isOwner ? {} : { userId }),
+            },
             select: { conceptId: true, userId: true, id: true, title: true, updatedAt: true },
             orderBy: { updatedAt: 'desc' },
         });
-        // 2. Get task notes by status
-        const isOwner = role === 'PLATFORM_OWNER' || role === 'TENANT_OWNER' || !department;
         const [pendingTasks, completedTasks] = await Promise.all([
             this.notesService.getPendingTaskConceptIds(tenantId, isOwner ? undefined : userId),
             this.notesService.getCompletedTaskConceptIds(tenantId, isOwner ? undefined : userId),
@@ -20556,7 +22525,7 @@ exports.ConversationService = ConversationService = ConversationService_1 = tsli
 
 
 /***/ }),
-/* 161 */
+/* 173 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -20604,7 +22573,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 162 */
+/* 174 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -20624,7 +22593,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 163 */
+/* 175 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -20656,22 +22625,22 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 164 */
+/* 176 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 var ConversationGateway_1;
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ConversationGateway = void 0;
 const tslib_1 = __webpack_require__(4);
-const websockets_1 = __webpack_require__(165);
-const socket_io_1 = __webpack_require__(166);
+const websockets_1 = __webpack_require__(177);
+const socket_io_1 = __webpack_require__(178);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const jsonwebtoken_1 = __webpack_require__(58);
-const jwks_rsa_1 = tslib_1.__importDefault(__webpack_require__(167));
-const conversation_service_1 = __webpack_require__(160);
+const jwks_rsa_1 = tslib_1.__importDefault(__webpack_require__(179));
+const conversation_service_1 = __webpack_require__(172);
 const ai_gateway_service_1 = __webpack_require__(89);
 const notes_service_1 = __webpack_require__(133);
 const concept_matching_service_1 = __webpack_require__(110);
@@ -20679,16 +22648,18 @@ const concept_classifier_service_1 = __webpack_require__(121);
 const concept_service_1 = __webpack_require__(105);
 const citation_injector_service_1 = __webpack_require__(114);
 const citation_service_1 = __webpack_require__(107);
-const memory_context_builder_service_1 = __webpack_require__(143);
-const memory_extraction_service_1 = __webpack_require__(141);
-const memory_service_1 = __webpack_require__(138);
+const memory_context_builder_service_1 = __webpack_require__(144);
+const memory_extraction_service_1 = __webpack_require__(142);
+const memory_service_1 = __webpack_require__(139);
 const concept_extraction_service_1 = __webpack_require__(115);
-const workflow_service_1 = __webpack_require__(149);
-const yolo_scheduler_service_1 = __webpack_require__(151);
-const web_search_service_1 = __webpack_require__(146);
+const workflow_service_1 = __webpack_require__(150);
+const yolo_scheduler_service_1 = __webpack_require__(152);
+const web_search_service_1 = __webpack_require__(147);
 const business_context_service_1 = __webpack_require__(119);
-const execution_state_service_1 = __webpack_require__(148);
-const attachments_service_1 = __webpack_require__(155);
+const execution_state_service_1 = __webpack_require__(149);
+const attachments_service_1 = __webpack_require__(156);
+const job_planner_service_1 = __webpack_require__(170);
+const agent_execution_event_bus_service_1 = __webpack_require__(167);
 const tenant_context_1 = __webpack_require__(9);
 const cuid2_1 = __webpack_require__(32);
 const prisma_1 = __webpack_require__(35);
@@ -20700,7 +22671,7 @@ const types_2 = __webpack_require__(85);
  * Note: CORS origin is configured dynamically in afterInit using ConfigService.
  */
 let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
-    constructor(conversationService, aiGatewayService, configService, prisma, notesService, conceptMatchingService, conceptClassifierService, citationInjectorService, citationService, memoryContextBuilder, memoryExtractionService, memoryService, workflowService, conceptService, conceptExtractionService, yoloScheduler, webSearchService, businessContextService, executionStateService, attachmentsService) {
+    constructor(conversationService, aiGatewayService, configService, prisma, notesService, conceptMatchingService, conceptClassifierService, citationInjectorService, citationService, memoryContextBuilder, memoryExtractionService, memoryService, workflowService, conceptService, conceptExtractionService, yoloScheduler, webSearchService, businessContextService, executionStateService, attachmentsService, jobPlannerService, agentEventBus) {
         this.conversationService = conversationService;
         this.aiGatewayService = aiGatewayService;
         this.configService = configService;
@@ -20721,6 +22692,8 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
         this.businessContextService = businessContextService;
         this.executionStateService = executionStateService;
         this.attachmentsService = attachmentsService;
+        this.jobPlannerService = jobPlannerService;
+        this.agentEventBus = agentEventBus;
         this.logger = new common_1.Logger(ConversationGateway_1.name);
         /** Cached dev user resolved from DB (avoids repeat queries per connection) */
         this.resolvedDevUser = null;
@@ -20769,6 +22742,29 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
                 await this.executionStateService.updateStatus(exec.id, 'failed', null, 'Server restarted during auto-popuni');
             }
         }
+        // Subscribe to agent execution events and broadcast to tenant rooms
+        this.agentEventBus.onEvent((event) => {
+            try {
+                if (this.server) {
+                    const room = `tenant:${event.tenantId}`;
+                    const socketsInRoom = this.server.sockets?.adapter?.rooms?.get(room)?.size ?? 0;
+                    this.logger.debug({
+                        message: 'Broadcasting agent event',
+                        eventName: event.eventName,
+                        room,
+                        socketsInRoom,
+                    });
+                    this.server.to(room).emit(event.eventName, event.payload);
+                }
+            }
+            catch (err) {
+                this.logger.error({
+                    message: 'Failed to broadcast agent event',
+                    eventName: event.eventName,
+                    error: err instanceof Error ? err.message : 'Unknown',
+                });
+            }
+        });
         // Daily event journal cleanup
         setInterval(() => {
             this.executionStateService
@@ -22204,9 +24200,7 @@ Odgovori SAMO sa validnim JSON nizom:
         // C7: After auto-popuni completes tasks, traverse concept_relationships
         // to spawn new PENDING tasks for ADVANCED/related concepts (autonomous growth loop)
         const completedConceptIds = [
-            ...new Set(tasks
-                .filter((t) => completedTaskIds.includes(t.id) && t.conceptId)
-                .map((t) => t.conceptId)),
+            ...new Set(tasks.filter((t) => completedTaskIds.includes(t.id) && t.conceptId).map((t) => t.conceptId)),
         ];
         if (completedConceptIds.length > 0) {
             this.workflowService
@@ -22246,7 +24240,16 @@ Odgovori SAMO sa validnim JSON nizom:
             timestamp: new Date().toISOString(),
             auto: true,
         });
-        const businessContext = await this.buildBusinessContext(tenantId, userId);
+        const businessContext = await this.buildBusinessContext(tenantId, userId, { lean: true });
+        // Pre-load tenant + brainContext once for all workflow steps (avoids per-step DB lookups)
+        const [cachedTenantData, brainCtx] = await Promise.all([
+            this.prisma.tenant.findUnique({
+                where: { id: tenantId },
+                select: { name: true, industry: true, description: true },
+            }),
+            this.businessContextService.getBusinessContext(tenantId).catch(() => ''),
+        ]);
+        const stepCachedContext = { tenant: cachedTenantData, brainContext: brainCtx };
         // Load task details
         const taskNote = await this.prisma.note.findUnique({ where: { id: task.id } });
         if (!taskNote)
@@ -22315,7 +24318,7 @@ Odgovori SAMO sa validnim JSON nizom:
                     };
                     const result = await this.workflowService.executeStepAutonomous(step, convId ?? '', userId, tenantId, () => {
                         /* auto-popuni: collect silently */
-                    }, completedSummaries, workflow.steps);
+                    }, completedSummaries, workflow.steps, stepCachedContext);
                     // Dedup: check if child note already exists
                     const existingSubTask = await this.notesService.findExistingSubTask(tenantId, task.id, workflowStep.stepNumber);
                     if (!existingSubTask) {
@@ -22531,19 +24534,10 @@ PRAVILA:
             timestamp: new Date().toISOString(),
             auto: true,
         });
-        // Load tenant info for scoring context
+        // Use pre-loaded tenant data for scoring context (cachedTenantData from line 2067)
         let tenantInfo = '';
-        try {
-            const tenant = await this.prisma.tenant.findUnique({
-                where: { id: tenantId },
-                select: { name: true, industry: true },
-            });
-            if (tenant) {
-                tenantInfo = `\nKOMPANIJA: ${tenant.name}${tenant.industry ? ` | INDUSTRIJA: ${tenant.industry}` : ''}`;
-            }
-        }
-        catch {
-            /* non-blocking */
+        if (cachedTenantData) {
+            tenantInfo = `\nKOMPANIJA: ${cachedTenantData.name}${cachedTenantData.industry ? ` | INDUSTRIJA: ${cachedTenantData.industry}` : ''}`;
         }
         let conceptScoreContext = '';
         if (taskNote.conceptId) {
@@ -22596,7 +24590,7 @@ Gde je OCENA prosek svih pet kriterijuma (zaokružen na ceo broj).
 Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
         let scoreResult = '';
         let scoreChunkIndex = 0;
-        await this.aiGatewayService.streamCompletionWithContext([{ role: 'user', content: scorePrompt }], { tenantId, userId, conversationId: convId, businessContext }, (chunk) => {
+        await this.aiGatewayService.streamCompletionWithContext([{ role: 'user', content: scorePrompt }], { tenantId, userId, conversationId: convId, businessContext, useFallback: true }, (chunk) => {
             scoreResult += chunk;
             client.emit('task:result-chunk', {
                 taskId: task.id,
@@ -22633,6 +24627,29 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
             auto: true,
         });
         client.emit('chat:notes-updated', { conversationId: convId, count: 0 });
+        // Auto-plan agent jobs after scoring
+        try {
+            const jobs = await this.jobPlannerService.planJobs(task.id, tenantId, userId);
+            if (jobs.length > 0) {
+                client.emit('jobs:planned', {
+                    noteId: task.id,
+                    conversationId: convId,
+                    jobs,
+                });
+                this.logger.log({
+                    message: 'Jobs planned after auto-popuni scoring',
+                    taskId: task.id,
+                    jobCount: jobs.length,
+                });
+            }
+        }
+        catch (jobErr) {
+            this.logger.error({
+                message: 'Job planning failed after auto-popuni scoring',
+                taskId: task.id,
+                error: jobErr instanceof Error ? jobErr.message : 'Unknown',
+            });
+        }
     }
     /**
      * Enqueue a YOLO-completed task for auto-popuni (synthesize + score).
@@ -22691,11 +24708,12 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
             taskIds: [taskId],
             taskCount: 1,
         });
-        let completed = false;
-        // Reuse the same handlers — handleExecuteTaskAi will find child notes
-        // and synthesize them into a final deliverable
+        // Reuse handleExecuteTaskAi — it synthesizes child notes into a final
+        // deliverable, auto-scores via scoreTaskInternal, and plans agent jobs.
         try {
             await this.handleExecuteTaskAi(client, { taskId, conversationId });
+            // Emit complete event (H3 fix)
+            client.emit('auto-popuni:complete', { totalTasks: 1, completedTasks: 1 });
         }
         catch (err) {
             this.logger.warn({
@@ -22704,25 +24722,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                 error: err instanceof Error ? err.message : 'Unknown',
             });
             client.emit('auto-popuni:complete', { totalTasks: 1, completedTasks: 0 });
-            return;
         }
-        // Now score the result
-        try {
-            await this.handleSubmitTaskResult(client, { taskId });
-            completed = true;
-        }
-        catch (err) {
-            this.logger.warn({
-                message: 'YOLO auto-popuni scoring failed',
-                taskId,
-                error: err instanceof Error ? err.message : 'Unknown',
-            });
-        }
-        // Emit complete event (H3 fix)
-        client.emit('auto-popuni:complete', {
-            totalTasks: 1,
-            completedTasks: completed ? 1 : 0,
-        });
     }
     // ─── Workflow / Agent Execution Events ─────────────────────────
     /**
@@ -23015,8 +25015,17 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
      * Execute all dependency layers, running all tasks within a layer simultaneously.
      */
     async runParallelPopuniLoop(client, layers, batchId, tenantId, userId, conversationId, autoPopuni, conceptConversations) {
-        // Cache business context once for all tasks
-        const businessContext = await this.buildBusinessContext(tenantId, userId);
+        // Cache business context once for all tasks (lean: skip chat-only formatting/capabilities)
+        const businessContext = await this.buildBusinessContext(tenantId, userId, { lean: true });
+        // Pre-load tenant + brainContext once for all workflow steps across all tasks
+        const [cachedTenant, cachedBrainCtx] = await Promise.all([
+            this.prisma.tenant.findUnique({
+                where: { id: tenantId },
+                select: { name: true, industry: true, description: true },
+            }),
+            this.businessContextService.getBusinessContext(tenantId).catch(() => ''),
+        ]);
+        const stepCachedContext = { tenant: cachedTenant, brainContext: cachedBrainCtx };
         const completedSummaries = new Map();
         let completedCount = 0;
         let failedCount = 0;
@@ -23030,7 +25039,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                 taskCount: layer.length,
             });
             // Run ALL tasks in this layer simultaneously
-            const results = await Promise.allSettled(layer.map((task) => this.executeParallelPopuniWorker(client, task, batchId, tenantId, userId, businessContext, completedSummaries, autoPopuni, conceptConversations)));
+            const results = await Promise.allSettled(layer.map((task) => this.executeParallelPopuniWorker(client, task, batchId, tenantId, userId, businessContext, completedSummaries, autoPopuni, conceptConversations, stepCachedContext)));
             for (const result of results) {
                 if (result.status === 'fulfilled') {
                     completedCount++;
@@ -23090,10 +25099,10 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
     }
     /**
      * Execute a single task in the parallel popuni batch.
-     * Full lifecycle: workflow → steps → synthesis → scoring (if autoPopuni).
+     * Full lifecycle: workflow → steps → synthesis → scoring → job planning.
      * Modeled after autoPopuniSingleTask but emits parallel-popuni events.
      */
-    async executeParallelPopuniWorker(client, task, batchId, tenantId, userId, businessContext, completedSummaries, autoPopuni, conceptConversations) {
+    async executeParallelPopuniWorker(client, task, batchId, tenantId, userId, businessContext, completedSummaries, autoPopuni, conceptConversations, stepCachedContext) {
         const taskNote = await this.prisma.note.findUnique({ where: { id: task.id } });
         if (!taskNote)
             throw new Error(`Task ${task.id} not found`);
@@ -23198,7 +25207,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                                 },
                             ]
                             : []),
-                    ], workflow.steps);
+                    ], workflow.steps, stepCachedContext);
                     // Dedup: check if child note already exists
                     const existingSubTask = await this.notesService.findExistingSubTask(tenantId, task.id, workflowStep.stepNumber);
                     if (!existingSubTask) {
@@ -23349,17 +25358,38 @@ PRAVILA:
             // Add to shared summaries for sibling tasks
             completedSummaries.set(task.id, fullContent.substring(0, 500));
             client.emit('chat:notes-updated', { conversationId: convId, count: 0 });
-            // ── Phase 4: Scoring (if autoPopuni) ──
+            // ── Phase 4: Scoring — always score after parallel popuni ──
             let score = null;
-            if (autoPopuni) {
-                const scoreProgress = {
-                    batchId,
+            const scoreProgress = {
+                batchId,
+                taskId: task.id,
+                status: 'scoring',
+            };
+            client.emit('parallel-popuni:task-progress', scoreProgress);
+            const scoreResult = await this.scoreTaskInternal(client, task.id, tenantId, userId, businessContext);
+            score = scoreResult.score;
+            // Auto-plan agent jobs after scoring
+            try {
+                const jobs = await this.jobPlannerService.planJobs(task.id, tenantId, userId);
+                if (jobs.length > 0) {
+                    client.emit('jobs:planned', {
+                        noteId: task.id,
+                        conversationId: convId,
+                        jobs,
+                    });
+                    this.logger.log({
+                        message: 'Jobs planned after parallel popuni scoring',
+                        taskId: task.id,
+                        jobCount: jobs.length,
+                    });
+                }
+            }
+            catch (jobErr) {
+                this.logger.error({
+                    message: 'Job planning failed after parallel popuni scoring',
                     taskId: task.id,
-                    status: 'scoring',
-                };
-                client.emit('parallel-popuni:task-progress', scoreProgress);
-                const scoreResult = await this.scoreTaskInternal(client, task.id, tenantId, userId);
-                score = scoreResult.score;
+                    error: jobErr instanceof Error ? jobErr.message : 'Unknown',
+                });
             }
             // Emit task done
             const donePayload = {
@@ -23726,6 +25756,11 @@ PRAVILA:
                 select: { title: true, content: true, workflowStepNumber: true, status: true },
                 orderBy: { workflowStepNumber: 'asc' },
             });
+            // Pre-load tenant info once (reused for workflow steps + web search + scoring)
+            const execTenant = await this.prisma.tenant.findUnique({
+                where: { id: authenticatedClient.tenantId },
+                select: { name: true, industry: true, description: true },
+            });
             // 2b. If no children exist, generate a workflow and execute each step first
             //     This ensures every task goes through multi-step research before synthesis
             if (childNotes.length === 0) {
@@ -23762,6 +25797,11 @@ PRAVILA:
                     });
                     // Execute each workflow step and save as child note
                     const completedSummaries = [];
+                    // Pre-load brainContext once for all steps (tenant already loaded above)
+                    const execBrainCtx = await this.businessContextService
+                        .getBusinessContext(authenticatedClient.tenantId)
+                        .catch(() => '');
+                    const execCachedContext = { tenant: execTenant, brainContext: execBrainCtx };
                     for (let stepIdx = 0; stepIdx < workflow.steps.length; stepIdx++) {
                         const workflowStep = workflow.steps[stepIdx];
                         client.emit('task:ai-step-progress', {
@@ -23794,7 +25834,7 @@ PRAVILA:
                                 index: stepIdx * 1000 + completedSummaries.length,
                                 stepTitle: workflowStep.title,
                             });
-                        }, completedSummaries, workflow.steps);
+                        }, completedSummaries, workflow.steps, execCachedContext);
                         // Dedup: check if child note already exists for this step
                         const existingSubTask = await this.notesService.findExistingSubTask(authenticatedClient.tenantId, payload.taskId, workflowStep.stepNumber);
                         if (!existingSubTask) {
@@ -23847,8 +25887,8 @@ PRAVILA:
                     // Fall through to direct execution (childNotes still empty)
                 }
             }
-            // 3. Build business context
-            const businessContext = await this.buildBusinessContext(authenticatedClient.tenantId, authenticatedClient.userId);
+            // 3. Build business context (lean: skip chat-only formatting/capabilities)
+            const businessContext = await this.buildBusinessContext(authenticatedClient.tenantId, authenticatedClient.userId, { lean: true });
             // 4. Load concept knowledge if task is linked to a concept
             let conceptKnowledge = '';
             if (task.conceptId) {
@@ -23877,11 +25917,8 @@ PRAVILA:
             let webContext = '';
             if (this.webSearchService.isAvailable()) {
                 try {
-                    const tenant = await this.prisma.tenant.findUnique({
-                        where: { id: authenticatedClient.tenantId },
-                        select: { name: true, industry: true },
-                    });
-                    const searchQuery = `${task.title} ${tenant?.industry ?? ''} ${new Date().getFullYear()}`;
+                    // Reuse pre-loaded execTenant instead of redundant DB query
+                    const searchQuery = `${task.title} ${execTenant?.industry ?? ''} ${new Date().getFullYear()}`;
                     const webResults = await this.webSearchService.searchAndExtract(searchQuery, 3);
                     if (webResults.length > 0) {
                         webContext = this.webSearchService.formatSourcesAsObsidian(webResults);
@@ -24037,7 +26074,7 @@ PRAVILA:
             // 10. Auto-trigger AI Score after completion
             try {
                 client.emit('task:scoring-start', { taskId: payload.taskId });
-                const { score, result, conversationId: scoredConvId, } = await this.scoreTaskInternal(client, payload.taskId, authenticatedClient.tenantId, authenticatedClient.userId);
+                const { score, result, conversationId: scoredConvId, } = await this.scoreTaskInternal(client, payload.taskId, authenticatedClient.tenantId, authenticatedClient.userId, businessContext);
                 client.emit('task:result-complete', {
                     taskId: payload.taskId,
                     conversationId: scoredConvId,
@@ -24046,6 +26083,29 @@ PRAVILA:
                     timestamp: new Date().toISOString(),
                 });
                 client.emit('chat:notes-updated', { conversationId: scoredConvId, count: 0 });
+                // Auto-plan agent jobs after scoring
+                try {
+                    const jobs = await this.jobPlannerService.planJobs(payload.taskId, authenticatedClient.tenantId, authenticatedClient.userId);
+                    if (jobs.length > 0) {
+                        client.emit('jobs:planned', {
+                            noteId: payload.taskId,
+                            conversationId: scoredConvId,
+                            jobs,
+                        });
+                        this.logger.log({
+                            message: 'Jobs planned after auto-score',
+                            taskId: payload.taskId,
+                            jobCount: jobs.length,
+                        });
+                    }
+                }
+                catch (jobErr) {
+                    this.logger.error({
+                        message: 'Job planning failed after auto-score',
+                        taskId: payload.taskId,
+                        error: jobErr instanceof Error ? jobErr.message : 'Unknown',
+                    });
+                }
             }
             catch (scoreErr) {
                 this.logger.warn({
@@ -24073,7 +26133,7 @@ PRAVILA:
      * Internal scoring logic: loads task, builds context, streams optimization + score.
      * Used by both manual "Get AI Score" and auto-scoring after AI Popuni.
      */
-    async scoreTaskInternal(client, taskId, tenantId, userId) {
+    async scoreTaskInternal(client, taskId, tenantId, userId, prebuiltBusinessContext) {
         // 1. Load the completed task note
         const task = await this.prisma.note.findUnique({
             where: { id: taskId },
@@ -24084,8 +26144,9 @@ PRAVILA:
         if (task.status !== 'COMPLETED' || !task.userReport) {
             throw new Error('Zadatak nema izveštaj za ocenjivanje');
         }
-        // 2. Build context for scoring
-        const businessContext = await this.buildBusinessContext(tenantId, userId);
+        // 2. Build context for scoring (reuse pre-built if available)
+        const businessContext = prebuiltBusinessContext ??
+            (await this.buildBusinessContext(tenantId, userId, { lean: true }));
         let conceptContext = '';
         if (task.conceptId) {
             try {
@@ -24099,19 +26160,6 @@ PRAVILA:
             catch {
                 /* concept not found */
             }
-        }
-        let tenantInfo = '';
-        try {
-            const tenant = await this.prisma.tenant.findUnique({
-                where: { id: tenantId },
-                select: { name: true, industry: true, description: true },
-            });
-            if (tenant) {
-                tenantInfo = `\nKOMPANIJA: ${tenant.name}${tenant.industry ? ` | INDUSTRIJA: ${tenant.industry}` : ''}`;
-            }
-        }
-        catch {
-            /* non-blocking */
         }
         // 3. Build the optimization + scoring prompt
         const prompt = `Ti si senior poslovni konsultant koji recenzira deliverable-e za klijenta. Tvoj zadatak je da:
@@ -24129,7 +26177,7 @@ PRAVILA:
    - KOMPLETNOST: Da li pokriva sve aspekte zadatka i očekivanog rezultata?
    - RELEVANTNOST: Da li je prilagođen industriji i specifičnim potrebama kompanije?
    - KVALITET: Da li je profesionalno strukturiran, jasan i bez grešaka?
-${tenantInfo}${conceptContext}
+${conceptContext}
 
 ZADATAK: ${task.title}
 ${task.content ? `OPIS: ${task.content}` : ''}
@@ -24161,6 +26209,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
             userId,
             conversationId: task.conversationId ?? undefined,
             businessContext,
+            useFallback: true,
         }, (chunk) => {
             fullResult += chunk;
             client.emit('task:result-chunk', {
@@ -24226,6 +26275,29 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
             });
             // Refresh notes
             client.emit('chat:notes-updated', { conversationId, count: 0 });
+            // Auto-plan agent jobs after scoring
+            try {
+                const jobs = await this.jobPlannerService.planJobs(payload.taskId, authenticatedClient.tenantId, authenticatedClient.userId);
+                if (jobs.length > 0) {
+                    client.emit('jobs:planned', {
+                        noteId: payload.taskId,
+                        conversationId,
+                        jobs,
+                    });
+                    this.logger.log({
+                        message: 'Jobs planned after scoring',
+                        taskId: payload.taskId,
+                        jobCount: jobs.length,
+                    });
+                }
+            }
+            catch (jobErr) {
+                this.logger.error({
+                    message: 'Job planning failed after scoring',
+                    taskId: payload.taskId,
+                    error: jobErr instanceof Error ? jobErr.message : 'Unknown',
+                });
+            }
         }
         catch (error) {
             this.logger.error({
@@ -24315,7 +26387,9 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                     // Update checkpoint for recovery
                     this.executionStateService
                         .updateCheckpoint(executionId, { completedCount: progress.completed })
-                        .catch(() => { });
+                        .catch(() => {
+                        /* non-blocking */
+                    });
                 },
                 onComplete: (result) => {
                     client.emit('workflow:yolo-complete', result);
@@ -24330,7 +26404,9 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                         failed: result.failed,
                         total: result.total,
                     })
-                        .catch(() => { });
+                        .catch(() => {
+                        /* non-blocking */
+                    });
                 },
                 onError: (error) => {
                     client.emit('workflow:error', {
@@ -24339,7 +26415,9 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                     });
                     this.executionStateService
                         .updateStatus(executionId, 'failed', null, error)
-                        .catch(() => { });
+                        .catch(() => {
+                        /* non-blocking */
+                    });
                 },
                 saveMessage: async (_role, content, conceptId) => {
                     const targetConvId = conceptId && conceptConversations.has(conceptId)
@@ -24392,7 +26470,9 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                 });
                 this.executionStateService
                     .updateStatus(executionId, 'failed', null, err instanceof Error ? err.message : 'Unknown')
-                    .catch(() => { });
+                    .catch(() => {
+                    /* non-blocking */
+                });
             });
         }
         catch (error) {
@@ -24436,7 +26516,9 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                     client.emit('workflow:yolo-progress', progress);
                     this.executionStateService
                         .updateCheckpoint(executionId, { completedCount: progress.completed })
-                        .catch(() => { });
+                        .catch(() => {
+                        /* non-blocking */
+                    });
                 },
                 onComplete: (result) => {
                     client.emit('workflow:yolo-complete', result);
@@ -24450,7 +26532,9 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                         failed: result.failed,
                         total: result.total,
                     })
-                        .catch(() => { });
+                        .catch(() => {
+                        /* non-blocking */
+                    });
                 },
                 onError: (error) => {
                     client.emit('workflow:error', {
@@ -24459,7 +26543,9 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                     });
                     this.executionStateService
                         .updateStatus(executionId, 'failed', null, error)
-                        .catch(() => { });
+                        .catch(() => {
+                        /* non-blocking */
+                    });
                 },
                 saveMessage: async (_role, content, conceptId) => {
                     const targetConvId = conceptId && conceptConversations.has(conceptId)
@@ -24514,7 +26600,9 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                 });
                 this.executionStateService
                     .updateStatus(executionId, 'failed', null, err instanceof Error ? err.message : 'Unknown')
-                    .catch(() => { });
+                    .catch(() => {
+                    /* non-blocking */
+                });
             });
         }
         catch (error) {
@@ -24795,7 +26883,7 @@ ${businessContext}${brainMemoryContext ? '\n' + brainMemoryContext : ''}${webCon
             });
         }
     }
-    async buildBusinessContext(tenantId, userId) {
+    async buildBusinessContext(tenantId, userId, options) {
         try {
             const [tenant, onboardingNote] = await Promise.all([
                 this.prisma.tenant.findUnique({
@@ -24827,7 +26915,7 @@ Kompanija: ${tenant.name}`;
                 context += `\n\nPoslovna analiza (iz onboardinga):\n${noteContent}`;
             }
             context += '\n--- KRAJ POSLOVNOG KONTEKSTA ---';
-            // Output quality rules + mandatory formatting
+            // Output quality rules
             context += `
 
 --- PRAVILA ZA ODGOVARANJE ---
@@ -24838,7 +26926,10 @@ Kompanija: ${tenant.name}`;
 5. Ako imaš web izvore, citiraj INLINE: ([Naziv izvora](URL))
 6. Odgovaraj ISKLJUČIVO na srpskom jeziku
 7. Minimum 300 reči za pitanja koja zahtevaju analizu — ne daj površne odgovore
---- KRAJ PRAVILA ---
+--- KRAJ PRAVILA ---`;
+            // Formatting rules + capabilities only for interactive chat (not task execution)
+            if (!options?.lean) {
+                context += `
 
 --- FORMATIRANJE (STROGO OBAVEZNO — svaki odgovor MORA koristiti ove formate) ---
 1. SEKCIJE: Organizuj svaki odgovor sa ## naslovom za svaku sekciju.
@@ -24869,6 +26960,7 @@ Kompanija: ${tenant.name}`;
 - Koncepti: Možeš da preporučiš relevantne poslovne koncepte iz baze znanja
 Kada korisnik pita šta možeš ili traži pomoć, pomeni ove funkcionalnosti.
 --- KRAJ FUNKCIONALNOSTI ---`;
+            }
             this.logger.log({
                 message: 'Business context built for chat',
                 tenantId,
@@ -25062,29 +27154,29 @@ FORMAT BRIEFA:
 exports.ConversationGateway = ConversationGateway;
 tslib_1.__decorate([
     (0, websockets_1.WebSocketServer)(),
-    tslib_1.__metadata("design:type", typeof (_w = typeof socket_io_1.Server !== "undefined" && socket_io_1.Server) === "function" ? _w : Object)
+    tslib_1.__metadata("design:type", typeof (_y = typeof socket_io_1.Server !== "undefined" && socket_io_1.Server) === "function" ? _y : Object)
 ], ConversationGateway.prototype, "server", void 0);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('execution:get-active'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_x = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _x : Object]),
-    tslib_1.__metadata("design:returntype", typeof (_y = typeof Promise !== "undefined" && Promise) === "function" ? _y : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_z = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _z : Object]),
+    tslib_1.__metadata("design:returntype", typeof (_0 = typeof Promise !== "undefined" && Promise) === "function" ? _0 : Object)
 ], ConversationGateway.prototype, "handleGetActiveExecutions", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('execution:replay-events'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_z = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _z : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_0 = typeof Promise !== "undefined" && Promise) === "function" ? _0 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_1 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _1 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_2 = typeof Promise !== "undefined" && Promise) === "function" ? _2 : Object)
 ], ConversationGateway.prototype, "handleReplayEvents", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('chat:regenerate'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_1 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _1 : Object, Object]),
+    tslib_1.__metadata("design:paramtypes", [typeof (_3 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _3 : Object, Object]),
     tslib_1.__metadata("design:returntype", Promise)
 ], ConversationGateway.prototype, "handleRegenerate", null);
 tslib_1.__decorate([
@@ -25092,7 +27184,7 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_2 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _2 : Object, Object]),
+    tslib_1.__metadata("design:paramtypes", [typeof (_4 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _4 : Object, Object]),
     tslib_1.__metadata("design:returntype", Promise)
 ], ConversationGateway.prototype, "handleMessage", null);
 tslib_1.__decorate([
@@ -25100,23 +27192,23 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_3 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _3 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_4 = typeof Promise !== "undefined" && Promise) === "function" ? _4 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_5 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _5 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_6 = typeof Promise !== "undefined" && Promise) === "function" ? _6 : Object)
 ], ConversationGateway.prototype, "handleRunAgents", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('workflow:parallel-popuni'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_5 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _5 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_6 = typeof Promise !== "undefined" && Promise) === "function" ? _6 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_7 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _7 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_8 = typeof Promise !== "undefined" && Promise) === "function" ? _8 : Object)
 ], ConversationGateway.prototype, "handleParallelPopuni", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('parallel-popuni:cancel'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_7 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _7 : Object, Object]),
+    tslib_1.__metadata("design:paramtypes", [typeof (_9 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _9 : Object, Object]),
     tslib_1.__metadata("design:returntype", void 0)
 ], ConversationGateway.prototype, "handleParallelPopuniCancel", null);
 tslib_1.__decorate([
@@ -25124,23 +27216,23 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_8 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _8 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_9 = typeof Promise !== "undefined" && Promise) === "function" ? _9 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_10 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _10 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_11 = typeof Promise !== "undefined" && Promise) === "function" ? _11 : Object)
 ], ConversationGateway.prototype, "handleGetPlan", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('workflow:approve'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_10 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _10 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_11 = typeof Promise !== "undefined" && Promise) === "function" ? _11 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_12 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _12 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_13 = typeof Promise !== "undefined" && Promise) === "function" ? _13 : Object)
 ], ConversationGateway.prototype, "handleWorkflowApproval", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('workflow:cancel'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_12 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _12 : Object, Object]),
+    tslib_1.__metadata("design:paramtypes", [typeof (_14 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _14 : Object, Object]),
     tslib_1.__metadata("design:returntype", void 0)
 ], ConversationGateway.prototype, "handleWorkflowCancel", null);
 tslib_1.__decorate([
@@ -25148,7 +27240,7 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_13 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _13 : Object, Object]),
+    tslib_1.__metadata("design:paramtypes", [typeof (_15 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _15 : Object, Object]),
     tslib_1.__metadata("design:returntype", void 0)
 ], ConversationGateway.prototype, "handleStepContinue", null);
 tslib_1.__decorate([
@@ -25156,40 +27248,40 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_14 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _14 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_15 = typeof Promise !== "undefined" && Promise) === "function" ? _15 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_16 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _16 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_17 = typeof Promise !== "undefined" && Promise) === "function" ? _17 : Object)
 ], ConversationGateway.prototype, "handleExecuteTaskAi", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('task:submit-result'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_16 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _16 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_17 = typeof Promise !== "undefined" && Promise) === "function" ? _17 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_18 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _18 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_19 = typeof Promise !== "undefined" && Promise) === "function" ? _19 : Object)
 ], ConversationGateway.prototype, "handleSubmitTaskResult", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('workflow:start-yolo'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_18 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _18 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_19 = typeof Promise !== "undefined" && Promise) === "function" ? _19 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_20 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _20 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_21 = typeof Promise !== "undefined" && Promise) === "function" ? _21 : Object)
 ], ConversationGateway.prototype, "handleStartYolo", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('yolo:start-domain'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_20 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _20 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_21 = typeof Promise !== "undefined" && Promise) === "function" ? _21 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_22 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _22 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_23 = typeof Promise !== "undefined" && Promise) === "function" ? _23 : Object)
 ], ConversationGateway.prototype, "handleStartDomainYolo", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('discovery:send-message'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_22 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _22 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_23 = typeof Promise !== "undefined" && Promise) === "function" ? _23 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_24 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _24 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_25 = typeof Promise !== "undefined" && Promise) === "function" ? _25 : Object)
 ], ConversationGateway.prototype, "handleDiscoveryMessage", null);
 exports.ConversationGateway = ConversationGateway = ConversationGateway_1 = tslib_1.__decorate([
     (0, websockets_1.WebSocketGateway)({
@@ -25199,30 +27291,30 @@ exports.ConversationGateway = ConversationGateway = ConversationGateway_1 = tsli
             credentials: true,
         },
     }),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _c : Object, typeof (_d = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _d : Object, typeof (_e = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _e : Object, typeof (_f = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _f : Object, typeof (_g = typeof concept_classifier_service_1.ConceptClassifierService !== "undefined" && concept_classifier_service_1.ConceptClassifierService) === "function" ? _g : Object, typeof (_h = typeof citation_injector_service_1.CitationInjectorService !== "undefined" && citation_injector_service_1.CitationInjectorService) === "function" ? _h : Object, typeof (_j = typeof citation_service_1.CitationService !== "undefined" && citation_service_1.CitationService) === "function" ? _j : Object, typeof (_k = typeof memory_context_builder_service_1.MemoryContextBuilderService !== "undefined" && memory_context_builder_service_1.MemoryContextBuilderService) === "function" ? _k : Object, typeof (_l = typeof memory_extraction_service_1.MemoryExtractionService !== "undefined" && memory_extraction_service_1.MemoryExtractionService) === "function" ? _l : Object, typeof (_m = typeof memory_service_1.MemoryService !== "undefined" && memory_service_1.MemoryService) === "function" ? _m : Object, typeof (_o = typeof workflow_service_1.WorkflowService !== "undefined" && workflow_service_1.WorkflowService) === "function" ? _o : Object, typeof (_p = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _p : Object, typeof (_q = typeof concept_extraction_service_1.ConceptExtractionService !== "undefined" && concept_extraction_service_1.ConceptExtractionService) === "function" ? _q : Object, typeof (_r = typeof yolo_scheduler_service_1.YoloSchedulerService !== "undefined" && yolo_scheduler_service_1.YoloSchedulerService) === "function" ? _r : Object, typeof (_s = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _s : Object, typeof (_t = typeof business_context_service_1.BusinessContextService !== "undefined" && business_context_service_1.BusinessContextService) === "function" ? _t : Object, typeof (_u = typeof execution_state_service_1.ExecutionStateService !== "undefined" && execution_state_service_1.ExecutionStateService) === "function" ? _u : Object, typeof (_v = typeof attachments_service_1.AttachmentsService !== "undefined" && attachments_service_1.AttachmentsService) === "function" ? _v : Object])
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _c : Object, typeof (_d = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _d : Object, typeof (_e = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _e : Object, typeof (_f = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _f : Object, typeof (_g = typeof concept_classifier_service_1.ConceptClassifierService !== "undefined" && concept_classifier_service_1.ConceptClassifierService) === "function" ? _g : Object, typeof (_h = typeof citation_injector_service_1.CitationInjectorService !== "undefined" && citation_injector_service_1.CitationInjectorService) === "function" ? _h : Object, typeof (_j = typeof citation_service_1.CitationService !== "undefined" && citation_service_1.CitationService) === "function" ? _j : Object, typeof (_k = typeof memory_context_builder_service_1.MemoryContextBuilderService !== "undefined" && memory_context_builder_service_1.MemoryContextBuilderService) === "function" ? _k : Object, typeof (_l = typeof memory_extraction_service_1.MemoryExtractionService !== "undefined" && memory_extraction_service_1.MemoryExtractionService) === "function" ? _l : Object, typeof (_m = typeof memory_service_1.MemoryService !== "undefined" && memory_service_1.MemoryService) === "function" ? _m : Object, typeof (_o = typeof workflow_service_1.WorkflowService !== "undefined" && workflow_service_1.WorkflowService) === "function" ? _o : Object, typeof (_p = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _p : Object, typeof (_q = typeof concept_extraction_service_1.ConceptExtractionService !== "undefined" && concept_extraction_service_1.ConceptExtractionService) === "function" ? _q : Object, typeof (_r = typeof yolo_scheduler_service_1.YoloSchedulerService !== "undefined" && yolo_scheduler_service_1.YoloSchedulerService) === "function" ? _r : Object, typeof (_s = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _s : Object, typeof (_t = typeof business_context_service_1.BusinessContextService !== "undefined" && business_context_service_1.BusinessContextService) === "function" ? _t : Object, typeof (_u = typeof execution_state_service_1.ExecutionStateService !== "undefined" && execution_state_service_1.ExecutionStateService) === "function" ? _u : Object, typeof (_v = typeof attachments_service_1.AttachmentsService !== "undefined" && attachments_service_1.AttachmentsService) === "function" ? _v : Object, typeof (_w = typeof job_planner_service_1.JobPlannerService !== "undefined" && job_planner_service_1.JobPlannerService) === "function" ? _w : Object, typeof (_x = typeof agent_execution_event_bus_service_1.AgentExecutionEventBus !== "undefined" && agent_execution_event_bus_service_1.AgentExecutionEventBus) === "function" ? _x : Object])
 ], ConversationGateway);
 
 
 /***/ }),
-/* 165 */
+/* 177 */
 /***/ ((module) => {
 
 module.exports = require("@nestjs/websockets");
 
 /***/ }),
-/* 166 */
+/* 178 */
 /***/ ((module) => {
 
 module.exports = require("socket.io");
 
 /***/ }),
-/* 167 */
+/* 179 */
 /***/ ((module) => {
 
 module.exports = require("jwks-rsa");
 
 /***/ }),
-/* 168 */
+/* 180 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -25236,12 +27328,12 @@ const ai_gateway_module_1 = __webpack_require__(88);
 const notes_module_1 = __webpack_require__(132);
 const knowledge_module_1 = __webpack_require__(73);
 const conversation_module_1 = __webpack_require__(131);
-const web_search_module_1 = __webpack_require__(145);
+const web_search_module_1 = __webpack_require__(146);
 const file_upload_module_1 = __webpack_require__(40);
-const workflow_module_1 = __webpack_require__(144);
-const onboarding_controller_1 = __webpack_require__(169);
-const onboarding_service_1 = __webpack_require__(170);
-const onboarding_metric_service_1 = __webpack_require__(171);
+const workflow_module_1 = __webpack_require__(145);
+const onboarding_controller_1 = __webpack_require__(181);
+const onboarding_service_1 = __webpack_require__(182);
+const onboarding_metric_service_1 = __webpack_require__(183);
 /**
  * Module for the onboarding quick win flow.
  * Provides sub-5-minute first value experience for new users.
@@ -25270,7 +27362,7 @@ exports.OnboardingModule = OnboardingModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 169 */
+/* 181 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -25281,8 +27373,8 @@ exports.OnboardingController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const platform_express_1 = __webpack_require__(27);
-const onboarding_service_1 = __webpack_require__(170);
-const quick_win_dto_1 = __webpack_require__(173);
+const onboarding_service_1 = __webpack_require__(182);
+const quick_win_dto_1 = __webpack_require__(185);
 const jwt_auth_guard_1 = __webpack_require__(46);
 const mfa_required_guard_1 = __webpack_require__(59);
 const skip_mfa_decorator_1 = __webpack_require__(51);
@@ -25585,7 +27677,7 @@ exports.OnboardingController = OnboardingController = OnboardingController_1 = t
 
 
 /***/ }),
-/* 170 */
+/* 182 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -25601,13 +27693,13 @@ const ai_gateway_service_1 = __webpack_require__(89);
 const notes_service_1 = __webpack_require__(133);
 const concept_service_1 = __webpack_require__(105);
 const concept_matching_service_1 = __webpack_require__(110);
-const conversation_service_1 = __webpack_require__(160);
-const web_search_service_1 = __webpack_require__(146);
+const conversation_service_1 = __webpack_require__(172);
+const web_search_service_1 = __webpack_require__(147);
 const brain_seeding_service_1 = __webpack_require__(117);
 const concept_classifier_service_1 = __webpack_require__(121);
-const workflow_service_1 = __webpack_require__(149);
-const onboarding_metric_service_1 = __webpack_require__(171);
-const quick_task_templates_1 = __webpack_require__(172);
+const workflow_service_1 = __webpack_require__(150);
+const onboarding_metric_service_1 = __webpack_require__(183);
+const quick_task_templates_1 = __webpack_require__(184);
 const department_categories_1 = __webpack_require__(118);
 /**
  * Service for managing the onboarding quick win flow.
@@ -25644,7 +27736,7 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
         }
         let text;
         try {
-            const { PDFParse } = await Promise.resolve().then(() => tslib_1.__importStar(__webpack_require__(156)));
+            const { PDFParse } = await Promise.resolve().then(() => tslib_1.__importStar(__webpack_require__(157)));
             const parser = new PDFParse({ data: pdfBuffer });
             const result = await parser.getText();
             text = result.text?.trim() ?? '';
@@ -26857,7 +28949,7 @@ exports.OnboardingService = OnboardingService = OnboardingService_1 = tslib_1.__
 
 
 /***/ }),
-/* 171 */
+/* 183 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -27006,7 +29098,7 @@ exports.OnboardingMetricService = OnboardingMetricService = OnboardingMetricServ
 
 
 /***/ }),
-/* 172 */
+/* 184 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -27196,7 +29288,7 @@ Please generate a professional, ready-to-use output that demonstrates immediate 
 
 
 /***/ }),
-/* 173 */
+/* 185 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -27325,7 +29417,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 174 */
+/* 186 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -27334,8 +29426,8 @@ exports.PersonasModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const auth_module_1 = __webpack_require__(41);
-const personas_service_1 = __webpack_require__(175);
-const personas_controller_1 = __webpack_require__(176);
+const personas_service_1 = __webpack_require__(187);
+const personas_controller_1 = __webpack_require__(188);
 /**
  * Module for department persona management.
  * Provides persona definitions and API endpoints for persona selection.
@@ -27354,7 +29446,7 @@ exports.PersonasModule = PersonasModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 175 */
+/* 187 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -27495,7 +29587,7 @@ exports.PersonasService = PersonasService = PersonasService_1 = tslib_1.__decora
 
 
 /***/ }),
-/* 176 */
+/* 188 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -27506,7 +29598,7 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const jwt_auth_guard_1 = __webpack_require__(46);
 const mfa_required_guard_1 = __webpack_require__(59);
-const personas_service_1 = __webpack_require__(175);
+const personas_service_1 = __webpack_require__(187);
 /**
  * Controller for persona-related API endpoints.
  * All endpoints require authentication and MFA verification.
@@ -27558,7 +29650,7 @@ exports.PersonasController = PersonasController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 177 */
+/* 189 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -27587,7 +29679,7 @@ exports.QdrantModule = QdrantModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 178 */
+/* 190 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -27597,9 +29689,9 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
 const auth_module_1 = __webpack_require__(41);
-const data_integrity_controller_1 = __webpack_require__(179);
-const data_integrity_service_1 = __webpack_require__(180);
-const brain_config_controller_1 = __webpack_require__(181);
+const data_integrity_controller_1 = __webpack_require__(191);
+const data_integrity_service_1 = __webpack_require__(192);
+const brain_config_controller_1 = __webpack_require__(193);
 let AdminModule = class AdminModule {
 };
 exports.AdminModule = AdminModule;
@@ -27613,7 +29705,7 @@ exports.AdminModule = AdminModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 179 */
+/* 191 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -27622,7 +29714,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DataIntegrityController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const data_integrity_service_1 = __webpack_require__(180);
+const data_integrity_service_1 = __webpack_require__(192);
 let DataIntegrityController = class DataIntegrityController {
     constructor(integrityService) {
         this.integrityService = integrityService;
@@ -27645,7 +29737,7 @@ exports.DataIntegrityController = DataIntegrityController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 180 */
+/* 192 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -27767,7 +29859,7 @@ exports.DataIntegrityService = DataIntegrityService = DataIntegrityService_1 = t
 
 
 /***/ }),
-/* 181 */
+/* 193 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -27842,7 +29934,7 @@ exports.BrainConfigController = BrainConfigController = BrainConfigController_1 
 
 
 /***/ }),
-/* 182 */
+/* 194 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -27853,9 +29945,9 @@ const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
 const auth_module_1 = __webpack_require__(41);
 const notes_module_1 = __webpack_require__(132);
-const pdf_export_controller_1 = __webpack_require__(183);
-const pdf_export_service_1 = __webpack_require__(184);
-const puppeteer_provider_1 = __webpack_require__(185);
+const pdf_export_controller_1 = __webpack_require__(195);
+const pdf_export_service_1 = __webpack_require__(196);
+const puppeteer_provider_1 = __webpack_require__(197);
 let PdfExportModule = class PdfExportModule {
 };
 exports.PdfExportModule = PdfExportModule;
@@ -27869,7 +29961,7 @@ exports.PdfExportModule = PdfExportModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 183 */
+/* 195 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -27880,10 +29972,10 @@ exports.PdfExportController = exports.ExportReportsDto = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const class_validator_1 = __webpack_require__(38);
-const express_1 = __webpack_require__(154);
+const express_1 = __webpack_require__(155);
 const jwt_auth_guard_1 = __webpack_require__(46);
 const current_user_decorator_1 = __webpack_require__(48);
-const pdf_export_service_1 = __webpack_require__(184);
+const pdf_export_service_1 = __webpack_require__(196);
 class ExportReportsDto {
 }
 exports.ExportReportsDto = ExportReportsDto;
@@ -27933,7 +30025,7 @@ exports.PdfExportController = PdfExportController = PdfExportController_1 = tsli
 
 
 /***/ }),
-/* 184 */
+/* 196 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -27945,8 +30037,8 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const notes_service_1 = __webpack_require__(133);
 const tenant_context_1 = __webpack_require__(9);
-const puppeteer_provider_1 = __webpack_require__(185);
-const pdf_html_builder_1 = __webpack_require__(187);
+const puppeteer_provider_1 = __webpack_require__(197);
+const pdf_html_builder_1 = __webpack_require__(199);
 let PdfExportService = PdfExportService_1 = class PdfExportService {
     constructor(notesService, puppeteer, prisma) {
         this.notesService = notesService;
@@ -28026,7 +30118,7 @@ exports.PdfExportService = PdfExportService = PdfExportService_1 = tslib_1.__dec
 
 
 /***/ }),
-/* 185 */
+/* 197 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -28035,7 +30127,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.PuppeteerProvider = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const puppeteer_1 = tslib_1.__importDefault(__webpack_require__(186));
+const puppeteer_1 = tslib_1.__importDefault(__webpack_require__(198));
 let PuppeteerProvider = PuppeteerProvider_1 = class PuppeteerProvider {
     constructor() {
         this.logger = new common_1.Logger(PuppeteerProvider_1.name);
@@ -28074,20 +30166,20 @@ exports.PuppeteerProvider = PuppeteerProvider = PuppeteerProvider_1 = tslib_1.__
 
 
 /***/ }),
-/* 186 */
+/* 198 */
 /***/ ((module) => {
 
 module.exports = require("puppeteer");
 
 /***/ }),
-/* 187 */
+/* 199 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.buildPdfHtml = buildPdfHtml;
-const server_1 = __webpack_require__(188);
-const pdf_light_theme_1 = __webpack_require__(192);
+const server_1 = __webpack_require__(200);
+const pdf_light_theme_1 = __webpack_require__(204);
 function escapeHtml(str) {
     return str
         .replace(/&/g, '&amp;')
@@ -28194,7 +30286,7 @@ function buildPdfHtml(options) {
 
 
 /***/ }),
-/* 188 */
+/* 200 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -28202,11 +30294,11 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 const tslib_1 = __webpack_require__(4);
 // Server-only exports (Node.js dependencies like isomorphic-dompurify).
 // Do NOT import from frontend code — use @mentor-ai/shared/utils instead.
-tslib_1.__exportStar(__webpack_require__(189), exports);
+tslib_1.__exportStar(__webpack_require__(201), exports);
 
 
 /***/ }),
-/* 189 */
+/* 201 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -28218,8 +30310,8 @@ tslib_1.__exportStar(__webpack_require__(189), exports);
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.renderMarkdownServer = renderMarkdownServer;
 const tslib_1 = __webpack_require__(4);
-const marked_1 = __webpack_require__(190);
-const isomorphic_dompurify_1 = tslib_1.__importDefault(__webpack_require__(191));
+const marked_1 = __webpack_require__(202);
+const isomorphic_dompurify_1 = tslib_1.__importDefault(__webpack_require__(203));
 const callout_transform_1 = __webpack_require__(34);
 const PURIFY_CONFIG = {
     ADD_ATTR: ['target', 'rel', 'class'],
@@ -28284,19 +30376,19 @@ function renderMarkdownServer(value) {
 
 
 /***/ }),
-/* 190 */
+/* 202 */
 /***/ ((module) => {
 
 module.exports = require("marked");
 
 /***/ }),
-/* 191 */
+/* 203 */
 /***/ ((module) => {
 
 module.exports = require("isomorphic-dompurify");
 
 /***/ }),
-/* 192 */
+/* 204 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -28555,993 +30647,7 @@ exports.PDF_LIGHT_THEME_CSS = `
 
 
 /***/ }),
-/* 193 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.AgentExecutionModule = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const config_1 = __webpack_require__(5);
-const tenant_context_1 = __webpack_require__(9);
-const auth_module_1 = __webpack_require__(41);
-const ai_gateway_module_1 = __webpack_require__(88);
-const notes_module_1 = __webpack_require__(132);
-const agent_execution_service_1 = __webpack_require__(194);
-const agent_execution_controller_1 = __webpack_require__(200);
-const openclaw_client_service_1 = __webpack_require__(195);
-const agent_registry_service_1 = __webpack_require__(197);
-const agent_recommender_service_1 = __webpack_require__(198);
-const agent_prompt_service_1 = __webpack_require__(196);
-const budget_service_1 = __webpack_require__(199);
-let AgentExecutionModule = class AgentExecutionModule {
-};
-exports.AgentExecutionModule = AgentExecutionModule;
-exports.AgentExecutionModule = AgentExecutionModule = tslib_1.__decorate([
-    (0, common_1.Module)({
-        imports: [
-            config_1.ConfigModule,
-            tenant_context_1.TenantModule,
-            auth_module_1.AuthModule,
-            ai_gateway_module_1.AiGatewayModule,
-            notes_module_1.NotesModule,
-        ],
-        controllers: [agent_execution_controller_1.AgentExecutionController],
-        providers: [
-            agent_execution_service_1.AgentExecutionService,
-            openclaw_client_service_1.OpenClawClientService,
-            agent_registry_service_1.AgentRegistryService,
-            agent_recommender_service_1.AgentRecommenderService,
-            agent_prompt_service_1.AgentPromptService,
-            budget_service_1.BudgetService,
-        ],
-        exports: [agent_execution_service_1.AgentExecutionService],
-    })
-], AgentExecutionModule);
-
-
-/***/ }),
-/* 194 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var AgentExecutionService_1;
-var _a, _b, _c, _d, _e, _f;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.AgentExecutionService = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const tenant_context_1 = __webpack_require__(9);
-const cuid2_1 = __webpack_require__(32);
-const types_1 = __webpack_require__(85);
-const openclaw_client_service_1 = __webpack_require__(195);
-const agent_prompt_service_1 = __webpack_require__(196);
-const agent_recommender_service_1 = __webpack_require__(198);
-const agent_registry_service_1 = __webpack_require__(197);
-const budget_service_1 = __webpack_require__(199);
-let AgentExecutionService = AgentExecutionService_1 = class AgentExecutionService {
-    constructor(prisma, openClawClient, agentPrompt, agentRecommender, registry, budgetService) {
-        this.prisma = prisma;
-        this.openClawClient = openClawClient;
-        this.agentPrompt = agentPrompt;
-        this.agentRecommender = agentRecommender;
-        this.registry = registry;
-        this.budgetService = budgetService;
-        this.logger = new common_1.Logger(AgentExecutionService_1.name);
-        this.MAX_CONCURRENT_PER_TENANT = 3;
-        this.VALID_STATUSES = new Set(Object.values(types_1.AgentExecutionStatus));
-    }
-    async getRecommendations(noteId, userId, tenantId) {
-        const note = await this.prisma.note.findFirst({
-            where: { id: noteId, tenantId },
-        });
-        if (!note) {
-            throw new common_1.NotFoundException(`Note ${noteId} not found`);
-        }
-        if (!note.userReport) {
-            throw new common_1.BadRequestException('Task has no completed report');
-        }
-        const [recommendations, budget] = await Promise.all([
-            this.agentRecommender.getRecommendations({
-                taskTitle: note.title,
-                taskContent: note.content,
-                userReport: note.userReport,
-                expectedOutcome: note.expectedOutcome,
-                tenantId,
-                userId,
-            }),
-            this.budgetService.getDailySpent(tenantId),
-        ]);
-        const estimatedCost = this.budgetService.getEstimatedCost();
-        return {
-            noteId: note.id,
-            recommendations,
-            agentTypes: this.registry.getAllAgentTypeInfos(),
-            dailySpentEur: budget.spentEur,
-            dailyLimitEur: budget.limitEur,
-            canProceed: budget.spentEur + estimatedCost <= budget.limitEur,
-        };
-    }
-    async triggerAgent(noteId, agentType, userId, tenantId) {
-        // Validate agent type
-        const agentDef = this.registry.getAgent(agentType);
-        // Verify note
-        const note = await this.prisma.note.findFirst({
-            where: { id: noteId, tenantId },
-        });
-        if (!note) {
-            throw new common_1.NotFoundException(`Note ${noteId} not found`);
-        }
-        if (!note.userReport) {
-            throw new common_1.BadRequestException('Task has no completed report');
-        }
-        // Check OpenClaw config
-        if (!this.openClawClient.isConfigured()) {
-            throw new common_1.BadRequestException('Agent execution is not configured');
-        }
-        // Check for existing active execution on this note+agentType
-        const existingActive = await this.prisma.agentExecution.findFirst({
-            where: {
-                noteId,
-                tenantId,
-                agentType,
-                status: { in: ['PENDING', 'FORMATTING', 'EXECUTING'] },
-            },
-        });
-        if (existingActive) {
-            throw new common_1.BadRequestException(`${agentDef.label} is already in progress for this task`);
-        }
-        // Check budget
-        const canSpend = await this.budgetService.canSpend(tenantId);
-        if (!canSpend) {
-            throw new common_1.ForbiddenException('Daily budget exceeded');
-        }
-        // Check concurrency via DB count (safe across multiple instances)
-        const activeCount = await this.prisma.agentExecution.count({
-            where: {
-                tenantId,
-                status: { in: ['PENDING', 'FORMATTING', 'EXECUTING'] },
-            },
-        });
-        if (activeCount >= this.MAX_CONCURRENT_PER_TENANT) {
-            throw new common_1.BadRequestException(`Maximum ${this.MAX_CONCURRENT_PER_TENANT} concurrent agent executions`);
-        }
-        // Create execution record + reserve budget
-        const executionId = `agx_${(0, cuid2_1.createId)()}`;
-        const estimatedCost = agentDef.estimatedCostEur;
-        await this.prisma.agentExecution.create({
-            data: {
-                id: executionId,
-                tenantId,
-                userId,
-                noteId,
-                status: 'PENDING',
-                agentType,
-                estimatedCostEur: estimatedCost,
-            },
-        });
-        await this.budgetService.recordSpend(tenantId, estimatedCost);
-        this.logger.log({
-            message: 'Agent triggered',
-            executionId,
-            noteId,
-            agentType,
-            userId,
-            tenantId,
-            reservedCostEur: estimatedCost,
-        });
-        // Fire-and-forget async pipeline
-        this.executeAgentPipeline(executionId, agentType, note, userId, tenantId, estimatedCost).catch((err) => {
-            this.logger.error({
-                message: 'Agent pipeline failed unexpectedly',
-                executionId,
-                agentType,
-                error: err.message,
-            });
-        });
-        return { executionId };
-    }
-    async executeAgentPipeline(executionId, agentType, note, userId, tenantId, reservedCostEur) {
-        const openClawAgentId = this.registry.getOpenClawAgentId(agentType);
-        try {
-            // Step 1: Format task into agent-specific instruction
-            await this.updateStatus(executionId, 'FORMATTING');
-            const formattedPrompt = await this.agentPrompt.formatPrompt({
-                agentType,
-                taskTitle: note.title,
-                taskContent: note.content,
-                userReport: note.userReport,
-                expectedOutcome: note.expectedOutcome,
-                tenantId,
-                userId,
-            });
-            await this.prisma.agentExecution.update({
-                where: { id: executionId },
-                data: { formattedPrompt },
-            });
-            // Step 2: Send to OpenClaw with the correct agent
-            await this.updateStatus(executionId, 'EXECUTING', { startedAt: new Date() });
-            const result = await this.openClawClient.executeAgent(formattedPrompt, {
-                agentId: openClawAgentId,
-            });
-            if (!result.success) {
-                await this.updateStatus(executionId, 'FAILED', {
-                    error: result.error ?? 'Agent execution failed',
-                    completedAt: new Date(),
-                    durationMs: result.durationMs,
-                });
-                return;
-            }
-            // Step 3: Store results in Note.agentEnrichments JSON (atomic merge)
-            await this.mergeEnrichment(note.id, agentType, {
-                executionId,
-                status: types_1.AgentExecutionStatus.COMPLETED,
-                result: result.output,
-                completedAt: new Date().toISOString(),
-                error: null,
-            });
-            // Step 4: Calculate cost and adjust budget
-            const actualCost = this.estimateActualCost(result.usage);
-            const costDifference = actualCost - reservedCostEur;
-            if (Math.abs(costDifference) > 0.0001) {
-                await this.budgetService.recordSpend(tenantId, costDifference);
-            }
-            // Step 5: Mark completed
-            await this.prisma.agentExecution.update({
-                where: { id: executionId },
-                data: {
-                    status: 'COMPLETED',
-                    agentOutput: result.output,
-                    actualCostEur: actualCost,
-                    completedAt: new Date(),
-                    durationMs: result.durationMs,
-                },
-            });
-            this.logger.log({
-                message: 'Agent execution completed',
-                executionId,
-                agentType,
-                durationMs: result.durationMs,
-                actualCostEur: actualCost,
-            });
-        }
-        catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-            this.logger.error({
-                message: 'Agent pipeline error',
-                executionId,
-                agentType,
-                error: errorMessage,
-            });
-            // Store error in enrichments too (atomic merge — safe under concurrency)
-            try {
-                await this.mergeEnrichment(note.id, agentType, {
-                    executionId,
-                    status: types_1.AgentExecutionStatus.FAILED,
-                    result: null,
-                    completedAt: new Date().toISOString(),
-                    error: errorMessage,
-                });
-            }
-            catch { /* best-effort */ }
-            await this.updateStatus(executionId, 'FAILED', {
-                error: errorMessage,
-                completedAt: new Date(),
-            });
-        }
-        finally {
-            // No cleanup needed — concurrency is tracked via DB status
-        }
-    }
-    async updateStatus(executionId, status, extra) {
-        await this.prisma.agentExecution.update({
-            where: { id: executionId },
-            data: { status, ...extra },
-        });
-    }
-    /**
-     * Atomically merges an enrichment entry into Note.agentEnrichments JSON
-     * using PostgreSQL jsonb || operator. Prevents race conditions when
-     * multiple agents write to the same note concurrently.
-     *
-     * NOTE: Uses raw SQL intentionally to get atomic JSONB merge semantics.
-     * This bypasses Prisma middleware (logging, hooks, @updatedAt).
-     * We manually set updated_at to compensate.
-     */
-    async mergeEnrichment(noteId, agentType, entry) {
-        const patch = JSON.stringify({ [agentType]: entry });
-        await this.prisma.$executeRaw `
-      UPDATE notes
-      SET agent_enrichments = COALESCE(agent_enrichments, '{}'::jsonb) || ${patch}::jsonb,
-          updated_at = NOW()
-      WHERE id = ${noteId}
-    `;
-    }
-    estimateActualCost(usage) {
-        if (!usage?.total)
-            return this.budgetService.getEstimatedCost();
-        const inputCost = ((usage.input ?? 0) / 1_000_000) * 0.27;
-        const outputCost = ((usage.output ?? 0) / 1_000_000) * 1.1;
-        const fetchCost = 0.03;
-        return Math.round((inputCost + outputCost + fetchCost) * 10000) / 10000;
-    }
-    async getExecution(executionId, tenantId) {
-        const exec = await this.prisma.agentExecution.findFirst({
-            where: { id: executionId, tenantId },
-        });
-        if (!exec)
-            return null;
-        return this.mapToResponse(exec);
-    }
-    async getExecutionsByNote(noteId, tenantId) {
-        const executions = await this.prisma.agentExecution.findMany({
-            where: { noteId, tenantId },
-            orderBy: { createdAt: 'desc' },
-        });
-        return executions.map((e) => this.mapToResponse(e));
-    }
-    mapToResponse(exec) {
-        let status = exec.status;
-        if (!this.VALID_STATUSES.has(status)) {
-            this.logger.warn({ message: 'Unknown execution status in DB', executionId: exec.id, status: exec.status });
-            status = types_1.AgentExecutionStatus.FAILED;
-        }
-        return {
-            id: exec.id,
-            noteId: exec.noteId,
-            resultNoteId: exec.resultNoteId,
-            status,
-            agentType: exec.agentType,
-            estimatedCostEur: exec.estimatedCostEur ? Number(exec.estimatedCostEur) : null,
-            actualCostEur: exec.actualCostEur ? Number(exec.actualCostEur) : null,
-            error: exec.error,
-            durationMs: exec.durationMs,
-            createdAt: exec.createdAt.toISOString(),
-            completedAt: exec.completedAt?.toISOString() ?? null,
-        };
-    }
-};
-exports.AgentExecutionService = AgentExecutionService;
-exports.AgentExecutionService = AgentExecutionService = AgentExecutionService_1 = tslib_1.__decorate([
-    (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof openclaw_client_service_1.OpenClawClientService !== "undefined" && openclaw_client_service_1.OpenClawClientService) === "function" ? _b : Object, typeof (_c = typeof agent_prompt_service_1.AgentPromptService !== "undefined" && agent_prompt_service_1.AgentPromptService) === "function" ? _c : Object, typeof (_d = typeof agent_recommender_service_1.AgentRecommenderService !== "undefined" && agent_recommender_service_1.AgentRecommenderService) === "function" ? _d : Object, typeof (_e = typeof agent_registry_service_1.AgentRegistryService !== "undefined" && agent_registry_service_1.AgentRegistryService) === "function" ? _e : Object, typeof (_f = typeof budget_service_1.BudgetService !== "undefined" && budget_service_1.BudgetService) === "function" ? _f : Object])
-], AgentExecutionService);
-
-
-/***/ }),
-/* 195 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var OpenClawClientService_1;
-var _a;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.OpenClawClientService = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const config_1 = __webpack_require__(5);
-let OpenClawClientService = OpenClawClientService_1 = class OpenClawClientService {
-    constructor(configService) {
-        this.configService = configService;
-        this.logger = new common_1.Logger(OpenClawClientService_1.name);
-        this.relayUrl =
-            this.configService.get('OPENCLAW_RELAY_URL') ?? '';
-        this.authToken =
-            this.configService.get('OPENCLAW_AUTH_TOKEN') ?? '';
-        this.timeoutSeconds =
-            parseInt(this.configService.get('OPENCLAW_TIMEOUT_SECONDS') ?? '600', 10);
-    }
-    isConfigured() {
-        return !!this.authToken && !!this.relayUrl;
-    }
-    async executeAgent(message, options) {
-        const agentId = options?.agentId ?? 'main';
-        const timeout = options?.timeoutSeconds ?? this.timeoutSeconds;
-        this.logger.log({
-            message: 'Sending to OpenClaw relay',
-            agentId,
-            msgLength: message.length,
-            timeoutSeconds: timeout,
-        });
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), (timeout + 30) * 1000);
-        try {
-            const response = await fetch(this.relayUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${this.authToken}`,
-                },
-                body: JSON.stringify({ message, agentId, timeoutSeconds: timeout }),
-                signal: controller.signal,
-            });
-            const data = await response.json();
-            if (!response.ok) {
-                this.logger.error({
-                    message: 'OpenClaw relay error',
-                    status: response.status,
-                    error: data.error,
-                });
-                return {
-                    success: false,
-                    output: '',
-                    durationMs: data.durationMs ?? 0,
-                    error: data.error ?? `HTTP ${response.status}`,
-                };
-            }
-            this.logger.log({
-                message: 'OpenClaw relay success',
-                durationMs: data.durationMs,
-                outputLength: data.output?.length ?? 0,
-                runId: data.runId,
-            });
-            return data;
-        }
-        catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-            this.logger.error({ message: 'OpenClaw relay call failed', error: errorMessage });
-            return {
-                success: false,
-                output: '',
-                durationMs: 0,
-                error: errorMessage,
-            };
-        }
-        finally {
-            clearTimeout(timer);
-        }
-    }
-};
-exports.OpenClawClientService = OpenClawClientService;
-exports.OpenClawClientService = OpenClawClientService = OpenClawClientService_1 = tslib_1.__decorate([
-    (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object])
-], OpenClawClientService);
-
-
-/***/ }),
-/* 196 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var AgentPromptService_1;
-var _a, _b;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.AgentPromptService = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const ai_gateway_service_1 = __webpack_require__(89);
-const agent_registry_service_1 = __webpack_require__(197);
-let AgentPromptService = AgentPromptService_1 = class AgentPromptService {
-    constructor(aiGateway, registry) {
-        this.aiGateway = aiGateway;
-        this.registry = registry;
-        this.logger = new common_1.Logger(AgentPromptService_1.name);
-    }
-    /**
-     * Generates a per-agent-type prompt for the OpenClaw agent.
-     * Uses AiGatewayService which automatically injects tenant memories
-     * (company name, industry, brand, goals, style, target audience).
-     */
-    async formatPrompt(params) {
-        const { agentType, taskTitle, taskContent, userReport, expectedOutcome, tenantId, userId } = params;
-        const agentDef = this.registry.getAgent(agentType);
-        const userMessage = `Task: ${taskTitle}
-
-Description: ${taskContent}
-
-${expectedOutcome ? `Expected Outcome: ${expectedOutcome}\n` : ''}User's Completed Report:
-${userReport.substring(0, 3000)}
-
-Based on this task report and the business context from memories, generate a direct execution instruction for the ${agentDef.label} agent. The agent should ACT on this — execute its tools, produce deliverables, and return results. Not analyze or plan.`;
-        const messages = [
-            { role: 'system', content: agentDef.systemPrompt },
-            { role: 'user', content: userMessage },
-        ];
-        let result = '';
-        await this.aiGateway.streamCompletionWithContext(messages, {
-            tenantId,
-            userId,
-            skipRateLimit: true,
-            skipQuotaCheck: true,
-        }, (chunk) => {
-            result += chunk;
-        });
-        this.logger.log({
-            message: 'Prompt formatted for agent',
-            agentType,
-            taskTitle,
-            instructionLength: result.length,
-        });
-        return result.trim();
-    }
-};
-exports.AgentPromptService = AgentPromptService;
-exports.AgentPromptService = AgentPromptService = AgentPromptService_1 = tslib_1.__decorate([
-    (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _a : Object, typeof (_b = typeof agent_registry_service_1.AgentRegistryService !== "undefined" && agent_registry_service_1.AgentRegistryService) === "function" ? _b : Object])
-], AgentPromptService);
-
-
-/***/ }),
-/* 197 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.AgentRegistryService = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const types_1 = __webpack_require__(85);
-let AgentRegistryService = class AgentRegistryService {
-    constructor() {
-        this.agents = new Map([
-            [
-                types_1.AgentType.WEB_SEARCH,
-                {
-                    type: types_1.AgentType.WEB_SEARCH,
-                    openClawAgentId: 'web-search',
-                    label: 'Online istraživanje',
-                    description: 'Pretražuje internet za relevantne informacije, trendove i izvore',
-                    icon: '🔍',
-                    estimatedCostEur: 0.5,
-                    systemPrompt: `You write a direct execution instruction for a web research agent. The agent has tools: web_search, web_fetch, browser.
-
-Given the task report and business context (injected from memories), write an instruction that tells the agent EXACTLY what to search for and what data to return.
-
-Your output instruction MUST:
-- List 3-5 specific web searches to execute (exact search queries)
-- Name specific competitor websites to analyze with web_fetch
-- Specify the exact data points to extract (prices, stats, market size, trends)
-- Tell the agent to cite every finding with a source URL
-- Tell the agent to write ALL output in Serbian language
-- Tell the agent to format output as clean markdown with tables and sections (NO code blocks, NO HTML tags)
-
-Write in English. Output ONLY the instruction text, under 500 words.`,
-                },
-            ],
-            [
-                types_1.AgentType.CONTENT,
-                {
-                    type: types_1.AgentType.CONTENT,
-                    openClawAgentId: 'content',
-                    label: 'Kreiranje sadržaja',
-                    description: 'Kreira gotov sadržaj sa tekstom i slikama',
-                    icon: '✏️',
-                    estimatedCostEur: 0.5,
-                    systemPrompt: `You write a direct execution instruction for a content creation agent. The agent has tools: web_search, web_fetch, exec.
-
-MANDATORY TOOL — IMAGE GENERATION:
-The agent MUST generate images for every content piece. The exact command is:
-FAL_IMAGE_SIZE=square_hd fal-generate "prompt here in English"
-Available sizes: square_hd, landscape_4_3, landscape_16_9, portrait_4_3, portrait_16_9
-The command returns an image URL on stdout. The agent must embed it as: ![description](returned_url)
-
-Given the task report and business context (injected from memories), write an instruction that tells the agent:
-1. First analyze the company's visual identity by fetching their website/social media with web_fetch
-2. Create a visual brief (colors, style, lighting, aesthetic) based on the analysis
-3. For EACH content piece: write the full text AND generate at least one matching image using the exec command above
-4. Format ALL output as clean markdown — NOT HTML, NOT code blocks
-5. Use ![description](url) for images — NEVER use <img> HTML tags
-6. Write ALL text content in Serbian language
-7. Include headlines, body copy, CTAs, hashtags, posting schedule
-
-CRITICAL FORMAT RULES for the agent:
-- Output must be pure markdown, never wrap content in \`\`\`html code blocks
-- Images must use markdown syntax: ![opis](url)
-- Tables use markdown pipe syntax
-- No raw HTML anywhere in the output
-
-Write in English. Output ONLY the instruction text, under 600 words.`,
-                },
-            ],
-            [
-                types_1.AgentType.MARKETING,
-                {
-                    type: types_1.AgentType.MARKETING,
-                    openClawAgentId: 'marketing',
-                    label: 'Marketing analiza',
-                    description: 'Analizira tržište, kreira vizuelni sadržaj sa AI slikama',
-                    icon: '📈',
-                    estimatedCostEur: 0.5,
-                    systemPrompt: `You write a direct execution instruction for a marketing strategy agent. The agent has tools: web_search, web_fetch, exec.
-
-MANDATORY TOOL — IMAGE GENERATION (when task involves content/visuals):
-The agent MUST generate images using exec:
-FAL_IMAGE_SIZE=square_hd fal-generate "prompt in English"
-Available sizes: square_hd, landscape_4_3, landscape_16_9, portrait_4_3, portrait_16_9
-Embed result as: ![description](returned_url)
-
-Given the task report and business context (injected from memories), write an instruction that tells the agent:
-1. What specific market data to find via web_search (competitors, pricing, market share — use exact search queries)
-2. What analysis frameworks to apply (SWOT, competitive positioning, segmentation)
-3. If the task involves content: generate at least 2 images using the exec command above
-4. Format ALL output as clean markdown with tables, sections, source URLs
-5. Write ALL output in Serbian language
-6. Use markdown image syntax ![opis](url) — never HTML <img> tags
-7. Never wrap output in code blocks
-
-Write in English. Output ONLY the instruction text, under 600 words.`,
-                },
-            ],
-            [
-                types_1.AgentType.SALES,
-                {
-                    type: types_1.AgentType.SALES,
-                    openClawAgentId: 'sales',
-                    label: 'Prodajna strategija',
-                    description: 'Kreira prodajne planove i šalje personalizovane emailove',
-                    icon: '💼',
-                    estimatedCostEur: 0.5,
-                    systemPrompt: `You write a direct execution instruction for a sales strategy agent. The agent has tools: web_search, web_fetch, exec.
-
-MANDATORY TOOL — EMAIL SENDING:
-The agent MUST send at least one personalized email per execution. The exact command is:
-agentmail-send --to "vojinskrill@gmail.com" --subject "Subject here" --text "Email body here"
-The agent must compose the email content based on the task context, then execute the command to send it.
-After sending, the agent must include the sent email content and confirmation in its output.
-
-Given the task report and business context (injected from memories), write an instruction that tells the agent:
-1. What sales data to research via web_search (competitor pricing, market positioning)
-2. What sales strategy to create (target profile, approach, objection handling, pricing)
-3. What email(s) to compose and send — specify the email purpose (cold outreach, follow-up, proposal, etc.)
-4. The email content must be personalized to the business context and task — NOT generic
-5. The agent MUST use the agentmail-send exec command to actually send each email
-6. Format ALL output as clean markdown with tables and sections
-7. Write ALL output in Serbian language
-8. Include a "Poslati Emailovi" section showing each sent email with subject, body, and send confirmation
-
-CRITICAL: The instruction MUST contain the exact agentmail-send command syntax. Do not omit email sending.
-
-Write in English. Output ONLY the instruction text, under 600 words.`,
-                },
-            ],
-            [
-                types_1.AgentType.FINANCIAL,
-                {
-                    type: types_1.AgentType.FINANCIAL,
-                    openClawAgentId: 'financial',
-                    label: 'Finansijska analiza',
-                    description: 'Računanje ROI, budžetska analiza i finansijsko planiranje',
-                    icon: '💰',
-                    estimatedCostEur: 0.5,
-                    systemPrompt: `You write a direct execution instruction for a financial analyst agent. The agent has tools: web_search, web_fetch.
-
-Given the task report and business context (injected from memories), write an instruction that tells the agent:
-1. What specific financials to calculate (ROI, break-even, margins, projections) with exact formulas
-2. What industry benchmarks to search for via web_search (exact search queries for costs, margins, growth rates)
-3. To build tables with actual numbers — not qualitative descriptions
-4. To include scenario analysis (optimistic, realistic, pessimistic)
-5. To include risk assessment with probability and financial impact
-6. Format ALL output as clean markdown with tables and sections
-7. Write ALL output in Serbian language
-8. Cite every benchmark with source URL
-
-Write in English. Output ONLY the instruction text, under 500 words.`,
-                },
-            ],
-        ]);
-    }
-    getAgent(type) {
-        const agent = this.agents.get(type);
-        if (!agent) {
-            throw new Error(`Unknown agent type: ${type}`);
-        }
-        return agent;
-    }
-    getAllAgents() {
-        return Array.from(this.agents.values());
-    }
-    getAgentLabel(type) {
-        return this.getAgent(type).label;
-    }
-    getOpenClawAgentId(type) {
-        return this.getAgent(type).openClawAgentId;
-    }
-    getAllAgentTypeInfos() {
-        return this.getAllAgents().map((a) => ({
-            type: a.type,
-            label: a.label,
-            description: a.description,
-            icon: a.icon,
-            estimatedCostEur: a.estimatedCostEur,
-        }));
-    }
-};
-exports.AgentRegistryService = AgentRegistryService;
-exports.AgentRegistryService = AgentRegistryService = tslib_1.__decorate([
-    (0, common_1.Injectable)()
-], AgentRegistryService);
-
-
-/***/ }),
-/* 198 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var AgentRecommenderService_1;
-var _a, _b;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.AgentRecommenderService = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const ai_gateway_service_1 = __webpack_require__(89);
-const agent_registry_service_1 = __webpack_require__(197);
-const types_1 = __webpack_require__(85);
-let AgentRecommenderService = AgentRecommenderService_1 = class AgentRecommenderService {
-    constructor(aiGateway, registry) {
-        this.aiGateway = aiGateway;
-        this.registry = registry;
-        this.logger = new common_1.Logger(AgentRecommenderService_1.name);
-    }
-    async getRecommendations(params) {
-        const { taskTitle, taskContent, userReport, expectedOutcome, tenantId, userId } = params;
-        const agentDescriptions = this.registry
-            .getAllAgents()
-            .map((a) => `- ${a.type}: ${a.label} — ${a.description}`)
-            .join('\n');
-        const systemPrompt = `You are a business task analyzer. Given a completed task report, recommend which AI agents would be most useful to enrich the report.
-
-Available agent types:
-${agentDescriptions}
-
-Rules:
-- Recommend 2-3 agents that would add the most value to this specific task
-- Each recommendation needs: agentType (exact enum value), relevanceScore (0-100), reasoning (1 sentence in Serbian explaining why)
-- Higher relevanceScore = more relevant for this specific task
-- Only recommend agents that genuinely add value — don't recommend all 5
-- Respond ONLY with a JSON array, no other text
-
-Example output:
-[{"agentType":"web_search","relevanceScore":85,"reasoning":"Istraživanje tržišta bi obogatilo analizu konkurencije."},{"agentType":"financial","relevanceScore":70,"reasoning":"ROI kalkulacija bi pomogla u donošenju odluke o investiciji."}]`;
-        const userMessage = `Task: ${taskTitle}
-
-Description: ${taskContent.substring(0, 500)}
-
-${expectedOutcome ? `Expected Outcome: ${expectedOutcome}\n` : ''}User Report (first 2000 chars):
-${userReport.substring(0, 2000)}
-
-Which agents would best enrich this report? Return JSON array only.`;
-        const messages = [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userMessage },
-        ];
-        let result = '';
-        try {
-            await this.aiGateway.streamCompletionWithContext(messages, {
-                tenantId,
-                userId,
-                skipRateLimit: true,
-                skipQuotaCheck: true,
-            }, (chunk) => {
-                result += chunk;
-            });
-            const jsonMatch = result.match(/\[[\s\S]*\]/);
-            if (!jsonMatch) {
-                this.logger.warn({ message: 'No JSON array found in recommendation response', result: result.substring(0, 200) });
-                return this.getDefaultRecommendations();
-            }
-            const parsed = JSON.parse(jsonMatch[0]);
-            const validTypes = Object.values(types_1.AgentType);
-            const recommendations = parsed
-                .filter((r) => validTypes.includes(r.agentType))
-                .map((r) => ({
-                agentType: r.agentType,
-                relevanceScore: Math.max(0, Math.min(100, Number(r.relevanceScore) || 50)),
-                reasoning: r.reasoning || '',
-            }))
-                .slice(0, 3);
-            this.logger.log({
-                message: 'Agent recommendations generated',
-                taskTitle,
-                count: recommendations.length,
-                types: recommendations.map((r) => r.agentType),
-            });
-            return recommendations.length > 0 ? recommendations : this.getDefaultRecommendations();
-        }
-        catch (err) {
-            this.logger.error({
-                message: 'Failed to generate recommendations',
-                error: err instanceof Error ? err.message : 'Unknown',
-            });
-            return this.getDefaultRecommendations();
-        }
-    }
-    getDefaultRecommendations() {
-        return [
-            {
-                agentType: types_1.AgentType.WEB_SEARCH,
-                relevanceScore: 70,
-                reasoning: 'Online istraživanje može pronaći dodatne podatke i izvore.',
-            },
-            {
-                agentType: types_1.AgentType.MARKETING,
-                relevanceScore: 60,
-                reasoning: 'Marketing analiza može dati uvid u tržište i konkurenciju.',
-            },
-        ];
-    }
-};
-exports.AgentRecommenderService = AgentRecommenderService;
-exports.AgentRecommenderService = AgentRecommenderService = AgentRecommenderService_1 = tslib_1.__decorate([
-    (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _a : Object, typeof (_b = typeof agent_registry_service_1.AgentRegistryService !== "undefined" && agent_registry_service_1.AgentRegistryService) === "function" ? _b : Object])
-], AgentRecommenderService);
-
-
-/***/ }),
-/* 199 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var BudgetService_1;
-var _a, _b;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.BudgetService = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const config_1 = __webpack_require__(5);
-const tenant_context_1 = __webpack_require__(9);
-const library_1 = __webpack_require__(99);
-let BudgetService = BudgetService_1 = class BudgetService {
-    constructor(prisma, configService) {
-        this.prisma = prisma;
-        this.configService = configService;
-        this.logger = new common_1.Logger(BudgetService_1.name);
-        this.dailyLimitEur = parseFloat(this.configService.get('AGENT_DAILY_BUDGET_EUR') ?? '20');
-        this.estimatedCostEur = parseFloat(this.configService.get('AGENT_ESTIMATED_COST_EUR') ?? '0.50');
-    }
-    getEstimatedCost() {
-        return this.estimatedCostEur;
-    }
-    getDailyLimit() {
-        return this.dailyLimitEur;
-    }
-    async getDailySpent(tenantId) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const budget = await this.prisma.agentDailyBudget.findUnique({
-            where: { tenantId_date: { tenantId, date: today } },
-        });
-        return {
-            spentEur: budget ? Number(budget.spentEur) : 0,
-            limitEur: budget ? Number(budget.limitEur) : this.dailyLimitEur,
-        };
-    }
-    async canSpend(tenantId, amount) {
-        const cost = amount ?? this.estimatedCostEur;
-        const { spentEur, limitEur } = await this.getDailySpent(tenantId);
-        return spentEur + cost <= limitEur;
-    }
-    async recordSpend(tenantId, amountEur) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        await this.prisma.agentDailyBudget.upsert({
-            where: { tenantId_date: { tenantId, date: today } },
-            update: {
-                spentEur: { increment: new library_1.Decimal(amountEur) },
-            },
-            create: {
-                tenantId,
-                date: today,
-                spentEur: new library_1.Decimal(amountEur),
-                limitEur: new library_1.Decimal(this.dailyLimitEur),
-            },
-        });
-        this.logger.log({
-            message: 'Budget spend recorded',
-            tenantId,
-            amountEur,
-        });
-    }
-};
-exports.BudgetService = BudgetService;
-exports.BudgetService = BudgetService = BudgetService_1 = tslib_1.__decorate([
-    (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _b : Object])
-], BudgetService);
-
-
-/***/ }),
-/* 200 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var _a, _b;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.AgentExecutionController = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const jwt_auth_guard_1 = __webpack_require__(46);
-const current_user_decorator_1 = __webpack_require__(48);
-const agent_execution_service_1 = __webpack_require__(194);
-const budget_service_1 = __webpack_require__(199);
-const types_1 = __webpack_require__(85);
-let AgentExecutionController = class AgentExecutionController {
-    constructor(agentExecutionService, budgetService) {
-        this.agentExecutionService = agentExecutionService;
-        this.budgetService = budgetService;
-    }
-    async getTodaysBudget(user) {
-        const { spentEur, limitEur } = await this.budgetService.getDailySpent(user.tenantId);
-        return { data: { spentEur, limitEur } };
-    }
-    async getRecommendations(noteId, user) {
-        const result = await this.agentExecutionService.getRecommendations(noteId, user.userId, user.tenantId);
-        return { data: result };
-    }
-    async triggerAgent(noteId, agentType, user) {
-        const validTypes = Object.values(types_1.AgentType);
-        if (!validTypes.includes(agentType)) {
-            throw new common_1.BadRequestException(`Invalid agent type: ${agentType}`);
-        }
-        const result = await this.agentExecutionService.triggerAgent(noteId, agentType, user.userId, user.tenantId);
-        return { data: result };
-    }
-    async getExecutionsByNote(noteId, user) {
-        const executions = await this.agentExecutionService.getExecutionsByNote(noteId, user.tenantId);
-        return { data: executions };
-    }
-    async getExecution(executionId, user) {
-        const execution = await this.agentExecutionService.getExecution(executionId, user.tenantId);
-        if (!execution) {
-            throw new common_1.NotFoundException(`Execution ${executionId} not found`);
-        }
-        return { data: execution };
-    }
-};
-exports.AgentExecutionController = AgentExecutionController;
-tslib_1.__decorate([
-    (0, common_1.Get)('budget/today'),
-    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object]),
-    tslib_1.__metadata("design:returntype", Promise)
-], AgentExecutionController.prototype, "getTodaysBudget", null);
-tslib_1.__decorate([
-    (0, common_1.Get)('recommendations/:noteId'),
-    tslib_1.__param(0, (0, common_1.Param)('noteId')),
-    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [String, Object]),
-    tslib_1.__metadata("design:returntype", Promise)
-], AgentExecutionController.prototype, "getRecommendations", null);
-tslib_1.__decorate([
-    (0, common_1.Post)('trigger/:noteId/:agentType'),
-    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
-    tslib_1.__param(0, (0, common_1.Param)('noteId')),
-    tslib_1.__param(1, (0, common_1.Param)('agentType')),
-    tslib_1.__param(2, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [String, String, Object]),
-    tslib_1.__metadata("design:returntype", Promise)
-], AgentExecutionController.prototype, "triggerAgent", null);
-tslib_1.__decorate([
-    (0, common_1.Get)('note/:noteId'),
-    tslib_1.__param(0, (0, common_1.Param)('noteId')),
-    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [String, Object]),
-    tslib_1.__metadata("design:returntype", Promise)
-], AgentExecutionController.prototype, "getExecutionsByNote", null);
-tslib_1.__decorate([
-    (0, common_1.Get)(':executionId'),
-    tslib_1.__param(0, (0, common_1.Param)('executionId')),
-    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [String, Object]),
-    tslib_1.__metadata("design:returntype", Promise)
-], AgentExecutionController.prototype, "getExecution", null);
-exports.AgentExecutionController = AgentExecutionController = tslib_1.__decorate([
-    (0, common_1.Controller)('v1/agent-execution'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof agent_execution_service_1.AgentExecutionService !== "undefined" && agent_execution_service_1.AgentExecutionService) === "function" ? _a : Object, typeof (_b = typeof budget_service_1.BudgetService !== "undefined" && budget_service_1.BudgetService) === "function" ? _b : Object])
-], AgentExecutionController);
-
-
-/***/ }),
-/* 201 */
+/* 205 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -29737,7 +30843,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 const common_1 = __webpack_require__(1);
 const core_1 = __webpack_require__(2);
 const app_module_1 = __webpack_require__(3);
-const all_exceptions_filter_1 = __webpack_require__(201);
+const all_exceptions_filter_1 = __webpack_require__(205);
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
     const globalPrefix = 'api';

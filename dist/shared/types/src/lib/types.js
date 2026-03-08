@@ -15,6 +15,9 @@ _export(exports, {
     AgentExecutionStatus: function() {
         return AgentExecutionStatus;
     },
+    AgentJobStatus: function() {
+        return AgentJobStatus;
+    },
     AgentType: function() {
         return AgentType;
     },
@@ -293,5 +296,12 @@ var AgentType;
     AgentType["SALES"] = "sales";
     AgentType["FINANCIAL"] = "financial";
 })(AgentType || (AgentType = {}));
+var AgentJobStatus;
+(function(AgentJobStatus) {
+    AgentJobStatus["PLANNED"] = "PLANNED";
+    AgentJobStatus["RUNNING"] = "RUNNING";
+    AgentJobStatus["COMPLETED"] = "COMPLETED";
+    AgentJobStatus["FAILED"] = "FAILED";
+})(AgentJobStatus || (AgentJobStatus = {}));
 
 //# sourceMappingURL=types.js.map

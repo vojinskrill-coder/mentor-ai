@@ -25,6 +25,7 @@ export class AgentPromptService {
     expectedOutcome?: string | null;
     tenantId: string;
     userId: string;
+    onChunk?: (chunk: string) => void;
   }): Promise<string> {
     const { agentType, taskTitle, taskContent, userReport, expectedOutcome, tenantId, userId } =
       params;
@@ -56,6 +57,7 @@ Based on this task report and the business context from memories, generate a dir
       },
       (chunk) => {
         result += chunk;
+        params.onChunk?.(chunk);
       }
     );
 

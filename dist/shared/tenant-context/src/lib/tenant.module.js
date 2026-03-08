@@ -16,7 +16,22 @@ const _platformprismaservice = require("./platform-prisma.service");
 const _tenantmiddleware = require("./tenant.middleware");
 let TenantModule = class TenantModule {
     configure(consumer) {
-        consumer.apply(_tenantmiddleware.TenantMiddleware).forRoutes('*');
+        consumer.apply(_tenantmiddleware.TenantMiddleware).exclude({
+            path: 'auth/(.*)',
+            method: _common.RequestMethod.ALL
+        }, {
+            path: 'health/(.*)',
+            method: _common.RequestMethod.ALL
+        }, {
+            path: 'health',
+            method: _common.RequestMethod.ALL
+        }, {
+            path: 'registration',
+            method: _common.RequestMethod.ALL
+        }, {
+            path: 'registration/(.*)',
+            method: _common.RequestMethod.ALL
+        }).forRoutes('*');
     }
 };
 TenantModule = _ts_decorate._([

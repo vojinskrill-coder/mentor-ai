@@ -50,6 +50,7 @@ import { ConceptTreeComponent } from './components/concept-tree.component';
 import { ConversationNotesComponent } from './components/conversation-notes.component';
 import { TopicPickerComponent } from './components/topic-picker.component';
 import { FeatureTourComponent } from './components/feature-tour.component';
+import { ExecutionPanelService } from '../../core/services/execution-panel.service';
 import type { CurriculumNode } from '@mentor-ai/shared/types';
 
 interface WorkflowStatusEntry {
@@ -89,7 +90,7 @@ interface WorkflowStatusEntry {
       /* All styles inline - no Tailwind dependency */
       :host {
         display: block;
-        height: 100vh;
+        height: 100%;
       }
       * {
         margin: 0;
@@ -98,7 +99,7 @@ interface WorkflowStatusEntry {
       }
       .layout {
         display: flex;
-        height: 100vh;
+        height: 100%;
         background: #0d0d0d;
         color: #fafafa;
         font-family: 'Inter', system-ui, sans-serif;
@@ -174,7 +175,7 @@ interface WorkflowStatusEntry {
           position: fixed;
           top: 0;
           left: 0;
-          height: 100vh;
+          height: 100%;
           z-index: 100;
           box-shadow: 4px 0 16px rgba(0, 0, 0, 0.4);
         }
@@ -3009,6 +3010,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly authService = inject(AuthService);
+  private readonly execPanel = inject(ExecutionPanelService);
   private readonly notesApi = inject(NotesApiService);
 
   @ViewChild(FeatureTourComponent) featureTour?: FeatureTourComponent;
@@ -3251,6 +3253,8 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   private nextStepDismissTimer: ReturnType<typeof setTimeout> | null = null;
 
   private keyboardHandler = (e: KeyboardEvent) => this.handleKeyboardShortcut(e);
+  /** Unsubscribe functions for WebSocket callbacks — cleaned up on destroy */
+  private wsUnsubs: (() => void)[] = [];
 
   ngOnInit(): void {
     document.addEventListener('keydown', this.keyboardHandler);
@@ -3300,7 +3304,10 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
   ngOnDestroy(): void {
     document.removeEventListener('keydown', this.keyboardHandler);
-    this.chatWsService.disconnect();
+    // Unsubscribe all WebSocket callbacks to prevent accumulation on re-navigation
+    for (const unsub of this.wsUnsubs) unsub();
+    this.wsUnsubs = [];
+    // WebSocket is managed globally by app-shell — don't disconnect here
   }
 
   private handleKeyboardShortcut(e: KeyboardEvent): void {
@@ -3593,8 +3600,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   manualReconnect(): void {
-    this.chatWsService.disconnect();
-    setTimeout(() => this.chatWsService.connect(), 500);
+    this.chatWsService.forceReconnect();
   }
 
   /**
@@ -4174,6 +4180,11 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  /** Helper: register a WS callback and track its unsubscribe function */
+  private wsOn(unsub: () => void): void {
+    this.wsUnsubs.push(unsub);
+  }
+
   private setupWebSocket(): void {
     this.chatWsService.connect();
 
@@ -4219,7 +4230,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     }, 500);
     this.destroyRef.onDestroy(() => clearInterval(checkConnection));
 
-    this.chatWsService.onMessageDeleted((data) => {
+    this.wsOn(this.chatWsService.onMessageDeleted((data) => {
       this.activeConversation$.update((conv) => {
         if (!conv || conv.id !== data.conversationId) return conv;
         return {
@@ -4227,9 +4238,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           messages: conv.messages.filter((msg) => msg.id !== data.messageId),
         };
       });
-    });
+    }));
 
-    this.chatWsService.onMessageReceived((data) => {
+    this.wsOn(this.chatWsService.onMessageReceived((data) => {
       // Update user message ID with real one from server
       this.activeConversation$.update((conv) => {
         if (!conv) return conv;
@@ -4249,9 +4260,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         return { ...conv, messages };
       });
       this.isStreaming$.set(true);
-    });
+    }));
 
-    this.chatWsService.onMessageChunk((data) => {
+    this.wsOn(this.chatWsService.onMessageChunk((data) => {
       this.streamBuffer += data.content;
       if (!this.streamRafId) {
         this.streamRafId = requestAnimationFrame(() => {
@@ -4260,13 +4271,13 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           this.streamRafId = null;
         });
       }
-    });
+    }));
 
-    this.chatWsService.onResearchPhase((data) => {
+    this.wsOn(this.chatWsService.onResearchPhase((data) => {
       this.researchPhase$.set(data.phase === 'researching' ? 'researching' : 'thinking');
-    });
+    }));
 
-    this.chatWsService.onComplete((data) => {
+    this.wsOn(this.chatWsService.onComplete((data) => {
       // Extract metadata (Story 2.5 confidence, 2.6 citations, 2.7 memory, 3.11 web sources)
       const confidence = data.metadata?.['confidence'] as
         | {
@@ -4308,25 +4319,25 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       this.isStreaming$.set(false);
       this.streamingContent$.set('');
       this.researchPhase$.set('thinking');
-    });
+    }));
 
-    this.chatWsService.onError((error) => {
+    this.wsOn(this.chatWsService.onError((error) => {
       this.isLoading$.set(false);
       this.isStreaming$.set(false);
       this.researchPhase$.set('thinking');
       const errorType = error.type ? `[${error.type}] ` : '';
       this.showError(errorType + (error.message || 'Poruka nije poslata. Pokušajte ponovo.'));
-    });
+    }));
 
-    this.chatWsService.onNotesUpdated((data) => {
+    this.wsOn(this.chatWsService.onNotesUpdated((data) => {
       // M1: Only refresh if the update is for the active conversation (or no conversationId filter)
       const activeConvId = this.activeConversationId$();
       if (!data?.conversationId || data.conversationId === activeConvId || this.folderName$()) {
         this.conversationNotes?.loadNotes();
       }
-    });
+    }));
 
-    this.chatWsService.onTasksCreatedForExecution((data) => {
+    this.wsOn(this.chatWsService.onTasksCreatedForExecution((data) => {
       if (data.conversationId !== this.activeConversationId$()) return;
 
       // Auto-select created tasks in notes tab
@@ -4398,9 +4409,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           }
         }, 1500);
       }
-    });
+    }));
 
-    this.chatWsService.onConceptDetected((data) => {
+    this.wsOn(this.chatWsService.onConceptDetected((data) => {
       // Refresh sidebar tree when a conversation is auto-classified
       this.conceptTree?.loadTree();
       // Update active conversation's conceptId if it matches
@@ -4410,11 +4421,11 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           return { ...conv, conceptId: data.conceptId };
         });
       }
-    });
+    }));
 
     // ─── Workflow Events ────────────────────────────────────────
 
-    this.chatWsService.onPlanReady((payload) => {
+    this.wsOn(this.chatWsService.onPlanReady((payload) => {
       if (payload.conversationId !== this.activeConversationId$()) return;
       if (this.planGenerationTimeout) {
         clearTimeout(this.planGenerationTimeout);
@@ -4427,9 +4438,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       this.activePlanId$.set(payload.plan.planId);
       this.executionProgress$.set(new Map());
       this.showPlanOverlay$.set(true);
-    });
+    }));
 
-    this.chatWsService.onConversationsCreated((payload) => {
+    this.wsOn(this.chatWsService.onConversationsCreated((payload) => {
       if (payload.originalConversationId !== this.activeConversationId$()) return;
       // Store created conversations for completion summary links
       this.createdConceptConversations$.set(payload.conversations);
@@ -4441,9 +4452,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       });
       // Refresh tree so new per-concept conversations appear
       this.conceptTree?.loadTree();
-    });
+    }));
 
-    this.chatWsService.onStepProgress((payload) => {
+    this.wsOn(this.chatWsService.onStepProgress((payload) => {
       if (payload.conversationId !== this.activeConversationId$()) return;
 
       // Auto-execute path: mark this conversation as executing on first step-progress
@@ -4542,9 +4553,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         this.conceptTree?.loadTree();
         this.conversationNotes?.loadNotes();
       }
-    });
+    }));
 
-    this.chatWsService.onWorkflowComplete((payload) => {
+    this.wsOn(this.chatWsService.onWorkflowComplete((payload) => {
       if (payload.conversationId !== this.activeConversationId$()) return;
 
       // Build completion summary with links to concept conversations
@@ -4624,9 +4635,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       if (payload.status === 'completed') {
         setTimeout(() => this.suggestNextStep(), 1500);
       }
-    });
+    }));
 
-    this.chatWsService.onWorkflowError((payload) => {
+    this.wsOn(this.chatWsService.onWorkflowError((payload) => {
       // Global: remove from executing set regardless of active conversation
       this.executingWorkflowConversationIds$.update((s) => {
         const next = new Set(s);
@@ -4643,11 +4654,11 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       this.isOnboardingFlow = false;
       this.onboardingStatus$.set(null);
       this.showError(payload.message ?? 'Izvršavanje workflow-a neuspešno');
-    });
+    }));
 
     // ─── Task AI Execution Events ───────────────────────────────
 
-    this.chatWsService.onTaskAiStart((data) => {
+    this.wsOn(this.chatWsService.onTaskAiStart((data) => {
       if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
       // Clear plan-generation state: direct AI execution replaces workflow plan
       if (this.isGeneratingPlan$()) {
@@ -4662,9 +4673,16 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       this.taskExecutionStreamContent$.set('');
       this.isStreaming$.set(true);
       this.streamingContent$.set('');
-    });
 
-    this.chatWsService.onTaskAiChunk((data) => {
+      // Push executing task to global execution panel
+      const notes = this.conversationNotes?.filteredNotes?.() ?? [];
+      const execNote = notes.find((n: any) => n.id === data.taskId);
+      if (execNote) {
+        this.execPanel.showTask({ note: execNote, conversationId: this.activeConversationId$() });
+      }
+    }));
+
+    this.wsOn(this.chatWsService.onTaskAiChunk((data) => {
       if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
       this.streamBuffer += data.content;
       if (!this.streamRafId) {
@@ -4675,9 +4693,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           this.streamRafId = null;
         });
       }
-    });
+    }));
 
-    this.chatWsService.onTaskAiComplete((data) => {
+    this.wsOn(this.chatWsService.onTaskAiComplete((data) => {
       if (data.conversationId !== this.activeConversationId$()) return;
       this.isStreaming$.set(false);
       this.streamingContent$.set('');
@@ -4689,25 +4707,32 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       if (convId) {
         this.loadConversation(convId);
       }
-    });
+      // Refresh execution panel with updated note data
+      const panelTask = this.execPanel.activeTask();
+      if (panelTask && data.taskId) {
+        this.notesApi.getById(data.taskId).then((updated) => {
+          this.execPanel.updateTask({ ...panelTask, note: updated });
+        }).catch(() => { /* panel stays with stale data */ });
+      }
+    }));
 
-    this.chatWsService.onTaskAiError((data) => {
+    this.wsOn(this.chatWsService.onTaskAiError((data) => {
       if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
       this.isStreaming$.set(false);
       this.streamingContent$.set('');
       this.taskExecutionStreamContent$.set('');
       this.executingTaskId$.set(null);
       this.showError(data.message ?? 'Izvršavanje zadatka neuspešno');
-    });
+    }));
 
     // ─── Task Result Submission Events (Story 3.12) ─────────────
 
-    this.chatWsService.onTaskResultChunk((data) => {
+    this.wsOn(this.chatWsService.onTaskResultChunk((data) => {
       if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
       this.taskResultStreamContent$.update((content) => content + data.content);
-    });
+    }));
 
-    this.chatWsService.onTaskResultComplete((data) => {
+    this.wsOn(this.chatWsService.onTaskResultComplete((data) => {
       if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
       if (this.resultSubmissionTimeout) {
         clearTimeout(this.resultSubmissionTimeout);
@@ -4716,15 +4741,15 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       this.submittingResultId$.set(null);
       this.taskResultStreamContent$.set('');
       this.conversationNotes?.loadNotes();
-    });
+    }));
 
     // Agent job pipeline: refresh notes when jobs are planned after scoring
-    this.chatWsService.onJobsPlanned((data) => {
+    this.wsOn(this.chatWsService.onJobsPlanned((data) => {
       if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
       this.conversationNotes?.loadNotes();
-    });
+    }));
 
-    this.chatWsService.onTaskResultError((data) => {
+    this.wsOn(this.chatWsService.onTaskResultError((data) => {
       if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
       if (this.resultSubmissionTimeout) {
         clearTimeout(this.resultSubmissionTimeout);
@@ -4733,14 +4758,14 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       this.submittingResultId$.set(null);
       this.taskResultStreamContent$.set('');
       this.showError(data.message ?? 'Slanje rezultata neuspešno');
-    });
+    }));
 
     // ─── Auto AI Popuni Events ─────────────────────────────────
-    this.chatWsService.onAutoPopuniStart((data) => {
+    this.wsOn(this.chatWsService.onAutoPopuniStart((data) => {
       this.autoPopuniTaskIds$.set(data.taskIds);
-    });
+    }));
 
-    this.chatWsService.onAutoPopuniComplete((data) => {
+    this.wsOn(this.chatWsService.onAutoPopuniComplete((data) => {
       this.autoPopuniTaskIds$.set([]);
       this.conversationNotes?.loadNotes();
       this.conceptTree?.loadTree();
@@ -4750,14 +4775,14 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           `Auto AI: ${data.completedTasks}/${data.totalTasks} zadataka uspešno popunjeno`
         );
       }
-    });
+    }));
 
-    this.chatWsService.onAutoPopuniTaskError(() => {
+    this.wsOn(this.chatWsService.onAutoPopuniTaskError(() => {
       // Individual task errors — the complete event will have the final count
-    });
+    }));
 
     // ─── Parallel Popuni Events ─────────────────────────────────
-    this.chatWsService.onParallelPopuniStart((data) => {
+    this.wsOn(this.chatWsService.onParallelPopuniStart((data) => {
       // C1: Clear plan generation loading — execution has started
       this.isGeneratingPlan$.set(false);
       this.parallelBatchId$.set(data.batchId);
@@ -4773,9 +4798,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           this.isOnboardingFlow = false;
         }, 3000);
       }
-    });
+    }));
 
-    this.chatWsService.onParallelPopuniProgress((data) => {
+    this.wsOn(this.chatWsService.onParallelPopuniProgress((data) => {
       this.parallelTaskStates$.update((states) =>
         states.map((s) =>
           s.taskId === data.taskId
@@ -4789,9 +4814,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
             : s
         )
       );
-    });
+    }));
 
-    this.chatWsService.onParallelPopuniTaskDone((data) => {
+    this.wsOn(this.chatWsService.onParallelPopuniTaskDone((data) => {
       this.parallelTaskStates$.update((states) =>
         states.map((s) =>
           s.taskId === data.taskId
@@ -4804,19 +4829,19 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
             : s
         )
       );
-    });
+    }));
 
-    this.chatWsService.onParallelPopuniBatchDone(() => {
+    this.wsOn(this.chatWsService.onParallelPopuniBatchDone(() => {
       this.parallelBatchId$.set(null);
       this.isGeneratingPlan$.set(false); // Ensure cleared
       this.isOnboardingFlow = false;
       this.onboardingStatus$.set(null);
       this.conversationNotes?.loadNotes();
       this.conceptTree?.loadTree();
-    });
+    }));
 
     // ─── Execution Persistence: State Restoration on Reconnect ─────
-    this.chatWsService.onExecutionActiveState((data) => {
+    this.wsOn(this.chatWsService.onExecutionActiveState((data) => {
       // M1: Track whether we've already restored a YOLO/workflow to avoid overwrites
       let yoloRestored = false;
       let workflowRestored = false;
@@ -4923,9 +4948,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         this.conceptTree?.loadTree();
         this.conversationNotes?.loadNotes();
       }
-    });
+    }));
 
-    this.chatWsService.onStepAwaitingConfirmation((payload) => {
+    this.wsOn(this.chatWsService.onStepAwaitingConfirmation((payload) => {
       if (payload.conversationId !== this.activeConversationId$()) return;
       this.activePlanId$.set(payload.planId);
 
@@ -4935,11 +4960,11 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       this.awaitingConfirmation$.set(true);
       this.nextStepInfo$.set(payload.nextStep);
       this.userStepInput$.set('');
-    });
+    }));
 
     // ─── Interactive Workflow Step Events (Task 6) ───────────────
 
-    this.chatWsService.onStepAwaitingInput((payload: WorkflowStepAwaitingInputPayload) => {
+    this.wsOn(this.chatWsService.onStepAwaitingInput((payload: WorkflowStepAwaitingInputPayload) => {
       if (payload.conversationId !== this.activeConversationId$()) return;
 
       // Confirmation steps are auto-resolved on the backend — skip on frontend
@@ -4949,9 +4974,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       this.currentWorkflowStepInput$.set(payload);
       this.allowWorkflowInput$.set(payload.inputType === 'text');
       this.isLoading$.set(false); // Unblock input for next step
-    });
+    }));
 
-    this.chatWsService.onStepMessage((payload: WorkflowStepMessagePayload) => {
+    this.wsOn(this.chatWsService.onStepMessage((payload: WorkflowStepMessagePayload) => {
       if (payload.conversationId !== this.activeConversationId$()) return;
       const stepMessage: Message = {
         id: payload.messageId,
@@ -4966,17 +4991,17 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         if (!conv) return conv;
         return { ...conv, messages: [...conv.messages, stepMessage] };
       });
-    });
+    }));
 
-    this.chatWsService.onNavigateToConversation((_payload: WorkflowNavigatePayload) => {
+    this.wsOn(this.chatWsService.onNavigateToConversation((_payload: WorkflowNavigatePayload) => {
       // Suppress auto-navigation during workflow execution.
       // User stays on original conversation to see step-progress events in real-time.
       // After completion, summary message includes links to per-concept conversations.
-    });
+    }));
 
     // ─── YOLO Mode Events ───────────────────────────────────────
 
-    this.chatWsService.onYoloProgress((payload) => {
+    this.wsOn(this.chatWsService.onYoloProgress((payload) => {
       // Global: track executing conversation regardless of active view
       this.executingWorkflowConversationIds$.update((s) => new Set([...s, payload.conversationId]));
       // Per-conversation UI updates
@@ -4989,9 +5014,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           if (el) el.scrollTop = el.scrollHeight;
         });
       }
-    });
+    }));
 
-    this.chatWsService.onYoloComplete((payload) => {
+    this.wsOn(this.chatWsService.onYoloComplete((payload) => {
       // Global: remove from executing set regardless of active view
       this.executingWorkflowConversationIds$.update((s) => {
         const next = new Set(s);
@@ -5006,13 +5031,13 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       this.conceptTree?.loadTree();
       // D4: Suggest next step after YOLO completion
       setTimeout(() => this.suggestNextStep(), 1500);
-    });
+    }));
 
-    this.chatWsService.onTasksDiscovered(() => {
+    this.wsOn(this.chatWsService.onTasksDiscovered(() => {
       this.conceptTree?.loadTree();
       // M2: Also refresh notes panel when new tasks are discovered
       this.conversationNotes?.loadNotes();
-    });
+    }));
   }
 
   continueWorkflow(): void {

@@ -1,107 +1,253 @@
 import { Component, DestroyRef, inject, output, signal, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { BrnButton } from '@spartan-ng/brain/button';
-import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideX, lucideLoader2, lucideShieldCheck } from '@ng-icons/lucide';
 import { BackupOwnerService } from '../services/backup-owner.service';
 import type { TeamMemberResponse } from '@mentor-ai/shared/types';
 
 @Component({
   selector: 'app-designate-dialog',
   standalone: true,
-  imports: [CommonModule, BrnButton, NgIcon],
-  providers: [provideIcons({ lucideX, lucideLoader2, lucideShieldCheck })],
+  styles: [
+    `
+      .backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        background: rgba(0, 0, 0, 0.6);
+      }
+      .dialog {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 51;
+        width: 90%;
+        max-width: 440px;
+        background: #1a1a1a;
+        border: 1px solid #2a2a2a;
+        border-radius: 12px;
+        padding: 24px;
+      }
+      .dialog-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+      }
+      .dialog-header-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .dialog-header svg {
+        width: 20px;
+        height: 20px;
+        color: #3b82f6;
+      }
+      .dialog-title {
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .close-btn {
+        padding: 4px;
+        border: none;
+        background: transparent;
+        color: #9e9e9e;
+        cursor: pointer;
+        border-radius: 4px;
+      }
+      .close-btn:hover {
+        color: #fafafa;
+        background: #242424;
+      }
+      .close-btn svg {
+        width: 20px;
+        height: 20px;
+      }
+      .dialog-desc {
+        font-size: 14px;
+        color: #9e9e9e;
+        line-height: 1.5;
+        margin-bottom: 16px;
+      }
+
+      /* Loading */
+      .loading-center {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 32px 0;
+      }
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      .spinner {
+        width: 24px;
+        height: 24px;
+        border: 3px solid #2a2a2a;
+        border-top-color: #3b82f6;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+      }
+
+      /* Empty */
+      .empty-text {
+        text-align: center;
+        padding: 32px 0;
+        font-size: 14px;
+        color: #9e9e9e;
+      }
+      .empty-text p {
+        margin: 4px 0;
+      }
+
+      /* Member list */
+      .member-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 20px;
+        max-height: 256px;
+        overflow-y: auto;
+      }
+      .member-option {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px;
+        border-radius: 8px;
+        border: 1px solid #2a2a2a;
+        cursor: pointer;
+        transition: border-color 0.15s, background 0.15s;
+      }
+      .member-option:hover {
+        background: rgba(59, 130, 246, 0.05);
+      }
+      .member-option.selected {
+        border-color: #3b82f6;
+        background: rgba(59, 130, 246, 0.08);
+      }
+      .member-option input[type="radio"] {
+        accent-color: #3b82f6;
+        margin-top: 2px;
+      }
+      .member-option-name {
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .member-option-meta {
+        font-size: 12px;
+        color: #9e9e9e;
+        margin-top: 2px;
+      }
+
+      /* Error */
+      .error-banner {
+        margin-bottom: 16px;
+        padding: 12px;
+        border-radius: 8px;
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        color: #f87171;
+        font-size: 13px;
+      }
+
+      /* Actions */
+      .dialog-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+      }
+      .btn-cancel {
+        padding: 8px 16px;
+        border-radius: 6px;
+        border: 1px solid #2a2a2a;
+        background: transparent;
+        color: #fafafa;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .btn-cancel:hover {
+        background: #242424;
+      }
+      .btn-confirm {
+        padding: 8px 16px;
+        border-radius: 6px;
+        border: none;
+        background: #3b82f6;
+        color: white;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .btn-confirm:hover:not(:disabled) {
+        background: #2563eb;
+      }
+      .btn-confirm:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+    `,
+  ],
   template: `
-    <div class="fixed inset-0 z-50 flex items-center justify-center">
-      <!-- Backdrop -->
-      <div
-        class="absolute inset-0 bg-black/50"
-        (click)="onCancel()"
-      ></div>
-
-      <!-- Dialog -->
-      <div class="relative z-10 w-full max-w-md rounded-lg bg-card p-6 shadow-lg">
-        <!-- Header -->
-        <div class="flex items-center justify-between mb-4">
-          <div class="flex items-center gap-2">
-            <ng-icon name="lucideShieldCheck" class="h-5 w-5 text-primary" />
-            <h2 class="text-lg font-semibold text-foreground">Designate Backup Owner</h2>
-          </div>
-          <button
-            brnButton
-            (click)="onCancel()"
-            class="rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted"
-          >
-            <ng-icon name="lucideX" class="h-5 w-5" />
-          </button>
+    <div class="backdrop" (click)="onCancel()"></div>
+    <div class="dialog">
+      <div class="dialog-header">
+        <div class="dialog-header-left">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+          <h2 class="dialog-title">Odredi rezervnog vlasnika</h2>
         </div>
+        <button class="close-btn" (click)="onCancel()">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
 
-        <p class="text-sm text-muted-foreground mb-4">
-          Choose a team member who can recover your account if you lose access.
-          They will be able to reset your two-factor authentication.
-        </p>
+      <p class="dialog-desc">
+        Izaberite člana tima koji može povratiti vaš nalog ako izgubite pristup.
+        Moći će da resetuje vašu dvofaktorsku autentifikaciju.
+      </p>
 
-        @if (isLoadingMembers$()) {
-          <div class="flex items-center justify-center py-8">
-            <ng-icon name="lucideLoader2" class="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        } @else if (eligibleMembers$().length === 0) {
-          <div class="text-center py-8 text-muted-foreground text-sm">
-            <p>No eligible team members found.</p>
-            <p class="mt-1">Invite an Admin or Member to your workspace first.</p>
-          </div>
-        } @else {
-          <!-- Member Selection -->
-          <div class="space-y-2 mb-6 max-h-64 overflow-y-auto">
-            @for (member of eligibleMembers$(); track member.id) {
-              <label
-                class="flex items-center gap-3 p-3 rounded-md border cursor-pointer hover:bg-muted/50"
-                [class.border-primary]="selectedMemberId$() === member.id"
-                [class.bg-primary/5]="selectedMemberId$() === member.id"
-              >
-                <input
-                  type="radio"
-                  name="backupOwner"
-                  [value]="member.id"
-                  [checked]="selectedMemberId$() === member.id"
-                  (change)="selectedMemberId$.set(member.id)"
-                  class="mt-0.5"
-                />
-                <div>
-                  <p class="text-sm font-medium text-foreground">{{ member.name || member.email }}</p>
-                  <p class="text-xs text-muted-foreground">{{ member.email }} &middot; {{ formatRole(member.role) }}</p>
-                </div>
-              </label>
-            }
-          </div>
-        }
-
-        <!-- Error Message -->
-        @if (errorMessage$()) {
-          <div class="mb-4 rounded-md bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-            {{ errorMessage$() }}
-          </div>
-        }
-
-        <!-- Actions -->
-        <div class="flex justify-end gap-3">
-          <button
-            brnButton
-            (click)="onCancel()"
-            class="inline-flex items-center justify-center rounded-md border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
-          >
-            Cancel
-          </button>
-          <button
-            brnButton
-            (click)="onConfirm()"
-            [disabled]="isSubmitting$() || !selectedMemberId$()"
-            class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {{ isSubmitting$() ? 'Designating...' : 'Designate' }}
-          </button>
+      @if (isLoadingMembers$()) {
+        <div class="loading-center"><div class="spinner"></div></div>
+      } @else if (eligibleMembers$().length === 0) {
+        <div class="empty-text">
+          <p>Nema dostupnih članova tima.</p>
+          <p>Prvo pozovite administratora ili člana u vaš radni prostor.</p>
         </div>
+      } @else {
+        <div class="member-list">
+          @for (member of eligibleMembers$(); track member.id) {
+            <label class="member-option" [class.selected]="selectedMemberId$() === member.id">
+              <input type="radio" name="backupOwner" [value]="member.id"
+                [checked]="selectedMemberId$() === member.id"
+                (change)="selectedMemberId$.set(member.id)" />
+              <div>
+                <div class="member-option-name">{{ member.name || member.email }}</div>
+                <div class="member-option-meta">{{ member.email }} · {{ formatRole(member.role) }}</div>
+              </div>
+            </label>
+          }
+        </div>
+      }
+
+      @if (errorMessage$()) {
+        <div class="error-banner">{{ errorMessage$() }}</div>
+      }
+
+      <div class="dialog-actions">
+        <button class="btn-cancel" (click)="onCancel()">Otkaži</button>
+        <button class="btn-confirm" (click)="onConfirm()"
+          [disabled]="isSubmitting$() || !selectedMemberId$()">
+          {{ isSubmitting$() ? 'Određivanje...' : 'Odredi' }}
+        </button>
       </div>
     </div>
   `,
@@ -168,7 +314,7 @@ export class DesignateDialogComponent implements OnInit {
       case 'ADMIN':
         return 'Admin';
       case 'MEMBER':
-        return 'Member';
+        return 'Član';
       default:
         return role;
     }
