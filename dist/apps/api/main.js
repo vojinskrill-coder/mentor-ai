@@ -38,16 +38,16 @@ const team_module_1 = __webpack_require__(126);
 const llm_config_module_1 = __webpack_require__(74);
 const ai_gateway_module_1 = __webpack_require__(88);
 const conversation_module_1 = __webpack_require__(131);
-const onboarding_module_1 = __webpack_require__(180);
-const personas_module_1 = __webpack_require__(186);
+const onboarding_module_1 = __webpack_require__(181);
+const personas_module_1 = __webpack_require__(187);
 const knowledge_module_1 = __webpack_require__(73);
 const memory_module_1 = __webpack_require__(137);
-const qdrant_module_1 = __webpack_require__(189);
+const qdrant_module_1 = __webpack_require__(190);
 const web_search_module_1 = __webpack_require__(146);
-const admin_module_1 = __webpack_require__(190);
+const admin_module_1 = __webpack_require__(191);
 const execution_module_1 = __webpack_require__(148);
 const attachments_module_1 = __webpack_require__(153);
-const pdf_export_module_1 = __webpack_require__(194);
+const pdf_export_module_1 = __webpack_require__(195);
 const agent_execution_module_1 = __webpack_require__(160);
 // Serve Angular static files in production (combined deploy)
 const staticPath = (0, path_1.join)(__dirname, '..', '..', 'web', 'browser');
@@ -2345,6 +2345,37 @@ let JwtAuthGuard = JwtAuthGuard_1 = class JwtAuthGuard extends (0, passport_1.Au
             this.logger.warn({
                 message: 'Dev mode: failed to resolve tenant, using fallback',
                 error: err instanceof Error ? err.message : 'Unknown',
+            });
+        }
+        // No active tenant/user found — create the fallback records so FK constraints work
+        try {
+            await prisma.tenant.upsert({
+                where: { id: DEV_USER_FALLBACK.tenantId },
+                create: {
+                    id: DEV_USER_FALLBACK.tenantId,
+                    name: 'Dev Tenant',
+                    industry: 'Technology',
+                    status: 'ACTIVE',
+                },
+                update: {},
+            });
+            await prisma.user.upsert({
+                where: { id: DEV_USER_FALLBACK.userId },
+                create: {
+                    id: DEV_USER_FALLBACK.userId,
+                    email: DEV_USER_FALLBACK.email,
+                    name: 'Dev User',
+                    role: 'TENANT_OWNER',
+                    tenantId: DEV_USER_FALLBACK.tenantId,
+                },
+                update: {},
+            });
+            this.logger.log('Dev mode: created fallback tenant/user records in DB');
+        }
+        catch (seedErr) {
+            this.logger.warn({
+                message: 'Dev mode: failed to seed fallback records',
+                error: seedErr instanceof Error ? seedErr.message : 'Unknown',
             });
         }
         finally {
@@ -10051,7 +10082,22 @@ let CurriculumService = CurriculumService_1 = class CurriculumService {
                 parentConceptId = existingAncestor.id;
                 continue;
             }
-            // Create the ancestor concept
+            // Concept may exist by name (e.g. seeded from Obsidian without curriculumId)
+            const existingByName = await this.prisma.concept.findUnique({
+                where: { name: ancestor.label },
+                select: { id: true },
+            });
+            if (existingByName) {
+                // Link existing concept to curriculum node
+                await this.prisma.concept.update({
+                    where: { id: existingByName.id },
+                    data: { curriculumId: ancestor.id, parentId: parentConceptId },
+                });
+                this.logger.log(`Linked existing concept to curriculum: ${ancestor.id} (${ancestor.label})`);
+                parentConceptId = existingByName.id;
+                continue;
+            }
+            // Create new concept
             const conceptId = `cpt_${(0, cuid2_1.createId)()}`;
             const topLevelCategory = chain[0]?.label ?? 'General'; // Root ancestor label as category
             await this.prisma.concept.create({
@@ -11902,14 +11948,18 @@ function getVisibleCategories(department, role) {
 
 
 /**
- * Business Context Service (Story 3.2)
+ * Business Context Service (Story 3.2, Sprint 2 Epic 2.1)
  *
  * Aggregates ALL memories for a tenant (across all users and domains)
  * into a structured context block for injection into LLM system prompts.
  *
- * This is the "shared brain" — every concept execution receives the full
+ * This is the "shared brain" — every concept execution receives
  * accumulated business knowledge, regardless of which user or department
  * created it.
+ *
+ * Sprint 2 improvement: When a query is provided, memories are scored
+ * by keyword relevance so the most pertinent ones fill the token budget
+ * first, rather than purely chronological ordering.
  */
 var BusinessContextService_1;
 var _a;
@@ -11925,6 +11975,23 @@ const CHARS_PER_TOKEN = 4;
 const MAX_CONTEXT_TOKENS = 1500;
 /** Cache TTL: 5 minutes */
 const CACHE_TTL_MS = 5 * 60 * 1000;
+/** Minimum word length for relevance scoring (skip articles, prepositions) */
+const MIN_KEYWORD_LENGTH = 3;
+/** Common stop words (Serbian + English), hoisted to module scope to avoid re-creation per call */
+const STOP_WORDS = new Set([
+    // Serbian
+    'je', 'da', 'ne', 'za', 'na', 'sa', 'od', 'do', 'se', 'su', 'im',
+    'ili', 'ali', 'kao', 'što', 'sto', 'sta', 'šta', 'taj', 'ova', 'ovo',
+    'tog', 'tom', 'sve', 'bio', 'ako', 'već', 'vec', 'može', 'moze',
+    'koji', 'koja', 'koje', 'koje', 'treba', 'trebao', 'sam', 'ste',
+    'neke', 'neki', 'jeste', 'nema', 'ima', 'bih', 'bismo',
+    // English
+    'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can',
+    'had', 'her', 'was', 'one', 'our', 'out', 'has', 'have', 'with',
+    'this', 'that', 'from', 'they', 'been', 'said', 'each', 'which',
+    'their', 'will', 'other', 'about', 'many', 'then', 'them', 'some',
+    'what', 'how', 'when', 'where', 'who', 'why',
+]);
 let BusinessContextService = BusinessContextService_1 = class BusinessContextService {
     constructor(prisma) {
         this.prisma = prisma;
@@ -11936,18 +12003,21 @@ let BusinessContextService = BusinessContextService_1 = class BusinessContextSer
         this.cache.delete(tenantId);
     }
     /**
-     * Loads and formats all business memories for a tenant.
+     * Loads and formats business memories for a tenant.
      * Returns a structured text block ready for system prompt injection.
      *
-     * Groups memories by type and includes attribution.
-     * Truncates to ~4000 tokens.
+     * When a query is provided, memories are ranked by keyword relevance
+     * so the most pertinent ones appear first within the token budget.
+     * Without a query, falls back to chronological ordering (cached).
      */
-    async getBusinessContext(tenantId) {
-        // Check cache first
-        const cached = this.cache.get(tenantId);
-        if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
-            this.logger.debug({ message: 'Business context cache hit', tenantId });
-            return cached.value;
+    async getBusinessContext(tenantId, query) {
+        // Without query: use cached chronological approach
+        if (!query) {
+            const cached = this.cache.get(tenantId);
+            if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+                this.logger.debug({ message: 'Business context cache hit', tenantId });
+                return cached.value;
+            }
         }
         const memories = await this.prisma.memory.findMany({
             where: {
@@ -11967,9 +12037,23 @@ let BusinessContextService = BusinessContextService_1 = class BusinessContextSer
         if (memories.length === 0) {
             return '';
         }
-        // Group by type
+        // Score and sort by relevance when query is provided
+        let sortedMemories = memories;
+        if (query) {
+            const keywords = this.extractKeywords(query);
+            if (keywords.length > 0) {
+                const scored = memories.map((mem) => ({
+                    ...mem,
+                    relevanceScore: this.scoreRelevance(mem.content, mem.subject, keywords),
+                }));
+                // Sort by relevance (highest first), then by recency as tiebreaker
+                scored.sort((a, b) => b.relevanceScore - a.relevanceScore);
+                sortedMemories = scored;
+            }
+        }
+        // Group by type (preserving sort order within each group)
         const grouped = new Map();
-        for (const mem of memories) {
+        for (const mem of sortedMemories) {
             const key = mem.type;
             if (!grouped.has(key))
                 grouped.set(key, []);
@@ -12012,10 +12096,42 @@ let BusinessContextService = BusinessContextService_1 = class BusinessContextSer
             tenantId,
             memoriesIncluded: memories.length,
             estimatedTokens: this.estimateTokens(context),
+            relevanceFiltered: !!query,
         });
-        // Store in cache
-        this.cache.set(tenantId, { value: context, cachedAt: Date.now() });
+        // Only cache chronological (non-query) results
+        if (!query) {
+            this.cache.set(tenantId, { value: context, cachedAt: Date.now() });
+        }
         return context;
+    }
+    /**
+     * Extracts meaningful keywords from a query string.
+     * Strips common Serbian/English stop words and short tokens.
+     */
+    extractKeywords(query) {
+        return query
+            .toLowerCase()
+            .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+            .split(/\s+/)
+            .filter((w) => w.length >= MIN_KEYWORD_LENGTH && !STOP_WORDS.has(w));
+    }
+    /**
+     * Scores a memory's relevance to a set of keywords.
+     * Returns a value 0..1 based on keyword overlap.
+     */
+    scoreRelevance(content, subject, keywords) {
+        if (keywords.length === 0)
+            return 0;
+        const text = `${content} ${subject ?? ''}`.toLowerCase();
+        // Tokenize the text into words for accurate matching (avoids substring false positives)
+        const textWords = new Set(text.replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean));
+        let matchCount = 0;
+        for (const keyword of keywords) {
+            if (textWords.has(keyword)) {
+                matchCount++;
+            }
+        }
+        return matchCount / keywords.length;
     }
     estimateTokens(text) {
         return Math.ceil(text.length / CHARS_PER_TOKEN);
@@ -12249,11 +12365,20 @@ ${Object.entries(CATEGORY_KEYWORDS)
 
 PRAVILA:
 1. Fokus na NAMERU korisnika, ne na pojedinačne reči u poruci
-2. "Prodajni plan" → Prodaja (ne Vrednost, ne Marketing)
-3. "Marketing strategija" → Marketing (ne Strategija)
-4. "Finansijski izveštaj" → Finansije
-5. Ako korisnik traži PLAN/ANALIZU/STRATEGIJU za neku oblast, kategorija je DOMEN te oblasti
-6. Ako nije jasno, biraj NAJSPECIFIČNIJU kategoriju za zahtev
+2. Ako korisnik traži PLAN/ANALIZU/STRATEGIJU za neku oblast, kategorija je DOMEN te oblasti
+3. Ako nije jasno, biraj NAJSPECIFIČNIJU kategoriju za zahtev
+
+OBAVEZNA PRAVILA ZA RAZREŠAVANJE (strogo poštuj):
+- "Prodajni plan" / "Prodajna strategija" / "Prodajni proces" → Prodaja (NIKAD Marketing ili Strategija)
+- "Marketing strategija" / "Marketing plan" / "Marketing kampanja" → Marketing (NIKAD Strategija)
+- "Kreiranje sadržaja" / "Content marketing" / "Pisanje blogova" → Digitalni Marketing (NIKAD Vrednost)
+- "Analiza konkurencije" / "Konkurentska analiza" → Strategija (NIKAD Marketing)
+- "Cena proizvoda" / "Cenovna strategija" / "Popusti" → Određivanje Cene (NIKAD Prodaja)
+- "Finansijski izveštaj" / "Budžet" / "ROI analiza" → Finansije
+- "Poslovni model" / "Monetizacija" → Poslovni Modeli (NIKAD Strategija)
+- "Zapošljavanje" / "Obuka zaposlenih" → Ljudski Resursi (NIKAD Menadžment)
+- "SEO" / "Društvene mreže" / "Email marketing" → Digitalni Marketing (NIKAD Marketing)
+- Ako sadrži reč "prodaj" u bilo kom obliku → verovatno Prodaja
 
 VRATI ISKLJUČIVO VALIDAN JSON (bez markdown, bez objašnjenja):
 {"category": "ime kategorije", "confidence": 0.0-1.0, "conceptName": "opciono: konkretan koncept ako prepoznaješ"}
@@ -12488,19 +12613,13 @@ let ConceptClassifierService = ConceptClassifierService_1 = class ConceptClassif
             'tom',
             'tim',
             'kod',
-            'napravi',
-            'napraviti',
             'hocu',
             'hoću',
             'želim',
             'zelim',
             'daj',
             'molim',
-            'kreira',
-            'kreiraj',
-            'kreiranje',
             'trebam',
-            'zelim',
         ]);
         const keywords = [...new Set(words.filter((w) => !commonWords.has(w)))];
         // Category filter: matches both "6. Prodaja" and "Prodaja"
@@ -13825,7 +13944,8 @@ const attachments_module_1 = __webpack_require__(153);
 const agent_execution_module_1 = __webpack_require__(160);
 const conversation_controller_1 = __webpack_require__(171);
 const conversation_service_1 = __webpack_require__(172);
-const conversation_gateway_1 = __webpack_require__(176);
+const conversation_gateway_1 = __webpack_require__(177);
+const concept_plan_service_1 = __webpack_require__(176);
 let ConversationModule = class ConversationModule {
 };
 exports.ConversationModule = ConversationModule;
@@ -13846,7 +13966,7 @@ exports.ConversationModule = ConversationModule = tslib_1.__decorate([
             agent_execution_module_1.AgentExecutionModule,
         ],
         controllers: [conversation_controller_1.ConversationController],
-        providers: [conversation_service_1.ConversationService, conversation_gateway_1.ConversationGateway],
+        providers: [conversation_service_1.ConversationService, conversation_gateway_1.ConversationGateway, concept_plan_service_1.ConceptPlanService],
         exports: [conversation_service_1.ConversationService],
     })
 ], ConversationModule);
@@ -14148,7 +14268,7 @@ let NotesService = NotesService_1 = class NotesService {
      * @param options - Score threshold (default 85) and max age in days (default 30)
      * @returns The reusable task data or null if none qualifies
      */
-    async findReusableTask(tenantId, conceptId, options = {}) {
+    async findReusableTask(tenantId, conceptId, title, options = {}) {
         const threshold = options.scoreThreshold ?? 85;
         const maxAge = options.maxAgeDays ?? 30;
         const cutoffDate = new Date();
@@ -14157,6 +14277,7 @@ let NotesService = NotesService_1 = class NotesService {
             where: {
                 tenantId,
                 conceptId,
+                title: { equals: title.trim(), mode: 'insensitive' },
                 noteType: prisma_1.NoteType.TASK,
                 status: prisma_1.NoteStatus.COMPLETED,
                 aiScore: { gte: threshold },
@@ -19878,7 +19999,7 @@ exports.AgentExecutionModule = AgentExecutionModule = tslib_1.__decorate([
 
 
 var AgentExecutionService_1;
-var _a, _b, _c, _d, _e, _f;
+var _a, _b, _c, _d, _e, _f, _g;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.AgentExecutionService = void 0;
 const tslib_1 = __webpack_require__(4);
@@ -19886,19 +20007,22 @@ const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
 const cuid2_1 = __webpack_require__(32);
 const types_1 = __webpack_require__(85);
+const prisma_1 = __webpack_require__(35);
 const openclaw_client_service_1 = __webpack_require__(162);
 const agent_prompt_service_1 = __webpack_require__(164);
 const agent_registry_service_1 = __webpack_require__(165);
 const budget_service_1 = __webpack_require__(166);
 const agent_execution_event_bus_service_1 = __webpack_require__(167);
+const notes_service_1 = __webpack_require__(133);
 let AgentExecutionService = AgentExecutionService_1 = class AgentExecutionService {
-    constructor(prisma, openClawClient, agentPrompt, registry, budgetService, eventBus) {
+    constructor(prisma, openClawClient, agentPrompt, registry, budgetService, eventBus, notesService) {
         this.prisma = prisma;
         this.openClawClient = openClawClient;
         this.agentPrompt = agentPrompt;
         this.registry = registry;
         this.budgetService = budgetService;
         this.eventBus = eventBus;
+        this.notesService = notesService;
         this.logger = new common_1.Logger(AgentExecutionService_1.name);
         this.MAX_CONCURRENT_PER_TENANT = 3;
         this.VALID_STATUSES = new Set(Object.values(types_1.AgentExecutionStatus));
@@ -20080,13 +20204,15 @@ let AgentExecutionService = AgentExecutionService_1 = class AgentExecutionServic
                 completedAt: new Date().toISOString(),
                 error: null,
             });
+            // Step 3b: Persist agent output as reviewable child note (Sprint 2 Epic 2.3)
+            const resultNoteId = await this.createResultNote(result.output, agentLabel, note, userId, tenantId, executionId);
             // Step 4: Calculate cost and adjust budget
             const actualCost = this.estimateActualCost(result.usage);
             const costDifference = actualCost - reservedCostEur;
             if (Math.abs(costDifference) > 0.0001) {
                 await this.budgetService.recordSpend(tenantId, costDifference);
             }
-            // Step 5: Mark completed
+            // Step 5: Mark completed + link result note
             await this.prisma.agentExecution.update({
                 where: { id: executionId },
                 data: {
@@ -20095,6 +20221,7 @@ let AgentExecutionService = AgentExecutionService_1 = class AgentExecutionServic
                     actualCostEur: actualCost,
                     completedAt: new Date(),
                     durationMs: result.durationMs,
+                    resultNoteId,
                 },
             });
             this.emitAgentEvent(tenantId, 'agent:status-change', {
@@ -20180,6 +20307,46 @@ let AgentExecutionService = AgentExecutionService_1 = class AgentExecutionServic
         const outputCost = ((usage.output ?? 0) / 1_000_000) * 1.1;
         const fetchCost = 0.03;
         return Math.round((inputCost + outputCost + fetchCost) * 10000) / 10000;
+    }
+    /** Creates a child note for an agent/job result, returning the new note ID or null on failure. */
+    async createResultNote(output, agentLabel, note, userId, tenantId, executionId, jobId) {
+        if (!output)
+            return null;
+        try {
+            const existingSteps = await this.prisma.note.count({
+                where: { parentNoteId: note.id, tenantId },
+            });
+            const childNote = await this.notesService.createNote({
+                title: `${agentLabel}: ${note.title}`,
+                content: output,
+                source: prisma_1.NoteSource.CONVERSATION,
+                noteType: prisma_1.NoteType.AGENT_RESEARCH,
+                status: prisma_1.NoteStatus.READY_FOR_REVIEW,
+                parentNoteId: note.id,
+                workflowStepNumber: existingSteps + 1,
+                conceptId: note.conceptId ?? undefined,
+                conversationId: note.conversationId ?? undefined,
+                userId,
+                tenantId,
+            });
+            this.logger.debug({
+                message: 'Agent result persisted as child note',
+                executionId,
+                jobId,
+                resultNoteId: childNote.id,
+                parentNoteId: note.id,
+            });
+            return childNote.id;
+        }
+        catch (noteErr) {
+            this.logger.warn({
+                message: 'Failed to create child note for agent result',
+                executionId,
+                jobId,
+                error: noteErr instanceof Error ? noteErr.message : 'Unknown',
+            });
+            return null;
+        }
     }
     // --- Agent Job Pipeline ---
     async executeJob(jobId, userId, tenantId) {
@@ -20384,13 +20551,15 @@ let AgentExecutionService = AgentExecutionService_1 = class AgentExecutionServic
                 completedAt: new Date().toISOString(),
                 error: null,
             });
+            // Step 3b: Persist job output as reviewable child note (Sprint 2 Epic 2.3)
+            const jobResultNoteId = await this.createResultNote(result.output, agentLabel, note, userId, tenantId, executionId, jobId);
             // Step 4: Cost adjustment
             const actualCost = this.estimateActualCost(result.usage);
             const costDifference = actualCost - reservedCostEur;
             if (Math.abs(costDifference) > 0.0001) {
                 await this.budgetService.recordSpend(tenantId, costDifference);
             }
-            // Step 5: Mark execution completed
+            // Step 5: Mark execution completed + link result note
             await this.prisma.agentExecution.update({
                 where: { id: executionId },
                 data: {
@@ -20399,6 +20568,7 @@ let AgentExecutionService = AgentExecutionService_1 = class AgentExecutionServic
                     actualCostEur: actualCost,
                     completedAt: new Date(),
                     durationMs: result.durationMs,
+                    resultNoteId: jobResultNoteId,
                 },
             });
             this.emitAgentEvent(tenantId, 'agent:status-change', {
@@ -20501,7 +20671,7 @@ let AgentExecutionService = AgentExecutionService_1 = class AgentExecutionServic
 exports.AgentExecutionService = AgentExecutionService;
 exports.AgentExecutionService = AgentExecutionService = AgentExecutionService_1 = tslib_1.__decorate([
     (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof openclaw_client_service_1.OpenClawClientService !== "undefined" && openclaw_client_service_1.OpenClawClientService) === "function" ? _b : Object, typeof (_c = typeof agent_prompt_service_1.AgentPromptService !== "undefined" && agent_prompt_service_1.AgentPromptService) === "function" ? _c : Object, typeof (_d = typeof agent_registry_service_1.AgentRegistryService !== "undefined" && agent_registry_service_1.AgentRegistryService) === "function" ? _d : Object, typeof (_e = typeof budget_service_1.BudgetService !== "undefined" && budget_service_1.BudgetService) === "function" ? _e : Object, typeof (_f = typeof agent_execution_event_bus_service_1.AgentExecutionEventBus !== "undefined" && agent_execution_event_bus_service_1.AgentExecutionEventBus) === "function" ? _f : Object])
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof openclaw_client_service_1.OpenClawClientService !== "undefined" && openclaw_client_service_1.OpenClawClientService) === "function" ? _b : Object, typeof (_c = typeof agent_prompt_service_1.AgentPromptService !== "undefined" && agent_prompt_service_1.AgentPromptService) === "function" ? _c : Object, typeof (_d = typeof agent_registry_service_1.AgentRegistryService !== "undefined" && agent_registry_service_1.AgentRegistryService) === "function" ? _d : Object, typeof (_e = typeof budget_service_1.BudgetService !== "undefined" && budget_service_1.BudgetService) === "function" ? _e : Object, typeof (_f = typeof agent_execution_event_bus_service_1.AgentExecutionEventBus !== "undefined" && agent_execution_event_bus_service_1.AgentExecutionEventBus) === "function" ? _f : Object, typeof (_g = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _g : Object])
 ], AgentExecutionService);
 
 
@@ -21545,7 +21715,7 @@ exports.JobPlannerService = JobPlannerService = JobPlannerService_1 = tslib_1.__
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
-var _a, _b, _c, _d, _e, _f;
+var _a, _b, _c, _d, _e, _f, _g;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ConversationController = void 0;
 const tslib_1 = __webpack_require__(4);
@@ -21559,16 +21729,18 @@ const update_conversation_dto_1 = __webpack_require__(174);
 const update_persona_dto_1 = __webpack_require__(175);
 const curriculum_service_1 = __webpack_require__(108);
 const concept_service_1 = __webpack_require__(105);
+const concept_plan_service_1 = __webpack_require__(176);
 /**
  * Controller for chat conversation management.
  * All endpoints require JWT authentication.
  * Operations are tenant-scoped through the user's JWT claims.
  */
 let ConversationController = class ConversationController {
-    constructor(conversationService, curriculumService, conceptService) {
+    constructor(conversationService, curriculumService, conceptService, conceptPlanService) {
         this.conversationService = conversationService;
         this.curriculumService = curriculumService;
         this.conceptService = conceptService;
+        this.conceptPlanService = conceptPlanService;
     }
     /**
      * Create a new conversation.
@@ -21588,6 +21760,14 @@ let ConversationController = class ConversationController {
             }
         }
         const conversation = await this.conversationService.createConversation(user.tenantId, user.userId, dto.title, dto.personaType, conceptId);
+        // Auto Concept Plan: fire-and-forget plan creation or next-step suggestion
+        if (conceptId) {
+            this.conceptPlanService
+                .triggerConceptPlan(conceptId, conversation.id, user.userId, user.tenantId)
+                .catch(() => {
+                /* logged inside service */
+            });
+        }
         return { data: conversation };
     }
     /**
@@ -21654,7 +21834,7 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
     tslib_1.__param(1, (0, common_1.Body)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object, typeof (_d = typeof create_conversation_dto_1.CreateConversationDto !== "undefined" && create_conversation_dto_1.CreateConversationDto) === "function" ? _d : Object]),
+    tslib_1.__metadata("design:paramtypes", [Object, typeof (_e = typeof create_conversation_dto_1.CreateConversationDto !== "undefined" && create_conversation_dto_1.CreateConversationDto) === "function" ? _e : Object]),
     tslib_1.__metadata("design:returntype", Promise)
 ], ConversationController.prototype, "createConversation", null);
 tslib_1.__decorate([
@@ -21707,7 +21887,7 @@ tslib_1.__decorate([
     tslib_1.__param(1, (0, common_1.Param)('id')),
     tslib_1.__param(2, (0, common_1.Body)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object, String, typeof (_e = typeof update_persona_dto_1.UpdatePersonaDto !== "undefined" && update_persona_dto_1.UpdatePersonaDto) === "function" ? _e : Object]),
+    tslib_1.__metadata("design:paramtypes", [Object, String, typeof (_f = typeof update_persona_dto_1.UpdatePersonaDto !== "undefined" && update_persona_dto_1.UpdatePersonaDto) === "function" ? _f : Object]),
     tslib_1.__metadata("design:returntype", Promise)
 ], ConversationController.prototype, "updatePersona", null);
 tslib_1.__decorate([
@@ -21717,13 +21897,13 @@ tslib_1.__decorate([
     tslib_1.__param(1, (0, common_1.Param)('id')),
     tslib_1.__param(2, (0, common_1.Body)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object, String, typeof (_f = typeof update_conversation_dto_1.UpdateConversationDto !== "undefined" && update_conversation_dto_1.UpdateConversationDto) === "function" ? _f : Object]),
+    tslib_1.__metadata("design:paramtypes", [Object, String, typeof (_g = typeof update_conversation_dto_1.UpdateConversationDto !== "undefined" && update_conversation_dto_1.UpdateConversationDto) === "function" ? _g : Object]),
     tslib_1.__metadata("design:returntype", Promise)
 ], ConversationController.prototype, "updateConversation", null);
 exports.ConversationController = ConversationController = tslib_1.__decorate([
     (0, common_1.Controller)('v1/conversations'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _a : Object, typeof (_b = typeof curriculum_service_1.CurriculumService !== "undefined" && curriculum_service_1.CurriculumService) === "function" ? _b : Object, typeof (_c = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _c : Object])
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _a : Object, typeof (_b = typeof curriculum_service_1.CurriculumService !== "undefined" && curriculum_service_1.CurriculumService) === "function" ? _b : Object, typeof (_c = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _c : Object, typeof (_d = typeof concept_plan_service_1.ConceptPlanService !== "undefined" && concept_plan_service_1.ConceptPlanService) === "function" ? _d : Object])
 ], ConversationController);
 
 
@@ -22252,6 +22432,61 @@ let ConversationService = ConversationService_1 = class ConversationService {
         });
     }
     /**
+     * Loads summaries of prior conversations about the same concept.
+     * Used to inject cross-conversation context into the LLM system prompt,
+     * so the AI can build on prior analyses instead of repeating itself.
+     *
+     * Returns the last assistant message from each OTHER conversation
+     * about the same concept (excluding the current one).
+     */
+    async getConceptInsights(tenantId, userId, conceptId, excludeConversationId, limit = 3) {
+        const prisma = await this.tenantPrisma.getClient(tenantId);
+        // Single query with nested include to avoid N+1 (loads last assistant message per conversation)
+        const conversations = await prisma.conversation.findMany({
+            where: {
+                conceptId,
+                userId,
+                id: { not: excludeConversationId },
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: limit,
+            select: {
+                id: true,
+                title: true,
+                messages: {
+                    where: { role: 'ASSISTANT' },
+                    orderBy: { createdAt: 'desc' },
+                    take: 1,
+                    select: { content: true },
+                },
+            },
+        });
+        if (conversations.length === 0)
+            return [];
+        const insights = [];
+        for (const conv of conversations) {
+            const lastMsg = conv.messages[0];
+            if (lastMsg?.content) {
+                // Trim at last sentence boundary within 500 chars for clean context
+                let summary = lastMsg.content;
+                if (summary.length > 500) {
+                    const truncated = summary.substring(0, 500);
+                    const lastSentenceEnd = Math.max(truncated.lastIndexOf('. '), truncated.lastIndexOf('.\n'), truncated.lastIndexOf('! '), truncated.lastIndexOf('? '));
+                    summary =
+                        lastSentenceEnd > 200
+                            ? truncated.substring(0, lastSentenceEnd + 1)
+                            : truncated + '...';
+                }
+                insights.push({
+                    conversationId: conv.id,
+                    title: conv.title ?? 'Prethodna konverzacija',
+                    summary,
+                });
+            }
+        }
+        return insights;
+    }
+    /**
      * Gets a conversation by ID with all messages.
      * @param tenantId - Tenant ID for database isolation
      * @param conversationId - Conversation ID to retrieve
@@ -22629,17 +22864,345 @@ tslib_1.__decorate([
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
+var ConceptPlanService_1;
+var _a, _b, _c, _d, _e, _f, _g;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ConceptPlanService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const cuid2_1 = __webpack_require__(32);
+const tenant_context_1 = __webpack_require__(9);
+const prisma_1 = __webpack_require__(35);
+const types_1 = __webpack_require__(85);
+const workflow_service_1 = __webpack_require__(150);
+const notes_service_1 = __webpack_require__(133);
+const conversation_service_1 = __webpack_require__(172);
+const ai_gateway_service_1 = __webpack_require__(89);
+const business_context_service_1 = __webpack_require__(119);
+const agent_execution_event_bus_service_1 = __webpack_require__(167);
+let ConceptPlanService = ConceptPlanService_1 = class ConceptPlanService {
+    constructor(prisma, workflowService, notesService, conversationService, aiGatewayService, businessContextService, eventBus) {
+        this.prisma = prisma;
+        this.workflowService = workflowService;
+        this.notesService = notesService;
+        this.conversationService = conversationService;
+        this.aiGatewayService = aiGatewayService;
+        this.businessContextService = businessContextService;
+        this.eventBus = eventBus;
+        this.logger = new common_1.Logger(ConceptPlanService_1.name);
+    }
+    /**
+     * Fire-and-forget entry point. Called after conversation creation when a conceptId is present.
+     * Checks for existing notes and routes to Branch A (create plan) or Branch B (suggest next steps).
+     *
+     * - Branch A: Creates TASKs in the task panel + sends a chat message explaining the plan.
+     * - Branch B: Sends a chat message with next-step suggestions (no notes created).
+     */
+    async triggerConceptPlan(conceptId, conversationId, userId, tenantId) {
+        try {
+            const existingNotes = await this.notesService.getByConcept(conceptId, userId, tenantId);
+            if (existingNotes.length === 0) {
+                await this.createAndExecutePlan(conceptId, conversationId, userId, tenantId);
+            }
+            else {
+                await this.suggestNextSteps(existingNotes, conceptId, conversationId, userId, tenantId);
+            }
+        }
+        catch (err) {
+            this.logger.error({
+                message: 'ConceptPlan trigger failed',
+                conceptId,
+                conversationId,
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+        }
+    }
+    // ─── Branch A: No existing notes — create plan tasks and execute ───
+    async createAndExecutePlan(conceptId, conversationId, userId, tenantId) {
+        // 1. Get or generate workflow steps for this concept
+        const { conceptName, steps } = await this.workflowService.getOrGenerateWorkflow(conceptId, tenantId, userId);
+        // 2. Dedup: skip if a parent task already exists for this concept
+        const existingTaskId = await this.notesService.findExistingTask(tenantId, {
+            conceptId,
+            title: conceptName,
+        });
+        if (existingTaskId) {
+            this.logger.log({
+                message: 'Skipping plan creation — parent task already exists',
+                conceptId,
+                existingTaskId,
+            });
+            return;
+        }
+        // 3. Create parent TASK in task panel
+        const parentNote = await this.notesService.createNote({
+            title: conceptName,
+            content: `Automatski plan za koncept: ${conceptName}\n\nKoraci: ${steps.length}`,
+            source: prisma_1.NoteSource.CONVERSATION,
+            noteType: prisma_1.NoteType.TASK,
+            status: prisma_1.NoteStatus.PENDING,
+            userId,
+            tenantId,
+            conversationId,
+            conceptId,
+        });
+        // 4. Create child TASKs for each workflow step
+        const childNoteIds = [];
+        for (const step of steps) {
+            const childNote = await this.notesService.createNote({
+                title: step.title,
+                content: step.description,
+                source: prisma_1.NoteSource.CONVERSATION,
+                noteType: prisma_1.NoteType.TASK,
+                status: prisma_1.NoteStatus.PENDING,
+                userId,
+                tenantId,
+                conversationId,
+                conceptId,
+                parentNoteId: parentNote.id,
+                workflowStepNumber: step.stepNumber,
+                expectedOutcome: step.expectedOutcome,
+            });
+            childNoteIds.push(childNote.id);
+        }
+        // 5. Notify frontend that tasks are available in task panel
+        this.emitNotesUpdated(tenantId, conversationId);
+        // 6. Send chat message explaining the plan
+        const stepList = steps
+            .map((s) => `${s.stepNumber}. **${s.title}** — ${s.description}`)
+            .join('\n');
+        const planMessage = `Pripremio sam plan rada za koncept **${conceptName}**. Plan sadrži ${steps.length} koraka:\n\n${stepList}\n\nPokrenuo sam automatsko izvršavanje. Rezultati će se pojaviti u panelu zadataka.`;
+        await this.sendChatMessage(tenantId, conversationId, planMessage);
+        this.logger.log({
+            message: 'Plan created — starting execution',
+            conceptId,
+            conceptName,
+            parentNoteId: parentNote.id,
+            stepCount: steps.length,
+        });
+        // 7. Execute steps sequentially
+        const completedSummaries = [];
+        for (const [i, step] of steps.entries()) {
+            const childNoteId = childNoteIds[i];
+            const planStep = {
+                stepId: `auto_${(0, cuid2_1.createId)()}`,
+                conceptId,
+                conceptName,
+                workflowStepNumber: step.stepNumber,
+                title: step.title,
+                description: step.description,
+                estimatedMinutes: step.estimatedMinutes,
+                departmentTag: step.departmentTag,
+                status: 'in_progress',
+            };
+            try {
+                const result = await this.workflowService.executeStepAutonomous(planStep, conversationId, userId, tenantId, () => {
+                    // onChunk callback required by interface — content comes from result.content
+                }, completedSummaries);
+                // Update child task with generated content
+                await this.prisma.note.update({
+                    where: { id: childNoteId },
+                    data: {
+                        content: result.content,
+                        status: prisma_1.NoteStatus.READY_FOR_REVIEW,
+                    },
+                });
+                completedSummaries.push({
+                    title: step.title,
+                    conceptName,
+                    summary: result.content.substring(0, 500),
+                });
+                // Notify frontend that task was updated
+                this.emitNotesUpdated(tenantId, conversationId);
+                this.logger.log({
+                    message: 'Plan step executed',
+                    stepNumber: step.stepNumber,
+                    title: step.title,
+                    contentLength: result.content.length,
+                    citations: result.citations.length,
+                });
+            }
+            catch (err) {
+                this.logger.error({
+                    message: 'Plan step execution failed',
+                    stepNumber: step.stepNumber,
+                    title: step.title,
+                    error: err instanceof Error ? err.message : 'Unknown',
+                });
+                // Continue with remaining steps — don't let one failure block others
+            }
+        }
+        // 8. Mark parent task as READY_FOR_REVIEW
+        await this.prisma.note.update({
+            where: { id: parentNote.id },
+            data: { status: prisma_1.NoteStatus.READY_FOR_REVIEW },
+        });
+        this.emitNotesUpdated(tenantId, conversationId);
+        // 9. Send completion message in chat
+        await this.sendChatMessage(tenantId, conversationId, `Plan za **${conceptName}** je završen. Izvršeno ${completedSummaries.length}/${steps.length} koraka. Rezultati su dostupni u panelu zadataka.`);
+        this.logger.log({
+            message: 'Plan execution complete',
+            conceptId,
+            conceptName,
+            completedSteps: completedSummaries.length,
+            totalSteps: steps.length,
+        });
+    }
+    // ─── Branch B: Notes exist — suggest next steps via chat message ───
+    async suggestNextSteps(existingNotes, conceptId, conversationId, userId, tenantId) {
+        // 1. Get concept name and workflow
+        const { conceptName, steps: workflowSteps } = await this.workflowService.getOrGenerateWorkflow(conceptId, tenantId, userId);
+        // 2. Categorize existing notes
+        const completed = [];
+        const pending = [];
+        for (const note of existingNotes) {
+            if (note.status === 'COMPLETED' || note.status === 'READY_FOR_REVIEW') {
+                completed.push(note);
+            }
+            else {
+                pending.push(note);
+            }
+        }
+        // 3. Build context for LLM
+        let completedContext = '';
+        if (completed.length > 0) {
+            completedContext = completed
+                .map((n) => {
+                const snippet = n.content.length > 300 ? n.content.substring(0, 300) + '...' : n.content;
+                const childInfo = n.children && n.children.length > 0
+                    ? ` (${n.children.filter((c) => c.status === 'COMPLETED' || c.status === 'READY_FOR_REVIEW').length}/${n.children.length} koraka zavrseno)`
+                    : '';
+                return `- "${n.title}" [${n.status}]${childInfo}: ${snippet}`;
+            })
+                .join('\n');
+        }
+        let pendingContext = '';
+        if (pending.length > 0) {
+            pendingContext = pending
+                .map((n) => {
+                const isBare = n.content.startsWith('Istraži koncept:');
+                const label = isBare ? ' [nije započeto]' : '';
+                const snippet = !isBare && n.content.length > 200
+                    ? n.content.substring(0, 200) + '...'
+                    : isBare
+                        ? ''
+                        : n.content;
+                return `- "${n.title}" [${n.status ?? 'PENDING'}]${label}${snippet ? ': ' + snippet : ''}`;
+            })
+                .join('\n');
+        }
+        const workflowContext = workflowSteps
+            .map((s) => `${s.stepNumber}. ${s.title} — ${s.description}`)
+            .join('\n');
+        // 4. Load business context
+        let businessContext = '';
+        try {
+            businessContext = await this.businessContextService.getBusinessContext(tenantId);
+        }
+        catch {
+            // non-blocking
+        }
+        // 5. LLM call
+        const systemPrompt = `Ti si poslovni savetnik. Analiziraj šta je korisnik već uradio za koncept "${conceptName}" i predloži sledeće korake.
+
+${completed.length > 0 ? `ZAVRŠENO (NE predlaži ponovo):\n${completedContext}\n` : ''}
+${pending.length > 0 ? `U TOKU / NEZAPOČETO:\n${pendingContext}\n` : ''}
+PLAN KONCEPTA (svi mogući koraci):
+${workflowContext}
+
+${businessContext ? `POSLOVNI KONTEKST:\n${businessContext}\n` : ''}
+Predloži 2-3 konkretna sledeća koraka. Budi specifičan za kompaniju i industriju.
+Fokusiraj se na ono što je NAJVAŽNIJE za korisnika u ovom trenutku.
+Za svaki predlog objasni ZAŠTO je važan i ŠTA će korisnik dobiti.
+Piši na srpskom jeziku. Minimum 400 reči.`;
+        let llmResponse = '';
+        try {
+            await this.aiGatewayService.streamCompletionWithContext([
+                { role: 'system', content: systemPrompt },
+                {
+                    role: 'user',
+                    content: `Predloži sledeće korake za koncept "${conceptName}".`,
+                },
+            ], { tenantId, userId, skipRateLimit: true, skipQuotaCheck: true, useFallback: true }, (chunk) => {
+                llmResponse += chunk;
+            });
+        }
+        catch (err) {
+            this.logger.error({
+                message: 'Branch B LLM call failed',
+                conceptId,
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+            return;
+        }
+        if (!llmResponse.trim()) {
+            this.logger.warn({ message: 'Branch B: empty LLM response', conceptId });
+            return;
+        }
+        // 6. Send suggestion as a chat message (not a note)
+        await this.sendChatMessage(tenantId, conversationId, llmResponse);
+        this.logger.log({
+            message: 'Next steps suggestion sent as chat message',
+            conceptId,
+            conceptName,
+            completedNotes: completed.length,
+            pendingNotes: pending.length,
+            responseLength: llmResponse.length,
+        });
+    }
+    // ─── Helpers ───
+    /**
+     * Saves an assistant message to the conversation DB and pushes it to the frontend
+     * via the EventBus → Gateway → socket.io broadcast path.
+     *
+     * Includes conversationId so the frontend can filter: only show the message
+     * if it belongs to the active conversation, and skip streaming-state resets
+     * for background messages.
+     */
+    async sendChatMessage(tenantId, conversationId, content) {
+        const message = await this.conversationService.addMessage(tenantId, conversationId, types_1.MessageRole.ASSISTANT, content);
+        this.eventBus.emit({
+            tenantId,
+            eventName: 'chat:complete',
+            payload: {
+                conversationId,
+                messageId: message.id,
+                fullContent: content,
+                metadata: { background: true },
+            },
+        });
+    }
+    emitNotesUpdated(tenantId, conversationId) {
+        this.eventBus.emit({
+            tenantId,
+            eventName: 'chat:notes-updated',
+            payload: { conversationId, count: 0 },
+        });
+    }
+};
+exports.ConceptPlanService = ConceptPlanService;
+exports.ConceptPlanService = ConceptPlanService = ConceptPlanService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof workflow_service_1.WorkflowService !== "undefined" && workflow_service_1.WorkflowService) === "function" ? _b : Object, typeof (_c = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _c : Object, typeof (_d = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _d : Object, typeof (_e = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _e : Object, typeof (_f = typeof business_context_service_1.BusinessContextService !== "undefined" && business_context_service_1.BusinessContextService) === "function" ? _f : Object, typeof (_g = typeof agent_execution_event_bus_service_1.AgentExecutionEventBus !== "undefined" && agent_execution_event_bus_service_1.AgentExecutionEventBus) === "function" ? _g : Object])
+], ConceptPlanService);
+
+
+/***/ }),
+/* 177 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
 var ConversationGateway_1;
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ConversationGateway = void 0;
 const tslib_1 = __webpack_require__(4);
-const websockets_1 = __webpack_require__(177);
-const socket_io_1 = __webpack_require__(178);
+const websockets_1 = __webpack_require__(178);
+const socket_io_1 = __webpack_require__(179);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const jsonwebtoken_1 = __webpack_require__(58);
-const jwks_rsa_1 = tslib_1.__importDefault(__webpack_require__(179));
+const jwks_rsa_1 = tslib_1.__importDefault(__webpack_require__(180));
 const conversation_service_1 = __webpack_require__(172);
 const ai_gateway_service_1 = __webpack_require__(89);
 const notes_service_1 = __webpack_require__(133);
@@ -23001,7 +23564,40 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
                 error: err instanceof Error ? err.message : 'Unknown',
             });
         }
-        this.resolvedDevUser = { userId: 'dev-user-001', tenantId: 'dev-tenant-001' };
+        // No active tenant/user — ensure fallback records exist for FK constraints
+        const fallbackTenantId = 'dev-tenant-001';
+        const fallbackUserId = 'dev-user-001';
+        try {
+            await this.prisma.tenant.upsert({
+                where: { id: fallbackTenantId },
+                create: {
+                    id: fallbackTenantId,
+                    name: 'Dev Tenant',
+                    industry: 'Technology',
+                    status: 'ACTIVE',
+                },
+                update: {},
+            });
+            await this.prisma.user.upsert({
+                where: { id: fallbackUserId },
+                create: {
+                    id: fallbackUserId,
+                    email: 'dev@mentor-ai.local',
+                    name: 'Dev User',
+                    role: 'TENANT_OWNER',
+                    tenantId: fallbackTenantId,
+                },
+                update: {},
+            });
+            this.logger.log('WebSocket dev mode: created fallback tenant/user records in DB');
+        }
+        catch (seedErr) {
+            this.logger.warn({
+                message: 'WebSocket dev mode: failed to seed fallback records',
+                error: seedErr instanceof Error ? seedErr.message : 'Unknown',
+            });
+        }
+        this.resolvedDevUser = { userId: fallbackUserId, tenantId: fallbackTenantId };
         return this.resolvedDevUser;
     }
     /**
@@ -23291,10 +23887,10 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
             // Build business context from tenant profile + onboarding notes
             const businessContext = await this.buildBusinessContext(authenticatedClient.tenantId, authenticatedClient.userId);
             perf.businessContext = Date.now() - perfStart;
-            // Pre-AI enrichment: concept search + memory context + web search + business brain context in parallel
+            // Pre-AI enrichment: concept search + memory context + web search + business brain + cross-conversation insights in parallel
             const enrichmentStart = Date.now();
             const webSearchEnabled = payload.webSearchEnabled !== false;
-            const [relevantConcepts, memoryContext, webSearchResults, businessBrainContext] = await Promise.all([
+            const [relevantConcepts, memoryContext, webSearchResults, businessBrainContext, conceptInsights] = await Promise.all([
                 this.conceptMatchingService
                     .findRelevantConcepts(content, {
                     limit: 5,
@@ -23315,8 +23911,14 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
                         .catch(() => [])
                     : Promise.resolve([]),
                 this.businessContextService
-                    .getBusinessContext(authenticatedClient.tenantId)
+                    .getBusinessContext(authenticatedClient.tenantId, content)
                     .catch(() => ''),
+                // Cross-conversation insights: load prior analyses about the same concept
+                conversation.conceptId
+                    ? this.conversationService
+                        .getConceptInsights(authenticatedClient.tenantId, authenticatedClient.userId, conversation.conceptId, conversationId, 3)
+                        .catch(() => [])
+                    : Promise.resolve([]),
             ]);
             perf.enrichmentParallel = Date.now() - enrichmentStart;
             // Build enriched context with curriculum concepts + memory + business brain
@@ -23358,6 +23960,17 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
                 enrichedContext += '--- KRAJ BAZE ZNANJA ---\n';
                 enrichedContext +=
                     'Primeni ove koncepte u odgovoru. Kada referenciraš koncept, koristi [[Naziv Koncepta]] oznaku.\n';
+            }
+            // Inject cross-conversation insights (Sprint 2 Epic 2.1)
+            // Enables the AI to build on prior analyses about the same concept
+            if (conceptInsights.length > 0) {
+                enrichedContext += '\n\n--- PRETHODNE ANALIZE O OVOM KONCEPTU ---\n';
+                enrichedContext +=
+                    'Ovi uvidi su iz prethodnih konverzacija na istu temu. Nadogradi se na njih, ne ponavljaj.\n';
+                for (const insight of conceptInsights) {
+                    enrichedContext += `\n[${insight.title}]\n${insight.summary}\n`;
+                }
+                enrichedContext += '--- KRAJ PRETHODNIH ANALIZA ---\n';
             }
             if (memoryContext.context) {
                 enrichedContext = this.memoryContextBuilder.injectIntoSystemPrompt(enrichedContext, memoryContext);
@@ -23771,7 +24384,7 @@ Ako nema zadataka: []`;
                 }
                 // Prior work reuse for auto-tasks
                 if (!forceRedo && effectiveConceptId) {
-                    const reusable = await this.notesService.findReusableTask(tenantId, effectiveConceptId);
+                    const reusable = await this.notesService.findReusableTask(tenantId, effectiveConceptId, task.title);
                     if (reusable) {
                         await this.notesService.createNote({
                             title: task.title,
@@ -24034,7 +24647,7 @@ Odgovori SAMO sa validnim JSON nizom:
                 }
                 // Prior work reuse: check for high-quality completed task on same concept
                 if (!forceRedo && taskConceptId) {
-                    const reusable = await this.notesService.findReusableTask(tenantId, taskConceptId);
+                    const reusable = await this.notesService.findReusableTask(tenantId, taskConceptId, task.title);
                     if (reusable) {
                         const result = await this.notesService.createNote({
                             title: task.title,
@@ -24090,6 +24703,52 @@ Odgovori SAMO sa validnim JSON nizom:
             const totalCreated = createdTasks.length + reusedTasks.length;
             if (totalCreated === 0)
                 return;
+            // Ensure conversations exist for cross-concept tasks (brain tree lifecycle gap).
+            // Without this, concepts with tasks but no conversation appear in the brain tree
+            // without a "Pogledaj" navigation link.
+            const allTasks = [...createdTasks, ...reusedTasks];
+            const crossConceptIds = [
+                ...new Set(allTasks
+                    .filter((t) => t.conceptId !== null && t.conceptId !== conceptId)
+                    .map((t) => t.conceptId)),
+            ];
+            if (crossConceptIds.length > 0) {
+                for (const crossConceptId of crossConceptIds) {
+                    try {
+                        // Check if a conversation already exists for this concept + user
+                        const existingConv = await this.prisma.conversation.findFirst({
+                            where: { conceptId: crossConceptId, userId },
+                            select: { id: true },
+                        });
+                        if (existingConv)
+                            continue;
+                        // Look up concept name for the conversation title
+                        let crossConceptName = 'Zadatak';
+                        try {
+                            const concept = await this.conceptService.findById(crossConceptId);
+                            crossConceptName = concept.name;
+                        }
+                        catch {
+                            const taskForConcept = allTasks.find((t) => t.conceptId === crossConceptId);
+                            crossConceptName = taskForConcept?.title ?? 'Zadatak';
+                        }
+                        await this.conversationService.createConversation(tenantId, userId, crossConceptName, undefined, crossConceptId);
+                        this.logger.debug({
+                            message: 'Created conversation for cross-concept task',
+                            crossConceptId,
+                            crossConceptName,
+                            originConversationId: conversationId,
+                        });
+                    }
+                    catch (err) {
+                        this.logger.warn({
+                            message: 'Failed to create cross-concept conversation',
+                            crossConceptId,
+                            error: err instanceof Error ? err.message : 'Unknown',
+                        });
+                    }
+                }
+            }
             // Emit event so frontend shows tasks with execute option
             // reusedTaskIds tells frontend to skip auto-execution for these
             client.emit('chat:tasks-created-for-execution', {
@@ -26161,6 +26820,20 @@ PRAVILA:
                 /* concept not found */
             }
         }
+        // 2b. Load attachment text for richer scoring context (Sprint 2 Epic 2.2)
+        let scoringAttachmentContext = '';
+        try {
+            const attachments = await this.prisma.attachment.findMany({
+                where: { noteId: taskId, tenantId },
+                select: { id: true },
+            });
+            if (attachments.length > 0) {
+                scoringAttachmentContext = await this.attachmentsService.getExtractedText(attachments.map((a) => a.id), tenantId);
+            }
+        }
+        catch {
+            /* non-blocking — score without attachments */
+        }
         // 3. Build the optimization + scoring prompt
         const prompt = `Ti si senior poslovni konsultant koji recenzira deliverable-e za klijenta. Tvoj zadatak je da:
 
@@ -26182,6 +26855,7 @@ ${conceptContext}
 ZADATAK: ${task.title}
 ${task.content ? `OPIS: ${task.content}` : ''}
 ${task.expectedOutcome ? `OČEKIVANI REZULTAT: ${task.expectedOutcome}` : ''}
+${scoringAttachmentContext ? `\nPRILOŽENI DOKUMENTI:\n${scoringAttachmentContext}` : ''}
 
 IZLAZ KOJI TREBA OCENITI I OPTIMIZOVATI:
 ${task.userReport}
@@ -26311,6 +26985,105 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                 message: error instanceof Error
                     ? error.message
                     : 'Ocenjivanje rezultata nije uspelo. Pokušajte ponovo.',
+            });
+        }
+    }
+    /**
+     * Sprint 2 Epic 2.2: Step-level feedback handler.
+     * Allows reviewing individual workflow steps (child notes) of a task.
+     * Accepts score, feedback text, and optional attachment IDs.
+     */
+    async handleStepFeedback(client, payload) {
+        const authenticatedClient = client;
+        try {
+            this.logger.log({
+                message: 'Step feedback submitted',
+                userId: authenticatedClient.userId,
+                stepId: payload.stepId,
+                score: payload.score,
+            });
+            // 1. Validate step note exists, belongs to tenant, and user owns it
+            const step = await this.prisma.note.findFirst({
+                where: {
+                    id: payload.stepId,
+                    tenantId: authenticatedClient.tenantId,
+                    userId: authenticatedClient.userId,
+                },
+            });
+            if (!step) {
+                client.emit('task:step-feedback-error', {
+                    stepId: payload.stepId,
+                    message: 'Korak nije pronađen',
+                });
+                return;
+            }
+            // 2. Verify it's a child note (has parentNoteId)
+            if (!step.parentNoteId) {
+                client.emit('task:step-feedback-error', {
+                    stepId: payload.stepId,
+                    message: 'Ovaj zadatak nema nadređeni korak',
+                });
+                return;
+            }
+            // 3. Build update data
+            const updateData = {};
+            if (payload.score !== undefined) {
+                const clampedScore = Math.max(0, Math.min(100, payload.score));
+                updateData.aiScore = clampedScore;
+            }
+            if (payload.feedback) {
+                updateData.aiFeedback = payload.feedback;
+            }
+            // Mark as completed when feedback is given
+            if (payload.score !== undefined || payload.feedback) {
+                updateData.status = prisma_1.NoteStatus.COMPLETED;
+            }
+            await this.prisma.note.update({
+                where: { id: payload.stepId },
+                data: updateData,
+            });
+            // 4. Link attachments to the step note
+            if (payload.attachmentIds && payload.attachmentIds.length > 0) {
+                for (const attachmentId of payload.attachmentIds) {
+                    await this.attachmentsService
+                        .linkToNote(attachmentId, payload.stepId, authenticatedClient.tenantId)
+                        .catch((err) => this.logger.warn({
+                        message: 'Failed to link attachment to step',
+                        attachmentId,
+                        stepId: payload.stepId,
+                        error: err instanceof Error ? err.message : 'Unknown',
+                    }));
+                }
+            }
+            // 5. Emit completion
+            client.emit('task:step-feedback-complete', {
+                stepId: payload.stepId,
+                parentId: step.parentNoteId,
+                score: updateData.aiScore ?? step.aiScore,
+                feedback: updateData.aiFeedback ?? step.aiFeedback,
+                status: updateData.status ?? step.status,
+            });
+            // 6. Notify notes updated
+            client.emit('chat:notes-updated', {
+                conversationId: step.conversationId,
+                count: 0,
+            });
+            this.logger.log({
+                message: 'Step feedback saved',
+                stepId: payload.stepId,
+                parentId: step.parentNoteId,
+                score: updateData.aiScore,
+            });
+        }
+        catch (error) {
+            this.logger.error({
+                message: 'Step feedback failed',
+                stepId: payload.stepId,
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
+            client.emit('task:step-feedback-error', {
+                stepId: payload.stepId,
+                message: error instanceof Error ? error.message : 'Greška pri čuvanju povratne informacije',
             });
         }
     }
@@ -27260,28 +28033,36 @@ tslib_1.__decorate([
     tslib_1.__metadata("design:returntype", typeof (_19 = typeof Promise !== "undefined" && Promise) === "function" ? _19 : Object)
 ], ConversationGateway.prototype, "handleSubmitTaskResult", null);
 tslib_1.__decorate([
-    (0, websockets_1.SubscribeMessage)('workflow:start-yolo'),
+    (0, websockets_1.SubscribeMessage)('task:step-feedback'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
     tslib_1.__metadata("design:paramtypes", [typeof (_20 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _20 : Object, Object]),
     tslib_1.__metadata("design:returntype", typeof (_21 = typeof Promise !== "undefined" && Promise) === "function" ? _21 : Object)
+], ConversationGateway.prototype, "handleStepFeedback", null);
+tslib_1.__decorate([
+    (0, websockets_1.SubscribeMessage)('workflow:start-yolo'),
+    tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
+    tslib_1.__param(1, (0, websockets_1.MessageBody)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_22 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _22 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_23 = typeof Promise !== "undefined" && Promise) === "function" ? _23 : Object)
 ], ConversationGateway.prototype, "handleStartYolo", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('yolo:start-domain'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_22 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _22 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_23 = typeof Promise !== "undefined" && Promise) === "function" ? _23 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_24 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _24 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_25 = typeof Promise !== "undefined" && Promise) === "function" ? _25 : Object)
 ], ConversationGateway.prototype, "handleStartDomainYolo", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('discovery:send-message'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_24 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _24 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_25 = typeof Promise !== "undefined" && Promise) === "function" ? _25 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_26 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _26 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_27 = typeof Promise !== "undefined" && Promise) === "function" ? _27 : Object)
 ], ConversationGateway.prototype, "handleDiscoveryMessage", null);
 exports.ConversationGateway = ConversationGateway = ConversationGateway_1 = tslib_1.__decorate([
     (0, websockets_1.WebSocketGateway)({
@@ -27296,25 +28077,25 @@ exports.ConversationGateway = ConversationGateway = ConversationGateway_1 = tsli
 
 
 /***/ }),
-/* 177 */
+/* 178 */
 /***/ ((module) => {
 
 module.exports = require("@nestjs/websockets");
 
 /***/ }),
-/* 178 */
+/* 179 */
 /***/ ((module) => {
 
 module.exports = require("socket.io");
 
 /***/ }),
-/* 179 */
+/* 180 */
 /***/ ((module) => {
 
 module.exports = require("jwks-rsa");
 
 /***/ }),
-/* 180 */
+/* 181 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -27331,9 +28112,9 @@ const conversation_module_1 = __webpack_require__(131);
 const web_search_module_1 = __webpack_require__(146);
 const file_upload_module_1 = __webpack_require__(40);
 const workflow_module_1 = __webpack_require__(145);
-const onboarding_controller_1 = __webpack_require__(181);
-const onboarding_service_1 = __webpack_require__(182);
-const onboarding_metric_service_1 = __webpack_require__(183);
+const onboarding_controller_1 = __webpack_require__(182);
+const onboarding_service_1 = __webpack_require__(183);
+const onboarding_metric_service_1 = __webpack_require__(184);
 /**
  * Module for the onboarding quick win flow.
  * Provides sub-5-minute first value experience for new users.
@@ -27362,7 +28143,7 @@ exports.OnboardingModule = OnboardingModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 181 */
+/* 182 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -27373,8 +28154,8 @@ exports.OnboardingController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const platform_express_1 = __webpack_require__(27);
-const onboarding_service_1 = __webpack_require__(182);
-const quick_win_dto_1 = __webpack_require__(185);
+const onboarding_service_1 = __webpack_require__(183);
+const quick_win_dto_1 = __webpack_require__(186);
 const jwt_auth_guard_1 = __webpack_require__(46);
 const mfa_required_guard_1 = __webpack_require__(59);
 const skip_mfa_decorator_1 = __webpack_require__(51);
@@ -27677,7 +28458,7 @@ exports.OnboardingController = OnboardingController = OnboardingController_1 = t
 
 
 /***/ }),
-/* 182 */
+/* 183 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -27698,8 +28479,8 @@ const web_search_service_1 = __webpack_require__(147);
 const brain_seeding_service_1 = __webpack_require__(117);
 const concept_classifier_service_1 = __webpack_require__(121);
 const workflow_service_1 = __webpack_require__(150);
-const onboarding_metric_service_1 = __webpack_require__(183);
-const quick_task_templates_1 = __webpack_require__(184);
+const onboarding_metric_service_1 = __webpack_require__(184);
+const quick_task_templates_1 = __webpack_require__(185);
 const department_categories_1 = __webpack_require__(118);
 /**
  * Service for managing the onboarding quick win flow.
@@ -28949,7 +29730,7 @@ exports.OnboardingService = OnboardingService = OnboardingService_1 = tslib_1.__
 
 
 /***/ }),
-/* 183 */
+/* 184 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -29098,7 +29879,7 @@ exports.OnboardingMetricService = OnboardingMetricService = OnboardingMetricServ
 
 
 /***/ }),
-/* 184 */
+/* 185 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -29288,7 +30069,7 @@ Please generate a professional, ready-to-use output that demonstrates immediate 
 
 
 /***/ }),
-/* 185 */
+/* 186 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -29417,7 +30198,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 186 */
+/* 187 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -29426,8 +30207,8 @@ exports.PersonasModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const auth_module_1 = __webpack_require__(41);
-const personas_service_1 = __webpack_require__(187);
-const personas_controller_1 = __webpack_require__(188);
+const personas_service_1 = __webpack_require__(188);
+const personas_controller_1 = __webpack_require__(189);
 /**
  * Module for department persona management.
  * Provides persona definitions and API endpoints for persona selection.
@@ -29446,7 +30227,7 @@ exports.PersonasModule = PersonasModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 187 */
+/* 188 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -29587,7 +30368,7 @@ exports.PersonasService = PersonasService = PersonasService_1 = tslib_1.__decora
 
 
 /***/ }),
-/* 188 */
+/* 189 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -29598,7 +30379,7 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const jwt_auth_guard_1 = __webpack_require__(46);
 const mfa_required_guard_1 = __webpack_require__(59);
-const personas_service_1 = __webpack_require__(187);
+const personas_service_1 = __webpack_require__(188);
 /**
  * Controller for persona-related API endpoints.
  * All endpoints require authentication and MFA verification.
@@ -29650,7 +30431,7 @@ exports.PersonasController = PersonasController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 189 */
+/* 190 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -29679,7 +30460,7 @@ exports.QdrantModule = QdrantModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 190 */
+/* 191 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -29689,9 +30470,9 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
 const auth_module_1 = __webpack_require__(41);
-const data_integrity_controller_1 = __webpack_require__(191);
-const data_integrity_service_1 = __webpack_require__(192);
-const brain_config_controller_1 = __webpack_require__(193);
+const data_integrity_controller_1 = __webpack_require__(192);
+const data_integrity_service_1 = __webpack_require__(193);
+const brain_config_controller_1 = __webpack_require__(194);
 let AdminModule = class AdminModule {
 };
 exports.AdminModule = AdminModule;
@@ -29705,7 +30486,7 @@ exports.AdminModule = AdminModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 191 */
+/* 192 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -29714,7 +30495,10 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DataIntegrityController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const data_integrity_service_1 = __webpack_require__(192);
+const data_integrity_service_1 = __webpack_require__(193);
+const jwt_auth_guard_1 = __webpack_require__(46);
+const roles_guard_1 = __webpack_require__(55);
+const roles_decorator_1 = __webpack_require__(54);
 let DataIntegrityController = class DataIntegrityController {
     constructor(integrityService) {
         this.integrityService = integrityService;
@@ -29726,18 +30510,20 @@ let DataIntegrityController = class DataIntegrityController {
 exports.DataIntegrityController = DataIntegrityController;
 tslib_1.__decorate([
     (0, common_1.Get)('data-integrity'),
+    (0, roles_decorator_1.Roles)('PLATFORM_OWNER'),
     tslib_1.__metadata("design:type", Function),
     tslib_1.__metadata("design:paramtypes", []),
     tslib_1.__metadata("design:returntype", typeof (_b = typeof Promise !== "undefined" && Promise) === "function" ? _b : Object)
 ], DataIntegrityController.prototype, "checkIntegrity", null);
 exports.DataIntegrityController = DataIntegrityController = tslib_1.__decorate([
     (0, common_1.Controller)('v1/admin'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof data_integrity_service_1.DataIntegrityService !== "undefined" && data_integrity_service_1.DataIntegrityService) === "function" ? _a : Object])
 ], DataIntegrityController);
 
 
 /***/ }),
-/* 192 */
+/* 193 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -29859,7 +30645,7 @@ exports.DataIntegrityService = DataIntegrityService = DataIntegrityService_1 = t
 
 
 /***/ }),
-/* 193 */
+/* 194 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -29934,7 +30720,7 @@ exports.BrainConfigController = BrainConfigController = BrainConfigController_1 
 
 
 /***/ }),
-/* 194 */
+/* 195 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -29945,9 +30731,9 @@ const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(9);
 const auth_module_1 = __webpack_require__(41);
 const notes_module_1 = __webpack_require__(132);
-const pdf_export_controller_1 = __webpack_require__(195);
-const pdf_export_service_1 = __webpack_require__(196);
-const puppeteer_provider_1 = __webpack_require__(197);
+const pdf_export_controller_1 = __webpack_require__(196);
+const pdf_export_service_1 = __webpack_require__(197);
+const puppeteer_provider_1 = __webpack_require__(198);
 let PdfExportModule = class PdfExportModule {
 };
 exports.PdfExportModule = PdfExportModule;
@@ -29961,7 +30747,7 @@ exports.PdfExportModule = PdfExportModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 195 */
+/* 196 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -29975,7 +30761,7 @@ const class_validator_1 = __webpack_require__(38);
 const express_1 = __webpack_require__(155);
 const jwt_auth_guard_1 = __webpack_require__(46);
 const current_user_decorator_1 = __webpack_require__(48);
-const pdf_export_service_1 = __webpack_require__(196);
+const pdf_export_service_1 = __webpack_require__(197);
 class ExportReportsDto {
 }
 exports.ExportReportsDto = ExportReportsDto;
@@ -30025,7 +30811,7 @@ exports.PdfExportController = PdfExportController = PdfExportController_1 = tsli
 
 
 /***/ }),
-/* 196 */
+/* 197 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -30037,8 +30823,8 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const notes_service_1 = __webpack_require__(133);
 const tenant_context_1 = __webpack_require__(9);
-const puppeteer_provider_1 = __webpack_require__(197);
-const pdf_html_builder_1 = __webpack_require__(199);
+const puppeteer_provider_1 = __webpack_require__(198);
+const pdf_html_builder_1 = __webpack_require__(200);
 let PdfExportService = PdfExportService_1 = class PdfExportService {
     constructor(notesService, puppeteer, prisma) {
         this.notesService = notesService;
@@ -30118,7 +30904,7 @@ exports.PdfExportService = PdfExportService = PdfExportService_1 = tslib_1.__dec
 
 
 /***/ }),
-/* 197 */
+/* 198 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -30127,7 +30913,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.PuppeteerProvider = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const puppeteer_1 = tslib_1.__importDefault(__webpack_require__(198));
+const puppeteer_1 = tslib_1.__importDefault(__webpack_require__(199));
 let PuppeteerProvider = PuppeteerProvider_1 = class PuppeteerProvider {
     constructor() {
         this.logger = new common_1.Logger(PuppeteerProvider_1.name);
@@ -30166,20 +30952,20 @@ exports.PuppeteerProvider = PuppeteerProvider = PuppeteerProvider_1 = tslib_1.__
 
 
 /***/ }),
-/* 198 */
+/* 199 */
 /***/ ((module) => {
 
 module.exports = require("puppeteer");
 
 /***/ }),
-/* 199 */
+/* 200 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.buildPdfHtml = buildPdfHtml;
-const server_1 = __webpack_require__(200);
-const pdf_light_theme_1 = __webpack_require__(204);
+const server_1 = __webpack_require__(201);
+const pdf_light_theme_1 = __webpack_require__(205);
 function escapeHtml(str) {
     return str
         .replace(/&/g, '&amp;')
@@ -30286,7 +31072,7 @@ function buildPdfHtml(options) {
 
 
 /***/ }),
-/* 200 */
+/* 201 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -30294,11 +31080,11 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 const tslib_1 = __webpack_require__(4);
 // Server-only exports (Node.js dependencies like isomorphic-dompurify).
 // Do NOT import from frontend code — use @mentor-ai/shared/utils instead.
-tslib_1.__exportStar(__webpack_require__(201), exports);
+tslib_1.__exportStar(__webpack_require__(202), exports);
 
 
 /***/ }),
-/* 201 */
+/* 202 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -30310,8 +31096,8 @@ tslib_1.__exportStar(__webpack_require__(201), exports);
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.renderMarkdownServer = renderMarkdownServer;
 const tslib_1 = __webpack_require__(4);
-const marked_1 = __webpack_require__(202);
-const isomorphic_dompurify_1 = tslib_1.__importDefault(__webpack_require__(203));
+const marked_1 = __webpack_require__(203);
+const isomorphic_dompurify_1 = tslib_1.__importDefault(__webpack_require__(204));
 const callout_transform_1 = __webpack_require__(34);
 const PURIFY_CONFIG = {
     ADD_ATTR: ['target', 'rel', 'class'],
@@ -30376,19 +31162,19 @@ function renderMarkdownServer(value) {
 
 
 /***/ }),
-/* 202 */
+/* 203 */
 /***/ ((module) => {
 
 module.exports = require("marked");
 
 /***/ }),
-/* 203 */
+/* 204 */
 /***/ ((module) => {
 
 module.exports = require("isomorphic-dompurify");
 
 /***/ }),
-/* 204 */
+/* 205 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -30647,7 +31433,7 @@ exports.PDF_LIGHT_THEME_CSS = `
 
 
 /***/ }),
-/* 205 */
+/* 206 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -30843,7 +31629,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 const common_1 = __webpack_require__(1);
 const core_1 = __webpack_require__(2);
 const app_module_1 = __webpack_require__(3);
-const all_exceptions_filter_1 = __webpack_require__(205);
+const all_exceptions_filter_1 = __webpack_require__(206);
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
     const globalPrefix = 'api';

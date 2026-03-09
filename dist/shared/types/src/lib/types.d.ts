@@ -391,6 +391,7 @@ export interface ChatMessageChunk {
 }
 /** WebSocket event: Server signals message completion */
 export interface ChatComplete {
+    conversationId?: string;
     messageId: string;
     fullContent: string;
     metadata?: Record<string, unknown>;
