@@ -30920,17 +30920,22 @@ let PuppeteerProvider = PuppeteerProvider_1 = class PuppeteerProvider {
         this.browser = null;
     }
     async onModuleInit() {
-        this.logger.log('Launching Puppeteer browser...');
-        this.browser = await puppeteer_1.default.launch({
-            headless: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-            ],
-        });
-        this.logger.log('Puppeteer browser launched');
+        try {
+            this.logger.log('Launching Puppeteer browser...');
+            this.browser = await puppeteer_1.default.launch({
+                headless: true,
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
+                ],
+            });
+            this.logger.log('Puppeteer browser launched');
+        }
+        catch (error) {
+            this.logger.warn(`Puppeteer browser launch failed — PDF export will be unavailable: ${error instanceof Error ? error.message : error}`);
+        }
     }
     async onModuleDestroy() {
         if (this.browser) {

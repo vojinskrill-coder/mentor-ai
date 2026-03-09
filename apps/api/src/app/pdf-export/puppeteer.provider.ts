@@ -7,17 +7,23 @@ export class PuppeteerProvider implements OnModuleInit, OnModuleDestroy {
   private browser: Browser | null = null;
 
   async onModuleInit(): Promise<void> {
-    this.logger.log('Launching Puppeteer browser...');
-    this.browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-      ],
-    });
-    this.logger.log('Puppeteer browser launched');
+    try {
+      this.logger.log('Launching Puppeteer browser...');
+      this.browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+        ],
+      });
+      this.logger.log('Puppeteer browser launched');
+    } catch (error) {
+      this.logger.warn(
+        `Puppeteer browser launch failed — PDF export will be unavailable: ${error instanceof Error ? error.message : error}`
+      );
+    }
   }
 
   async onModuleDestroy(): Promise<void> {
