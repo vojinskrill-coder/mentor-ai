@@ -46,24 +46,23 @@ export class JobPlannerService {
       .map((a) => `- ${a.type}: ${a.label} — ${a.description}`)
       .join('\n');
 
-    const systemPrompt = `You are a business operations planner. Given a completed task report, create an execution plan of AI agent jobs that will produce concrete deliverables.
+    const systemPrompt = `You are a business operations planner. Given a completed task report, you MUST create an execution plan of AI agent jobs that will enrich the report with real-world data and produce concrete deliverables.
 
 Available agent types:
 ${agentDescriptions}
 
 Rules:
-- Create 2-4 jobs ONLY if agents genuinely add value — if nothing is useful, return an empty array []
-- Jobs execute sequentially: later jobs receive outputs from earlier jobs as context
+- ALWAYS create 2-4 jobs. The report is a starting point — agents add real-world research, competitor data, market validation, and actionable content.
+- ALWAYS start with web_search to gather current market data, competitor intelligence, and industry benchmarks.
+- Jobs execute sequentially: later jobs receive outputs from earlier jobs as context.
 - Common chains: web_search → content, web_search → marketing, web_search → sales
-- Each job instruction MUST be specific to this task and reference the business context (company name, industry, products, target audience)
-- Instructions must tell agents WHAT to do, not analyze — they should execute their tools and produce deliverables
-- Write instructions in English (agents will produce Serbian output)
-- Respond ONLY with a JSON array, no other text
+- Each job instruction MUST be specific to this task and reference the business context (company name, industry, products, target audience).
+- Instructions must tell agents WHAT to do and what tools to use — they should execute web searches, fetch competitor websites, and produce deliverables.
+- Write instructions in English (agents will produce Serbian output).
+- Respond ONLY with a JSON array, no other text.
 
 Output format:
-[{"agentType":"web_search","order":1,"dependsOnOrders":[],"instruction":"Research..."},{"agentType":"content","order":2,"dependsOnOrders":[1],"instruction":"Using the research results, create..."}]
-
-If no agents are relevant, return: []`;
+[{"agentType":"web_search","order":1,"dependsOnOrders":[],"instruction":"Research..."},{"agentType":"content","order":2,"dependsOnOrders":[1],"instruction":"Using the research results, create..."}]`;
 
     const userMessage = `Task: ${note.title}
 
@@ -110,10 +109,10 @@ Create an execution plan of agent jobs for this task. Return JSON array only.`;
         instruction: string;
       }>;
 
-      // If LLM returned empty array, no jobs needed
+      // If LLM returned empty array, use default web_search → content chain
       if (parsed.length === 0) {
-        this.logger.log({ message: 'LLM determined no agent jobs needed', noteId });
-        return [];
+        this.logger.warn({ message: 'LLM returned empty job plan — using default chain', noteId });
+        return this.createDefaultJobs(noteId, tenantId, userId, note.title, note.userReport);
       }
 
       const validTypes = Object.values(AgentType) as string[];
