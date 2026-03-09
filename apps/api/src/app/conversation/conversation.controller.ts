@@ -20,6 +20,7 @@ import { UpdateConversationDto } from './dto/update-conversation.dto';
 import { UpdatePersonaDto } from '../personas/dto/update-persona.dto';
 import { CurriculumService } from '../knowledge/services/curriculum.service';
 import { ConceptService } from '../knowledge/services/concept.service';
+import { ConceptPlanService } from './concept-plan.service';
 
 /**
  * Controller for chat conversation management.
@@ -32,7 +33,8 @@ export class ConversationController {
   constructor(
     private readonly conversationService: ConversationService,
     private readonly curriculumService: CurriculumService,
-    private readonly conceptService: ConceptService
+    private readonly conceptService: ConceptService,
+    private readonly conceptPlanService: ConceptPlanService
   ) {}
 
   /**
@@ -67,6 +69,15 @@ export class ConversationController {
       dto.personaType,
       conceptId
     );
+
+    // Auto Concept Plan: fire-and-forget plan creation or next-step suggestion
+    if (conceptId) {
+      this.conceptPlanService
+        .triggerConceptPlan(conceptId, conversation.id, user.userId, user.tenantId)
+        .catch(() => {
+          /* logged inside service */
+        });
+    }
 
     return { data: conversation };
   }

@@ -14,6 +14,7 @@ import { AgentExecutionModule } from '../agent-execution/agent-execution.module'
 import { ConversationController } from './conversation.controller';
 import { ConversationService } from './conversation.service';
 import { ConversationGateway } from './conversation.gateway';
+import { ConceptPlanService } from './concept-plan.service';
 
 @Module({
   imports: [
@@ -31,7 +32,7 @@ import { ConversationGateway } from './conversation.gateway';
     AgentExecutionModule,
   ],
   controllers: [ConversationController],
-  providers: [ConversationService, ConversationGateway],
+  providers: [ConversationService, ConversationGateway, ConceptPlanService],
   exports: [ConversationService],
 })
 export class ConversationModule {}

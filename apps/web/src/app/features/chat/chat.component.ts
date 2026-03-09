@@ -4230,814 +4230,906 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     }, 500);
     this.destroyRef.onDestroy(() => clearInterval(checkConnection));
 
-    this.wsOn(this.chatWsService.onMessageDeleted((data) => {
-      this.activeConversation$.update((conv) => {
-        if (!conv || conv.id !== data.conversationId) return conv;
-        return {
-          ...conv,
-          messages: conv.messages.filter((msg) => msg.id !== data.messageId),
-        };
-      });
-    }));
-
-    this.wsOn(this.chatWsService.onMessageReceived((data) => {
-      // Update user message ID with real one from server
-      this.activeConversation$.update((conv) => {
-        if (!conv) return conv;
-        const messages = conv.messages.map((msg, idx, arr) => {
-          // Find last user message with temp ID
-          const isLastTempUser =
-            msg.role === MessageRole.USER &&
-            msg.id.startsWith('temp_') &&
-            !arr
-              .slice(idx + 1)
-              .some((m) => m.role === MessageRole.USER && m.id.startsWith('temp_'));
-          if (isLastTempUser) {
-            return { ...msg, id: data.messageId };
-          }
-          return msg;
+    this.wsOn(
+      this.chatWsService.onMessageDeleted((data) => {
+        this.activeConversation$.update((conv) => {
+          if (!conv || conv.id !== data.conversationId) return conv;
+          return {
+            ...conv,
+            messages: conv.messages.filter((msg) => msg.id !== data.messageId),
+          };
         });
-        return { ...conv, messages };
-      });
-      this.isStreaming$.set(true);
-    }));
+      })
+    );
 
-    this.wsOn(this.chatWsService.onMessageChunk((data) => {
-      this.streamBuffer += data.content;
-      if (!this.streamRafId) {
-        this.streamRafId = requestAnimationFrame(() => {
-          this.streamingContent$.update((c) => c + this.streamBuffer);
-          this.streamBuffer = '';
-          this.streamRafId = null;
-        });
-      }
-    }));
-
-    this.wsOn(this.chatWsService.onResearchPhase((data) => {
-      this.researchPhase$.set(data.phase === 'researching' ? 'researching' : 'thinking');
-    }));
-
-    this.wsOn(this.chatWsService.onComplete((data) => {
-      // Extract metadata (Story 2.5 confidence, 2.6 citations, 2.7 memory, 3.11 web sources)
-      const confidence = data.metadata?.['confidence'] as
-        | {
-            score?: number;
-            factors?: ConfidenceFactor[];
-          }
-        | undefined;
-      const citations = (data.metadata?.['citations'] as ConceptCitation[] | undefined) ?? [];
-      const memoryAttributions =
-        (data.metadata?.['memoryAttributions'] as MemoryAttribution[] | undefined) ?? [];
-      const webSearchSources =
-        (data.metadata?.['webSearchSources'] as WebSearchSource[] | undefined) ?? [];
-      const suggestedActions =
-        (data.metadata?.['suggestedActions'] as SuggestedAction[] | undefined) ?? [];
-
-      const aiMessage: Message = {
-        id: data.messageId,
-        conversationId: this.activeConversationId$() ?? '',
-        role: MessageRole.ASSISTANT,
-        content: data.fullContent,
-        confidenceScore: confidence?.score ?? null,
-        confidenceFactors: confidence?.factors ?? null,
-        citations: citations.length > 0 ? citations : undefined,
-        memoryAttributions: memoryAttributions.length > 0 ? memoryAttributions : undefined,
-        webSearchSources: webSearchSources.length > 0 ? webSearchSources : undefined,
-        suggestedActions: suggestedActions.length > 0 ? suggestedActions : undefined,
-        createdAt: new Date().toISOString(),
-      };
-
-      this.activeConversation$.update((conv) => {
-        if (!conv) return conv;
-        return {
-          ...conv,
-          messages: [...conv.messages, aiMessage],
-        };
-      });
-
-      this.isLoading$.set(false);
-      this.isStreaming$.set(false);
-      this.streamingContent$.set('');
-      this.researchPhase$.set('thinking');
-    }));
-
-    this.wsOn(this.chatWsService.onError((error) => {
-      this.isLoading$.set(false);
-      this.isStreaming$.set(false);
-      this.researchPhase$.set('thinking');
-      const errorType = error.type ? `[${error.type}] ` : '';
-      this.showError(errorType + (error.message || 'Poruka nije poslata. Pokušajte ponovo.'));
-    }));
-
-    this.wsOn(this.chatWsService.onNotesUpdated((data) => {
-      // M1: Only refresh if the update is for the active conversation (or no conversationId filter)
-      const activeConvId = this.activeConversationId$();
-      if (!data?.conversationId || data.conversationId === activeConvId || this.folderName$()) {
-        this.conversationNotes?.loadNotes();
-      }
-    }));
-
-    this.wsOn(this.chatWsService.onTasksCreatedForExecution((data) => {
-      if (data.conversationId !== this.activeConversationId$()) return;
-
-      // Auto-select created tasks in notes tab
-      if (data.taskIds.length > 0) {
-        this.autoSelectTaskIds$.set(data.taskIds);
-      }
-      this.conversationNotes?.loadNotes();
-
-      // Onboarding flow: update status and prepare to navigate to Tasks tab
-      if (this.isOnboardingFlow) {
-        this.onboardingStatus$.set('Zadaci kreirani! Pokrećemo izvršavanje...');
-      }
-
-      // Refresh concept tree (new conversations may have been created)
-      this.conceptTree?.loadTree();
-
-      // Show visible feedback in chat with navigation instructions
-      const count = data.taskCount ?? data.taskIds.length;
-      let content = `**Kreirano ${count} ${count === 1 ? 'zadatak' : 'zadataka'}!**`;
-      content += ' Kliknite na dugme ispod da biste prešli na zadatak.';
-
-      const taskMsg: Message = {
-        id: `tasks_created_${Date.now()}`,
-        conversationId: data.conversationId,
-        role: MessageRole.ASSISTANT,
-        content,
-        confidenceScore: null,
-        confidenceFactors: null,
-        createdAt: new Date().toISOString(),
-      };
-      this.activeConversation$.update((conv) => {
-        if (!conv) return conv;
-        return { ...conv, messages: [...conv.messages, taskMsg] };
-      });
-
-      // C6: Populate task navigation buttons from taskIds using notes data
-      // Review fix: Retry with increasing delay instead of fixed 800ms race
-      const tryPopulateNotifications = (attempt: number) => {
-        const notes = this.conversationNotes?.notes() ?? [];
-        const created = notes
-          .filter((n) => data.taskIds.includes(n.id))
-          .map((n) => ({
-            id: n.id,
-            title: n.title,
-            conceptId: n.conceptId ?? null,
-            conceptName: null as string | null,
-            conversationId: n.conversationId ?? data.conversationId,
-            isCrossConversation: (n.conversationId ?? data.conversationId) !== data.conversationId,
-          }));
-        if (created.length > 0) {
-          this.createdTaskNotifications$.set(created);
-        } else if (attempt < 5) {
-          // Notes not loaded yet — retry with increasing delay (200, 400, 800, 1600ms)
-          setTimeout(() => tryPopulateNotifications(attempt + 1), 200 * Math.pow(2, attempt));
-        }
-      };
-      setTimeout(() => tryPopulateNotifications(0), 200);
-
-      // Auto AI Popuni: if toggle is ON, automatically execute FRESH tasks only
-      // Reused tasks are already COMPLETED — skip AI execution for them
-      const reusedSet = new Set(data.reusedTaskIds ?? []);
-      const freshTaskIds = data.taskIds.filter((id) => !reusedSet.has(id));
-
-      if (this.autoAiPopuni$() && freshTaskIds.length > 0) {
-        setTimeout(() => {
-          const convId = data.conversationId;
-          for (const taskId of freshTaskIds) {
-            this.chatWsService.emitExecuteTaskAi(taskId, convId);
-          }
-        }, 1500);
-      }
-    }));
-
-    this.wsOn(this.chatWsService.onConceptDetected((data) => {
-      // Refresh sidebar tree when a conversation is auto-classified
-      this.conceptTree?.loadTree();
-      // Update active conversation's conceptId if it matches
-      if (data.conversationId === this.activeConversationId$()) {
+    this.wsOn(
+      this.chatWsService.onMessageReceived((data) => {
+        // Update user message ID with real one from server
         this.activeConversation$.update((conv) => {
           if (!conv) return conv;
-          return { ...conv, conceptId: data.conceptId };
+          const messages = conv.messages.map((msg, idx, arr) => {
+            // Find last user message with temp ID
+            const isLastTempUser =
+              msg.role === MessageRole.USER &&
+              msg.id.startsWith('temp_') &&
+              !arr
+                .slice(idx + 1)
+                .some((m) => m.role === MessageRole.USER && m.id.startsWith('temp_'));
+            if (isLastTempUser) {
+              return { ...msg, id: data.messageId };
+            }
+            return msg;
+          });
+          return { ...conv, messages };
         });
-      }
-    }));
+        this.isStreaming$.set(true);
+      })
+    );
 
-    // ─── Workflow Events ────────────────────────────────────────
+    this.wsOn(
+      this.chatWsService.onMessageChunk((data) => {
+        this.streamBuffer += data.content;
+        if (!this.streamRafId) {
+          this.streamRafId = requestAnimationFrame(() => {
+            this.streamingContent$.update((c) => c + this.streamBuffer);
+            this.streamBuffer = '';
+            this.streamRafId = null;
+          });
+        }
+      })
+    );
 
-    this.wsOn(this.chatWsService.onPlanReady((payload) => {
-      if (payload.conversationId !== this.activeConversationId$()) return;
-      if (this.planGenerationTimeout) {
-        clearTimeout(this.planGenerationTimeout);
-        this.planGenerationTimeout = null;
-      }
-      this.isGeneratingPlan$.set(false);
+    this.wsOn(
+      this.chatWsService.onResearchPhase((data) => {
+        this.researchPhase$.set(data.phase === 'researching' ? 'researching' : 'thinking');
+      })
+    );
 
-      this.executingTaskId$.set(null);
-      this.currentPlan$.set(payload.plan);
-      this.activePlanId$.set(payload.plan.planId);
-      this.executionProgress$.set(new Map());
-      this.showPlanOverlay$.set(true);
-    }));
+    this.wsOn(
+      this.chatWsService.onComplete((data) => {
+        // Skip messages for other conversations (background plan messages include conversationId)
+        const activeConvId = this.activeConversationId$();
+        if (data.conversationId && data.conversationId !== activeConvId) return;
 
-    this.wsOn(this.chatWsService.onConversationsCreated((payload) => {
-      if (payload.originalConversationId !== this.activeConversationId$()) return;
-      // Store created conversations for completion summary links
-      this.createdConceptConversations$.set(payload.conversations);
-      // Mark created conversations as new (blue dot)
-      this.newConversationIds$.update((s) => {
-        const n = new Set(s);
-        payload.conversations.forEach((c) => n.add(c.conversationId));
-        return n;
-      });
-      // Refresh tree so new per-concept conversations appear
-      this.conceptTree?.loadTree();
-    }));
+        // Extract metadata (Story 2.5 confidence, 2.6 citations, 2.7 memory, 3.11 web sources)
+        const confidence = data.metadata?.['confidence'] as
+          | {
+              score?: number;
+              factors?: ConfidenceFactor[];
+            }
+          | undefined;
+        const citations = (data.metadata?.['citations'] as ConceptCitation[] | undefined) ?? [];
+        const memoryAttributions =
+          (data.metadata?.['memoryAttributions'] as MemoryAttribution[] | undefined) ?? [];
+        const webSearchSources =
+          (data.metadata?.['webSearchSources'] as WebSearchSource[] | undefined) ?? [];
+        const suggestedActions =
+          (data.metadata?.['suggestedActions'] as SuggestedAction[] | undefined) ?? [];
 
-    this.wsOn(this.chatWsService.onStepProgress((payload) => {
-      if (payload.conversationId !== this.activeConversationId$()) return;
+        const aiMessage: Message = {
+          id: data.messageId,
+          conversationId: data.conversationId ?? activeConvId ?? '',
+          role: MessageRole.ASSISTANT,
+          content: data.fullContent,
+          confidenceScore: confidence?.score ?? null,
+          confidenceFactors: confidence?.factors ?? null,
+          citations: citations.length > 0 ? citations : undefined,
+          memoryAttributions: memoryAttributions.length > 0 ? memoryAttributions : undefined,
+          webSearchSources: webSearchSources.length > 0 ? webSearchSources : undefined,
+          suggestedActions: suggestedActions.length > 0 ? suggestedActions : undefined,
+          createdAt: new Date().toISOString(),
+        };
 
-      // Auto-execute path: mark this conversation as executing on first step-progress
-      this.executingWorkflowConversationIds$.update((s) => new Set([...s, payload.conversationId]));
-      if (!this.activePlanId$() && payload.planId) {
-        this.activePlanId$.set(payload.planId);
-      }
+        this.activeConversation$.update((conv) => {
+          if (!conv) return conv;
+          return {
+            ...conv,
+            messages: [...conv.messages, aiMessage],
+          };
+        });
 
-      this.executionProgress$.update((map) => {
-        const next = new Map(map);
-        next.set(payload.stepId, payload.status);
-        return next;
-      });
+        // Only reset streaming state for user-initiated chat (not background messages)
+        const isBackground = data.metadata?.['background'] === true;
+        if (!isBackground) {
+          this.isLoading$.set(false);
+          this.isStreaming$.set(false);
+          this.streamingContent$.set('');
+          this.researchPhase$.set('thinking');
+        }
+      })
+    );
 
-      // Update workflow status bar entry
-      if (payload.planId) {
-        this.workflowHistory$.update((entries) =>
-          entries.map((e) =>
-            e.planId === payload.planId
-              ? {
-                  ...e,
-                  currentStepTitle:
-                    payload.status === 'in_progress'
-                      ? (payload.stepTitle ?? e.currentStepTitle)
-                      : e.currentStepTitle,
-                  completedSteps:
-                    payload.status === 'completed' || payload.status === 'failed'
-                      ? e.completedSteps + 1
-                      : e.completedSteps,
-                }
-              : e
-          )
-        );
-      }
+    this.wsOn(
+      this.chatWsService.onError((error) => {
+        this.isLoading$.set(false);
+        this.isStreaming$.set(false);
+        this.researchPhase$.set('thinking');
+        const errorType = error.type ? `[${error.type}] ` : '';
+        this.showError(errorType + (error.message || 'Poruka nije poslata. Pokušajte ponovo.'));
+      })
+    );
 
-      // Update inline progress indicator
-      if (payload.totalSteps != null) {
-        this.totalStepsCount$.set(payload.totalSteps);
-      }
+    this.wsOn(
+      this.chatWsService.onNotesUpdated((data) => {
+        // M1: Only refresh if the update is for the active conversation (or no conversationId filter)
+        const activeConvId = this.activeConversationId$();
+        if (!data?.conversationId || data.conversationId === activeConvId || this.folderName$()) {
+          this.conversationNotes?.loadNotes();
+        }
+      })
+    );
 
-      if (payload.status === 'in_progress') {
-        // Update current step info
-        this.currentStepTitle$.set(payload.stepTitle ?? 'Izvršavanje...');
-        if (payload.stepIndex != null) {
-          this.currentStepIndex$.set(payload.stepIndex);
+    this.wsOn(
+      this.chatWsService.onTasksCreatedForExecution((data) => {
+        if (data.conversationId !== this.activeConversationId$()) return;
+
+        // Auto-select created tasks in notes tab
+        if (data.taskIds.length > 0) {
+          this.autoSelectTaskIds$.set(data.taskIds);
+        }
+        this.conversationNotes?.loadNotes();
+
+        // Onboarding flow: update status and prepare to navigate to Tasks tab
+        if (this.isOnboardingFlow) {
+          this.onboardingStatus$.set('Zadaci kreirani! Pokrećemo izvršavanje...');
         }
 
-        // Add step-start status message to chat
-        const stepLabel = payload.stepTitle ?? 'Korak';
-        const stepNum = (payload.stepIndex ?? 0) + 1;
-        const total = payload.totalSteps ?? 0;
-        const statusMessage: Message = {
-          id: `wf_status_${payload.stepId}`,
-          conversationId: this.activeConversationId$() ?? '',
+        // Refresh concept tree (new conversations may have been created)
+        this.conceptTree?.loadTree();
+
+        // Show visible feedback in chat with navigation instructions
+        const count = data.taskCount ?? data.taskIds.length;
+        let content = `**Kreirano ${count} ${count === 1 ? 'zadatak' : 'zadataka'}!**`;
+        content += ' Kliknite na dugme ispod da biste prešli na zadatak.';
+
+        const taskMsg: Message = {
+          id: `tasks_created_${Date.now()}`,
+          conversationId: data.conversationId,
           role: MessageRole.ASSISTANT,
-          content: `**Izvršavam korak ${stepNum}/${total}:** ${stepLabel}`,
+          content,
           confidenceScore: null,
           confidenceFactors: null,
           createdAt: new Date().toISOString(),
         };
         this.activeConversation$.update((conv) => {
           if (!conv) return conv;
-          return { ...conv, messages: [...conv.messages, statusMessage] };
+          return { ...conv, messages: [...conv.messages, taskMsg] };
         });
-      }
 
-      // If step completed with content — message rendering now handled by onStepMessage handler (F1 fix)
-      // Only update progress counters and tree here
-      if (payload.status === 'completed' && payload.content) {
-        this.completedStepsCount$.update((c) => c + 1);
-        this.conceptTree?.loadTree();
-        this.conversationNotes?.loadNotes();
+        // C6: Populate task navigation buttons from taskIds using notes data
+        // Review fix: Retry with increasing delay instead of fixed 800ms race
+        const tryPopulateNotifications = (attempt: number) => {
+          const notes = this.conversationNotes?.notes() ?? [];
+          const created = notes
+            .filter((n) => data.taskIds.includes(n.id))
+            .map((n) => ({
+              id: n.id,
+              title: n.title,
+              conceptId: n.conceptId ?? null,
+              conceptName: null as string | null,
+              conversationId: n.conversationId ?? data.conversationId,
+              isCrossConversation:
+                (n.conversationId ?? data.conversationId) !== data.conversationId,
+            }));
+          if (created.length > 0) {
+            this.createdTaskNotifications$.set(created);
+          } else if (attempt < 5) {
+            // Notes not loaded yet — retry with increasing delay (200, 400, 800, 1600ms)
+            setTimeout(() => tryPopulateNotifications(attempt + 1), 200 * Math.pow(2, attempt));
+          }
+        };
+        setTimeout(() => tryPopulateNotifications(0), 200);
 
-        // Show "preparing next step" transition if more steps remain
-        const completed = this.completedStepsCount$();
-        const total = this.totalStepsCount$();
-        if (completed < total) {
-          this.currentStepTitle$.set('Pripremam sledeći korak...');
+        // Auto AI Popuni: if toggle is ON, automatically execute FRESH tasks only
+        // Reused tasks are already COMPLETED — skip AI execution for them
+        const reusedSet = new Set(data.reusedTaskIds ?? []);
+        const freshTaskIds = data.taskIds.filter((id) => !reusedSet.has(id));
+
+        if (this.autoAiPopuni$() && freshTaskIds.length > 0) {
+          setTimeout(() => {
+            const convId = data.conversationId;
+            for (const taskId of freshTaskIds) {
+              this.chatWsService.emitExecuteTaskAi(taskId, convId);
+            }
+          }, 1500);
         }
-      }
+      })
+    );
 
-      if (payload.status === 'completed' && !payload.content) {
-        this.completedStepsCount$.update((c) => c + 1);
+    this.wsOn(
+      this.chatWsService.onConceptDetected((data) => {
+        // Refresh sidebar tree when a conversation is auto-classified
         this.conceptTree?.loadTree();
-        this.conversationNotes?.loadNotes();
-        // Still show transition
-        const completed = this.completedStepsCount$();
-        const total = this.totalStepsCount$();
-        if (completed < total) {
-          this.currentStepTitle$.set('Pripremam sledeći korak...');
+        // Update active conversation's conceptId if it matches
+        if (data.conversationId === this.activeConversationId$()) {
+          this.activeConversation$.update((conv) => {
+            if (!conv) return conv;
+            return { ...conv, conceptId: data.conceptId };
+          });
         }
-      }
+      })
+    );
 
-      if (payload.status === 'failed') {
-        this.completedStepsCount$.update((c) => c + 1);
-        this.conceptTree?.loadTree();
-        this.conversationNotes?.loadNotes();
-      }
-    }));
+    // ─── Workflow Events ────────────────────────────────────────
 
-    this.wsOn(this.chatWsService.onWorkflowComplete((payload) => {
-      if (payload.conversationId !== this.activeConversationId$()) return;
-
-      // Build completion summary with links to concept conversations
-      const statusLabel =
-        payload.status === 'completed'
-          ? 'Završeno'
-          : payload.status === 'cancelled'
-            ? 'Otkazano'
-            : 'Greška';
-      const conceptConvs = this.createdConceptConversations$();
-      let summaryContent = `**${statusLabel}!** Izvršeno ${payload.completedSteps}/${payload.totalSteps} koraka.`;
-
-      if (conceptConvs.length > 0) {
-        summaryContent += '\n\n**Rezultati po konceptima:**';
-        conceptConvs.forEach((c, i) => {
-          summaryContent += `\n${i + 1}. [[${c.conceptName}]]`;
-        });
-        summaryContent +=
-          '\n\nKliknite na koncept ili odaberite konverzaciju u drvetu sa leve strane da pregledate rezultate.';
-      }
-
-      const summaryMessage: Message = {
-        id: `wf_summary_${payload.planId}`,
-        conversationId: this.activeConversationId$() ?? '',
-        role: MessageRole.ASSISTANT,
-        content: summaryContent,
-        confidenceScore: null,
-        confidenceFactors: null,
-        createdAt: new Date().toISOString(),
-      };
-      this.activeConversation$.update((conv) => {
-        if (!conv) return conv;
-        return { ...conv, messages: [...conv.messages, summaryMessage] };
-      });
-
-      // Reset inline progress
-      this.currentStepTitle$.set(null);
-      this.currentStepIndex$.set(0);
-      this.totalStepsCount$.set(0);
-      this.completedStepsCount$.set(0);
-
-      // Remove this conversation from executing set (allows parallel workflows)
-      this.executingWorkflowConversationIds$.update((s) => {
-        const next = new Set(s);
-        next.delete(payload.conversationId);
-        return next;
-      });
-      this.closePlanOverlay();
-      this.conversationNotes?.loadNotes();
-      this.conceptTree?.loadTree();
-
-      // Update workflow status bar entry
-      if (payload.planId) {
-        const finalStatus =
-          payload.status === 'completed'
-            ? ('completed' as const)
-            : payload.status === 'cancelled'
-              ? ('cancelled' as const)
-              : ('failed' as const);
-        this.workflowHistory$.update((entries) =>
-          entries.map((e) =>
-            e.planId === payload.planId
-              ? { ...e, status: finalStatus, completedSteps: payload.completedSteps }
-              : e
-          )
-        );
-
-        // Auto-clear completed/cancelled entries after 30 seconds (gives user time to click)
-        setTimeout(() => {
-          this.workflowHistory$.update((entries) =>
-            entries.filter((e) => e.planId !== payload.planId)
-          );
-        }, 30000);
-      }
-
-      // D4: Suggest next step after successful workflow
-      if (payload.status === 'completed') {
-        setTimeout(() => this.suggestNextStep(), 1500);
-      }
-    }));
-
-    this.wsOn(this.chatWsService.onWorkflowError((payload) => {
-      // Global: remove from executing set regardless of active conversation
-      this.executingWorkflowConversationIds$.update((s) => {
-        const next = new Set(s);
-        next.delete(payload.conversationId);
-        return next;
-      });
-      // Per-conversation UI cleanup only for active conversation
-      if (payload.conversationId !== this.activeConversationId$()) return;
-      this.closePlanOverlay();
-      this.isYoloMode$.set(false);
-      this.yoloProgress$.set(null);
-      this.isGeneratingPlan$.set(false); // Clear plan generation on error
-      this.parallelBatchId$.set(null); // Clear parallel batch on error
-      this.isOnboardingFlow = false;
-      this.onboardingStatus$.set(null);
-      this.showError(payload.message ?? 'Izvršavanje workflow-a neuspešno');
-    }));
-
-    // ─── Task AI Execution Events ───────────────────────────────
-
-    this.wsOn(this.chatWsService.onTaskAiStart((data) => {
-      if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
-      // Clear plan-generation state: direct AI execution replaces workflow plan
-      if (this.isGeneratingPlan$()) {
-        this.isGeneratingPlan$.set(false);
+    this.wsOn(
+      this.chatWsService.onPlanReady((payload) => {
+        if (payload.conversationId !== this.activeConversationId$()) return;
         if (this.planGenerationTimeout) {
           clearTimeout(this.planGenerationTimeout);
           this.planGenerationTimeout = null;
         }
-      }
-      // Set execution state — track which task is currently executing
-      this.executingTaskId$.set(data.taskId);
-      this.taskExecutionStreamContent$.set('');
-      this.isStreaming$.set(true);
-      this.streamingContent$.set('');
+        this.isGeneratingPlan$.set(false);
 
-      // Push executing task to global execution panel
-      const notes = this.conversationNotes?.filteredNotes?.() ?? [];
-      const execNote = notes.find((n: any) => n.id === data.taskId);
-      if (execNote) {
-        this.execPanel.showTask({ note: execNote, conversationId: this.activeConversationId$() });
-      }
-    }));
+        this.executingTaskId$.set(null);
+        this.currentPlan$.set(payload.plan);
+        this.activePlanId$.set(payload.plan.planId);
+        this.executionProgress$.set(new Map());
+        this.showPlanOverlay$.set(true);
+      })
+    );
 
-    this.wsOn(this.chatWsService.onTaskAiChunk((data) => {
-      if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
-      this.streamBuffer += data.content;
-      if (!this.streamRafId) {
-        this.streamRafId = requestAnimationFrame(() => {
-          this.streamingContent$.update((c) => c + this.streamBuffer);
-          this.taskExecutionStreamContent$.update((c) => c + this.streamBuffer);
-          this.streamBuffer = '';
-          this.streamRafId = null;
+    this.wsOn(
+      this.chatWsService.onConversationsCreated((payload) => {
+        if (payload.originalConversationId !== this.activeConversationId$()) return;
+        // Store created conversations for completion summary links
+        this.createdConceptConversations$.set(payload.conversations);
+        // Mark created conversations as new (blue dot)
+        this.newConversationIds$.update((s) => {
+          const n = new Set(s);
+          payload.conversations.forEach((c) => n.add(c.conversationId));
+          return n;
         });
-      }
-    }));
+        // Refresh tree so new per-concept conversations appear
+        this.conceptTree?.loadTree();
+      })
+    );
 
-    this.wsOn(this.chatWsService.onTaskAiComplete((data) => {
-      if (data.conversationId !== this.activeConversationId$()) return;
-      this.isStreaming$.set(false);
-      this.streamingContent$.set('');
-      this.taskExecutionStreamContent$.set('');
-      this.executingTaskId$.set(null);
-      this.conversationNotes?.loadNotes();
-      // Reload conversation to show the saved AI message
-      const convId = this.activeConversationId$();
-      if (convId) {
-        this.loadConversation(convId);
-      }
-      // Refresh execution panel with updated note data
-      const panelTask = this.execPanel.activeTask();
-      if (panelTask && data.taskId) {
-        this.notesApi.getById(data.taskId).then((updated) => {
-          this.execPanel.updateTask({ ...panelTask, note: updated });
-        }).catch(() => { /* panel stays with stale data */ });
-      }
-    }));
+    this.wsOn(
+      this.chatWsService.onStepProgress((payload) => {
+        if (payload.conversationId !== this.activeConversationId$()) return;
 
-    this.wsOn(this.chatWsService.onTaskAiError((data) => {
-      if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
-      this.isStreaming$.set(false);
-      this.streamingContent$.set('');
-      this.taskExecutionStreamContent$.set('');
-      this.executingTaskId$.set(null);
-      this.showError(data.message ?? 'Izvršavanje zadatka neuspešno');
-    }));
+        // Auto-execute path: mark this conversation as executing on first step-progress
+        this.executingWorkflowConversationIds$.update(
+          (s) => new Set([...s, payload.conversationId])
+        );
+        if (!this.activePlanId$() && payload.planId) {
+          this.activePlanId$.set(payload.planId);
+        }
+
+        this.executionProgress$.update((map) => {
+          const next = new Map(map);
+          next.set(payload.stepId, payload.status);
+          return next;
+        });
+
+        // Update workflow status bar entry
+        if (payload.planId) {
+          this.workflowHistory$.update((entries) =>
+            entries.map((e) =>
+              e.planId === payload.planId
+                ? {
+                    ...e,
+                    currentStepTitle:
+                      payload.status === 'in_progress'
+                        ? (payload.stepTitle ?? e.currentStepTitle)
+                        : e.currentStepTitle,
+                    completedSteps:
+                      payload.status === 'completed' || payload.status === 'failed'
+                        ? e.completedSteps + 1
+                        : e.completedSteps,
+                  }
+                : e
+            )
+          );
+        }
+
+        // Update inline progress indicator
+        if (payload.totalSteps != null) {
+          this.totalStepsCount$.set(payload.totalSteps);
+        }
+
+        if (payload.status === 'in_progress') {
+          // Update current step info
+          this.currentStepTitle$.set(payload.stepTitle ?? 'Izvršavanje...');
+          if (payload.stepIndex != null) {
+            this.currentStepIndex$.set(payload.stepIndex);
+          }
+
+          // Add step-start status message to chat
+          const stepLabel = payload.stepTitle ?? 'Korak';
+          const stepNum = (payload.stepIndex ?? 0) + 1;
+          const total = payload.totalSteps ?? 0;
+          const statusMessage: Message = {
+            id: `wf_status_${payload.stepId}`,
+            conversationId: this.activeConversationId$() ?? '',
+            role: MessageRole.ASSISTANT,
+            content: `**Izvršavam korak ${stepNum}/${total}:** ${stepLabel}`,
+            confidenceScore: null,
+            confidenceFactors: null,
+            createdAt: new Date().toISOString(),
+          };
+          this.activeConversation$.update((conv) => {
+            if (!conv) return conv;
+            return { ...conv, messages: [...conv.messages, statusMessage] };
+          });
+        }
+
+        // If step completed with content — message rendering now handled by onStepMessage handler (F1 fix)
+        // Only update progress counters and tree here
+        if (payload.status === 'completed' && payload.content) {
+          this.completedStepsCount$.update((c) => c + 1);
+          this.conceptTree?.loadTree();
+          this.conversationNotes?.loadNotes();
+
+          // Show "preparing next step" transition if more steps remain
+          const completed = this.completedStepsCount$();
+          const total = this.totalStepsCount$();
+          if (completed < total) {
+            this.currentStepTitle$.set('Pripremam sledeći korak...');
+          }
+        }
+
+        if (payload.status === 'completed' && !payload.content) {
+          this.completedStepsCount$.update((c) => c + 1);
+          this.conceptTree?.loadTree();
+          this.conversationNotes?.loadNotes();
+          // Still show transition
+          const completed = this.completedStepsCount$();
+          const total = this.totalStepsCount$();
+          if (completed < total) {
+            this.currentStepTitle$.set('Pripremam sledeći korak...');
+          }
+        }
+
+        if (payload.status === 'failed') {
+          this.completedStepsCount$.update((c) => c + 1);
+          this.conceptTree?.loadTree();
+          this.conversationNotes?.loadNotes();
+        }
+      })
+    );
+
+    this.wsOn(
+      this.chatWsService.onWorkflowComplete((payload) => {
+        if (payload.conversationId !== this.activeConversationId$()) return;
+
+        // Build completion summary with links to concept conversations
+        const statusLabel =
+          payload.status === 'completed'
+            ? 'Završeno'
+            : payload.status === 'cancelled'
+              ? 'Otkazano'
+              : 'Greška';
+        const conceptConvs = this.createdConceptConversations$();
+        let summaryContent = `**${statusLabel}!** Izvršeno ${payload.completedSteps}/${payload.totalSteps} koraka.`;
+
+        if (conceptConvs.length > 0) {
+          summaryContent += '\n\n**Rezultati po konceptima:**';
+          conceptConvs.forEach((c, i) => {
+            summaryContent += `\n${i + 1}. [[${c.conceptName}]]`;
+          });
+          summaryContent +=
+            '\n\nKliknite na koncept ili odaberite konverzaciju u drvetu sa leve strane da pregledate rezultate.';
+        }
+
+        const summaryMessage: Message = {
+          id: `wf_summary_${payload.planId}`,
+          conversationId: this.activeConversationId$() ?? '',
+          role: MessageRole.ASSISTANT,
+          content: summaryContent,
+          confidenceScore: null,
+          confidenceFactors: null,
+          createdAt: new Date().toISOString(),
+        };
+        this.activeConversation$.update((conv) => {
+          if (!conv) return conv;
+          return { ...conv, messages: [...conv.messages, summaryMessage] };
+        });
+
+        // Reset inline progress
+        this.currentStepTitle$.set(null);
+        this.currentStepIndex$.set(0);
+        this.totalStepsCount$.set(0);
+        this.completedStepsCount$.set(0);
+
+        // Remove this conversation from executing set (allows parallel workflows)
+        this.executingWorkflowConversationIds$.update((s) => {
+          const next = new Set(s);
+          next.delete(payload.conversationId);
+          return next;
+        });
+        this.closePlanOverlay();
+        this.conversationNotes?.loadNotes();
+        this.conceptTree?.loadTree();
+
+        // Update workflow status bar entry
+        if (payload.planId) {
+          const finalStatus =
+            payload.status === 'completed'
+              ? ('completed' as const)
+              : payload.status === 'cancelled'
+                ? ('cancelled' as const)
+                : ('failed' as const);
+          this.workflowHistory$.update((entries) =>
+            entries.map((e) =>
+              e.planId === payload.planId
+                ? { ...e, status: finalStatus, completedSteps: payload.completedSteps }
+                : e
+            )
+          );
+
+          // Auto-clear completed/cancelled entries after 30 seconds (gives user time to click)
+          setTimeout(() => {
+            this.workflowHistory$.update((entries) =>
+              entries.filter((e) => e.planId !== payload.planId)
+            );
+          }, 30000);
+        }
+
+        // D4: Suggest next step after successful workflow
+        if (payload.status === 'completed') {
+          setTimeout(() => this.suggestNextStep(), 1500);
+        }
+      })
+    );
+
+    this.wsOn(
+      this.chatWsService.onWorkflowError((payload) => {
+        // Global: remove from executing set regardless of active conversation
+        this.executingWorkflowConversationIds$.update((s) => {
+          const next = new Set(s);
+          next.delete(payload.conversationId);
+          return next;
+        });
+        // Per-conversation UI cleanup only for active conversation
+        if (payload.conversationId !== this.activeConversationId$()) return;
+        this.closePlanOverlay();
+        this.isYoloMode$.set(false);
+        this.yoloProgress$.set(null);
+        this.isGeneratingPlan$.set(false); // Clear plan generation on error
+        this.parallelBatchId$.set(null); // Clear parallel batch on error
+        this.isOnboardingFlow = false;
+        this.onboardingStatus$.set(null);
+        this.showError(payload.message ?? 'Izvršavanje workflow-a neuspešno');
+      })
+    );
+
+    // ─── Task AI Execution Events ───────────────────────────────
+
+    this.wsOn(
+      this.chatWsService.onTaskAiStart((data) => {
+        if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
+        // Clear plan-generation state: direct AI execution replaces workflow plan
+        if (this.isGeneratingPlan$()) {
+          this.isGeneratingPlan$.set(false);
+          if (this.planGenerationTimeout) {
+            clearTimeout(this.planGenerationTimeout);
+            this.planGenerationTimeout = null;
+          }
+        }
+        // Set execution state — track which task is currently executing
+        this.executingTaskId$.set(data.taskId);
+        this.taskExecutionStreamContent$.set('');
+        this.isStreaming$.set(true);
+        this.streamingContent$.set('');
+
+        // Push executing task to global execution panel
+        const notes = this.conversationNotes?.filteredNotes?.() ?? [];
+        const execNote = notes.find((n: any) => n.id === data.taskId);
+        if (execNote) {
+          this.execPanel.showTask({ note: execNote, conversationId: this.activeConversationId$() });
+        }
+      })
+    );
+
+    this.wsOn(
+      this.chatWsService.onTaskAiChunk((data) => {
+        if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
+        this.streamBuffer += data.content;
+        if (!this.streamRafId) {
+          this.streamRafId = requestAnimationFrame(() => {
+            this.streamingContent$.update((c) => c + this.streamBuffer);
+            this.taskExecutionStreamContent$.update((c) => c + this.streamBuffer);
+            this.streamBuffer = '';
+            this.streamRafId = null;
+          });
+        }
+      })
+    );
+
+    this.wsOn(
+      this.chatWsService.onTaskAiComplete((data) => {
+        if (data.conversationId !== this.activeConversationId$()) return;
+        this.isStreaming$.set(false);
+        this.streamingContent$.set('');
+        this.taskExecutionStreamContent$.set('');
+        this.executingTaskId$.set(null);
+        this.conversationNotes?.loadNotes();
+        // Reload conversation to show the saved AI message
+        const convId = this.activeConversationId$();
+        if (convId) {
+          this.loadConversation(convId);
+        }
+        // Refresh execution panel with updated note data
+        const panelTask = this.execPanel.activeTask();
+        if (panelTask && data.taskId) {
+          this.notesApi
+            .getById(data.taskId)
+            .then((updated) => {
+              this.execPanel.updateTask({ ...panelTask, note: updated });
+            })
+            .catch(() => {
+              /* panel stays with stale data */
+            });
+        }
+      })
+    );
+
+    this.wsOn(
+      this.chatWsService.onTaskAiError((data) => {
+        if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
+        this.isStreaming$.set(false);
+        this.streamingContent$.set('');
+        this.taskExecutionStreamContent$.set('');
+        this.executingTaskId$.set(null);
+        this.showError(data.message ?? 'Izvršavanje zadatka neuspešno');
+      })
+    );
 
     // ─── Task Result Submission Events (Story 3.12) ─────────────
 
-    this.wsOn(this.chatWsService.onTaskResultChunk((data) => {
-      if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
-      this.taskResultStreamContent$.update((content) => content + data.content);
-    }));
+    this.wsOn(
+      this.chatWsService.onTaskResultChunk((data) => {
+        if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
+        this.taskResultStreamContent$.update((content) => content + data.content);
+      })
+    );
 
-    this.wsOn(this.chatWsService.onTaskResultComplete((data) => {
-      if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
-      if (this.resultSubmissionTimeout) {
-        clearTimeout(this.resultSubmissionTimeout);
-        this.resultSubmissionTimeout = null;
-      }
-      this.submittingResultId$.set(null);
-      this.taskResultStreamContent$.set('');
-      this.conversationNotes?.loadNotes();
-    }));
+    this.wsOn(
+      this.chatWsService.onTaskResultComplete((data) => {
+        if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
+        if (this.resultSubmissionTimeout) {
+          clearTimeout(this.resultSubmissionTimeout);
+          this.resultSubmissionTimeout = null;
+        }
+        this.submittingResultId$.set(null);
+        this.taskResultStreamContent$.set('');
+        this.conversationNotes?.loadNotes();
+      })
+    );
 
     // Agent job pipeline: refresh notes when jobs are planned after scoring
-    this.wsOn(this.chatWsService.onJobsPlanned((data) => {
-      if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
-      this.conversationNotes?.loadNotes();
-    }));
+    this.wsOn(
+      this.chatWsService.onJobsPlanned((data) => {
+        if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
+        this.conversationNotes?.loadNotes();
+      })
+    );
 
-    this.wsOn(this.chatWsService.onTaskResultError((data) => {
-      if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
-      if (this.resultSubmissionTimeout) {
-        clearTimeout(this.resultSubmissionTimeout);
-        this.resultSubmissionTimeout = null;
-      }
-      this.submittingResultId$.set(null);
-      this.taskResultStreamContent$.set('');
-      this.showError(data.message ?? 'Slanje rezultata neuspešno');
-    }));
+    this.wsOn(
+      this.chatWsService.onTaskResultError((data) => {
+        if (data.conversationId && data.conversationId !== this.activeConversationId$()) return;
+        if (this.resultSubmissionTimeout) {
+          clearTimeout(this.resultSubmissionTimeout);
+          this.resultSubmissionTimeout = null;
+        }
+        this.submittingResultId$.set(null);
+        this.taskResultStreamContent$.set('');
+        this.showError(data.message ?? 'Slanje rezultata neuspešno');
+      })
+    );
 
     // ─── Auto AI Popuni Events ─────────────────────────────────
-    this.wsOn(this.chatWsService.onAutoPopuniStart((data) => {
-      this.autoPopuniTaskIds$.set(data.taskIds);
-    }));
+    this.wsOn(
+      this.chatWsService.onAutoPopuniStart((data) => {
+        this.autoPopuniTaskIds$.set(data.taskIds);
+      })
+    );
 
-    this.wsOn(this.chatWsService.onAutoPopuniComplete((data) => {
-      this.autoPopuniTaskIds$.set([]);
-      this.conversationNotes?.loadNotes();
-      this.conceptTree?.loadTree();
-      // Review fix: Show error toast when auto-popuni partially fails
-      if (data?.completedTasks != null && data.completedTasks < data.totalTasks) {
-        this.showError(
-          `Auto AI: ${data.completedTasks}/${data.totalTasks} zadataka uspešno popunjeno`
-        );
-      }
-    }));
+    this.wsOn(
+      this.chatWsService.onAutoPopuniComplete((data) => {
+        this.autoPopuniTaskIds$.set([]);
+        this.conversationNotes?.loadNotes();
+        this.conceptTree?.loadTree();
+        // Review fix: Show error toast when auto-popuni partially fails
+        if (data?.completedTasks != null && data.completedTasks < data.totalTasks) {
+          this.showError(
+            `Auto AI: ${data.completedTasks}/${data.totalTasks} zadataka uspešno popunjeno`
+          );
+        }
+      })
+    );
 
-    this.wsOn(this.chatWsService.onAutoPopuniTaskError(() => {
-      // Individual task errors — the complete event will have the final count
-    }));
+    this.wsOn(
+      this.chatWsService.onAutoPopuniTaskError(() => {
+        // Individual task errors — the complete event will have the final count
+      })
+    );
 
     // ─── Parallel Popuni Events ─────────────────────────────────
-    this.wsOn(this.chatWsService.onParallelPopuniStart((data) => {
-      // C1: Clear plan generation loading — execution has started
-      this.isGeneratingPlan$.set(false);
-      this.parallelBatchId$.set(data.batchId);
-      this.parallelTaskStates$.set(data.tasks);
+    this.wsOn(
+      this.chatWsService.onParallelPopuniStart((data) => {
+        // C1: Clear plan generation loading — execution has started
+        this.isGeneratingPlan$.set(false);
+        this.parallelBatchId$.set(data.batchId);
+        this.parallelTaskStates$.set(data.tasks);
 
-      // Onboarding flow: auto-navigate to Tasks tab so user sees execution progress
-      if (this.isOnboardingFlow) {
-        this.onboardingStatus$.set('Izvršavanje zadataka u toku...');
-        this.activeTab$.set('notes');
-        // Clear onboarding status after a delay (user can now see progress in Tasks tab)
-        setTimeout(() => {
-          this.onboardingStatus$.set(null);
-          this.isOnboardingFlow = false;
-        }, 3000);
-      }
-    }));
+        // Onboarding flow: auto-navigate to Tasks tab so user sees execution progress
+        if (this.isOnboardingFlow) {
+          this.onboardingStatus$.set('Izvršavanje zadataka u toku...');
+          this.activeTab$.set('notes');
+          // Clear onboarding status after a delay (user can now see progress in Tasks tab)
+          setTimeout(() => {
+            this.onboardingStatus$.set(null);
+            this.isOnboardingFlow = false;
+          }, 3000);
+        }
+      })
+    );
 
-    this.wsOn(this.chatWsService.onParallelPopuniProgress((data) => {
-      this.parallelTaskStates$.update((states) =>
-        states.map((s) =>
-          s.taskId === data.taskId
-            ? {
-                ...s,
-                status: data.status,
-                currentStep: data.currentStep ?? s.currentStep,
-                totalSteps: data.totalSteps ?? s.totalSteps,
-                stepLabel: data.stepLabel ?? s.stepLabel,
-              }
-            : s
-        )
-      );
-    }));
+    this.wsOn(
+      this.chatWsService.onParallelPopuniProgress((data) => {
+        this.parallelTaskStates$.update((states) =>
+          states.map((s) =>
+            s.taskId === data.taskId
+              ? {
+                  ...s,
+                  status: data.status,
+                  currentStep: data.currentStep ?? s.currentStep,
+                  totalSteps: data.totalSteps ?? s.totalSteps,
+                  stepLabel: data.stepLabel ?? s.stepLabel,
+                }
+              : s
+          )
+        );
+      })
+    );
 
-    this.wsOn(this.chatWsService.onParallelPopuniTaskDone((data) => {
-      this.parallelTaskStates$.update((states) =>
-        states.map((s) =>
-          s.taskId === data.taskId
-            ? {
-                ...s,
-                status: data.status,
-                score: data.score ?? s.score,
-                error: data.error,
-              }
-            : s
-        )
-      );
-    }));
+    this.wsOn(
+      this.chatWsService.onParallelPopuniTaskDone((data) => {
+        this.parallelTaskStates$.update((states) =>
+          states.map((s) =>
+            s.taskId === data.taskId
+              ? {
+                  ...s,
+                  status: data.status,
+                  score: data.score ?? s.score,
+                  error: data.error,
+                }
+              : s
+          )
+        );
+      })
+    );
 
-    this.wsOn(this.chatWsService.onParallelPopuniBatchDone(() => {
-      this.parallelBatchId$.set(null);
-      this.isGeneratingPlan$.set(false); // Ensure cleared
-      this.isOnboardingFlow = false;
-      this.onboardingStatus$.set(null);
-      this.conversationNotes?.loadNotes();
-      this.conceptTree?.loadTree();
-    }));
+    this.wsOn(
+      this.chatWsService.onParallelPopuniBatchDone(() => {
+        this.parallelBatchId$.set(null);
+        this.isGeneratingPlan$.set(false); // Ensure cleared
+        this.isOnboardingFlow = false;
+        this.onboardingStatus$.set(null);
+        this.conversationNotes?.loadNotes();
+        this.conceptTree?.loadTree();
+      })
+    );
 
     // ─── Execution Persistence: State Restoration on Reconnect ─────
-    this.wsOn(this.chatWsService.onExecutionActiveState((data) => {
-      // M1: Track whether we've already restored a YOLO/workflow to avoid overwrites
-      let yoloRestored = false;
-      let workflowRestored = false;
+    this.wsOn(
+      this.chatWsService.onExecutionActiveState((data) => {
+        // M1: Track whether we've already restored a YOLO/workflow to avoid overwrites
+        let yoloRestored = false;
+        let workflowRestored = false;
 
-      // Restore active executions
-      for (const exec of data.active) {
-        if ((exec.type === 'yolo' || exec.type === 'domain-yolo') && !yoloRestored) {
-          yoloRestored = true;
-          // Restore YOLO overlay with checkpoint data
-          this.isYoloMode$.set(true);
-          if (exec.conversationId) {
-            this.executingWorkflowConversationIds$.update((s) => {
-              const next = new Set(s);
-              next.add(exec.conversationId!);
-              return next;
+        // Restore active executions
+        for (const exec of data.active) {
+          if ((exec.type === 'yolo' || exec.type === 'domain-yolo') && !yoloRestored) {
+            yoloRestored = true;
+            // Restore YOLO overlay with checkpoint data
+            this.isYoloMode$.set(true);
+            if (exec.conversationId) {
+              this.executingWorkflowConversationIds$.update((s) => {
+                const next = new Set(s);
+                next.add(exec.conversationId!);
+                return next;
+              });
+            }
+            const cp = exec.checkpoint as {
+              planId?: string;
+              running?: number;
+              maxConcurrency?: number;
+              completed?: number;
+              completedCount?: number;
+              failed?: number;
+              failedCount?: number;
+              total?: number;
+              discoveredCount?: number;
+              conversationId?: string;
+              currentTasks?: YoloProgressPayload['currentTasks'];
+            };
+            const completedVal = cp.completed ?? cp.completedCount ?? 0;
+            const failedVal = cp.failed ?? cp.failedCount ?? 0;
+            this.yoloProgress$.set({
+              planId: cp.planId ?? exec.planId ?? 'resume',
+              running: cp.running ?? 0,
+              maxConcurrency: cp.maxConcurrency ?? 3,
+              completed: completedVal,
+              failed: failedVal,
+              total: cp.total ?? 0,
+              discoveredCount: cp.discoveredCount ?? 0,
+              currentTasks: cp.currentTasks ?? [],
+              conversationId: cp.conversationId ?? exec.conversationId ?? '',
             });
+            // M2: Replay only events since the execution was created (avoid stale replays)
+            this.chatWsService.replayEvents(exec.id, exec.createdAt);
           }
-          const cp = exec.checkpoint as {
-            planId?: string;
-            running?: number;
-            maxConcurrency?: number;
-            completed?: number;
-            completedCount?: number;
-            failed?: number;
-            failedCount?: number;
-            total?: number;
-            discoveredCount?: number;
-            conversationId?: string;
-            currentTasks?: YoloProgressPayload['currentTasks'];
-          };
-          const completedVal = cp.completed ?? cp.completedCount ?? 0;
-          const failedVal = cp.failed ?? cp.failedCount ?? 0;
-          this.yoloProgress$.set({
-            planId: cp.planId ?? exec.planId ?? 'resume',
-            running: cp.running ?? 0,
-            maxConcurrency: cp.maxConcurrency ?? 3,
-            completed: completedVal,
-            failed: failedVal,
-            total: cp.total ?? 0,
-            discoveredCount: cp.discoveredCount ?? 0,
-            currentTasks: cp.currentTasks ?? [],
-            conversationId: cp.conversationId ?? exec.conversationId ?? '',
-          });
-          // M2: Replay only events since the execution was created (avoid stale replays)
-          this.chatWsService.replayEvents(exec.id, exec.createdAt);
+
+          if (exec.type === 'workflow' && !workflowRestored) {
+            workflowRestored = true;
+            // Restore workflow execution indicator
+            if (exec.conversationId) {
+              this.executingWorkflowConversationIds$.update((s) => {
+                const next = new Set(s);
+                next.add(exec.conversationId!);
+                return next;
+              });
+            }
+            if (exec.planId) {
+              this.activePlanId$.set(exec.planId);
+              this.showPlanOverlay$.set(true);
+            }
+            // Restore step progress from checkpoint
+            const wfCp = exec.checkpoint as {
+              lastCompletedStepIndex?: number;
+              totalSteps?: number;
+              currentStepTitle?: string;
+            };
+            if (wfCp.lastCompletedStepIndex != null) {
+              this.completedStepsCount$.set(wfCp.lastCompletedStepIndex + 1);
+              this.currentStepIndex$.set(wfCp.lastCompletedStepIndex + 1);
+            }
+            if (wfCp.totalSteps != null) {
+              this.totalStepsCount$.set(wfCp.totalSteps);
+            }
+            if (wfCp.currentStepTitle) {
+              this.currentStepTitle$.set(wfCp.currentStepTitle);
+            }
+            // M2: Replay only events since the execution was created
+            this.chatWsService.replayEvents(exec.id, exec.createdAt);
+          }
+
+          if (exec.type === 'auto-popuni') {
+            const meta = exec.metadata as { taskIds?: string[] };
+            if (Array.isArray(meta?.taskIds)) {
+              this.autoPopuniTaskIds$.set(meta.taskIds);
+            }
+          }
         }
 
-        if (exec.type === 'workflow' && !workflowRestored) {
-          workflowRestored = true;
-          // Restore workflow execution indicator
-          if (exec.conversationId) {
-            this.executingWorkflowConversationIds$.update((s) => {
-              const next = new Set(s);
-              next.add(exec.conversationId!);
-              return next;
-            });
-          }
-          if (exec.planId) {
-            this.activePlanId$.set(exec.planId);
-            this.showPlanOverlay$.set(true);
-          }
-          // Restore step progress from checkpoint
-          const wfCp = exec.checkpoint as {
-            lastCompletedStepIndex?: number;
-            totalSteps?: number;
-            currentStepTitle?: string;
-          };
-          if (wfCp.lastCompletedStepIndex != null) {
-            this.completedStepsCount$.set(wfCp.lastCompletedStepIndex + 1);
-            this.currentStepIndex$.set(wfCp.lastCompletedStepIndex + 1);
-          }
-          if (wfCp.totalSteps != null) {
-            this.totalStepsCount$.set(wfCp.totalSteps);
-          }
-          if (wfCp.currentStepTitle) {
-            this.currentStepTitle$.set(wfCp.currentStepTitle);
-          }
-          // M2: Replay only events since the execution was created
-          this.chatWsService.replayEvents(exec.id, exec.createdAt);
+        // Show summary for recently completed executions (completed while user was away)
+        let needsRefresh = false;
+        for (const exec of data.recentlyCompleted) {
+          const typeLabel =
+            exec.type === 'yolo' || exec.type === 'domain-yolo'
+              ? 'YOLO'
+              : exec.type === 'workflow'
+                ? 'Workflow'
+                : 'Auto AI';
+          this.showError(`Brain je radio dok ste bili odsutni: ${typeLabel} završen`);
+          needsRefresh = true;
         }
-
-        if (exec.type === 'auto-popuni') {
-          const meta = exec.metadata as { taskIds?: string[] };
-          if (Array.isArray(meta?.taskIds)) {
-            this.autoPopuniTaskIds$.set(meta.taskIds);
-          }
+        // Refresh tree and notes once (not per-completion)
+        if (needsRefresh) {
+          this.conceptTree?.loadTree();
+          this.conversationNotes?.loadNotes();
         }
-      }
+      })
+    );
 
-      // Show summary for recently completed executions (completed while user was away)
-      let needsRefresh = false;
-      for (const exec of data.recentlyCompleted) {
-        const typeLabel =
-          exec.type === 'yolo' || exec.type === 'domain-yolo'
-            ? 'YOLO'
-            : exec.type === 'workflow'
-              ? 'Workflow'
-              : 'Auto AI';
-        this.showError(`Brain je radio dok ste bili odsutni: ${typeLabel} završen`);
-        needsRefresh = true;
-      }
-      // Refresh tree and notes once (not per-completion)
-      if (needsRefresh) {
-        this.conceptTree?.loadTree();
-        this.conversationNotes?.loadNotes();
-      }
-    }));
+    this.wsOn(
+      this.chatWsService.onStepAwaitingConfirmation((payload) => {
+        if (payload.conversationId !== this.activeConversationId$()) return;
+        this.activePlanId$.set(payload.planId);
 
-    this.wsOn(this.chatWsService.onStepAwaitingConfirmation((payload) => {
-      if (payload.conversationId !== this.activeConversationId$()) return;
-      this.activePlanId$.set(payload.planId);
+        // Backend auto-continues confirmation steps — no action needed here during execution
+        if (this.isCurrentConversationExecuting$()) return;
 
-      // Backend auto-continues confirmation steps — no action needed here during execution
-      if (this.isCurrentConversationExecuting$()) return;
-
-      this.awaitingConfirmation$.set(true);
-      this.nextStepInfo$.set(payload.nextStep);
-      this.userStepInput$.set('');
-    }));
+        this.awaitingConfirmation$.set(true);
+        this.nextStepInfo$.set(payload.nextStep);
+        this.userStepInput$.set('');
+      })
+    );
 
     // ─── Interactive Workflow Step Events (Task 6) ───────────────
 
-    this.wsOn(this.chatWsService.onStepAwaitingInput((payload: WorkflowStepAwaitingInputPayload) => {
-      if (payload.conversationId !== this.activeConversationId$()) return;
+    this.wsOn(
+      this.chatWsService.onStepAwaitingInput((payload: WorkflowStepAwaitingInputPayload) => {
+        if (payload.conversationId !== this.activeConversationId$()) return;
 
-      // Confirmation steps are auto-resolved on the backend — skip on frontend
-      if (payload.inputType === 'confirmation') return;
+        // Confirmation steps are auto-resolved on the backend — skip on frontend
+        if (payload.inputType === 'confirmation') return;
 
-      // For 'text' input types, show the interactive input UI
-      this.currentWorkflowStepInput$.set(payload);
-      this.allowWorkflowInput$.set(payload.inputType === 'text');
-      this.isLoading$.set(false); // Unblock input for next step
-    }));
+        // For 'text' input types, show the interactive input UI
+        this.currentWorkflowStepInput$.set(payload);
+        this.allowWorkflowInput$.set(payload.inputType === 'text');
+        this.isLoading$.set(false); // Unblock input for next step
+      })
+    );
 
-    this.wsOn(this.chatWsService.onStepMessage((payload: WorkflowStepMessagePayload) => {
-      if (payload.conversationId !== this.activeConversationId$()) return;
-      const stepMessage: Message = {
-        id: payload.messageId,
-        conversationId: payload.conversationId,
-        role: MessageRole.ASSISTANT,
-        content: payload.content,
-        confidenceScore: null,
-        confidenceFactors: null,
-        createdAt: new Date().toISOString(),
-      };
-      this.activeConversation$.update((conv) => {
-        if (!conv) return conv;
-        return { ...conv, messages: [...conv.messages, stepMessage] };
-      });
-    }));
+    this.wsOn(
+      this.chatWsService.onStepMessage((payload: WorkflowStepMessagePayload) => {
+        if (payload.conversationId !== this.activeConversationId$()) return;
+        const stepMessage: Message = {
+          id: payload.messageId,
+          conversationId: payload.conversationId,
+          role: MessageRole.ASSISTANT,
+          content: payload.content,
+          confidenceScore: null,
+          confidenceFactors: null,
+          createdAt: new Date().toISOString(),
+        };
+        this.activeConversation$.update((conv) => {
+          if (!conv) return conv;
+          return { ...conv, messages: [...conv.messages, stepMessage] };
+        });
+      })
+    );
 
-    this.wsOn(this.chatWsService.onNavigateToConversation((_payload: WorkflowNavigatePayload) => {
-      // Suppress auto-navigation during workflow execution.
-      // User stays on original conversation to see step-progress events in real-time.
-      // After completion, summary message includes links to per-concept conversations.
-    }));
+    this.wsOn(
+      this.chatWsService.onNavigateToConversation((_payload: WorkflowNavigatePayload) => {
+        // Suppress auto-navigation during workflow execution.
+        // User stays on original conversation to see step-progress events in real-time.
+        // After completion, summary message includes links to per-concept conversations.
+      })
+    );
 
     // ─── YOLO Mode Events ───────────────────────────────────────
 
-    this.wsOn(this.chatWsService.onYoloProgress((payload) => {
-      // Global: track executing conversation regardless of active view
-      this.executingWorkflowConversationIds$.update((s) => new Set([...s, payload.conversationId]));
-      // Per-conversation UI updates
-      if (payload.conversationId !== this.activeConversationId$()) return;
-      this.yoloProgress$.set(payload);
-      // Auto-scroll activity log to latest entry (AC4)
-      if (this.showYoloActivityLog$() && this.yoloLogContainer?.nativeElement) {
-        setTimeout(() => {
-          const el = this.yoloLogContainer?.nativeElement;
-          if (el) el.scrollTop = el.scrollHeight;
+    this.wsOn(
+      this.chatWsService.onYoloProgress((payload) => {
+        // Global: track executing conversation regardless of active view
+        this.executingWorkflowConversationIds$.update(
+          (s) => new Set([...s, payload.conversationId])
+        );
+        // Per-conversation UI updates
+        if (payload.conversationId !== this.activeConversationId$()) return;
+        this.yoloProgress$.set(payload);
+        // Auto-scroll activity log to latest entry (AC4)
+        if (this.showYoloActivityLog$() && this.yoloLogContainer?.nativeElement) {
+          setTimeout(() => {
+            const el = this.yoloLogContainer?.nativeElement;
+            if (el) el.scrollTop = el.scrollHeight;
+          });
+        }
+      })
+    );
+
+    this.wsOn(
+      this.chatWsService.onYoloComplete((payload) => {
+        // Global: remove from executing set regardless of active view
+        this.executingWorkflowConversationIds$.update((s) => {
+          const next = new Set(s);
+          next.delete(payload.conversationId);
+          return next;
         });
-      }
-    }));
+        // Per-conversation UI cleanup
+        if (payload.conversationId !== this.activeConversationId$()) return;
+        this.yoloProgress$.set(null);
+        this.isYoloMode$.set(false);
+        this.conversationNotes?.loadNotes();
+        this.conceptTree?.loadTree();
+        // D4: Suggest next step after YOLO completion
+        setTimeout(() => this.suggestNextStep(), 1500);
+      })
+    );
 
-    this.wsOn(this.chatWsService.onYoloComplete((payload) => {
-      // Global: remove from executing set regardless of active view
-      this.executingWorkflowConversationIds$.update((s) => {
-        const next = new Set(s);
-        next.delete(payload.conversationId);
-        return next;
-      });
-      // Per-conversation UI cleanup
-      if (payload.conversationId !== this.activeConversationId$()) return;
-      this.yoloProgress$.set(null);
-      this.isYoloMode$.set(false);
-      this.conversationNotes?.loadNotes();
-      this.conceptTree?.loadTree();
-      // D4: Suggest next step after YOLO completion
-      setTimeout(() => this.suggestNextStep(), 1500);
-    }));
-
-    this.wsOn(this.chatWsService.onTasksDiscovered(() => {
-      this.conceptTree?.loadTree();
-      // M2: Also refresh notes panel when new tasks are discovered
-      this.conversationNotes?.loadNotes();
-    }));
+    this.wsOn(
+      this.chatWsService.onTasksDiscovered(() => {
+        this.conceptTree?.loadTree();
+        // M2: Also refresh notes panel when new tasks are discovered
+        this.conversationNotes?.loadNotes();
+      })
+    );
   }
 
   continueWorkflow(): void {

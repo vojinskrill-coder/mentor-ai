@@ -4,6 +4,7 @@ import { ConversationController } from './conversation.controller';
 import { ConversationService } from './conversation.service';
 import { CurriculumService } from '../knowledge/services/curriculum.service';
 import { ConceptService } from '../knowledge/services/concept.service';
+import { ConceptPlanService } from './concept-plan.service';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import type { CurrentUserPayload } from '../auth/strategies/jwt.strategy';
 
@@ -45,6 +46,10 @@ describe('ConversationController', () => {
               .fn()
               .mockResolvedValue({ relationshipsCreated: 0, errors: [] }),
           },
+        },
+        {
+          provide: ConceptPlanService,
+          useValue: { triggerConceptPlan: jest.fn().mockResolvedValue(undefined) },
         },
         { provide: ConfigService, useValue: { get: jest.fn() } },
         { provide: PlatformPrismaService, useValue: {} },
