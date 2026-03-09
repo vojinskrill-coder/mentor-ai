@@ -41,7 +41,7 @@
     "reflect-metadata": "0.1.14",
     "rxjs": "7.8.2",
     "socket.io": "4.8.3",
-    "undici": "7.18.2",
+    "undici": "7.22.0",
     "xlsx": "0.18.5"
   },
   "main": "main.js"
