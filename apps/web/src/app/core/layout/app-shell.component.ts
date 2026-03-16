@@ -406,7 +406,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         padding: clamp(12px, 1vw, 20px);
         scrollbar-width: thin;
         scrollbar-color: #2a2a2a transparent;
-        font-size: var(--text-tiny, 11px);
+        font-size: 16px;
       }
       .exec-panel-body::-webkit-scrollbar { width: 4px; }
       .exec-panel-body::-webkit-scrollbar-track { background: transparent; }
@@ -459,13 +459,13 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         margin-bottom: 12px;
       }
       .panel-empty h4 {
-        font-size: 14px;
+        font-size: 16px;
         font-weight: 500;
         color: #9e9e9e;
         margin-bottom: 4px;
       }
       .panel-empty p {
-        font-size: 12px;
+        font-size: 16px;
         line-height: 1.5;
       }
 
@@ -480,9 +480,9 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         display: inline-flex;
         align-items: center;
         gap: 4px;
-        padding: 3px 8px;
+        padding: 4px 10px;
         border-radius: 999px;
-        font-size: 10px;
+        font-size: 13px;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.03em;
@@ -493,9 +493,9 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .panel-status-badge svg { width: 10px; height: 10px; }
       .panel-score {
         margin-left: auto;
-        padding: 2px 8px;
+        padding: 3px 10px;
         border-radius: 999px;
-        font-size: 11px;
+        font-size: 14px;
         font-weight: 600;
       }
       .panel-score.high { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
@@ -514,12 +514,12 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         padding: 3px 10px;
         border-radius: 999px;
         background: #242424;
-        font-size: 11px;
+        font-size: 14px;
         font-weight: 500;
         color: #a1a1a1;
         margin-bottom: 16px;
       }
-      .panel-concept svg { width: 10px; height: 10px; }
+      .panel-concept svg { width: 12px; height: 12px; }
 
       /* Lifecycle stepper in panel */
       .panel-stepper {
@@ -556,7 +556,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         50% { opacity: 0.4; }
       }
       .panel-step-label {
-        font-size: 9px;
+        font-size: 12px;
         color: #707070;
         white-space: nowrap;
       }
@@ -576,7 +576,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         margin-bottom: 16px;
       }
       .panel-section-label {
-        font-size: 10px;
+        font-size: 13px;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
@@ -588,7 +588,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       }
       .panel-section-label svg { width: 12px; height: 12px; }
       .panel-description {
-        font-size: 13px;
+        font-size: 16px;
         color: #b0b0b0;
         line-height: 1.6;
       }
@@ -599,7 +599,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         border: 1px solid #2a2a2a;
         border-radius: 8px;
         padding: 12px;
-        font-size: 13px;
+        font-size: 16px;
         color: #b0b0b0;
         line-height: 1.6;
       }
@@ -618,13 +618,13 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         margin-bottom: 8px;
       }
       .panel-jobs-title {
-        font-size: 10px;
+        font-size: 14px;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
         color: #707070;
       }
-      .panel-jobs-count { font-size: 10px; color: #9e9e9e; }
+      .panel-jobs-count { font-size: 14px; color: #9e9e9e; }
       .panel-job-row {
         display: flex;
         align-items: center;
@@ -645,12 +645,12 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .panel-job-dot.failed { background: #ef4444; }
       .panel-job-name {
         flex: 1;
-        font-size: 12px;
+        font-size: 16px;
         font-weight: 500;
         color: #d0d0d0;
       }
       .panel-job-status {
-        font-size: 10px;
+        font-size: 13px;
         font-weight: 500;
         text-transform: uppercase;
         letter-spacing: 0.03em;
@@ -667,7 +667,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         gap: 10px;
         padding-top: 12px;
         border-top: 1px solid #2a2a2a;
-        font-size: 10px;
+        font-size: 14px;
         color: #707070;
       }
       .panel-chat-link {
