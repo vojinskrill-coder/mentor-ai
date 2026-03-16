@@ -71,13 +71,14 @@ const STAGE_ORDER: MaturityStage[] = [
       }
 
       .main {
-        max-width: 1024px;
+        max-width: min(95%, 1600px);
         margin: 0 auto;
         padding: 32px 24px;
       }
-      @media (min-width: 1440px) {
+      @media (min-width: 1800px) {
         .main {
-          max-width: 1200px;
+          max-width: min(90%, 1800px);
+          padding: 40px 32px;
         }
       }
 

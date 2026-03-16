@@ -625,6 +625,26 @@
 }
 
 /* ============================================
+   Responsive scaling for large screens
+   Scales ALL elements proportionally (icons, labels, buttons, spacing)
+   ============================================ */
+@media (min-width: 1920px) {
+  html { font-size: 105%; }
+}
+@media (min-width: 2200px) {
+  html { font-size: 112%; }
+}
+@media (min-width: 2560px) {
+  html { font-size: 118%; }
+}
+@media (min-width: 3200px) {
+  html { font-size: 125%; }
+}
+@media (min-width: 3840px) {
+  html { font-size: 135%; }
+}
+
+/* ============================================
    Light mode support (optional)
    ============================================ */
 html.light {

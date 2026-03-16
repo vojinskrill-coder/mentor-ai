@@ -23,18 +23,27 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         height: 100vh;
         overflow: hidden;
       }
+      :host {
+        /* Responsive scale factor — controls spacing, icons, controls */
+        --ui-scale: 1;
+      }
+      @media (min-width: 1800px) { :host { --ui-scale: 1.08; } }
+      @media (min-width: 2200px) { :host { --ui-scale: 1.15; } }
+      @media (min-width: 2800px) { :host { --ui-scale: 1.22; } }
+
       .shell {
         display: flex;
         height: 100vh;
         background: var(--color-bg-base, #0d0d0d);
         color: var(--color-text-primary, #fafafa);
         font-family: 'Inter', system-ui, sans-serif;
+        font-size: calc(14px * var(--ui-scale));
       }
 
       /* ===== SIDEBAR ===== */
       .sidebar {
-        width: 220px;
-        min-width: 220px;
+        width: calc(220px * var(--ui-scale));
+        min-width: calc(220px * var(--ui-scale));
         background: var(--color-bg-base, #0d0d0d);
         border-right: 1px solid var(--color-border-subtle, #2a2a2a);
         display: flex;
@@ -43,7 +52,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         overflow: hidden;
       }
       .sidebar-brand {
-        height: 48px;
+        height: calc(48px * var(--ui-scale));
         display: flex;
         align-items: center;
         padding: 0 20px;
@@ -81,11 +90,11 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .nav-item {
         display: flex;
         align-items: center;
-        gap: 10px;
-        padding: 8px 20px;
-        margin: 1px 8px;
+        gap: calc(10px * var(--ui-scale));
+        padding: calc(8px * var(--ui-scale)) calc(20px * var(--ui-scale));
+        margin: 1px calc(8px * var(--ui-scale));
         border-radius: 6px;
-        font-size: 13px;
+        font-size: calc(13px * var(--ui-scale));
         font-weight: 500;
         color: var(--color-text-secondary, #a1a1a1);
         text-decoration: none;
@@ -112,8 +121,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         background: var(--color-primary, #3b82f6);
       }
       .nav-item svg {
-        width: 18px;
-        height: 18px;
+        width: calc(18px * var(--ui-scale));
+        height: calc(18px * var(--ui-scale));
         flex-shrink: 0;
         opacity: 0.7;
       }
@@ -264,15 +273,18 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         z-index: 99;
       }
 
-      /* Graph panel in exec panel upper half */
+      /* Graph panel in exec panel upper half — responsive height */
       .graph-panel {
-        height: 280px;
+        height: 35%;
+        min-height: 220px;
+        max-height: 450px;
         border-bottom: 1px solid #2A2A2A;
         overflow: hidden;
         transition: height 0.2s ease;
       }
       .graph-panel.hidden {
         height: 0;
+        min-height: 0;
         border-bottom: none;
       }
 
@@ -292,10 +304,11 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         flex-direction: column;
       }
 
-      /* ===== EXECUTION PANEL (right sidebar) ===== */
+      /* ===== EXECUTION PANEL (right sidebar) — responsive width ===== */
       .exec-panel {
         width: 420px;
-        min-width: 420px;
+        min-width: 360px;
+        max-width: 55vw;
         flex-shrink: 0;
         height: 100%;
         background: #111111;
@@ -304,7 +317,11 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         flex-direction: column;
         overflow: hidden;
         transition: width 0.2s ease, min-width 0.2s ease, opacity 0.15s ease;
+        position: relative;
       }
+      /* Scale exec panel on large screens */
+      @media (min-width: 1800px) { .exec-panel { width: 480px; } }
+      @media (min-width: 2200px) { .exec-panel { width: 540px; } }
       .exec-panel.collapsed {
         width: 0;
         min-width: 0;
@@ -312,19 +329,37 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         overflow: hidden;
         pointer-events: none;
       }
+
+      /* Resize handle */
+      .panel-resize-handle {
+        position: absolute;
+        left: -3px;
+        top: 0;
+        bottom: 0;
+        width: 6px;
+        cursor: col-resize;
+        z-index: 10;
+        transition: background 0.15s;
+      }
+      .panel-resize-handle:hover,
+      .panel-resize-handle.active {
+        background: rgba(59, 130, 246, 0.3);
+      }
       .exec-panel.collapsed * {
         display: none;
       }
       .exec-panel-header {
         display: flex;
         align-items: center;
-        gap: 10px;
-        padding: 12px 16px;
+        gap: calc(10px * var(--ui-scale));
+        padding: calc(12px * var(--ui-scale)) calc(16px * var(--ui-scale));
         border-bottom: 1px solid #2a2a2a;
         flex-shrink: 0;
+        min-height: calc(48px * var(--ui-scale)); /* align with sidebar brand */
+        box-sizing: border-box;
       }
       .exec-panel-title {
-        font-size: 13px;
+        font-size: calc(13px * var(--ui-scale));
         font-weight: 600;
         flex: 1;
         white-space: nowrap;
@@ -972,10 +1007,10 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         overflow: hidden;
       }
 
-      /* Regular pages (not chat/tasks) get centered max-width */
+      /* Regular pages (not chat/tasks) get centered max-width — scales with screen */
       @media (min-width: 1536px) {
         .content-inner:not(:has(app-chat)):not(:has(app-task-hub)) > * {
-          max-width: 1440px;
+          max-width: min(90%, 1800px);
           margin: 0 auto;
         }
       }
@@ -1085,7 +1120,10 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
           </div>
 
           <!-- Global Execution Panel -->
-          <aside class="exec-panel" [class.collapsed]="!execPanel.panelOpen()">
+          <aside class="exec-panel" [class.collapsed]="!execPanel.panelOpen()" [style.width.px]="panelWidth()">
+              <div class="panel-resize-handle"
+                [class.active]="isResizingPanel"
+                (mousedown)="onPanelResizeStart($event)"></div>
               <div class="exec-panel-header">
                 <span class="ws-indicator" [class.ws-connected]="wsState() === 'connected'" [class.ws-disconnected]="wsState() === 'disconnected'" [class.ws-reconnecting]="wsState() === 'reconnecting'"></span>
                 <span class="exec-panel-title">
@@ -1337,6 +1375,10 @@ export class AppShellComponent {
   readonly routeLoading = signal(false);
   readonly showGraph = signal(true);
   readonly showGraphPopup = signal(false);
+  readonly panelWidth = signal(420);
+  isResizingPanel = false;
+  private resizeStartX = 0;
+  private resizeStartWidth = 0;
 
   /** Map of context keys (taskId, batchId, etc.) → activity entry IDs */
   private readonly entryMap = new Map<string, string>();
@@ -1437,6 +1479,34 @@ export class AppShellComponent {
     } catch {
       // Silently ignore — panel stays with stale data
     }
+  }
+
+  onPanelResizeStart(event: MouseEvent): void {
+    event.preventDefault();
+    this.isResizingPanel = true;
+    this.resizeStartX = event.clientX;
+    this.resizeStartWidth = this.panelWidth();
+
+    const onMove = (e: MouseEvent) => {
+      const delta = this.resizeStartX - e.clientX; // dragging left = wider
+      const screenWidth = window.innerWidth;
+      const maxPanel = Math.min(screenWidth * 0.55, 1200); // up to 55% of screen
+      const newWidth = Math.max(280, Math.min(maxPanel, this.resizeStartWidth + delta));
+      this.panelWidth.set(newWidth);
+    };
+
+    const onUp = () => {
+      this.isResizingPanel = false;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   }
 
   onGraphNoteActivated(event: { noteId: string; conceptId: string }): void {

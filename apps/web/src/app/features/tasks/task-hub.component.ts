@@ -21,7 +21,7 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
       }
       .page {
         padding: 24px;
-        max-width: 900px;
+        max-width: min(95%, 1400px);
       }
 
       /* Page header */

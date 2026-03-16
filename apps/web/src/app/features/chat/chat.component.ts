@@ -433,7 +433,7 @@ interface WorkflowStatusEntry {
         scroll-behavior: smooth;
       }
       .messages-container {
-        max-width: 768px;
+        max-width: min(90%, 960px);
         margin: 0 auto;
       }
       .scroll-to-bottom {
@@ -1344,7 +1344,7 @@ interface WorkflowStatusEntry {
         }
       }
       .skeleton-messages {
-        max-width: 768px;
+        max-width: min(90%, 960px);
         margin: 0 auto;
         padding: 24px;
       }
@@ -1380,7 +1380,7 @@ interface WorkflowStatusEntry {
         gap: 8px;
         padding: 8px 14px;
         margin: 8px 0;
-        max-width: 768px;
+        max-width: min(90%, 960px);
         background: #1a1a1a;
         border-left: 3px solid #3b82f6;
         border-radius: 0 6px 6px 0;

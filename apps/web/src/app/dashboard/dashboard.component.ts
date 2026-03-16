@@ -16,15 +16,15 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
         display: block;
       }
 
-      /* Main */
+      /* Main — fluid, fills available space */
       .main {
-        max-width: 1024px;
+        max-width: min(95%, 1600px);
         margin: 0 auto;
         padding: 32px 24px;
       }
-      @media (min-width: 1440px) {
+      @media (min-width: 1800px) {
         .main {
-          max-width: 1200px;
+          max-width: min(90%, 1800px);
         }
       }
 
