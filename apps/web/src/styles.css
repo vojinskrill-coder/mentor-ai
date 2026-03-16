@@ -678,17 +678,7 @@ html {
 /* Prevent text from escaping parent containers */
 * {
   overflow-wrap: break-word;
-  word-break: break-word;
-}
-/* Labels and single-line text truncate instead of wrapping */
-span, a, label, th, .nav-item, .btn, button {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* Multi-line elements can wrap normally */
-p, li, td, div, textarea, h1, h2, h3, h4 {
-  white-space: normal;
+  min-width: 0;
 }
 
 /* Force readable text inside content and exec panels.

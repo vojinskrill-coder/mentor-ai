@@ -1352,7 +1352,7 @@ export class AppShellComponent {
   readonly routeLoading = signal(false);
   readonly showGraph = signal(true);
   readonly showGraphPopup = signal(false);
-  readonly panelWidth = signal(420);
+  readonly panelWidth = signal(parseInt(localStorage.getItem('execPanelWidth') ?? '420', 10));
   isResizingPanel = false;
   private resizeStartX = 0;
   private resizeStartWidth = 0;
@@ -1474,6 +1474,7 @@ export class AppShellComponent {
 
     const onUp = () => {
       this.isResizingPanel = false;
+      localStorage.setItem('execPanelWidth', String(this.panelWidth()));
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       document.body.style.cursor = '';

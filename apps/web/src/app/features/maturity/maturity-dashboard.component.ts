@@ -151,10 +151,12 @@ const STAGE_ORDER: MaturityStage[] = [
         font-size: 15px;
         font-weight: 600;
         margin-bottom: 4px;
+        white-space: nowrap;
       }
       .stage-step-desc {
         font-size: 12px;
         color: #888;
+        white-space: nowrap;
       }
       .stage-badge {
         display: inline-block;
@@ -163,6 +165,7 @@ const STAGE_ORDER: MaturityStage[] = [
         padding: 2px 8px;
         border-radius: 9999px;
         margin-top: 8px;
+        white-space: nowrap;
       }
 
       /* Progress Ring Section */
@@ -221,6 +224,7 @@ const STAGE_ORDER: MaturityStage[] = [
         font-size: 11px;
         color: #888;
         margin-top: 2px;
+        white-space: nowrap;
       }
       .ring-stats {
         display: flex;
@@ -228,6 +232,7 @@ const STAGE_ORDER: MaturityStage[] = [
         margin-top: 16px;
         font-size: 12px;
         color: #a1a1a1;
+        white-space: nowrap;
       }
       .ring-stat-val {
         font-size: 16px;
@@ -257,10 +262,12 @@ const STAGE_ORDER: MaturityStage[] = [
         margin-bottom: 0;
       }
       .persona-label {
-        width: 150px;
+        min-width: 120px;
+        width: auto;
         font-size: 13px;
         font-weight: 500;
         flex-shrink: 0;
+        white-space: nowrap;
       }
       .persona-bar-track {
         flex: 1;
@@ -505,6 +512,7 @@ const STAGE_ORDER: MaturityStage[] = [
         font-size: 11px;
         color: #888;
         margin-top: 4px;
+        white-space: nowrap;
       }
       .auto-last-run {
         font-size: 12px;
