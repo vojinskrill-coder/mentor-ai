@@ -303,21 +303,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         min-width: 0;
         min-height: 0;
         overflow: hidden;
-        /* Grid layout: router-outlet collapses, route component fills everything */
-        display: grid;
-        grid-template-rows: 1fr;
-        grid-template-columns: 1fr;
-      }
-      .content-inner > router-outlet {
-        display: none;
-      }
-      .content-inner > router-outlet + * {
-        /* Route component fills the entire grid cell */
-        grid-row: 1;
-        grid-column: 1;
-        min-height: 0;
-        min-width: 0;
-        overflow: auto;
+        display: flex;
+        flex-direction: column;
       }
 
       /* ===== EXECUTION PANEL (right sidebar) — responsive width ===== */
@@ -1016,19 +1003,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         animation: tl-pulse 2s ease-in-out infinite;
       }
 
-      /* Chat/task-hub manage their own internal scroll */
-      .content-inner > router-outlet + app-chat,
-      .content-inner > router-outlet + app-task-hub {
-        overflow: hidden;
-      }
-
-      /* Regular pages (not chat/tasks) get centered max-width — scales with screen */
-      @media (min-width: 1536px) {
-        .content-inner:not(:has(app-chat)):not(:has(app-task-hub)) > * {
-          max-width: min(90%, 1800px);
-          margin: 0 auto;
-        }
-      }
+      /* Layout overrides handled by global styles in styles.css */
     `,
   ],
   template: `

@@ -633,6 +633,33 @@ html, body {
 }
 
 /* ============================================
+   Route component layout — fills the content panel
+   These MUST be global (not component-scoped) because Angular
+   route components are siblings of router-outlet and need
+   to fill their parent flex container.
+   ============================================ */
+.content-inner > router-outlet {
+  display: none !important;
+}
+.content-inner > *:not(router-outlet) {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* Pages that scroll their own content (maturity, dashboard, tasks, settings) */
+.content-inner > app-maturity-dashboard,
+.content-inner > app-dashboard,
+.content-inner > app-task-hub,
+.content-inner > app-account-settings,
+.content-inner > app-llm-config,
+.content-inner > app-team {
+  overflow-y: auto;
+}
+
+/* ============================================
    Responsive scaling for large screens
    Uses CSS zoom for true proportional scaling of ALL elements (px, em, rem, everything)
    This is the cleanest way to scale an entire app on large screens.
