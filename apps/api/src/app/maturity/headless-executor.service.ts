@@ -61,7 +61,17 @@ export class HeadlessExecutorService {
       // Load task note
       const taskNote = await this.prisma.note.findUnique({ where: { id: taskId } });
       if (!taskNote) return { success: false, error: 'Task not found' };
-      if (taskNote.status === 'COMPLETED') return { success: true };
+
+      // If note already completed (e.g., from prior execution before server restart),
+      // still call onConceptCompleted to ensure the assignment is marked COMPLETED too.
+      if (taskNote.status === 'COMPLETED') {
+        if (taskNote.conceptId) {
+          try {
+            await this.maturityEngine.onConceptCompleted(tenantId, taskNote.conceptId, taskId, userId);
+          } catch { /* best-effort */ }
+        }
+        return { success: true };
+      }
 
       const convId = taskNote.conversationId ?? '';
 

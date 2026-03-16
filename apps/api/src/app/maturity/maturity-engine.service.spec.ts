@@ -108,8 +108,8 @@ describe('MaturityEngineService', () => {
 
       await service.initializeStage(TENANT_ID, MaturityStage.BASIC, USER_ID);
 
-      // 8 personas × 1 call each + 1 batch name load in runStageExecution = 9 calls
-      expect(mockPrisma.concept.findMany).toHaveBeenCalledTimes(9);
+      // 8 personas × 1 call each = 8 calls (execution no longer auto-starts from initializeStage)
+      expect(mockPrisma.concept.findMany).toHaveBeenCalledTimes(8);
     });
 
     it('should create assignments from classified concepts', async () => {

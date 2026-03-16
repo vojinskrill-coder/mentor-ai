@@ -159,16 +159,8 @@ export class MaturityEngineService {
         noteCount,
       });
 
-      // Auto-execute all PENDING tasks in dependency order (fire-and-forget)
-      this.runStageExecution(tenantId, stage, userId).catch((err) => {
-        this.logger.error({
-          message: 'Stage auto-execution failed',
-          tenantId,
-          stage,
-          error: err instanceof Error ? err.message : 'Unknown',
-        });
-      });
-
+      // Stage is prepared — execution must be triggered explicitly via the dashboard
+      // (POST /api/v1/maturity/stage/:stage/execute)
       return { assignmentCount: finalCount };
     } finally {
       this.initializingTenants.delete(tenantId);
@@ -832,12 +824,24 @@ export class MaturityEngineService {
               taskId: assignment.noteId!, tenantId, userId,
             });
             if (result.success) {
-              // Verify assignment actually transitioned to COMPLETED (onConceptCompleted runs inside executeTask)
+              // Verify assignment transitioned to COMPLETED. If not (e.g., onConceptCompleted
+              // missed due to prior server restart), force-mark it now.
               const updated = await this.prisma.stageConceptAssignment.findUnique({
                 where: { id: assignment.id },
                 select: { status: true },
               });
               if (updated?.status === StageConceptStatus.COMPLETED) {
+                completedConcepts.add(assignment.conceptId);
+              } else if (updated?.status === StageConceptStatus.PENDING || updated?.status === StageConceptStatus.IN_PROGRESS) {
+                // Safety net: note completed but assignment wasn't updated — fix it
+                this.logger.warn({
+                  message: 'Force-completing assignment (note completed but assignment lagged)',
+                  tenantId, conceptId: assignment.conceptId, assignmentStatus: updated?.status,
+                });
+                await this.prisma.stageConceptAssignment.update({
+                  where: { id: assignment.id },
+                  data: { status: StageConceptStatus.COMPLETED, completedAt: new Date() },
+                });
                 completedConcepts.add(assignment.conceptId);
               }
               executed++;
