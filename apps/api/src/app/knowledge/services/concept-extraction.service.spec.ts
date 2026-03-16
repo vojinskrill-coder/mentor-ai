@@ -61,14 +61,14 @@ describe('ConceptExtractionService', () => {
   describe('extractAndCreateConcepts', () => {
     it('should extract and create concepts from AI output', async () => {
       mockLlmResponse(
-        `[{"name": "Value Chain Analysis", "category": "Strategy", "definition": "A framework for analyzing a firm's activities to find competitive advantage.", "departmentTags": ["STRATEGY"]}]`,
+        `[{"name": "Value Chain Analysis", "category": "Strategija", "definition": "Okvir za analizu aktivnosti firme radi pronalaženja konkurentske prednosti.", "departmentTags": ["STRATEGY"]}]`,
       );
       mockPrisma.concept.create.mockResolvedValue({
         id: 'cpt_new1',
         name: 'Value Chain Analysis',
         slug: 'value-chain-analysis',
-        category: 'Strategy',
-        definition: 'A framework for analyzing a firm\'s activities to find competitive advantage.',
+        category: 'Strategija',
+        definition: 'Okvir za analizu aktivnosti firme radi pronalaženja konkurentske prednosti.',
         departmentTags: ['STRATEGY'],
         source: 'AI_DISCOVERED',
         version: 1,
@@ -88,7 +88,7 @@ describe('ConceptExtractionService', () => {
         expect.objectContaining({
           data: expect.objectContaining({
             name: 'Value Chain Analysis',
-            category: 'Strategy',
+            category: 'Strategija',
             source: 'AI_DISCOVERED',
           }),
         }),
@@ -97,7 +97,7 @@ describe('ConceptExtractionService', () => {
 
     it('should skip duplicate concepts detected via findByName', async () => {
       mockLlmResponse(
-        `[{"name": "SWOT Analysis", "category": "Strategy", "definition": "Strategic planning framework for evaluation.", "departmentTags": ["STRATEGY"]}]`,
+        `[{"name": "SWOT Analysis", "category": "Strategija", "definition": "Okvir za strateško planiranje i evaluaciju poslovanja.", "departmentTags": ["STRATEGY"]}]`,
       );
       mockConceptService.findByName.mockResolvedValue({
         id: 'cpt_existing',
@@ -125,8 +125,8 @@ describe('ConceptExtractionService', () => {
     it('should enforce per-response cap (maxNew)', async () => {
       const concepts = Array.from({ length: 10 }, (_, i) => ({
         name: `Concept ${i + 1}`,
-        category: 'Finance',
-        definition: `Definition for concept number ${i + 1} in the series.`,
+        category: 'Finansije',
+        definition: `Definicija za koncept broj ${i + 1} u nizu poslovanja.`,
         departmentTags: ['FINANCE'],
       }));
       mockLlmResponse(JSON.stringify(concepts));
@@ -183,7 +183,7 @@ describe('ConceptExtractionService', () => {
 
     it('should handle DB unique constraint gracefully', async () => {
       mockLlmResponse(
-        `[{"name": "Duplicate Concept", "category": "Finance", "definition": "A concept that already exists in database.", "departmentTags": []}]`,
+        `[{"name": "Duplicate Concept", "category": "Finansije", "definition": "Koncept koji već postoji u bazi podataka sistema.", "departmentTags": []}]`,
       );
       mockPrisma.concept.create.mockRejectedValue(
         new Error('Unique constraint failed on the fields: (`slug`)'),
@@ -208,7 +208,7 @@ describe('ConceptExtractionService', () => {
 
     it('should generate correct slug from concept name', async () => {
       mockLlmResponse(
-        `[{"name": "Value Chain Analysis", "category": "Strategy", "definition": "A strategic analysis framework for business.", "departmentTags": ["STRATEGY"]}]`,
+        `[{"name": "Value Chain Analysis", "category": "Strategija", "definition": "Okvir za stratešku analizu poslovanja i konkurencije.", "departmentTags": ["STRATEGY"]}]`,
       );
       mockPrisma.concept.create.mockImplementation(async ({ data }: { data: { slug: string } }) => ({
         ...data,
@@ -230,7 +230,7 @@ describe('ConceptExtractionService', () => {
 
     it('should use cpt_ prefix for generated concept IDs', async () => {
       mockLlmResponse(
-        `[{"name": "Test Concept", "category": "Finance", "definition": "A test concept with proper definition.", "departmentTags": []}]`,
+        `[{"name": "Test Concept", "category": "Finansije", "definition": "Testni koncept sa odgovarajućom definicijom za proveru.", "departmentTags": []}]`,
       );
       mockPrisma.concept.create.mockImplementation(async ({ data }: { data: { id: string } }) => ({
         ...data,

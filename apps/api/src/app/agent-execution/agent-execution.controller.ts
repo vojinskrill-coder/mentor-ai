@@ -93,6 +93,13 @@ export class AgentExecutionController {
     return { data: result };
   }
 
+  @Post('jobs/:jobId/retry')
+  @HttpCode(HttpStatus.CREATED)
+  async retryJob(@Param('jobId') jobId: string, @CurrentUser() user: CurrentUserPayload) {
+    const result = await this.agentExecutionService.retryJob(jobId, user.userId, user.tenantId);
+    return { data: result };
+  }
+
   @Get(':executionId')
   async getExecution(
     @Param('executionId') executionId: string,

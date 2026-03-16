@@ -20,47 +20,47 @@ describe('extraction-prompt', () => {
       );
       expect(prompt).toContain('SWOT Analysis');
       expect(prompt).toContain('Porter Five Forces');
-      expect(prompt).toContain('DO NOT extract these');
+      expect(prompt).toContain('NE ekstrahuj');
     });
 
     it('should include valid categories list', () => {
       const prompt = buildConceptExtractionPrompt('text', []);
-      expect(prompt).toContain('Finance');
+      expect(prompt).toContain('Finansije');
       expect(prompt).toContain('Marketing');
-      expect(prompt).toContain('Strategy');
-      expect(prompt).toContain('Sales');
+      expect(prompt).toContain('Strategija');
+      expect(prompt).toContain('Prodaja');
     });
 
     it('should respect maxConcepts parameter', () => {
       const prompt = buildConceptExtractionPrompt('text', [], 3);
-      expect(prompt).toContain('at most 3 concepts');
+      expect(prompt).toContain('3 konceptat');
     });
 
     it('should use default maxConcepts of 5', () => {
       const prompt = buildConceptExtractionPrompt('text', []);
-      expect(prompt).toContain('at most 5 concepts');
+      expect(prompt).toContain('5 konceptat');
     });
 
     it('should handle empty existing names list', () => {
       const prompt = buildConceptExtractionPrompt('text', []);
-      expect(prompt).not.toContain('EXISTING CONCEPTS');
+      expect(prompt).not.toContain('POSTOJEĆI KONCEPTI');
     });
   });
 
   describe('parseExtractionResponse', () => {
     it('should parse valid JSON array of concept candidates', () => {
-      const response = `[{"name": "Blue Ocean Strategy", "category": "Strategy", "definition": "A business strategy framework for creating uncontested market space.", "departmentTags": ["STRATEGY"]}]`;
+      const response = `[{"name": "Blue Ocean Strategy", "category": "Strategija", "definition": "Okvir poslovne strategije za kreiranje neosporenog tržišnog prostora.", "departmentTags": ["STRATEGY"]}]`;
       const result = parseExtractionResponse(response);
       expect(result).toHaveLength(1);
       const first = result[0]!;
       expect(first.name).toBe('Blue Ocean Strategy');
-      expect(first.category).toBe('Strategy');
-      expect(first.definition).toContain('business strategy framework');
+      expect(first.category).toBe('Strategija');
+      expect(first.definition).toContain('poslovne strategije');
       expect(first.departmentTags).toEqual(['STRATEGY']);
     });
 
     it('should extract JSON array from markdown-wrapped response', () => {
-      const response = `Here are the concepts:\n\`\`\`json\n[{"name": "Test Concept", "category": "Finance", "definition": "A test concept definition here.", "departmentTags": []}]\n\`\`\``;
+      const response = `Here are the concepts:\n\`\`\`json\n[{"name": "Test Concept", "category": "Finansije", "definition": "Definicija test koncepta za testiranje.", "departmentTags": []}]\n\`\`\``;
       const result = parseExtractionResponse(response);
       expect(result).toHaveLength(1);
       expect(result[0]!.name).toBe('Test Concept');
@@ -73,13 +73,13 @@ describe('extraction-prompt', () => {
     });
 
     it('should reject candidates with short definition (< 10 chars)', () => {
-      const response = `[{"name": "Test", "category": "Finance", "definition": "Short", "departmentTags": []}]`;
+      const response = `[{"name": "Test", "category": "Finansije", "definition": "Short", "departmentTags": []}]`;
       const result = parseExtractionResponse(response);
       expect(result).toHaveLength(0);
     });
 
     it('should reject candidates with empty name', () => {
-      const response = `[{"name": "  ", "category": "Finance", "definition": "A valid definition text.", "departmentTags": []}]`;
+      const response = `[{"name": "  ", "category": "Finansije", "definition": "A valid definition text.", "departmentTags": []}]`;
       const result = parseExtractionResponse(response);
       expect(result).toHaveLength(0);
     });
@@ -96,9 +96,9 @@ describe('extraction-prompt', () => {
 
     it('should handle mixed valid and invalid candidates', () => {
       const response = `[
-        {"name": "Valid Concept", "category": "Finance", "definition": "A valid concept with proper definition.", "departmentTags": ["FINANCE"]},
+        {"name": "Valid Concept", "category": "Finansije", "definition": "Validan koncept sa odgovarajucom definicijom.", "departmentTags": ["FINANCE"]},
         {"name": "Invalid", "category": "BadCategory", "definition": "Valid definition text.", "departmentTags": []},
-        {"name": "Short Def", "category": "Finance", "definition": "Short", "departmentTags": []}
+        {"name": "Short Def", "category": "Finansije", "definition": "Short", "departmentTags": []}
       ]`;
       const result = parseExtractionResponse(response);
       expect(result).toHaveLength(1);
@@ -106,18 +106,18 @@ describe('extraction-prompt', () => {
     });
 
     it('should handle missing departmentTags gracefully', () => {
-      const response = `[{"name": "Test Concept", "category": "Marketing", "definition": "A valid definition for testing."}]`;
+      const response = `[{"name": "Test Concept", "category": "Marketing", "definition": "Validna definicija za testiranje koncepta."}]`;
       const result = parseExtractionResponse(response);
       expect(result).toHaveLength(1);
       expect(result[0]!.departmentTags).toEqual([]);
     });
 
     it('should trim name and definition whitespace', () => {
-      const response = `[{"name": "  Padded Name  ", "category": "Finance", "definition": "  A padded definition text.  ", "departmentTags": []}]`;
+      const response = `[{"name": "  Padded Name  ", "category": "Finansije", "definition": "  Definicija sa razmacima na pocetku i kraju.  ", "departmentTags": []}]`;
       const result = parseExtractionResponse(response);
       expect(result).toHaveLength(1);
       expect(result[0]!.name).toBe('Padded Name');
-      expect(result[0]!.definition).toBe('A padded definition text.');
+      expect(result[0]!.definition).toBe('Definicija sa razmacima na pocetku i kraju.');
     });
   });
 });

@@ -1,6 +1,10 @@
-import { Component } from '@angular/core';
+import { Component, OnInit, inject, signal, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { map } from 'rxjs';
+import { MaturityDashboardData } from '@mentor-ai/shared/types';
 
 @Component({
   selector: 'app-dashboard',
@@ -185,6 +189,73 @@ import { RouterLink } from '@angular/router';
         color: #a1a1a1;
         line-height: 1.4;
       }
+
+      /* Maturity Card */
+      .maturity-section {
+        margin-bottom: 32px;
+      }
+      .maturity-card {
+        background: #1a1a1a;
+        border-radius: 12px;
+        border: 1px solid #2a2a2a;
+        padding: 20px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        text-decoration: none;
+        color: inherit;
+        transition: border-color 0.2s;
+      }
+      .maturity-card:hover {
+        border-color: #3b82f6;
+      }
+      .maturity-left {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .maturity-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .maturity-icon svg {
+        width: 24px;
+        height: 24px;
+      }
+      .maturity-title {
+        font-size: 15px;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .maturity-subtitle {
+        font-size: 13px;
+        color: #a1a1a1;
+      }
+      .maturity-right {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .maturity-percent {
+        font-size: 20px;
+        font-weight: 700;
+      }
+      .maturity-stage-badge {
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 500;
+        padding: 4px 10px;
+        border-radius: 9999px;
+      }
+      .maturity-arrow {
+        color: #888;
+        font-size: 18px;
+      }
     `,
   ],
   template: `
@@ -245,20 +316,70 @@ import { RouterLink } from '@angular/router';
             <div class="persona-role">Tehnologija</div>
           </div>
           <div class="persona-card">
-            <div class="persona-avatar" style="background-color: #F59E0B;">O</div>
-            <div class="persona-name" style="color: #F59E0B;">Operacije</div>
-            <div class="persona-role">Procesi</div>
+            <div class="persona-avatar" style="background-color: #F59E0B;">C</div>
+            <div class="persona-name" style="color: #F59E0B;">COO</div>
+            <div class="persona-role">Operacije</div>
           </div>
           <div class="persona-card">
-            <div class="persona-avatar" style="background-color: #EF4444;">P</div>
-            <div class="persona-name" style="color: #EF4444;">Pravo</div>
-            <div class="persona-role">Usklađenost</div>
+            <div class="persona-avatar" style="background-color: #EF4444;">C</div>
+            <div class="persona-name" style="color: #EF4444;">CLO</div>
+            <div class="persona-role">Pravo</div>
           </div>
           <div class="persona-card">
-            <div class="persona-avatar" style="background-color: #EC4899;">K</div>
-            <div class="persona-name" style="color: #EC4899;">Kreativa</div>
-            <div class="persona-role">Dizajn</div>
+            <div class="persona-avatar" style="background-color: #EC4899;">C</div>
+            <div class="persona-name" style="color: #EC4899;">CCO</div>
+            <div class="persona-role">Kreativa</div>
           </div>
+          <div class="persona-card">
+            <div class="persona-avatar" style="background-color: #06B6D4;">C</div>
+            <div class="persona-name" style="color: #06B6D4;">CSO</div>
+            <div class="persona-role">Strategija</div>
+          </div>
+          <div class="persona-card">
+            <div class="persona-avatar" style="background-color: #F97316;">C</div>
+            <div class="persona-name" style="color: #F97316;">CRO</div>
+            <div class="persona-role">Prodaja</div>
+          </div>
+        </div>
+
+        <!-- Maturity Engine Card -->
+        <div class="maturity-section">
+          <h3 class="section-title">Razvojni plan</h3>
+          <a routerLink="/maturity" class="maturity-card">
+            <div class="maturity-left">
+              <div class="maturity-icon"
+                   [style.background]="maturityData()?.currentStage ? getStageColor(maturityData()!.currentStage!) + '15' : 'rgba(59,130,246,0.1)'">
+                <svg fill="none" [attr.stroke]="maturityData()?.currentStage ? getStageColor(maturityData()!.currentStage!) : '#3b82f6'"
+                     viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <div>
+                <div class="maturity-title">Maturity Engine</div>
+                <div class="maturity-subtitle" *ngIf="!maturityData()?.currentStage">
+                  Pokrenite razvojni plan vašeg poslovanja
+                </div>
+                <div class="maturity-subtitle" *ngIf="maturityData()?.progress as p">
+                  {{ p.completed }} od {{ p.totalAssignments }} koncepata završeno
+                </div>
+              </div>
+            </div>
+            <div class="maturity-right">
+              <span *ngIf="maturityData()?.currentStage as stage"
+                    class="maturity-stage-badge"
+                    [style.background]="getStageColor(stage) + '20'"
+                    [style.color]="getStageColor(stage)">
+                {{ getStageLabel(stage) }}
+              </span>
+              <span *ngIf="maturityData()?.progress as p"
+                    class="maturity-percent"
+                    [style.color]="getStageColor(maturityData()!.currentStage!)">
+                {{ p.completionPercent }}%
+              </span>
+              <span class="maturity-arrow">→</span>
+            </div>
+          </a>
         </div>
 
         <!-- Admin Section -->
@@ -349,4 +470,39 @@ import { RouterLink } from '@angular/router';
       </main>
   `,
 })
-export class DashboardComponent {}
+export class DashboardComponent implements OnInit {
+  private readonly http = inject(HttpClient);
+  private readonly destroyRef = inject(DestroyRef);
+
+  maturityData = signal<MaturityDashboardData | null>(null);
+
+  private readonly stageColors: Record<string, string> = {
+    BASIC: '#10B981',
+    ADVANCED: '#F59E0B',
+    AUTONOMOUS: '#8B5CF6',
+  };
+
+  private readonly stageLabels: Record<string, string> = {
+    BASIC: 'Basic',
+    ADVANCED: 'Advanced',
+    AUTONOMOUS: 'Autonomous',
+  };
+
+  ngOnInit(): void {
+    this.http
+      .get<{ data: MaturityDashboardData }>('/api/v1/maturity/stage')
+      .pipe(map((r) => r.data), takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (data) => this.maturityData.set(data),
+        error: () => {}, // silent — card just won't show details
+      });
+  }
+
+  getStageColor(stage: string): string {
+    return this.stageColors[stage] || '#3B82F6';
+  }
+
+  getStageLabel(stage: string): string {
+    return this.stageLabels[stage] || stage;
+  }
+}

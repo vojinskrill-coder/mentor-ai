@@ -30,40 +30,39 @@ describe('PersonaPrompts', () => {
       });
     });
 
-    it('should have system prompts approximately 500 tokens (estimated)', () => {
-      // Rough token estimation: 1 token ≈ 4 characters
-      // 500 tokens ≈ 2000 characters, allow range of 1000-3000 characters
+    it('should have system prompts of reasonable length', () => {
+      // Rough token estimation: 1 token ~ 4 characters
+      // Serbian text with formatting rules is longer; allow 200-2000 tokens
       Object.entries(PERSONA_PROMPTS).forEach(([type, prompt]) => {
         const charCount = prompt.systemPrompt.length;
         const estimatedTokens = Math.ceil(charCount / 4);
 
-        // Allow range of 200-800 tokens (reasonable flexibility)
         expect(estimatedTokens).toBeGreaterThanOrEqual(200);
-        expect(estimatedTokens).toBeLessThanOrEqual(800);
+        expect(estimatedTokens).toBeLessThanOrEqual(2000);
       });
     });
 
     it('should include expertise section in all prompts', () => {
       Object.values(PERSONA_PROMPTS).forEach((prompt) => {
-        expect(prompt.systemPrompt).toContain('EXPERTISE:');
+        expect(prompt.systemPrompt).toContain('EKSPERTIZA:');
       });
     });
 
     it('should include communication style section in all prompts', () => {
       Object.values(PERSONA_PROMPTS).forEach((prompt) => {
-        expect(prompt.systemPrompt).toContain('COMMUNICATION STYLE:');
+        expect(prompt.systemPrompt).toContain('STIL KOMUNIKACIJE:');
       });
     });
 
     it('should include response format section in all prompts', () => {
       Object.values(PERSONA_PROMPTS).forEach((prompt) => {
-        expect(prompt.systemPrompt).toContain('RESPONSE FORMAT:');
+        expect(prompt.systemPrompt).toContain('FORMAT ODGOVORA:');
       });
     });
 
     it('should include citation format instruction', () => {
       Object.values(PERSONA_PROMPTS).forEach((prompt) => {
-        expect(prompt.systemPrompt).toContain('[[Concept Name]]');
+        expect(prompt.systemPrompt).toContain('[[Naziv Koncepta]]');
       });
     });
   });
@@ -78,8 +77,8 @@ describe('PersonaPrompts', () => {
     it('should mention financial expertise', () => {
       const cfoPrompt = PERSONA_PROMPTS['CFO'];
       expect(cfoPrompt).toBeDefined();
-      expect(cfoPrompt!.systemPrompt).toContain('Chief Financial Officer');
-      expect(cfoPrompt!.systemPrompt).toContain('Financial');
+      expect(cfoPrompt!.systemPrompt).toContain('Finansijski Direktor (CFO)');
+      expect(cfoPrompt!.systemPrompt).toContain('Finansijska');
     });
 
     it('should mention ROI', () => {
@@ -91,7 +90,7 @@ describe('PersonaPrompts', () => {
     it('should have relevant capabilities', () => {
       const cfoPrompt = PERSONA_PROMPTS['CFO'];
       expect(cfoPrompt).toBeDefined();
-      expect(cfoPrompt!.capabilities).toContain('Financial analysis and modeling');
+      expect(cfoPrompt!.capabilities).toContain('Finansijska analiza i modeliranje');
     });
   });
 
@@ -105,8 +104,8 @@ describe('PersonaPrompts', () => {
     it('should mention marketing expertise', () => {
       const cmoPrompt = PERSONA_PROMPTS['CMO'];
       expect(cmoPrompt).toBeDefined();
-      expect(cmoPrompt!.systemPrompt).toContain('Chief Marketing Officer');
-      expect(cmoPrompt!.systemPrompt).toContain('Brand');
+      expect(cmoPrompt!.systemPrompt).toContain('Direktor Marketinga (CMO)');
+      expect(cmoPrompt!.systemPrompt).toContain('brenda');
     });
   });
 
@@ -120,9 +119,9 @@ describe('PersonaPrompts', () => {
     it('should include disclaimer about not being legal advice', () => {
       const legalPrompt = PERSONA_PROMPTS['LEGAL'];
       expect(legalPrompt).toBeDefined();
-      expect(legalPrompt!.systemPrompt).toContain('DISCLAIMER');
+      expect(legalPrompt!.systemPrompt).toContain('VAŽNA NAPOMENA');
       expect(legalPrompt!.systemPrompt).toContain(
-        'NOT a substitute for professional legal advice'
+        'NIJE zamena za profesionalni pravni savet'
       );
     });
 
@@ -130,7 +129,7 @@ describe('PersonaPrompts', () => {
       const legalPrompt = PERSONA_PROMPTS['LEGAL'];
       expect(legalPrompt).toBeDefined();
       expect(legalPrompt!.limitations).toContain(
-        'Cannot provide specific legal advice'
+        'Ne može pružiti specifične pravne savete'
       );
     });
   });
@@ -156,7 +155,7 @@ describe('PersonaPrompts', () => {
 
       expect(typeof prompt).toBe('string');
       expect(prompt.length).toBeGreaterThan(0);
-      expect(prompt).toContain('Chief Financial Officer');
+      expect(prompt).toContain('Finansijski Direktor (CFO)');
     });
 
     it('should return empty string for invalid type', () => {

@@ -306,6 +306,12 @@ PLAN KONCEPTA (svi mogući koraci):
 ${workflowContext}
 
 ${businessContext ? `POSLOVNI KONTEKST:\n${businessContext}\n` : ''}
+KAKO ANALIZIRATI I PREDLOŽITI:
+- Analiziraj rezultate završenih koraka i identifikuj gde postoji NAJVEĆI GAP između onoga što korisnik ima i onoga što mu treba
+- Ne predlaži korake koji su varijacije već završenog — predloži korake koji NADOGRAĐUJU rezultate
+- Svaki predlog mora biti SPECIFIČAN za kompaniju i rezultate prethodno urađenog posla
+- Ako su završeni koraci otkrili konkretan problem ili priliku, predloži korak koji to ADRESIRA
+
 Predloži 2-3 konkretna sledeća koraka. Budi specifičan za kompaniju i industriju.
 Fokusiraj se na ono što je NAJVAŽNIJE za korisnika u ovom trenutku.
 Za svaki predlog objasni ZAŠTO je važan i ŠTA će korisnik dobiti.

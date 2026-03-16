@@ -630,6 +630,78 @@ export class ConversationService {
   }
 
   /**
+   * Loads summaries of prior conversations about the same concept.
+   * Used to inject cross-conversation context into the LLM system prompt,
+   * so the AI can build on prior analyses instead of repeating itself.
+   *
+   * Returns the last assistant message from each OTHER conversation
+   * about the same concept (excluding the current one).
+   */
+  async getConceptInsights(
+    tenantId: string,
+    userId: string,
+    conceptId: string,
+    excludeConversationId: string,
+    limit = 3
+  ): Promise<Array<{ conversationId: string; title: string; summary: string }>> {
+    const prisma = await this.tenantPrisma.getClient(tenantId);
+
+    // Single query with nested include to avoid N+1 (loads last assistant message per conversation)
+    const conversations = await prisma.conversation.findMany({
+      where: {
+        conceptId,
+        userId,
+        id: { not: excludeConversationId },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        title: true,
+        messages: {
+          where: { role: 'ASSISTANT' },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { content: true },
+        },
+      },
+    });
+
+    if (conversations.length === 0) return [];
+
+    const insights: Array<{ conversationId: string; title: string; summary: string }> = [];
+
+    for (const conv of conversations) {
+      const lastMsg = conv.messages[0];
+      if (lastMsg?.content) {
+        // Trim at last sentence boundary within 500 chars for clean context
+        let summary = lastMsg.content;
+        if (summary.length > 500) {
+          const truncated = summary.substring(0, 500);
+          const lastSentenceEnd = Math.max(
+            truncated.lastIndexOf('. '),
+            truncated.lastIndexOf('.\n'),
+            truncated.lastIndexOf('! '),
+            truncated.lastIndexOf('? ')
+          );
+          summary =
+            lastSentenceEnd > 200
+              ? truncated.substring(0, lastSentenceEnd + 1)
+              : truncated + '...';
+        }
+
+        insights.push({
+          conversationId: conv.id,
+          title: conv.title ?? 'Prethodna konverzacija',
+          summary,
+        });
+      }
+    }
+
+    return insights;
+  }
+
+  /**
    * Gets a conversation by ID with all messages.
    * @param tenantId - Tenant ID for database isolation
    * @param conversationId - Conversation ID to retrieve

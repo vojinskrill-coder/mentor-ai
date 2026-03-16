@@ -240,8 +240,8 @@ describe('MemoryExtractionService', () => {
 
       const formatted = servicePvt.formatMessages(mockMessages);
 
-      expect(formatted).toContain('User: I need to discuss Acme Corp');
-      expect(formatted).toContain('Assistant: I understand');
+      expect(formatted).toContain('KORISNIK: I need to discuss Acme Corp');
+      expect(formatted).toContain('AI: I understand');
     });
   });
 });

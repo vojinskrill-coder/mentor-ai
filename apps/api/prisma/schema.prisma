@@ -96,6 +96,21 @@ enum PersonaType {
   SALES
 }
 
+// ── Business Maturity Engine ──
+// Three evolutionary stages for tenant business maturity
+enum MaturityStage {
+  BASIC
+  ADVANCED
+  AUTONOMOUS
+}
+
+enum StageConceptStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  STALE
+}
+
 // Tenant business profile with industry and description
 // Linked to TenantRegistry for database connection info
 model Tenant {
@@ -112,6 +127,9 @@ model Tenant {
 
   // Autonomous AI Popuni — when enabled, newly created tasks auto-fill + auto-score
   autoAiPopuni Boolean     @default(false) @map("auto_ai_popuni")
+
+  // Business Maturity Engine — current stage (null = engine not initialized)
+  maturityStage MaturityStage? @map("maturity_stage")
 
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
@@ -740,5 +758,60 @@ model AgentJob {
   @@index([tenantId])
   @@index([noteId, order])
   @@map("agent_jobs")
+}
+
+// ── Business Maturity Engine ──
+// Persona-driven concept assignment per stage per tenant
+model StageConceptAssignment {
+  id          String             @id @default(cuid()) @map("id")
+  tenantId    String             @map("tenant_id")
+  conceptId   String             @map("concept_id")
+  stage       MaturityStage
+  personaType PersonaType        @map("persona_type")
+  priority    Int                @default(0) // ordering within stage, lower = first
+  status      StageConceptStatus @default(PENDING)
+  completedAt DateTime?          @map("completed_at")
+  noteId      String?            @map("note_id") // link to the executed Note
+  version     Int                @default(1) // re-execution tracking
+  staleReason String?            @map("stale_reason")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  @@unique([tenantId, conceptId, stage])
+  @@index([tenantId, stage, status])
+  @@index([tenantId, personaType, stage])
+  @@map("stage_concept_assignments")
+}
+
+// Stage transition audit log
+model StageCompletionLog {
+  id            String        @id @default(cuid()) @map("id")
+  tenantId      String        @map("tenant_id")
+  stage         MaturityStage
+  completedAt   DateTime      @map("completed_at")
+  totalConcepts Int           @map("total_concepts")
+  triggeredBy   String        @map("triggered_by")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@map("stage_completion_logs")
+}
+
+// Autonomous execution run log
+model AutonomousRun {
+  id             String    @id @default(cuid()) @map("id")
+  tenantId       String    @map("tenant_id")
+  runType        String    @map("run_type") // 'staleness_scan', 'kpi_monitor', 'weekly_digest'
+  status         String    @default("RUNNING") // 'RUNNING', 'COMPLETED', 'FAILED'
+  staleFound     Int       @default(0) @map("stale_found")
+  reExecuted     Int       @default(0) @map("re_executed")
+  tasksCompleted Int       @default(0) @map("tasks_completed")
+  resultSummary  String?   @map("result_summary")
+  error          String?
+  startedAt      DateTime  @default(now()) @map("started_at")
+  completedAt    DateTime? @map("completed_at")
+
+  @@index([tenantId, runType])
+  @@map("autonomous_runs")
 }
 

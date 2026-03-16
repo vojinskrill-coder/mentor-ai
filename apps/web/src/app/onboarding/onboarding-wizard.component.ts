@@ -1053,8 +1053,11 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
                 </p>
               } @else {
                 <p>
-                  Vaš poslovni mozak je kreiran! Idite na razgovor da istražite personalizovane
-                  zadatke i fokus oblasti.
+                  Vaš poslovni mozak je kreiran! AI sada u pozadini priprema personalizovane
+                  zadatke za 8 C-level persona (CFO, CMO, CTO, COO, CLO, CCO, CSO, CRO).
+                </p>
+                <p style="color:#a1a1a1;font-size:13px;margin-top:8px">
+                  Na sledećoj stranici ćete videti napredak inicijalizacije i automatskog izvršavanja.
                 </p>
               }
             </div>
@@ -1113,7 +1116,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
 
           @if (showCelebration$()) {
             <button class="btn btn-primary btn-right" (click)="goToChat()">
-              Idi na razgovor &#8594;
+              Pogledaj napredak &#8594;
             </button>
           }
         </div>
@@ -1207,7 +1210,7 @@ export class OnboardingWizardComponent implements OnInit {
     try {
       const status = await this.onboardingService.getStatus();
       if (status.currentStep === 'complete') {
-        this.router.navigate(['/chat']);
+        this.router.navigate(['/maturity']);
       }
     } catch {
       // Continue with fresh onboarding
@@ -1433,17 +1436,8 @@ export class OnboardingWizardComponent implements OnInit {
   }
 
   goToChat(): void {
-    const convId = this.welcomeConversationId$();
-    const planId = this.planId$();
-    const taskIds = this.taskIds$();
-    const queryParams: Record<string, string> = {};
-    if (this.executionMode$() === 'YOLO') queryParams['yolo'] = 'true';
-    if (planId) queryParams['planId'] = planId;
-    if (taskIds.length > 0) queryParams['taskIds'] = taskIds.join(',');
-    if (convId) {
-      this.router.navigate(['/chat', convId], { queryParams });
-    } else {
-      this.router.navigate(['/chat'], { queryParams });
-    }
+    // Redirect to maturity dashboard — auto-BASIC initialization runs in background
+    // and the dashboard shows real-time execution progress
+    this.router.navigate(['/maturity']);
   }
 }

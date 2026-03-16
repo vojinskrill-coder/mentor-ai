@@ -391,6 +391,187 @@ describe('BusinessContextService', () => {
   });
 
   // -----------------------------------------------------------------
+  // Relevance-filtered context (Sprint 2 Epic 2.1)
+  // -----------------------------------------------------------------
+  describe('getBusinessContext with query (relevance filtering)', () => {
+    it('should accept optional query parameter', async () => {
+      mockPrismaService.memory.findMany.mockResolvedValue([
+        buildMemory({ content: 'Revenue is 1M EUR' }),
+      ]);
+
+      const result = await service.getBusinessContext(TENANT_ID, 'revenue');
+
+      expect(result).toContain('Revenue is 1M EUR');
+    });
+
+    it('should rank memories by keyword relevance when query provided', async () => {
+      mockPrismaService.memory.findMany.mockResolvedValue([
+        buildMemory({ type: 'CLIENT_CONTEXT', content: 'Client Alpha prefers email communication' }),
+        buildMemory({ type: 'CLIENT_CONTEXT', content: 'Marketing budget for social media is 5000 EUR monthly' }),
+        buildMemory({ type: 'CLIENT_CONTEXT', content: 'Social media presence is key for growth' }),
+      ]);
+
+      const result = await service.getBusinessContext(TENANT_ID, 'social media marketing');
+
+      // Both social media-related memories should appear before the email one
+      const socialIdx = result.indexOf('social media');
+      const emailIdx = result.indexOf('email communication');
+      expect(socialIdx).toBeLessThan(emailIdx);
+    });
+
+    it('should not cache results when query is provided', async () => {
+      mockPrismaService.memory.findMany.mockResolvedValue([
+        buildMemory({ content: 'Test memory' }),
+      ]);
+
+      // First call with query
+      await service.getBusinessContext(TENANT_ID, 'test query');
+      // Second call without query
+      await service.getBusinessContext(TENANT_ID);
+
+      // Both should hit the database (2 calls total)
+      expect(mockPrismaService.memory.findMany).toHaveBeenCalledTimes(2);
+    });
+
+    it('should fall back to chronological order when query has no meaningful keywords', async () => {
+      mockPrismaService.memory.findMany.mockResolvedValue([
+        buildMemory({ content: 'First memory' }),
+        buildMemory({ content: 'Second memory' }),
+      ]);
+
+      // Query with only stop words
+      const result = await service.getBusinessContext(TENANT_ID, 'je da ne za na');
+
+      // Should still include memories (chronological order)
+      expect(result).toContain('First memory');
+      expect(result).toContain('Second memory');
+    });
+  });
+
+  // -----------------------------------------------------------------
+  // extractKeywords
+  // -----------------------------------------------------------------
+  describe('extractKeywords', () => {
+    it('should extract meaningful words from a query', () => {
+      const keywords = service.extractKeywords('marketing strategija za prodaju');
+
+      expect(keywords).toContain('marketing');
+      expect(keywords).toContain('strategija');
+      expect(keywords).toContain('prodaju');
+    });
+
+    it('should filter out short words (less than 3 chars)', () => {
+      const keywords = service.extractKeywords('ja i ti');
+
+      expect(keywords).toHaveLength(0);
+    });
+
+    it('should filter out Serbian stop words', () => {
+      const keywords = service.extractKeywords('koji treba da može neke');
+
+      expect(keywords).toHaveLength(0);
+    });
+
+    it('should filter out English stop words', () => {
+      const keywords = service.extractKeywords('what about this from their');
+
+      expect(keywords).toHaveLength(0);
+    });
+
+    it('should lowercase all keywords', () => {
+      const keywords = service.extractKeywords('Marketing STRATEGIJA Prodaja');
+
+      expect(keywords).toEqual(['marketing', 'strategija', 'prodaja']);
+    });
+
+    it('should strip punctuation', () => {
+      const keywords = service.extractKeywords('prodaja, marketing! strategija?');
+
+      expect(keywords).toContain('prodaja');
+      expect(keywords).toContain('marketing');
+      expect(keywords).toContain('strategija');
+    });
+
+    it('should return empty array for empty string', () => {
+      const keywords = service.extractKeywords('');
+
+      expect(keywords).toEqual([]);
+    });
+  });
+
+  // -----------------------------------------------------------------
+  // scoreRelevance
+  // -----------------------------------------------------------------
+  describe('scoreRelevance', () => {
+    it('should return 1.0 when all keywords match', () => {
+      const score = service.scoreRelevance(
+        'Marketing budget for social media campaign',
+        null,
+        ['marketing', 'social', 'media']
+      );
+
+      expect(score).toBe(1.0);
+    });
+
+    it('should return 0.0 when no keywords match', () => {
+      const score = service.scoreRelevance(
+        'Client Alpha prefers email',
+        null,
+        ['marketing', 'social', 'media']
+      );
+
+      expect(score).toBe(0.0);
+    });
+
+    it('should return partial score for partial matches', () => {
+      const score = service.scoreRelevance(
+        'Marketing email campaign results',
+        null,
+        ['marketing', 'social', 'media']
+      );
+
+      // Only 'marketing' matches → 1/3
+      expect(score).toBeCloseTo(1 / 3);
+    });
+
+    it('should include subject in matching', () => {
+      const score = service.scoreRelevance(
+        'Revenue is 1M EUR',
+        'Marketing Department',
+        ['marketing']
+      );
+
+      expect(score).toBe(1.0);
+    });
+
+    it('should handle null subject', () => {
+      const score = service.scoreRelevance(
+        'Marketing budget',
+        null,
+        ['marketing']
+      );
+
+      expect(score).toBe(1.0);
+    });
+
+    it('should return 0.0 for empty keywords array', () => {
+      const score = service.scoreRelevance('Some content', null, []);
+
+      expect(score).toBe(0.0);
+    });
+
+    it('should match case-insensitively', () => {
+      const score = service.scoreRelevance(
+        'MARKETING Strategy',
+        null,
+        ['marketing', 'strategy']
+      );
+
+      expect(score).toBe(1.0);
+    });
+  });
+
+  // -----------------------------------------------------------------
   // Integration-style: full output structure
   // -----------------------------------------------------------------
   describe('full output structure', () => {

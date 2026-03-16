@@ -13,16 +13,18 @@ import {
   AgentEnrichmentEntry,
   AgentType,
 } from '@mentor-ai/shared/types';
+import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
 import { OpenClawClientService } from './openclaw-client.service';
 import { AgentPromptService } from './agent-prompt.service';
 import { AgentRegistryService } from './agent-registry.service';
 import { BudgetService } from './budget.service';
 import { AgentExecutionEventBus } from './agent-execution-event-bus.service';
+import { NotesService } from '../notes/notes.service';
 
 @Injectable()
 export class AgentExecutionService {
   private readonly logger = new Logger(AgentExecutionService.name);
-  private readonly MAX_CONCURRENT_PER_TENANT = 3;
+  private readonly MAX_CONCURRENT_PER_TENANT = 5;
 
   constructor(
     private readonly prisma: PlatformPrismaService,
@@ -30,7 +32,8 @@ export class AgentExecutionService {
     private readonly agentPrompt: AgentPromptService,
     private readonly registry: AgentRegistryService,
     private readonly budgetService: BudgetService,
-    private readonly eventBus: AgentExecutionEventBus
+    private readonly eventBus: AgentExecutionEventBus,
+    private readonly notesService: NotesService
   ) {}
 
   private emitAgentEvent(tenantId: string, eventName: string, payload: unknown): void {
@@ -166,6 +169,8 @@ export class AgentExecutionService {
       content: string;
       userReport: string | null;
       expectedOutcome: string | null;
+      conceptId?: string | null;
+      conversationId?: string | null;
     },
     userId: string,
     tenantId: string,
@@ -266,6 +271,11 @@ export class AgentExecutionService {
         error: null,
       });
 
+      // Step 3b: Persist agent output as reviewable child note (Sprint 2 Epic 2.3)
+      const resultNoteId = await this.createResultNote(
+        result.output, agentLabel, note, userId, tenantId, executionId
+      );
+
       // Step 4: Calculate cost and adjust budget
       const actualCost = this.estimateActualCost(result.usage);
       const costDifference = actualCost - reservedCostEur;
@@ -273,7 +283,7 @@ export class AgentExecutionService {
         await this.budgetService.recordSpend(tenantId, costDifference);
       }
 
-      // Step 5: Mark completed
+      // Step 5: Mark completed + link result note
       await this.prisma.agentExecution.update({
         where: { id: executionId },
         data: {
@@ -282,6 +292,7 @@ export class AgentExecutionService {
           actualCostEur: actualCost,
           completedAt: new Date(),
           durationMs: result.durationMs,
+          resultNoteId,
         },
       });
 
@@ -382,6 +393,53 @@ export class AgentExecutionService {
     return Math.round((inputCost + outputCost + fetchCost) * 10000) / 10000;
   }
 
+  /** Creates a child note for an agent/job result, returning the new note ID or null on failure. */
+  private async createResultNote(
+    output: string,
+    agentLabel: string,
+    note: { id: string; title: string; conceptId?: string | null; conversationId?: string | null },
+    userId: string,
+    tenantId: string,
+    executionId: string,
+    jobId?: string
+  ): Promise<string | null> {
+    if (!output) return null;
+    try {
+      const existingSteps = await this.prisma.note.count({
+        where: { parentNoteId: note.id, tenantId },
+      });
+      const childNote = await this.notesService.createNote({
+        title: `${agentLabel}: ${note.title}`,
+        content: output,
+        source: NoteSource.CONVERSATION,
+        noteType: NoteType.AGENT_RESEARCH,
+        status: NoteStatus.READY_FOR_REVIEW,
+        parentNoteId: note.id,
+        workflowStepNumber: existingSteps + 1,
+        conceptId: note.conceptId ?? undefined,
+        conversationId: note.conversationId ?? undefined,
+        userId,
+        tenantId,
+      });
+      this.logger.debug({
+        message: 'Agent result persisted as child note',
+        executionId,
+        jobId,
+        resultNoteId: childNote.id,
+        parentNoteId: note.id,
+      });
+      return childNote.id;
+    } catch (noteErr) {
+      this.logger.warn({
+        message: 'Failed to create child note for agent result',
+        executionId,
+        jobId,
+        error: noteErr instanceof Error ? noteErr.message : 'Unknown',
+      });
+      return null;
+    }
+  }
+
   // --- Agent Job Pipeline ---
 
   async executeJob(
@@ -401,14 +459,17 @@ export class AgentExecutionService {
       throw new BadRequestException(`Job is already ${job.status.toLowerCase()}`);
     }
 
-    // Check all dependencies are COMPLETED
+    // Check dependencies are in terminal state (COMPLETED or FAILED)
+    // Block only on actively running deps — FAILED deps are allowed (context will exclude them)
     if (job.dependsOn.length > 0) {
       const depJobs = await this.prisma.agentJob.findMany({
         where: { id: { in: job.dependsOn } },
       });
-      const allCompleted = depJobs.every((d) => d.status === 'COMPLETED');
-      if (!allCompleted) {
-        throw new BadRequestException('Dependency jobs not yet completed');
+      const nonTerminalDeps = depJobs.filter(
+        (d) => !['COMPLETED', 'FAILED'].includes(d.status),
+      );
+      if (nonTerminalDeps.length > 0) {
+        throw new BadRequestException('Dependency jobs still in progress');
       }
     }
 
@@ -522,6 +583,38 @@ export class AgentExecutionService {
     return { jobId, executionId };
   }
 
+  /**
+   * Retry a FAILED agent job: reset to PLANNED, then re-execute.
+   */
+  async retryJob(
+    jobId: string,
+    userId: string,
+    tenantId: string,
+  ): Promise<{ jobId: string; executionId: string }> {
+    const job = await this.prisma.agentJob.findFirst({
+      where: { id: jobId, tenantId },
+    });
+
+    if (!job) {
+      throw new NotFoundException(`Job ${jobId} not found`);
+    }
+    if (job.status !== 'FAILED') {
+      throw new BadRequestException(
+        `Only FAILED jobs can be retried, current status: ${job.status}`,
+      );
+    }
+
+    // Reset to PLANNED so executeJob() can pick it up
+    await this.prisma.agentJob.update({
+      where: { id: jobId },
+      data: { status: 'PLANNED', executionId: null, error: null },
+    });
+
+    this.logger.log({ message: 'Retrying failed job', jobId, tenantId });
+
+    return this.executeJob(jobId, userId, tenantId);
+  }
+
   private async executeJobPipeline(
     executionId: string,
     jobId: string,
@@ -532,6 +625,8 @@ export class AgentExecutionService {
       content: string;
       userReport: string | null;
       expectedOutcome: string | null;
+      conceptId?: string | null;
+      conversationId?: string | null;
     },
     jobInstruction: string,
     dependencyContext: string,
@@ -646,6 +741,11 @@ export class AgentExecutionService {
         error: null,
       });
 
+      // Step 3b: Persist job output as reviewable child note (Sprint 2 Epic 2.3)
+      const jobResultNoteId = await this.createResultNote(
+        result.output, agentLabel, note, userId, tenantId, executionId, jobId
+      );
+
       // Step 4: Cost adjustment
       const actualCost = this.estimateActualCost(result.usage);
       const costDifference = actualCost - reservedCostEur;
@@ -653,7 +753,7 @@ export class AgentExecutionService {
         await this.budgetService.recordSpend(tenantId, costDifference);
       }
 
-      // Step 5: Mark execution completed
+      // Step 5: Mark execution completed + link result note
       await this.prisma.agentExecution.update({
         where: { id: executionId },
         data: {
@@ -662,6 +762,7 @@ export class AgentExecutionService {
           actualCostEur: actualCost,
           completedAt: new Date(),
           durationMs: result.durationMs,
+          resultNoteId: jobResultNoteId,
         },
       });
 

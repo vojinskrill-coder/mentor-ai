@@ -32,6 +32,8 @@ import { ExecutionStateService } from '../execution/execution-state.service';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { JobPlannerService } from '../agent-execution/job-planner.service';
 import { AgentExecutionEventBus } from '../agent-execution/agent-execution-event-bus.service';
+import { MaturityEngineService } from '../maturity/maturity-engine.service';
+import { WsServerHolder } from '../maturity/ws-server-holder.service';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { createId } from '@paralleldrive/cuid2';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
@@ -117,7 +119,9 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     private readonly executionStateService: ExecutionStateService,
     private readonly attachmentsService: AttachmentsService,
     private readonly jobPlannerService: JobPlannerService,
-    private readonly agentEventBus: AgentExecutionEventBus
+    private readonly agentEventBus: AgentExecutionEventBus,
+    private readonly maturityEngine: MaturityEngineService,
+    private readonly wsServerHolder: WsServerHolder
   ) {
     this.auth0Domain = this.configService.get<string>('AUTH0_DOMAIN') ?? '';
     this.auth0Audience = this.configService.get<string>('AUTH0_AUDIENCE') ?? '';
@@ -134,6 +138,9 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
    * Server restart recovery: mark stale executions as failed, resume YOLO from checkpoint.
    */
   async onModuleInit(): Promise<void> {
+    // Share WebSocket server reference for autonomous services
+    this.wsServerHolder.server = this.server;
+
     // Mark stale executions (stuck > 30 min) as failed
     const stale = await this.executionStateService.getAllStaleExecutions(30);
     for (const exec of stale) {
@@ -525,7 +532,40 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
       });
     }
 
-    this.resolvedDevUser = { userId: 'dev-user-001', tenantId: 'dev-tenant-001' };
+    // No active tenant/user — ensure fallback records exist for FK constraints
+    const fallbackTenantId = 'dev-tenant-001';
+    const fallbackUserId = 'dev-user-001';
+    try {
+      await this.prisma.tenant.upsert({
+        where: { id: fallbackTenantId },
+        create: {
+          id: fallbackTenantId,
+          name: 'Dev Tenant',
+          industry: 'Technology',
+          status: 'ACTIVE',
+        },
+        update: {},
+      });
+      await this.prisma.user.upsert({
+        where: { id: fallbackUserId },
+        create: {
+          id: fallbackUserId,
+          email: 'dev@mentor-ai.local',
+          name: 'Dev User',
+          role: 'TENANT_OWNER',
+          tenantId: fallbackTenantId,
+        },
+        update: {},
+      });
+      this.logger.log('WebSocket dev mode: created fallback tenant/user records in DB');
+    } catch (seedErr) {
+      this.logger.warn({
+        message: 'WebSocket dev mode: failed to seed fallback records',
+        error: seedErr instanceof Error ? seedErr.message : 'Unknown',
+      });
+    }
+
+    this.resolvedDevUser = { userId: fallbackUserId, tenantId: fallbackTenantId };
     return this.resolvedDevUser;
   }
 
@@ -882,10 +922,10 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
       );
       perf.businessContext = Date.now() - perfStart;
 
-      // Pre-AI enrichment: concept search + memory context + web search + business brain context in parallel
+      // Pre-AI enrichment: concept search + memory context + web search + business brain + cross-conversation insights in parallel
       const enrichmentStart = Date.now();
       const webSearchEnabled = (payload as any).webSearchEnabled !== false;
-      const [relevantConcepts, memoryContext, webSearchResults, businessBrainContext] =
+      const [relevantConcepts, memoryContext, webSearchResults, businessBrainContext, conceptInsights] =
         await Promise.all([
           this.conceptMatchingService
             .findRelevantConcepts(content, {
@@ -907,8 +947,20 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
                 .catch(() => [] as import('@mentor-ai/shared/types').EnrichedSearchResult[])
             : Promise.resolve([] as import('@mentor-ai/shared/types').EnrichedSearchResult[]),
           this.businessContextService
-            .getBusinessContext(authenticatedClient.tenantId)
+            .getBusinessContext(authenticatedClient.tenantId, content)
             .catch(() => ''),
+          // Cross-conversation insights: load prior analyses about the same concept
+          conversation.conceptId
+            ? this.conversationService
+                .getConceptInsights(
+                  authenticatedClient.tenantId,
+                  authenticatedClient.userId,
+                  conversation.conceptId,
+                  conversationId,
+                  3
+                )
+                .catch(() => [] as Array<{ conversationId: string; title: string; summary: string }>)
+            : Promise.resolve([] as Array<{ conversationId: string; title: string; summary: string }>),
         ]);
 
       perf.enrichmentParallel = Date.now() - enrichmentStart;
@@ -954,6 +1006,18 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
         enrichedContext += '--- KRAJ BAZE ZNANJA ---\n';
         enrichedContext +=
           'Primeni ove koncepte u odgovoru. Kada referenciraš koncept, koristi [[Naziv Koncepta]] oznaku.\n';
+      }
+
+      // Inject cross-conversation insights (Sprint 2 Epic 2.1)
+      // Enables the AI to build on prior analyses about the same concept
+      if (conceptInsights.length > 0) {
+        enrichedContext += '\n\n--- PRETHODNE ANALIZE O OVOM KONCEPTU ---\n';
+        enrichedContext +=
+          'Ovi uvidi su iz prethodnih konverzacija na istu temu. Nadogradi se na njih, ne ponavljaj.\n';
+        for (const insight of conceptInsights) {
+          enrichedContext += `\n[${insight.title}]\n${insight.summary}\n`;
+        }
+        enrichedContext += '--- KRAJ PRETHODNIH ANALIZA ---\n';
       }
 
       if (memoryContext.context) {
@@ -1487,7 +1551,7 @@ Ako nema zadataka: []`;
 
         // Prior work reuse for auto-tasks
         if (!forceRedo && effectiveConceptId) {
-          const reusable = await this.notesService.findReusableTask(tenantId, effectiveConceptId);
+          const reusable = await this.notesService.findReusableTask(tenantId, effectiveConceptId, task.title);
           if (reusable) {
             await this.notesService.createNote({
               title: task.title,
@@ -1840,7 +1904,7 @@ Odgovori SAMO sa validnim JSON nizom:
 
         // Prior work reuse: check for high-quality completed task on same concept
         if (!forceRedo && taskConceptId) {
-          const reusable = await this.notesService.findReusableTask(tenantId, taskConceptId);
+          const reusable = await this.notesService.findReusableTask(tenantId, taskConceptId, task.title);
           if (reusable) {
             const result = await this.notesService.createNote({
               title: task.title,
@@ -1898,6 +1962,62 @@ Odgovori SAMO sa validnim JSON nizom:
 
       const totalCreated = createdTasks.length + reusedTasks.length;
       if (totalCreated === 0) return;
+
+      // Ensure conversations exist for cross-concept tasks (brain tree lifecycle gap).
+      // Without this, concepts with tasks but no conversation appear in the brain tree
+      // without a "Pogledaj" navigation link.
+      const allTasks = [...createdTasks, ...reusedTasks];
+      const crossConceptIds = [
+        ...new Set(
+          allTasks
+            .filter((t) => t.conceptId !== null && t.conceptId !== conceptId)
+            .map((t) => t.conceptId!)
+        ),
+      ];
+
+      if (crossConceptIds.length > 0) {
+        for (const crossConceptId of crossConceptIds) {
+          try {
+            // Check if a conversation already exists for this concept + user
+            const existingConv = await this.prisma.conversation.findFirst({
+              where: { conceptId: crossConceptId, userId },
+              select: { id: true },
+            });
+            if (existingConv) continue;
+
+            // Look up concept name for the conversation title
+            let crossConceptName = 'Zadatak';
+            try {
+              const concept = await this.conceptService.findById(crossConceptId);
+              crossConceptName = concept.name;
+            } catch {
+              const taskForConcept = allTasks.find((t) => t.conceptId === crossConceptId);
+              crossConceptName = taskForConcept?.title ?? 'Zadatak';
+            }
+
+            await this.conversationService.createConversation(
+              tenantId,
+              userId,
+              crossConceptName,
+              undefined,
+              crossConceptId
+            );
+
+            this.logger.debug({
+              message: 'Created conversation for cross-concept task',
+              crossConceptId,
+              crossConceptName,
+              originConversationId: conversationId,
+            });
+          } catch (err) {
+            this.logger.warn({
+              message: 'Failed to create cross-concept conversation',
+              crossConceptId,
+              error: err instanceof Error ? err.message : 'Unknown',
+            });
+          }
+        }
+      }
 
       // Emit event so frontend shows tasks with execute option
       // reusedTaskIds tells frontend to skip auto-execution for these
@@ -2661,6 +2781,30 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
       await this.handleExecuteTaskAi(client, { taskId, conversationId });
       // Emit complete event (H3 fix)
       client.emit('auto-popuni:complete', { totalTasks: 1, completedTasks: 1 });
+
+      // Maturity Engine: update stage progress after task completion
+      try {
+        const note = await this.prisma.note.findUnique({
+          where: { id: taskId },
+          select: { conceptId: true },
+        });
+        if (note?.conceptId) {
+          const result = await this.maturityEngine.onConceptCompleted(
+            tenantId, note.conceptId, taskId, userId
+          );
+          if (result.stageCompleted) {
+            client.emit('maturity:stage-completed', {
+              stage: result.nextStage,
+            });
+          }
+        }
+      } catch (maturityErr) {
+        this.logger.warn({
+          message: 'Maturity stage update failed (non-blocking)',
+          taskId,
+          error: maturityErr instanceof Error ? maturityErr.message : 'Unknown',
+        });
+      }
     } catch (err) {
       this.logger.warn({
         message: 'YOLO auto-popuni AI execute failed',
@@ -4466,6 +4610,23 @@ PRAVILA:
       }
     }
 
+    // 2b. Load attachment text for richer scoring context (Sprint 2 Epic 2.2)
+    let scoringAttachmentContext = '';
+    try {
+      const attachments = await this.prisma.attachment.findMany({
+        where: { noteId: taskId, tenantId },
+        select: { id: true },
+      });
+      if (attachments.length > 0) {
+        scoringAttachmentContext = await this.attachmentsService.getExtractedText(
+          attachments.map((a) => a.id),
+          tenantId
+        );
+      }
+    } catch {
+      /* non-blocking — score without attachments */
+    }
+
     // 3. Build the optimization + scoring prompt
     const prompt = `Ti si senior poslovni konsultant koji recenzira deliverable-e za klijenta. Tvoj zadatak je da:
 
@@ -4487,6 +4648,7 @@ ${conceptContext}
 ZADATAK: ${task.title}
 ${task.content ? `OPIS: ${task.content}` : ''}
 ${task.expectedOutcome ? `OČEKIVANI REZULTAT: ${task.expectedOutcome}` : ''}
+${scoringAttachmentContext ? `\nPRILOŽENI DOKUMENTI:\n${scoringAttachmentContext}` : ''}
 
 IZLAZ KOJI TREBA OCENITI I OPTIMIZOVATI:
 ${task.userReport}
@@ -4645,6 +4807,126 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
           error instanceof Error
             ? error.message
             : 'Ocenjivanje rezultata nije uspelo. Pokušajte ponovo.',
+      });
+    }
+  }
+
+  /**
+   * Sprint 2 Epic 2.2: Step-level feedback handler.
+   * Allows reviewing individual workflow steps (child notes) of a task.
+   * Accepts score, feedback text, and optional attachment IDs.
+   */
+  @SubscribeMessage('task:step-feedback')
+  async handleStepFeedback(
+    @ConnectedSocket() client: Socket,
+    @MessageBody()
+    payload: {
+      stepId: string;
+      score?: number;
+      feedback?: string;
+      attachmentIds?: string[];
+    }
+  ): Promise<void> {
+    const authenticatedClient = client as AuthenticatedSocket;
+
+    try {
+      this.logger.log({
+        message: 'Step feedback submitted',
+        userId: authenticatedClient.userId,
+        stepId: payload.stepId,
+        score: payload.score,
+      });
+
+      // 1. Validate step note exists, belongs to tenant, and user owns it
+      const step = await this.prisma.note.findFirst({
+        where: {
+          id: payload.stepId,
+          tenantId: authenticatedClient.tenantId,
+          userId: authenticatedClient.userId,
+        },
+      });
+      if (!step) {
+        client.emit('task:step-feedback-error', {
+          stepId: payload.stepId,
+          message: 'Korak nije pronađen',
+        });
+        return;
+      }
+
+      // 2. Verify it's a child note (has parentNoteId)
+      if (!step.parentNoteId) {
+        client.emit('task:step-feedback-error', {
+          stepId: payload.stepId,
+          message: 'Ovaj zadatak nema nadređeni korak',
+        });
+        return;
+      }
+
+      // 3. Build update data
+      const updateData: Record<string, unknown> = {};
+      if (payload.score !== undefined) {
+        const clampedScore = Math.max(0, Math.min(100, payload.score));
+        updateData.aiScore = clampedScore;
+      }
+      if (payload.feedback) {
+        updateData.aiFeedback = payload.feedback;
+      }
+      // Mark as completed when feedback is given
+      if (payload.score !== undefined || payload.feedback) {
+        updateData.status = NoteStatus.COMPLETED;
+      }
+
+      await this.prisma.note.update({
+        where: { id: payload.stepId },
+        data: updateData,
+      });
+
+      // 4. Link attachments to the step note
+      if (payload.attachmentIds && payload.attachmentIds.length > 0) {
+        for (const attachmentId of payload.attachmentIds) {
+          await this.attachmentsService
+            .linkToNote(attachmentId, payload.stepId, authenticatedClient.tenantId)
+            .catch((err) =>
+              this.logger.warn({
+                message: 'Failed to link attachment to step',
+                attachmentId,
+                stepId: payload.stepId,
+                error: err instanceof Error ? err.message : 'Unknown',
+              })
+            );
+        }
+      }
+
+      // 5. Emit completion
+      client.emit('task:step-feedback-complete', {
+        stepId: payload.stepId,
+        parentId: step.parentNoteId,
+        score: updateData.aiScore ?? step.aiScore,
+        feedback: updateData.aiFeedback ?? step.aiFeedback,
+        status: updateData.status ?? step.status,
+      });
+
+      // 6. Notify notes updated
+      client.emit('chat:notes-updated', {
+        conversationId: step.conversationId,
+        count: 0,
+      });
+
+      this.logger.log({
+        message: 'Step feedback saved',
+        stepId: payload.stepId,
+        parentId: step.parentNoteId,
+        score: updateData.aiScore,
+      });
+    } catch (error) {
+      this.logger.error({
+        message: 'Step feedback failed',
+        stepId: payload.stepId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      client.emit('task:step-feedback-error', {
+        stepId: payload.stepId,
+        message: error instanceof Error ? error.message : 'Greška pri čuvanju povratne informacije',
       });
     }
   }

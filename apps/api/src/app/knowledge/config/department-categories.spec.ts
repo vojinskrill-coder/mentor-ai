@@ -14,8 +14,8 @@ describe('department-categories', () => {
   });
 
   describe('ALL_CATEGORIES', () => {
-    it('should contain 16 categories', () => {
-      expect(ALL_CATEGORIES).toHaveLength(16);
+    it('should contain 20 categories', () => {
+      expect(ALL_CATEGORIES).toHaveLength(20);
     });
 
     it('should include all foundation categories', () => {

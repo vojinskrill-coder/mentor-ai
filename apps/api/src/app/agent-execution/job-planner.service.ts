@@ -51,12 +51,17 @@ export class JobPlannerService {
 Available agent types:
 ${agentDescriptions}
 
+DECISION FRAMEWORK:
+- Analyze the task report and identify WHAT IS MISSING — if there are no concrete market data points, web_search is critical; if there is no ready-to-use content, content is critical; if there is no competitive pricing data, web_search + financial is critical.
+- Do NOT create jobs for things the report already covers well — focus on GAPS and NEW VALUE.
+
 Rules:
 - ALWAYS create 2-4 jobs. The report is a starting point — agents add real-world research, competitor data, market validation, and actionable content.
 - ALWAYS start with web_search to gather current market data, competitor intelligence, and industry benchmarks.
 - Jobs execute sequentially: later jobs receive outputs from earlier jobs as context.
 - Common chains: web_search → content, web_search → marketing, web_search → sales
-- Each job instruction MUST be specific to this task and reference the business context (company name, industry, products, target audience).
+- Each job instruction MUST reference CONCRETE findings from the task report — not generate an independent instruction.
+- A job that depends on a previous job MUST explicitly state WHAT to take from the previous output (e.g., "Using the competitor pricing data from the research step, ...").
 - Instructions must tell agents WHAT to do and what tools to use — they should execute web searches, fetch competitor websites, and produce deliverables.
 - Write instructions in English (agents will produce Serbian output).
 - Respond ONLY with a JSON array, no other text.

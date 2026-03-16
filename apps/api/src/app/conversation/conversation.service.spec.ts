@@ -15,11 +15,13 @@ describe('ConversationService', () => {
       create: jest.Mock;
       findMany: jest.Mock;
       findUnique: jest.Mock;
+      findFirst: jest.Mock;
       update: jest.Mock;
       delete: jest.Mock;
     };
     message: {
       create: jest.Mock;
+      findFirst: jest.Mock;
     };
   };
   let mockTenantPrisma: { getClient: jest.Mock };
@@ -43,11 +45,13 @@ describe('ConversationService', () => {
         create: jest.fn(),
         findMany: jest.fn(),
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         update: jest.fn(),
         delete: jest.fn(),
       },
       message: {
         create: jest.fn(),
+        findFirst: jest.fn(),
       },
     };
 
@@ -564,6 +568,158 @@ describe('ConversationService', () => {
       // Uncategorized
       expect(result.uncategorized).toHaveLength(1);
       expect(result.uncategorized[0]!.id).toBe('sess_none');
+    });
+  });
+
+  // ─── getConceptInsights tests (Sprint 2 Epic 2.1) ─────────────────────────
+
+  describe('getConceptInsights', () => {
+    const conceptId = 'cpt_sales';
+    const currentConvId = 'sess_current';
+
+    it('should return empty array when no other conversations exist for the concept', async () => {
+      mockPrisma.conversation.findMany.mockResolvedValue([]);
+
+      const result = await service.getConceptInsights(
+        mockTenantId, mockUserId, conceptId, currentConvId
+      );
+
+      expect(result).toEqual([]);
+      expect(mockPrisma.conversation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            conceptId,
+            userId: mockUserId,
+            id: { not: currentConvId },
+          },
+        })
+      );
+    });
+
+    it('should exclude the current conversation from results', async () => {
+      mockPrisma.conversation.findMany.mockResolvedValue([]);
+
+      await service.getConceptInsights(
+        mockTenantId, mockUserId, conceptId, currentConvId
+      );
+
+      const callArgs = mockPrisma.conversation.findMany.mock.calls[0]![0];
+      expect(callArgs.where.id).toEqual({ not: currentConvId });
+    });
+
+    it('should return insights from conversations with nested messages (no N+1)', async () => {
+      mockPrisma.conversation.findMany.mockResolvedValue([
+        { id: 'sess_prior1', title: 'Prodajna strategija', messages: [{ content: 'Analiza prodaje pokazuje rast od 15%.' }] },
+        { id: 'sess_prior2', title: 'Prodajni plan', messages: [{ content: 'Plan prodaje za Q3 uključuje tri ključna koraka.' }] },
+      ]);
+
+      const result = await service.getConceptInsights(
+        mockTenantId, mockUserId, conceptId, currentConvId
+      );
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual({
+        conversationId: 'sess_prior1',
+        title: 'Prodajna strategija',
+        summary: 'Analiza prodaje pokazuje rast od 15%.',
+      });
+      expect(result[1]).toEqual({
+        conversationId: 'sess_prior2',
+        title: 'Prodajni plan',
+        summary: 'Plan prodaje za Q3 uključuje tri ključna koraka.',
+      });
+      // Should NOT use separate message queries (N+1 fix)
+      expect(mockPrisma.message.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('should truncate long summaries at sentence boundary within 500 chars', async () => {
+      const longContent = 'First sentence here. ' + 'B'.repeat(300) + '. Another sentence. ' + 'C'.repeat(400);
+      mockPrisma.conversation.findMany.mockResolvedValue([
+        { id: 'sess_long', title: 'Long conversation', messages: [{ content: longContent }] },
+      ]);
+
+      const result = await service.getConceptInsights(
+        mockTenantId, mockUserId, conceptId, currentConvId
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.summary.length).toBeLessThanOrEqual(503);
+    });
+
+    it('should skip conversations with empty messages array', async () => {
+      mockPrisma.conversation.findMany.mockResolvedValue([
+        { id: 'sess_empty', title: 'Empty conv', messages: [] },
+        { id: 'sess_has_msg', title: 'Has message', messages: [{ content: 'Valid insight' }] },
+      ]);
+
+      const result = await service.getConceptInsights(
+        mockTenantId, mockUserId, conceptId, currentConvId
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.conversationId).toBe('sess_has_msg');
+    });
+
+    it('should use "Prethodna konverzacija" as fallback title when title is null', async () => {
+      mockPrisma.conversation.findMany.mockResolvedValue([
+        { id: 'sess_no_title', title: null, messages: [{ content: 'Some insight' }] },
+      ]);
+
+      const result = await service.getConceptInsights(
+        mockTenantId, mockUserId, conceptId, currentConvId
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.title).toBe('Prethodna konverzacija');
+    });
+
+    it('should respect the limit parameter', async () => {
+      mockPrisma.conversation.findMany.mockResolvedValue([]);
+
+      await service.getConceptInsights(
+        mockTenantId, mockUserId, conceptId, currentConvId, 5
+      );
+
+      const callArgs = mockPrisma.conversation.findMany.mock.calls[0]![0];
+      expect(callArgs.take).toBe(5);
+    });
+
+    it('should default limit to 3', async () => {
+      mockPrisma.conversation.findMany.mockResolvedValue([]);
+
+      await service.getConceptInsights(
+        mockTenantId, mockUserId, conceptId, currentConvId
+      );
+
+      const callArgs = mockPrisma.conversation.findMany.mock.calls[0]![0];
+      expect(callArgs.take).toBe(3);
+    });
+
+    it('should order conversations by updatedAt desc (most recent first)', async () => {
+      mockPrisma.conversation.findMany.mockResolvedValue([]);
+
+      await service.getConceptInsights(
+        mockTenantId, mockUserId, conceptId, currentConvId
+      );
+
+      const callArgs = mockPrisma.conversation.findMany.mock.calls[0]![0];
+      expect(callArgs.orderBy).toEqual({ updatedAt: 'desc' });
+    });
+
+    it('should use nested messages select for ASSISTANT role', async () => {
+      mockPrisma.conversation.findMany.mockResolvedValue([]);
+
+      await service.getConceptInsights(
+        mockTenantId, mockUserId, conceptId, currentConvId
+      );
+
+      const callArgs = mockPrisma.conversation.findMany.mock.calls[0]![0];
+      expect(callArgs.select.messages).toEqual({
+        where: { role: 'ASSISTANT' },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { content: true },
+      });
     });
   });
 });

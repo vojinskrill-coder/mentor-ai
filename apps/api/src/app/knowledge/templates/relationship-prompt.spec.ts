@@ -7,10 +7,11 @@ import {
 describe('relationship-prompt', () => {
   describe('getRelevantCategories', () => {
     it('should return own category + adjacent categories', () => {
-      const result = getRelevantCategories('Finance');
-      expect(result).toContain('Finance');
-      expect(result).toContain('Strategy');
-      expect(result).toContain('Operations');
+      const result = getRelevantCategories('Finansije');
+      expect(result).toContain('Finansije');
+      expect(result).toContain('Računovodstvo');
+      expect(result).toContain('Strategija');
+      expect(result).toContain('Operacije');
       expect(result).not.toContain('Marketing');
     });
 
@@ -19,21 +20,24 @@ describe('relationship-prompt', () => {
       expect(result).toEqual(['Underwater Basket Weaving']);
     });
 
-    it('should include cross-domain categories for Strategy', () => {
-      const result = getRelevantCategories('Strategy');
-      expect(result).toContain('Strategy');
-      expect(result).toContain('Finance');
+    it('should include cross-domain categories for Strategija', () => {
+      const result = getRelevantCategories('Strategija');
+      expect(result).toContain('Strategija');
+      expect(result).toContain('Finansije');
       expect(result).toContain('Marketing');
-      expect(result).toContain('Sales');
-      expect(result).toContain('Operations');
+      expect(result).toContain('Poslovni Modeli');
+      expect(result).toContain('Liderstvo');
     });
   });
 
   describe('CATEGORY_ADJACENCY', () => {
     it('should define adjacency for all expected categories', () => {
       const expectedCategories = [
-        'Finance', 'Marketing', 'Strategy', 'Sales',
-        'Operations', 'Technology', 'Creative', 'Legal',
+        'Finansije', 'Marketing', 'Strategija', 'Prodaja',
+        'Operacije', 'Tehnologija', 'Menadžment', 'Liderstvo',
+        'Uvod u Poslovanje', 'Vrednost', 'Preduzetništvo',
+        'Digitalni Marketing', 'Odnosi sa Klijentima', 'Računovodstvo',
+        'Inovacije', 'Poslovni Modeli',
       ];
       for (const cat of expectedCategories) {
         const adj = CATEGORY_ADJACENCY[cat];
@@ -87,7 +91,7 @@ describe('relationship-prompt', () => {
       const prompt = buildRelationshipClassificationPrompt(
         'Test', 'Finance', 'Def', candidates,
       );
-      expect(prompt).toContain('JSON array');
+      expect(prompt).toContain('JSON');
       expect(prompt).toContain('"slug"');
       expect(prompt).toContain('"type"');
     });

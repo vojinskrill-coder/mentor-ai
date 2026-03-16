@@ -360,7 +360,7 @@ describe('ConceptService', () => {
 
     it('should resolve name and category from DB when not provided', async () => {
       mockPrisma.concept.findUnique.mockResolvedValue({
-        name: 'Test Concept', definition: 'Test', slug: 'test', category: 'Finance',
+        name: 'Test Concept', definition: 'Test', slug: 'test', category: 'Finansije',
       });
       mockPrisma.concept.findMany.mockResolvedValue([]);
 
@@ -368,10 +368,10 @@ describe('ConceptService', () => {
 
       expect(result.errors).toHaveLength(0);
       expect(result.conceptName).toBe('Test Concept'); // resolved from DB
-      // findMany should have been called with categories including Finance + adjacent
+      // findMany should have been called with categories including Finansije + adjacent
       const findManyArgs = mockPrisma.concept.findMany.mock.calls[0][0];
-      expect(findManyArgs.where.category.in).toContain('Finance');
-      expect(findManyArgs.where.category.in).toContain('Strategy'); // adjacent to Finance
+      expect(findManyArgs.where.category.in).toContain('Finansije');
+      expect(findManyArgs.where.category.in).toContain('Strategija'); // adjacent to Finansije
     });
 
     it('should return early when concept not found', async () => {

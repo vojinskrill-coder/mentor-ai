@@ -8,7 +8,6 @@ import { CurriculumService } from '../knowledge/services/curriculum.service';
 import { ConceptExtractionService } from '../knowledge/services/concept-extraction.service';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { ConceptRelevanceService } from '../knowledge/services/concept-relevance.service';
-import { ConceptResearchService } from '../research/concept-research.service';
 import type { YoloConfig, YoloProgressPayload, YoloCompletePayload } from '@mentor-ai/shared/types';
 
 // ─── Mocks ───────────────────────────────────────────────────
@@ -40,8 +39,17 @@ function createMockCallbacks() {
   };
 }
 
-function makeFakeConcept(id: string, name: string, category = 'Uvod u Poslovanje') {
-  return { id, name, category };
+function makeFakeTaskNote(id: string, conceptId: string, title: string) {
+  return {
+    id,
+    title,
+    conceptId,
+    tenantId: 'tenant-1',
+    noteType: 'TASK',
+    status: 'PENDING',
+    content: `Apply ${title}`,
+    source: 'CONVERSATION',
+  };
 }
 
 /** Poll for onComplete instead of fixed setTimeout — prevents flaky tests */
@@ -61,9 +69,7 @@ const defaultConfig: YoloConfig = {
   retryAttempts: 1,
   retryBaseDelayMs: 0,
   circuitBreakerCooldownMs: 0,
-  workflowBudget: 100,
-  researchBatchSize: 10,
-  researchTurns: 2,
+  maxExecutionBudget: 100,
 };
 
 describe('YoloSchedulerService', () => {
@@ -74,39 +80,48 @@ describe('YoloSchedulerService', () => {
   let mockConceptService: any;
   let mockConceptMatchingService: any;
   let mockCurriculumService: any;
-  let mockResearchService: any;
 
-  // Default concepts used by most tests (can be overridden per test)
-  let testConcepts: Array<{ id: string; name: string; category: string }>;
+  // Default PENDING task notes returned by prisma.note.findMany
+  let pendingTaskNotes: ReturnType<typeof makeFakeTaskNote>[];
 
   beforeEach(async () => {
-    testConcepts = [
-      makeFakeConcept('concept-A', 'Concept A'),
-      makeFakeConcept('concept-B', 'Concept B'),
-      makeFakeConcept('concept-C', 'Concept C'),
+    pendingTaskNotes = [
+      makeFakeTaskNote('task-A', 'concept-A', 'Concept A'),
+      makeFakeTaskNote('task-B', 'concept-B', 'Concept B'),
+      makeFakeTaskNote('task-C', 'concept-C', 'Concept C'),
     ];
 
     mockPrisma = {
       note: {
-        findMany: jest.fn().mockResolvedValue([]),
+        findMany: jest.fn().mockImplementation(async (args: any) => {
+          // PENDING tasks query (initial load)
+          if (args?.where?.status === 'PENDING') {
+            return pendingTaskNotes;
+          }
+          // COMPLETED tasks query (for relevance scoring — completedCategories)
+          if (args?.where?.status === 'COMPLETED') {
+            return [];
+          }
+          return [];
+        }),
       },
       concept: {
         findMany: jest.fn().mockImplementation(async (args: any) => {
-          // If querying by IDs (e.g., for completed concept categories), return stubs
           if (args?.where?.id?.in) {
             const ids: string[] = args.where.id.in;
             return ids.map((id: string) => ({ id, category: 'Uvod u Poslovanje' }));
           }
-          // Otherwise return test concepts (initial concept load)
-          return testConcepts;
+          return [];
         }),
-        findUnique: jest.fn().mockResolvedValue({ category: 'Uvod u Poslovanje' }),
       },
       user: {
         findUnique: jest.fn().mockResolvedValue({ department: null, role: 'PLATFORM_OWNER' }),
       },
       tenant: {
         findUnique: jest.fn().mockResolvedValue({ industry: 'digital' }),
+      },
+      conceptRelationship: {
+        findMany: jest.fn().mockResolvedValue([]),
       },
     };
 
@@ -133,12 +148,15 @@ describe('YoloSchedulerService', () => {
       }),
       updateStatus: jest.fn().mockResolvedValue(undefined),
       findExistingSubTask: jest.fn().mockResolvedValue(null),
+      findExistingTask: jest.fn().mockResolvedValue(null),
     };
 
     mockConceptService = {
-      findById: jest.fn().mockResolvedValue({
+      findById: jest.fn().mockImplementation(async (id: string) => ({
+        id,
+        name: id.replace('concept-', 'Concept ').replace(/^\w/, (c: string) => c.toUpperCase()),
         relatedConcepts: [],
-      }),
+      })),
       createDynamicRelationships: jest.fn().mockResolvedValue({
         conceptId: 'cpt_x',
         conceptName: 'Test',
@@ -154,33 +172,6 @@ describe('YoloSchedulerService', () => {
     mockCurriculumService = {
       matchTopic: jest.fn().mockReturnValue(null),
       ensureConceptExists: jest.fn().mockResolvedValue('cpt_xxx'),
-    };
-
-    // Default research mock: creates 1 task per concept
-    mockResearchService = {
-      researchConcept: jest.fn().mockImplementation(async (input: any) => ({
-        conceptId: input.conceptId,
-        conceptName: `Concept ${input.conceptId}`,
-        conversationId: input.conversationId || 'sess_test',
-        researchOutput: `Research for ${input.conceptId}`,
-        createdTasks: [
-          {
-            id: `task-for-${input.conceptId}`,
-            title: `Task for ${input.conceptId}`,
-            conceptId: input.conceptId,
-            conceptName: `Concept ${input.conceptId}`,
-            conversationId: input.conversationId || 'sess_test',
-          },
-        ],
-        summary: {
-          conceptId: input.conceptId,
-          conceptName: `Concept ${input.conceptId}`,
-          category: 'General',
-          keySummary: '',
-          taskTitles: [`Task for ${input.conceptId}`],
-        },
-        fullyCompleted: true,
-      })),
     };
 
     const module = await Test.createTestingModule({
@@ -207,16 +198,15 @@ describe('YoloSchedulerService', () => {
             getThreshold: jest.fn().mockReturnValue(0.3),
           },
         },
-        { provide: ConceptResearchService, useValue: mockResearchService },
       ],
     }).compile();
 
     service = module.get<YoloSchedulerService>(YoloSchedulerService);
   });
 
-  // ─── Test 1: Concepts are researched and workflows executed ───
+  // ─── Test 1: Pending tasks are loaded and workflows executed ───
 
-  it('should research concepts and execute workflows for created tasks', async () => {
+  it('should load pending tasks and execute workflows for each', async () => {
     const callbacks = createMockCallbacks();
     const conceptConvs = new Map([
       ['concept-A', 'conv-A'],
@@ -238,8 +228,9 @@ describe('YoloSchedulerService', () => {
     expect(planId).toContain('yolo_');
     expect(callbacks.onComplete).toHaveBeenCalledTimes(1);
 
-    // 3 concepts → 3 research calls → 3 tasks → 3 workflow executions
-    expect(mockResearchService.researchConcept).toHaveBeenCalledTimes(3);
+    // 3 pending task notes → 3 workflow executions
+    expect(mockWorkflowService.getOrGenerateWorkflow).toHaveBeenCalledTimes(3);
+    expect(mockWorkflowService.executeStepAutonomous).toHaveBeenCalledTimes(3);
     const result = callbacks.completePayload!;
     expect(result.completed).toBe(3);
     expect(result.failed).toBe(0);
@@ -249,39 +240,11 @@ describe('YoloSchedulerService', () => {
   // ─── Test 2: Same concept tasks don't run in parallel ─────────
 
   it('should not run two tasks with the same conceptId in parallel', async () => {
-    testConcepts = [makeFakeConcept('concept-X', 'Concept X')];
-
-    // Research creates 2 tasks for the same concept
-    mockResearchService.researchConcept.mockImplementation(async (input: any) => ({
-      conceptId: input.conceptId,
-      conceptName: 'Concept X',
-      conversationId: 'sess_test',
-      researchOutput: 'Research',
-      createdTasks: [
-        {
-          id: 'task-1',
-          title: 'Task 1',
-          conceptId: input.conceptId,
-          conceptName: 'Concept X',
-          conversationId: 'sess_test',
-        },
-        {
-          id: 'task-2',
-          title: 'Task 2',
-          conceptId: input.conceptId,
-          conceptName: 'Concept X',
-          conversationId: 'sess_test',
-        },
-      ],
-      summary: {
-        conceptId: input.conceptId,
-        conceptName: 'Concept X',
-        category: 'General',
-        keySummary: '',
-        taskTitles: ['Task 1', 'Task 2'],
-      },
-      fullyCompleted: true,
-    }));
+    // Two task notes for the same concept
+    pendingTaskNotes = [
+      makeFakeTaskNote('task-1', 'concept-X', 'Concept X Task 1'),
+      makeFakeTaskNote('task-2', 'concept-X', 'Concept X Task 2'),
+    ];
 
     let concurrentRunning = 0;
     let maxConcurrent = 0;
@@ -315,31 +278,7 @@ describe('YoloSchedulerService', () => {
   // ─── Test 3: Auto-Done Semantics ──────────────────────────
 
   it('should auto-mark completed tasks as COMPLETED without user interaction', async () => {
-    testConcepts = [makeFakeConcept('concept-A', 'Auto Task')];
-
-    mockResearchService.researchConcept.mockImplementation(async (input: any) => ({
-      conceptId: input.conceptId,
-      conceptName: 'Auto Task',
-      conversationId: 'sess_test',
-      researchOutput: 'Research',
-      createdTasks: [
-        {
-          id: 'task-A',
-          title: 'Auto Task',
-          conceptId: input.conceptId,
-          conceptName: 'Auto Task',
-          conversationId: 'sess_test',
-        },
-      ],
-      summary: {
-        conceptId: input.conceptId,
-        conceptName: 'Auto Task',
-        category: 'General',
-        keySummary: '',
-        taskTitles: ['Auto Task'],
-      },
-      fullyCompleted: true,
-    }));
+    pendingTaskNotes = [makeFakeTaskNote('task-A', 'concept-A', 'Auto Task')];
 
     const callbacks = createMockCallbacks();
     const conceptConvs = new Map([['concept-A', 'conv-A']]);
@@ -357,32 +296,30 @@ describe('YoloSchedulerService', () => {
 
     expect(callbacks.onComplete).toHaveBeenCalledTimes(1);
     expect(callbacks.completePayload!.completed).toBe(1);
-    // The note status should have been updated to COMPLETED (task ID from research mock)
+    // The note status should have been updated to COMPLETED
     expect(mockNotesService.updateStatus).toHaveBeenCalledWith('task-A', 'COMPLETED', 'tenant-1');
   });
 
-  // ─── Test 4: Workflow Budget Stop ─────────────────────────
+  // ─── Test 4: Execution Budget Stop ─────────────────────────
 
-  it('should stop execution when reaching workflowBudget', async () => {
-    // 5 concepts, each produces 1 task, but budget is 3
-    testConcepts = Array.from({ length: 5 }, (_, i) =>
-      makeFakeConcept(`concept-${i}`, `Concept ${i}`)
+  it('should stop execution when reaching maxExecutionBudget', async () => {
+    // 5 task notes, but budget is 3
+    pendingTaskNotes = Array.from({ length: 5 }, (_, i) =>
+      makeFakeTaskNote(`task-${i}`, `concept-${i}`, `Concept ${i}`)
     );
 
     const budgetConfig: YoloConfig = {
-      maxConcurrency: 1, // sequential to make budget predictable
+      maxConcurrency: 1,
       maxConceptsHardStop: 1000,
       retryAttempts: 1,
       retryBaseDelayMs: 0,
       circuitBreakerCooldownMs: 0,
-      workflowBudget: 3,
-      researchBatchSize: 5,
-      researchTurns: 2,
+      maxExecutionBudget: 3,
     };
 
     const callbacks = createMockCallbacks();
     const conceptConvs = new Map(
-      testConcepts.map((c) => [c.id, `conv-${c.id}`] as [string, string])
+      pendingTaskNotes.map((n) => [n.conceptId, `conv-${n.conceptId}`] as [string, string])
     );
 
     await service.startYoloExecution(
@@ -398,7 +335,7 @@ describe('YoloSchedulerService', () => {
 
     expect(callbacks.onComplete).toHaveBeenCalledTimes(1);
     const result = callbacks.completePayload!;
-    // Should have stopped at or near the budget
+    // Should have executed at most the budget (3) tasks
     expect(result.completed).toBeLessThanOrEqual(3);
     expect(result.completed).toBeGreaterThanOrEqual(1);
   });
@@ -406,12 +343,12 @@ describe('YoloSchedulerService', () => {
   // ─── Test 5: Failed Workflow Doesn't Block Others ──────────
 
   it('should continue executing unrelated concepts when one workflow fails', async () => {
-    testConcepts = [
-      makeFakeConcept('concept-A', 'Failing Concept'),
-      makeFakeConcept('concept-C', 'Independent Concept'),
+    pendingTaskNotes = [
+      makeFakeTaskNote('task-A', 'concept-A', 'Failing Concept'),
+      makeFakeTaskNote('task-C', 'concept-C', 'Independent Concept'),
     ];
 
-    // Make concept-A's workflow fail (step has conceptId field)
+    // Make concept-A's workflow fail
     mockWorkflowService.executeStepAutonomous.mockImplementation(async (step: any) => {
       if (step.conceptId === 'concept-A') {
         throw new Error('LLM failure');
@@ -444,15 +381,15 @@ describe('YoloSchedulerService', () => {
 
     expect(callbacks.onComplete).toHaveBeenCalledTimes(1);
     const result = callbacks.completePayload!;
-    // At least one should have failed, at least one should have succeeded
-    expect(result.failed).toBeGreaterThanOrEqual(0);
+    // concept-A failed, concept-C succeeded
+    expect(result.failed).toBeGreaterThanOrEqual(1);
     expect(result.completed).toBeGreaterThanOrEqual(1);
   });
 
   // ─── Test 6: Retry on Workflow Failure ─────────────────────
 
   it('should retry a failed workflow step before marking it as failed', async () => {
-    testConcepts = [makeFakeConcept('concept-A', 'Retry Concept')];
+    pendingTaskNotes = [makeFakeTaskNote('task-A', 'concept-A', 'Retry Concept')];
 
     let attemptCount = 0;
     mockWorkflowService.executeStepAutonomous.mockImplementation(async () => {
@@ -482,13 +419,11 @@ describe('YoloSchedulerService', () => {
     expect(callbacks.completePayload!.failed).toBe(0);
   });
 
-  // ─── Test 7: No concepts returns error ─────────────────────
+  // ─── Test 7: No pending tasks returns error ─────────────────
 
-  it('should emit error when no concepts available', async () => {
-    // All concepts already have completed tasks
-    testConcepts = [makeFakeConcept('concept-A', 'Done Concept')];
-    // Return concept-A as having a completed task
-    mockPrisma.note.findMany.mockResolvedValue([{ conceptId: 'concept-A' }]);
+  it('should emit error when no pending tasks found', async () => {
+    // No pending tasks
+    pendingTaskNotes = [];
 
     const callbacks = createMockCallbacks();
     const conceptConvs = new Map<string, string>();
@@ -503,16 +438,16 @@ describe('YoloSchedulerService', () => {
     );
 
     expect(callbacks.onError).toHaveBeenCalledWith(
-      expect.stringContaining('No concepts available')
+      expect.stringContaining('No pending tasks found')
     );
   });
 
   // ─── Test 8: Discovery Creates New Concept Entries ─────────
 
-  it('should discover related concepts after research completion', async () => {
-    testConcepts = [makeFakeConcept('concept-A', 'Task A')];
+  it('should discover related concepts after task completion', async () => {
+    pendingTaskNotes = [makeFakeTaskNote('task-A', 'concept-A', 'Task A')];
 
-    // After concept-A research, discovery finds concept-B
+    // After concept-A completes, discovery finds concept-B via semantic search
     mockConceptMatchingService.findRelevantConcepts.mockResolvedValue([
       {
         conceptId: 'concept-B',
@@ -547,7 +482,10 @@ describe('YoloSchedulerService', () => {
   // ─── Test 9: No Duplicate Discovery ───────────────────────
 
   it('should not create duplicate entries for already-known concepts', async () => {
-    testConcepts = [makeFakeConcept('concept-A', 'Task A'), makeFakeConcept('concept-B', 'Task B')];
+    pendingTaskNotes = [
+      makeFakeTaskNote('task-A', 'concept-A', 'Task A'),
+      makeFakeTaskNote('task-B', 'concept-B', 'Task B'),
+    ];
 
     // Discovery returns concept-B (already in initial set) — should be skipped
     mockConceptMatchingService.findRelevantConcepts.mockResolvedValue([
@@ -584,7 +522,7 @@ describe('YoloSchedulerService', () => {
   // ─── Story 2.16: Per-Step Progress Tests ───────────────────
 
   it('should include recentLogs in progress payloads (AC5)', async () => {
-    testConcepts = [makeFakeConcept('concept-A', 'Task A')];
+    pendingTaskNotes = [makeFakeTaskNote('task-A', 'concept-A', 'Task A')];
 
     const callbacks = createMockCallbacks();
     const conceptConvs = new Map([['concept-A', 'conv-A']]);
@@ -608,7 +546,7 @@ describe('YoloSchedulerService', () => {
   });
 
   it('should include step detail in currentTasks during execution (AC5)', async () => {
-    testConcepts = [makeFakeConcept('concept-A', 'Task A')];
+    pendingTaskNotes = [makeFakeTaskNote('task-A', 'concept-A', 'Task A')];
 
     mockWorkflowService.getOrGenerateWorkflow.mockResolvedValue({
       steps: [
@@ -656,7 +594,7 @@ describe('YoloSchedulerService', () => {
   });
 
   it('should include logs in YoloCompletePayload (AC5)', async () => {
-    testConcepts = [makeFakeConcept('concept-A', 'Task A')];
+    pendingTaskNotes = [makeFakeTaskNote('task-A', 'concept-A', 'Task A')];
 
     const callbacks = createMockCallbacks();
     const conceptConvs = new Map([['concept-A', 'conv-A']]);
@@ -679,7 +617,7 @@ describe('YoloSchedulerService', () => {
   });
 
   it('should maintain backward compatibility — new fields are optional (AC6)', async () => {
-    testConcepts = [makeFakeConcept('concept-A', 'Task A')];
+    pendingTaskNotes = [makeFakeTaskNote('task-A', 'concept-A', 'Task A')];
 
     const callbacks = createMockCallbacks();
     const conceptConvs = new Map([['concept-A', 'conv-A']]);
@@ -719,12 +657,12 @@ describe('YoloSchedulerService', () => {
     expect(result.conversationId).toBeDefined();
   });
 
-  // ─── Research-specific tests ──────────────────────────────
+  // ─── Workflow execution tests ──────────────────────────────
 
-  it('should pass prior research summaries to subsequent concept research', async () => {
-    testConcepts = [
-      makeFakeConcept('concept-A', 'First Concept'),
-      makeFakeConcept('concept-B', 'Second Concept'),
+  it('should execute workflow steps sequentially for each task', async () => {
+    pendingTaskNotes = [
+      makeFakeTaskNote('task-A', 'concept-A', 'First Concept'),
+      makeFakeTaskNote('task-B', 'concept-B', 'Second Concept'),
     ];
 
     const config: YoloConfig = {
@@ -749,37 +687,20 @@ describe('YoloSchedulerService', () => {
 
     await waitForComplete(callbacks);
 
-    // Second research call should include prior summaries
-    const calls = mockResearchService.researchConcept.mock.calls;
-    expect(calls.length).toBe(2);
-    // First call has no prior summaries
-    expect(calls[0][0].priorResearchSummaries).toEqual([]);
-    // Second call should have the first concept's summary
-    expect(calls[1][0].priorResearchSummaries.length).toBe(1);
+    // Both tasks should have been executed
+    expect(mockWorkflowService.getOrGenerateWorkflow).toHaveBeenCalledTimes(2);
+    expect(mockWorkflowService.executeStepAutonomous).toHaveBeenCalledTimes(2);
+    expect(callbacks.completePayload!.completed).toBe(2);
   });
 
-  it('should handle research that creates zero tasks gracefully', async () => {
-    testConcepts = [makeFakeConcept('concept-A', 'Empty Research')];
-
-    // Research creates no tasks
-    mockResearchService.researchConcept.mockResolvedValue({
-      conceptId: 'concept-A',
-      conceptName: 'Empty Research',
-      conversationId: 'sess_test',
-      researchOutput: 'No actionable items found',
-      createdTasks: [],
-      summary: {
-        conceptId: 'concept-A',
-        conceptName: 'Empty Research',
-        category: 'General',
-        keySummary: '',
-        taskTitles: [],
-      },
-      fullyCompleted: true,
-    });
+  it('should handle tasks with no linked concepts gracefully', async () => {
+    // Task note with null conceptId — should be filtered out
+    pendingTaskNotes = [
+      { ...makeFakeTaskNote('task-A', 'concept-A', 'Valid Task'), conceptId: null as any },
+    ];
 
     const callbacks = createMockCallbacks();
-    const conceptConvs = new Map([['concept-A', 'conv-A']]);
+    const conceptConvs = new Map<string, string>();
 
     await service.startYoloExecution(
       'tenant-1',
@@ -790,12 +711,12 @@ describe('YoloSchedulerService', () => {
       conceptConvs
     );
 
-    await waitForComplete(callbacks);
-
-    expect(callbacks.onComplete).toHaveBeenCalledTimes(1);
-    // No workflows should have been executed
-    expect(mockWorkflowService.getOrGenerateWorkflow).not.toHaveBeenCalled();
-    // But the execution should still complete successfully
-    expect(callbacks.completePayload!.status).toBe('completed');
+    // The note.findMany WHERE clause requires conceptId: { not: null },
+    // but our mock returns a note with null conceptId anyway.
+    // The service filters with notesWithConcepts = taskNotes.filter(n => n.conceptId)
+    // and would reach "No tasks with linked concepts found" if all are null.
+    expect(callbacks.onError).toHaveBeenCalledWith(
+      expect.stringContaining('No tasks with linked concepts found')
+    );
   });
 });

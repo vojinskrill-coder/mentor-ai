@@ -162,6 +162,37 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
         message: 'Dev mode: failed to resolve tenant, using fallback',
         error: err instanceof Error ? err.message : 'Unknown',
       });
+    }
+
+    // No active tenant/user found — create the fallback records so FK constraints work
+    try {
+      await prisma.tenant.upsert({
+        where: { id: DEV_USER_FALLBACK.tenantId },
+        create: {
+          id: DEV_USER_FALLBACK.tenantId,
+          name: 'Dev Tenant',
+          industry: 'Technology',
+          status: 'ACTIVE',
+        },
+        update: {},
+      });
+      await prisma.user.upsert({
+        where: { id: DEV_USER_FALLBACK.userId },
+        create: {
+          id: DEV_USER_FALLBACK.userId,
+          email: DEV_USER_FALLBACK.email,
+          name: 'Dev User',
+          role: 'TENANT_OWNER',
+          tenantId: DEV_USER_FALLBACK.tenantId,
+        },
+        update: {},
+      });
+      this.logger.log('Dev mode: created fallback tenant/user records in DB');
+    } catch (seedErr) {
+      this.logger.warn({
+        message: 'Dev mode: failed to seed fallback records',
+        error: seedErr instanceof Error ? seedErr.message : 'Unknown',
+      });
     } finally {
       await prisma.$disconnect();
     }

@@ -67,11 +67,20 @@ ${Object.entries(CATEGORY_KEYWORDS)
 
 PRAVILA:
 1. Fokus na NAMERU korisnika, ne na pojedinačne reči u poruci
-2. "Prodajni plan" → Prodaja (ne Vrednost, ne Marketing)
-3. "Marketing strategija" → Marketing (ne Strategija)
-4. "Finansijski izveštaj" → Finansije
-5. Ako korisnik traži PLAN/ANALIZU/STRATEGIJU za neku oblast, kategorija je DOMEN te oblasti
-6. Ako nije jasno, biraj NAJSPECIFIČNIJU kategoriju za zahtev
+2. Ako korisnik traži PLAN/ANALIZU/STRATEGIJU za neku oblast, kategorija je DOMEN te oblasti
+3. Ako nije jasno, biraj NAJSPECIFIČNIJU kategoriju za zahtev
+
+OBAVEZNA PRAVILA ZA RAZREŠAVANJE (strogo poštuj):
+- "Prodajni plan" / "Prodajna strategija" / "Prodajni proces" → Prodaja (NIKAD Marketing ili Strategija)
+- "Marketing strategija" / "Marketing plan" / "Marketing kampanja" → Marketing (NIKAD Strategija)
+- "Kreiranje sadržaja" / "Content marketing" / "Pisanje blogova" → Digitalni Marketing (NIKAD Vrednost)
+- "Analiza konkurencije" / "Konkurentska analiza" → Strategija (NIKAD Marketing)
+- "Cena proizvoda" / "Cenovna strategija" / "Popusti" → Određivanje Cene (NIKAD Prodaja)
+- "Finansijski izveštaj" / "Budžet" / "ROI analiza" → Finansije
+- "Poslovni model" / "Monetizacija" → Poslovni Modeli (NIKAD Strategija)
+- "Zapošljavanje" / "Obuka zaposlenih" → Ljudski Resursi (NIKAD Menadžment)
+- "SEO" / "Društvene mreže" / "Email marketing" → Digitalni Marketing (NIKAD Marketing)
+- Ako sadrži reč "prodaj" u bilo kom obliku → verovatno Prodaja
 
 VRATI ISKLJUČIVO VALIDAN JSON (bez markdown, bez objašnjenja):
 {"category": "ime kategorije", "confidence": 0.0-1.0, "conceptName": "opciono: konkretan koncept ako prepoznaješ"}
@@ -359,19 +368,13 @@ export class ConceptClassifierService {
       'tom',
       'tim',
       'kod',
-      'napravi',
-      'napraviti',
       'hocu',
       'hoću',
       'želim',
       'zelim',
       'daj',
       'molim',
-      'kreira',
-      'kreiraj',
-      'kreiranje',
       'trebam',
-      'zelim',
     ]);
     const keywords = [...new Set(words.filter((w) => !commonWords.has(w)))];
 

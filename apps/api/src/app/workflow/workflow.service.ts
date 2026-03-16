@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
@@ -20,6 +20,7 @@ import { WebSearchService } from '../web-search/web-search.service';
 import { BusinessContextService } from '../knowledge/services/business-context.service';
 import { ConceptRelevanceService } from '../knowledge/services/concept-relevance.service';
 import { PromptCheckerService } from './prompt-checker.service';
+import { MaturityEngineService } from '../maturity/maturity-engine.service';
 import { generateSystemPrompt } from '../personas/templates/persona-prompts';
 import { getVisibleCategories } from '../knowledge/config/department-categories';
 
@@ -33,6 +34,25 @@ Svaki radni tok mora:
 3. Svaki korak proizvodi upotrebljiv izlaz (analizu, plan, matricu, strategiju, profil, itd.)
 4. Koristiti odgovarajući departmanski okvir kada je departmentTag specificiran
 5. Biti SPECIFIČAN za datu kompaniju i industriju — NE generički
+
+KORIŠĆENJE KONCEPATA:
+- Svaki korak MORA primeniti {{conceptName}} kao analitički okvir — ne objašnjavati ga
+- Ako koncept ima PREREQUISITE koncepte, raniji koraci moraju primeniti te temelje pre glavnog koncepta
+- Ako koncept ima RELATED koncepte, koristiti ih za dopunsku analizu gde je relevantno
+- NIKADA ne nabrajaj definicije koncepata — PRIMENI ih na konkretno poslovanje
+
+SEKVENCIJALNO GRAĐENJE:
+- Korak 2 MORA koristiti nalaze iz koraka 1 — ne sme generisati nezavisnu analizu
+- Korak 3 MORA sintetizovati nalaze iz koraka 1 i 2 u konkretan plan
+- promptTemplate svakog koraka (osim prvog) MORA sadržati instrukciju: "Na osnovu prethodno urađene analize, ..."
+- NIKADA ne ponavljaj analizu koja je već urađena u prethodnom koraku
+
+KVALITET OUTPUTA:
+- Svaki nalaz mora imati obrazloženje — ne samo tvrdnju
+- Preporuke moraju biti prioritizovane — ne lista jednako važnih stavki
+- Svaki dokument mora završiti sa KONKRETNIM sledećim koracima
+- Koristiti tabele za uporedne analize i numeričke podatke
+- Format: čist markdown sa ## sekcijama, tabelama, > callout blokovima
 
 KRITIČNO za promptTemplate polje:
 - Prompt MORA instruirati AI da URADI posao, NE da objašnjava korisniku kako da ga uradi
@@ -98,7 +118,9 @@ export class WorkflowService {
     private readonly webSearchService: WebSearchService,
     private readonly businessContextService: BusinessContextService,
     private readonly conceptRelevanceService: ConceptRelevanceService,
-    private readonly promptCheckerService: PromptCheckerService
+    private readonly promptCheckerService: PromptCheckerService,
+    @Inject(forwardRef(() => MaturityEngineService))
+    private readonly maturityEngine: MaturityEngineService
   ) {}
 
   // ─── Workflow Generation ──────────────────────────────────────
@@ -264,6 +286,21 @@ export class WorkflowService {
 
 ZADATAK: ${task.title}
 ${task.content ? `OPIS ZADATKA: ${task.content}` : ''}${conceptContext}${conversationContext}
+
+ANALIZA KONVERZACIJE:
+- Pročitaj konverzaciju i identifikuj ŠTA korisnik već zna o ovom problemu
+- Ne generiši korake za stvari koje su već diskutovane ili rešene
+- Referencirati konkretne probleme, proizvode ili situacije koje je korisnik pomenuo
+- promptTemplate MORA koristiti specifičnosti iz konverzacije
+
+KONCEPT KAO OKVIR:
+- Ako je task povezan sa konceptom, koristiti koncept kao ANALITIČKI OKVIR za strukturiranje koraka
+- Ne objašnjavati koncept — primeniti ga na konkretnu situaciju korisnika
+
+SEKVENCIJALNO GRAĐENJE:
+- Korak 2 MORA koristiti nalaze iz koraka 1 — promptTemplate mora sadržati "Na osnovu prethodno urađene analize, ..."
+- Korak 3 MORA sintetizovati nalaze iz koraka 1 i 2 u konkretan plan
+- NIKADA ne ponavljaj analizu koja je već urađena u prethodnom koraku
 
 KRITIČNO: Koraci MORAJU biti direktno povezani sa ZADATKOM iznad i sa KONVERZACIJOM korisnika.
 NE generiši generičke korake za koncept. Generiši korake koji rešavaju KONKRETAN problem korisnika.
@@ -1066,6 +1103,30 @@ PRAVILA:
 7. Strukturiraj sa zaglavljima, tabelama, nabrajanjima i konkretnim preporukama
 8. Odgovaraj ISKLJUČIVO na srpskom jeziku
 
+KORIŠĆENJE KONCEPATA:
+- Koncepti ispod su tvoj ANALITIČKI OKVIR — ne lekcije za objašnjavanje
+- PRIMENI koncept na konkretno poslovanje: ako je koncept "SWOT Analiza", ne objašnjavaj šta je SWOT — uradi SWOT za ovu kompaniju
+- Ako postoje RELATED koncepti, koristi ih za dopunsku dubinu analize
+- Označi primenjene koncepte sa [[Naziv Koncepta]] da korisnik može pratiti izvor znanja
+- Objasni KAKO koncept menja analizu — ne samo da je primenjen, već ŠTA novo otkriva
+
+ANALITIČKI STANDARDI:
+- Svaki nalaz MORA imati obrazloženje — ne samo tvrdnju. Umesto "Jak brend" → "Jak brend — jer ima 45 godina tradicije i ekskluzivne ugovore sa 30+ restorana"
+- Kada primenjuješ analitički okvir, završi sa STRATEŠKIM IMPLIKACIJAMA — ne samo nabrajaj stavke
+- Povezuj nalaze — ako analiza pokazuje gap, strategija mora adresirati taj gap
+- Preporuke moraju biti PRIORITIZOVANE — 3 kritične preporuke na vrhu, ostale nakon toga
+- Svaki dokument mora završiti sa KONKRETNIM sledećim koracima: ko, šta, kada
+- Navedi KLJUČNE METRIKE utvrđene u ovoj analizi (npr. trenutna marža, veličina tržišta, konverzija) — ovo su baseline vrednosti za buduće praćenje
+- Označi pod kojim USLOVIMA bi ova analiza trebalo da se ponovo uradi (npr. promena cena konkurencije, novi tržišni igrač, promena regulativa)
+
+FORMAT OUTPUTA (markdown):
+- Koristi ## za sekcije, ### za podsekcije
+- Koristi > **Ključni uvid:** za najvažnije zaključke
+- Koristi tabele za sve uporedne i numeričke podatke
+- Koristi **bold** za ključne termine
+- Koristi bullet liste za nabrajanje, NE dugačke paragrafe
+- Minimum 800 reči za analitičke dokumente
+
 RAZLIKUJ DVA TIPA ZADATAKA:
 A) DIGITALNI (sadržaj, planovi, analize, mejlovi, kampanje, budžeti, šabloni, procedure):
    → PROIZVEDI GOTOV REZULTAT. Ne daj instrukcije — URADI posao i prikaži gotov dokument.
@@ -1110,16 +1171,50 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${taskSpecificContex
       }
     }
 
-    // Inject completed step summaries to prevent repetition
+    // Inject completed step summaries with explicit context-passing instructions
     if (completedSummaries.length > 0) {
-      systemPromptText += '\n\n--- VEĆ ZAVRŠENI KORACI (NE PONAVLJAJ) ---';
+      systemPromptText += '\n\n--- PRETHODNO ZAVRŠENI KORACI ---';
       for (const prev of completedSummaries) {
         systemPromptText += `\nKORAK: ${prev.title} (${prev.conceptName})`;
         systemPromptText += `\nREZIME: ${prev.summary}`;
       }
       systemPromptText += '\n--- KRAJ ZAVRŠENIH KORAKA ---';
-      systemPromptText +=
-        '\nKRITIČNO: NE ponavljaj analize ili preporuke iz prethodnih koraka. Nadogradi na njima i fokusiraj se SAMO na nove uvide specifične za trenutni zadatak.';
+      systemPromptText += `
+KORIŠĆENJE PRETHODNIH REZULTATA:
+- OBAVEZNO koristi nalaze iz prethodnih koraka — ne ponavljaj analizu koja je već urađena
+- Referencirati konkretne podatke, imena, brojke iz prethodnih koraka
+- Ako prethodni korak identifikuje problem, tvoj korak mora adresirati taj KONKRETNI problem
+- Ako prethodni korak sadrži podatke iz web pretrage, koristi te KONKRETNE izvore i URL-ove
+- NIKADA ne ponavljaj analize ili preporuke iz prethodnih koraka — NADOGRADI na njima`;
+    }
+
+    // 4b. Maturity Engine: inject prerequisite concept outputs as context
+    try {
+      const tenantForStage = await this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { maturityStage: true },
+      });
+      if (tenantForStage?.maturityStage && step.conceptId) {
+        const prereqs = await this.maturityEngine.checkPrerequisites(
+          tenantId,
+          step.conceptId,
+          tenantForStage.maturityStage as import('@mentor-ai/shared/types').MaturityStage
+        );
+        if (prereqs.prerequisiteOutputs.length > 0) {
+          systemPromptText += '\n\n--- REZULTATI PREREQUISITE KONCEPATA ---';
+          for (const po of prereqs.prerequisiteOutputs) {
+            systemPromptText += `\n### ${po.conceptName}\n${po.outputSummary}`;
+          }
+          systemPromptText += '\n--- KRAJ PREREQUISITE KONTEKSTA ---';
+          systemPromptText += `\nKORISTI ove nalaze kao TEMELJ — ne ponavljaj ih, NADOGRADI na njima.`;
+        }
+      }
+    } catch (err) {
+      this.logger.warn({
+        message: 'Prerequisite context injection failed (non-blocking)',
+        conceptId: step.conceptId,
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
     }
 
     // 5. Build user prompt from template
@@ -1483,6 +1578,21 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${taskSpecificContex
     }));
 
     await this.prisma.note.createMany({ data: noteData });
+
+    // Maturity Engine: link discovered tasks to stage assignments
+    try {
+      const tasksWithConcepts = noteData
+        .filter((n) => n.conceptId)
+        .map((n) => ({ noteId: n.id, conceptId: n.conceptId! }));
+      if (tasksWithConcepts.length > 0) {
+        await this.maturityEngine.linkDiscoveredTasksToStage(tenantId, tasksWithConcepts);
+      }
+    } catch (err) {
+      this.logger.warn({
+        message: 'Maturity stage linking failed (non-blocking)',
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+    }
 
     const newConceptIds = toSeed.map((c) => c.id);
 

@@ -60,6 +60,9 @@ _export(exports, {
     MEMORY_TYPE_LABELS: function() {
         return MEMORY_TYPE_LABELS;
     },
+    MaturityStage: function() {
+        return MaturityStage;
+    },
     MemorySource: function() {
         return MemorySource;
     },
@@ -86,6 +89,9 @@ _export(exports, {
     },
     RelationshipType: function() {
         return RelationshipType;
+    },
+    StageConceptStatus: function() {
+        return StageConceptStatus;
     },
     TenantStatus: function() {
         return TenantStatus;
@@ -303,5 +309,18 @@ var AgentJobStatus;
     AgentJobStatus["COMPLETED"] = "COMPLETED";
     AgentJobStatus["FAILED"] = "FAILED";
 })(AgentJobStatus || (AgentJobStatus = {}));
+var MaturityStage;
+(function(MaturityStage) {
+    MaturityStage["BASIC"] = "BASIC";
+    MaturityStage["ADVANCED"] = "ADVANCED";
+    MaturityStage["AUTONOMOUS"] = "AUTONOMOUS";
+})(MaturityStage || (MaturityStage = {}));
+var StageConceptStatus;
+(function(StageConceptStatus) {
+    StageConceptStatus["PENDING"] = "PENDING";
+    StageConceptStatus["IN_PROGRESS"] = "IN_PROGRESS";
+    StageConceptStatus["COMPLETED"] = "COMPLETED";
+    StageConceptStatus["STALE"] = "STALE";
+})(StageConceptStatus || (StageConceptStatus = {}));
 
 //# sourceMappingURL=types.js.map

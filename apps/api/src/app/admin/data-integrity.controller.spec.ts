@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { DataIntegrityController } from './data-integrity.controller';
 import { DataIntegrityService, DataIntegrityReport } from './data-integrity.service';
 
@@ -36,6 +37,10 @@ describe('DataIntegrityController', () => {
           useValue: {
             runFullCheck: jest.fn().mockResolvedValue(mockReport),
           },
+        },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn().mockReturnValue('false') },
         },
       ],
     }).compile();

@@ -18,6 +18,10 @@ import { MemoryService } from '../memory/services/memory.service';
 import { WebSearchService } from '../web-search/web-search.service';
 import { BusinessContextService } from '../knowledge/services/business-context.service';
 import { ExecutionStateService } from '../execution/execution-state.service';
+import { ConceptClassifierService } from '../knowledge/services/concept-classifier.service';
+import { AttachmentsService } from '../attachments/attachments.service';
+import { JobPlannerService } from '../agent-execution/job-planner.service';
+import { AgentExecutionEventBus } from '../agent-execution/agent-execution-event-bus.service';
 
 describe('ConversationGateway', () => {
   let gateway: ConversationGateway;
@@ -130,6 +134,25 @@ describe('ConversationGateway', () => {
         {
           provide: ExecutionStateService,
           useValue: { getState: jest.fn(), setState: jest.fn(), deleteState: jest.fn() },
+        },
+        {
+          provide: ConceptClassifierService,
+          useValue: { autoClassifyConversation: jest.fn().mockResolvedValue(null) },
+        },
+        {
+          provide: AttachmentsService,
+          useValue: {
+            getExtractedText: jest.fn().mockResolvedValue(''),
+            linkToNote: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: JobPlannerService,
+          useValue: { planJobs: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: AgentExecutionEventBus,
+          useValue: { emit: jest.fn() },
         },
       ],
     }).compile();

@@ -259,6 +259,25 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
         opacity: 0.4;
         cursor: not-allowed;
       }
+      .job-retry-btn {
+        background: transparent;
+        border: 1px solid #f59e0b;
+        color: #f59e0b;
+        padding: 4px 14px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .job-retry-btn:hover:not(:disabled) {
+        background: #f59e0b;
+        color: #fff;
+      }
+      .job-retry-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
       .job-running-indicator {
         display: flex;
         align-items: center;
@@ -643,6 +662,14 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
                       >
                         Izvrši
                       </button>
+                    } @else if (job.status === 'FAILED') {
+                      <button
+                        class="job-retry-btn"
+                        [disabled]="retryingJobs().has(job.id)"
+                        (click)="onRetryJob(job)"
+                      >
+                        {{ retryingJobs().has(job.id) ? 'Ponavljanje...' : 'Ponovi' }}
+                      </button>
                     }
                   </div>
 
@@ -710,6 +737,7 @@ export class JobPanelComponent implements OnInit, OnDestroy {
   loading = signal(false);
   budget = signal<{ spent: number; limit: number } | null>(null);
   expandedResults = signal<Set<string>>(new Set());
+  retryingJobs = signal<Set<string>>(new Set());
   globalError = signal<string | null>(null);
 
   // Running job state
@@ -1036,6 +1064,56 @@ export class JobPanelComponent implements OnInit, OnDestroy {
         this.execPanel.failEntry(eid, message);
         this.jobEntryIds.delete(job.id);
       }
+    }
+  }
+
+  async onRetryJob(job: AgentJobItem): Promise<void> {
+    this.globalError.set(null);
+
+    const retrying = new Set(this.retryingJobs());
+    retrying.add(job.id);
+    this.retryingJobs.set(retrying);
+
+    const entryId = this.execPanel.addEntry(
+      'agent-job',
+      `${this.getLabel(job.agentType)} (ponovo)`,
+      'running',
+      'Ponavljanje zadatka...',
+    );
+    this.jobEntryIds.set(job.id, entryId);
+
+    try {
+      const { executionId } = await this.agentApi.retryJob(job.id);
+
+      this.updateJobStatus(job.id, 'RUNNING', executionId);
+
+      const current = new Map(this.runningJobs());
+      current.set(job.id, {
+        executionId,
+        phase: 'Priprema instrukcija...',
+        startedAt: Date.now(),
+      });
+      this.runningJobs.set(current);
+      this.startElapsedTimer();
+      this.execToJobMap.set(executionId, job.id);
+
+      if (this.wsService.connectionState$() !== 'connected') {
+        this.pollRetryCounts.delete(job.id);
+        this.pollErrorCounts.delete(job.id);
+        this.pollJobExecution(job.id, executionId);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Greška pri ponovnom pokretanju';
+      this.globalError.set(message);
+      const eid = this.jobEntryIds.get(job.id);
+      if (eid) {
+        this.execPanel.failEntry(eid, message);
+        this.jobEntryIds.delete(job.id);
+      }
+    } finally {
+      const updated = new Set(this.retryingJobs());
+      updated.delete(job.id);
+      this.retryingJobs.set(updated);
     }
   }
 

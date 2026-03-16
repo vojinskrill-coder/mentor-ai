@@ -142,7 +142,11 @@ export class OpenClawClientService {
       const contentType = response.headers.get('content-type') || '';
       if (!contentType.includes('text/event-stream')) {
         // Server doesn't support streaming — parse as JSON and return
-        const data = (await response.json()) as Record<string, unknown>;
+        const text = await response.text();
+        if (!text) {
+          throw new Error('Empty response body from stream endpoint');
+        }
+        const data = JSON.parse(text) as Record<string, unknown>;
         return data as unknown as OpenClawResult;
       }
 
@@ -310,7 +314,37 @@ export class OpenClawClientService {
         dispatcher: this.dispatcher,
       });
 
-      const data = (await response.json()) as Record<string, unknown>;
+      const text = await response.text();
+      if (!text) {
+        this.logger.error({
+          message: 'OpenClaw relay returned empty body',
+          status: response.status,
+          agentId,
+        });
+        return {
+          success: false,
+          output: '',
+          durationMs: 0,
+          error: `Empty response (HTTP ${response.status})`,
+        };
+      }
+
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        this.logger.error({
+          message: 'OpenClaw relay returned invalid JSON',
+          status: response.status,
+          bodyPreview: text.substring(0, 200),
+        });
+        return {
+          success: false,
+          output: '',
+          durationMs: 0,
+          error: `Invalid JSON response (HTTP ${response.status})`,
+        };
+      }
 
       if (!response.ok) {
         this.logger.error({

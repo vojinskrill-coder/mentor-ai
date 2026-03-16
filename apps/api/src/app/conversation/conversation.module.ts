@@ -11,6 +11,7 @@ import { WebSearchModule } from '../web-search/web-search.module';
 import { ExecutionModule } from '../execution/execution.module';
 import { AttachmentsModule } from '../attachments/attachments.module';
 import { AgentExecutionModule } from '../agent-execution/agent-execution.module';
+import { MaturityModule } from '../maturity/maturity.module';
 import { ConversationController } from './conversation.controller';
 import { ConversationService } from './conversation.service';
 import { ConversationGateway } from './conversation.gateway';
@@ -30,6 +31,7 @@ import { ConceptPlanService } from './concept-plan.service';
     ExecutionModule,
     AttachmentsModule,
     AgentExecutionModule,
+    MaturityModule,
   ],
   controllers: [ConversationController],
   providers: [ConversationService, ConversationGateway, ConceptPlanService],

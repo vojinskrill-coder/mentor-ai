@@ -11,6 +11,8 @@ import { ConversationService } from '../conversation/conversation.service';
 import { WebSearchService } from '../web-search/web-search.service';
 import { BrainSeedingService } from '../knowledge/services/brain-seeding.service';
 import { WorkflowService } from '../workflow/workflow.service';
+import { ConceptClassifierService } from '../knowledge/services/concept-classifier.service';
+import { MaturityEngineService } from '../maturity/maturity-engine.service';
 import { TenantStatus, NoteSource } from '@mentor-ai/shared/prisma';
 
 describe('OnboardingService', () => {
@@ -28,6 +30,9 @@ describe('OnboardingService', () => {
       findUnique: jest.fn().mockResolvedValue({ department: null, role: 'MEMBER' }),
     },
     concept: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    conceptRelationship: {
       findMany: jest.fn().mockResolvedValue([]),
     },
   };
@@ -88,11 +93,21 @@ describe('OnboardingService', () => {
           useValue: { seedPendingTasksForUser: jest.fn().mockResolvedValue([]) },
         },
         {
+          provide: ConceptClassifierService,
+          useValue: { autoClassifyConversation: jest.fn().mockResolvedValue(null) },
+        },
+        {
           provide: WorkflowService,
           useValue: {
             buildExecutionPlan: jest
               .fn()
               .mockResolvedValue({ planId: 'ep_test', steps: [], taskIds: [] }),
+          },
+        },
+        {
+          provide: MaturityEngineService,
+          useValue: {
+            initializeStage: jest.fn().mockResolvedValue(10),
           },
         },
       ],
@@ -238,7 +253,7 @@ describe('OnboardingService', () => {
       );
 
       expect(result.newTenantStatus).toBe('ACTIVE');
-      expect(result.celebrationMessage).toContain('saved');
+      expect(result.celebrationMessage).toContain('uštedeli');
       expect(result.noteId).toBe('note_abc123');
       expect(mockPrismaService.tenant.update).toHaveBeenCalledWith({
         where: { id: 'tnt_123' },

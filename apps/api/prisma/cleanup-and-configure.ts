@@ -44,7 +44,6 @@ async function main(): Promise<void> {
   const counts = {
     memories: await prisma.memory.count(),
     conceptCitations: await prisma.conceptCitation.count(),
-    conceptWorkflows: await prisma.conceptWorkflow.count(),
     notes: await prisma.note.count(),
     tokenUsage: await prisma.tokenUsage.count(),
     onboardingMetrics: await prisma.onboardingMetric.count(),
@@ -52,8 +51,18 @@ async function main(): Promise<void> {
     conversations: await prisma.conversation.count(),
     dataExports: await prisma.dataExport.count(),
     invitations: await prisma.invitation.count(),
+    attachments: await prisma.attachment.count(),
+    executionEvents: await prisma.executionEvent.count(),
+    executions: await prisma.execution.count(),
+    agentJobs: await prisma.agentJob.count(),
+    agentExecutions: await prisma.agentExecution.count(),
+    agentDailyBudgets: await prisma.agentDailyBudget.count(),
+    stageConceptAssignments: await prisma.stageConceptAssignment.count(),
+    stageCompletionLogs: await prisma.stageCompletionLog.count(),
+    autonomousRuns: await prisma.autonomousRun.count(),
     users: await prisma.user.count(),
     tenants: await prisma.tenant.count(),
+    tenantRegistry: await prisma.tenantRegistry.count(),
     llmConfigs: await prisma.llmProviderConfig.count(),
   };
 
@@ -65,9 +74,9 @@ async function main(): Promise<void> {
   // ── Preserved tables ──
   const preservedCounts = {
     platform: await prisma.platform.count(),
-    tenantRegistry: await prisma.tenantRegistry.count(),
     concepts: await prisma.concept.count(),
     conceptRelationships: await prisma.conceptRelationship.count(),
+    conceptWorkflows: await prisma.conceptWorkflow.count(),
     llmConfigAuditLogs: await prisma.llmConfigAuditLog.count(),
   };
 
@@ -86,15 +95,12 @@ async function main(): Promise<void> {
   // ── Step 2: Delete user data (leaf tables first, respecting FK constraints) ──
   console.log('\nDeleting user data...');
 
-  // 2a. Tables with no FK dependencies on other user tables
+  // 2a. Leaf tables with no FK dependencies on other user tables
   const deletedMemories = await prisma.memory.deleteMany({});
   console.log(`  Deleted ${deletedMemories.count} memories`);
 
   const deletedCitations = await prisma.conceptCitation.deleteMany({});
   console.log(`  Deleted ${deletedCitations.count} concept_citations`);
-
-  const deletedWorkflows = await prisma.conceptWorkflow.deleteMany({});
-  console.log(`  Deleted ${deletedWorkflows.count} concept_workflows`);
 
   const deletedTokenUsage = await prisma.tokenUsage.deleteMany({});
   console.log(`  Deleted ${deletedTokenUsage.count} token_usage`);
@@ -102,28 +108,59 @@ async function main(): Promise<void> {
   const deletedOnboarding = await prisma.onboardingMetric.deleteMany({});
   console.log(`  Deleted ${deletedOnboarding.count} onboarding_metrics`);
 
-  // 2b. Notes (self-referential FK: parentNoteId) — clear parent refs first, then delete
+  // 2b. Maturity / execution tables
+  const deletedStageAssignments = await prisma.stageConceptAssignment.deleteMany({});
+  console.log(`  Deleted ${deletedStageAssignments.count} stage_concept_assignments`);
+
+  const deletedStageLogs = await prisma.stageCompletionLog.deleteMany({});
+  console.log(`  Deleted ${deletedStageLogs.count} stage_completion_logs`);
+
+  const deletedAutonomousRuns = await prisma.autonomousRun.deleteMany({});
+  console.log(`  Deleted ${deletedAutonomousRuns.count} autonomous_runs`);
+
+  // 2c. Agent tables (agent_jobs FK → agent_executions)
+  const deletedAgentJobs = await prisma.agentJob.deleteMany({});
+  console.log(`  Deleted ${deletedAgentJobs.count} agent_jobs`);
+
+  const deletedAgentExecs = await prisma.agentExecution.deleteMany({});
+  console.log(`  Deleted ${deletedAgentExecs.count} agent_executions`);
+
+  const deletedAgentBudgets = await prisma.agentDailyBudget.deleteMany({});
+  console.log(`  Deleted ${deletedAgentBudgets.count} agent_daily_budgets`);
+
+  // 2d. Execution events (FK → executions)
+  const deletedExecEvents = await prisma.executionEvent.deleteMany({});
+  console.log(`  Deleted ${deletedExecEvents.count} execution_events`);
+
+  const deletedExecs = await prisma.execution.deleteMany({});
+  console.log(`  Deleted ${deletedExecs.count} executions`);
+
+  // 2e. Attachments
+  const deletedAttachments = await prisma.attachment.deleteMany({});
+  console.log(`  Deleted ${deletedAttachments.count} attachments`);
+
+  // 2f. Notes (self-referential FK: parentNoteId) — clear parent refs first, then delete
   await prisma.note.updateMany({ data: { parentNoteId: null } });
   const deletedNotes = await prisma.note.deleteMany({});
   console.log(`  Deleted ${deletedNotes.count} notes`);
 
-  // 2c. Messages (FK → conversations)
+  // 2g. Messages (FK → conversations)
   const deletedMessages = await prisma.message.deleteMany({});
   console.log(`  Deleted ${deletedMessages.count} messages`);
 
-  // 2d. Conversations (FK → users)
+  // 2h. Conversations (FK → users)
   const deletedConversations = await prisma.conversation.deleteMany({});
   console.log(`  Deleted ${deletedConversations.count} conversations`);
 
-  // 2e. Data exports (FK → users, tenants)
+  // 2i. Data exports (FK → users, tenants)
   const deletedExports = await prisma.dataExport.deleteMany({});
   console.log(`  Deleted ${deletedExports.count} data_exports`);
 
-  // 2f. Invitations (FK → users, tenants)
+  // 2j. Invitations (FK → users, tenants)
   const deletedInvitations = await prisma.invitation.deleteMany({});
   console.log(`  Deleted ${deletedInvitations.count} invitations`);
 
-  // 2g. Clear tenant back-references before deleting users
+  // 2k. Clear tenant back-references before deleting users
   await prisma.tenant.updateMany({
     data: {
       backupOwnerId: null,
@@ -131,13 +168,17 @@ async function main(): Promise<void> {
     },
   });
 
-  // 2h. Users (FK → tenants)
+  // 2l. Users (FK → tenants)
   const deletedUsers = await prisma.user.deleteMany({});
   console.log(`  Deleted ${deletedUsers.count} users`);
 
-  // 2i. Tenants
+  // 2m. Tenants
   const deletedTenants = await prisma.tenant.deleteMany({});
   console.log(`  Deleted ${deletedTenants.count} tenants`);
+
+  // 2n. Tenant registry (unique constraint on name blocks re-registration)
+  const deletedRegistry = await prisma.tenantRegistry.deleteMany({});
+  console.log(`  Deleted ${deletedRegistry.count} tenant_registry entries`);
 
   // ── Step 3: Re-create dev tenant + user ──
   console.log('\nRe-creating dev tenant and user...');
@@ -169,19 +210,15 @@ async function main(): Promise<void> {
   });
   console.log('  Created dev user: dev@mentor-ai.local (TENANT_OWNER)');
 
-  // Ensure tenant registry exists
-  const existingRegistry = await prisma.tenantRegistry.findUnique({ where: { id: devTenantId } });
-  if (!existingRegistry) {
-    await prisma.tenantRegistry.create({
-      data: {
-        id: devTenantId,
-        name: 'Dev Workspace',
-        dbUrl: process.env.DATABASE_URL ?? 'postgresql://localhost:5432/mentor_ai_dev',
-        status: 'ACTIVE',
-      },
-    });
-    console.log('  Created dev tenant registry entry');
-  }
+  await prisma.tenantRegistry.create({
+    data: {
+      id: devTenantId,
+      name: 'Dev Workspace',
+      dbUrl: process.env.DATABASE_URL ?? 'postgresql://localhost:5432/mentor_ai_dev',
+      status: 'ACTIVE',
+    },
+  });
+  console.log('  Created dev tenant registry entry');
 
   // ── Step 4: LLM config preserved (not reconfigured) ──
   const activeLlm = await prisma.llmProviderConfig.findFirst({
@@ -195,9 +232,9 @@ async function main(): Promise<void> {
   console.log('\n=== CLEANUP COMPLETE ===');
   console.log('Preserved:');
   console.log(`  - ${preservedCounts.platform} platform record(s)`);
-  console.log(`  - ${preservedCounts.tenantRegistry} tenant registry entries`);
   console.log(`  - ${preservedCounts.concepts} concepts`);
   console.log(`  - ${preservedCounts.conceptRelationships} concept relationships`);
+  console.log(`  - ${preservedCounts.conceptWorkflows} concept workflows`);
   console.log(`  - ${preservedCounts.llmConfigAuditLogs} LLM audit logs`);
   console.log(
     `  - Active LLM config: ${activeLlm?.providerType ?? 'none'} (${activeLlm?.modelId ?? 'n/a'})`

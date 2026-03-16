@@ -9,6 +9,10 @@ describe('ConceptMatchingService', () => {
     concept: {
       findMany: jest.Mock;
     };
+    conceptRelationship: {
+      findMany: jest.Mock;
+      groupBy: jest.Mock;
+    };
   };
 
   const mockConcepts = [
@@ -36,6 +40,10 @@ describe('ConceptMatchingService', () => {
     mockPrisma = {
       concept: {
         findMany: jest.fn().mockResolvedValue([]),
+      },
+      conceptRelationship: {
+        findMany: jest.fn().mockResolvedValue([]),
+        groupBy: jest.fn().mockResolvedValue([]),
       },
     };
 

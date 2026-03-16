@@ -39,7 +39,13 @@ Description: ${taskContent}
 ${expectedOutcome ? `Expected Outcome: ${expectedOutcome}\n` : ''}User's Completed Report:
 ${userReport.substring(0, 3000)}
 
-Based on this task report and the business context from memories, generate a direct execution instruction for the ${agentDef.label} agent. The agent should ACT on this — execute its tools, produce deliverables, and return results. Not analyze or plan.`;
+Based on this task report and the business context from memories, generate a direct execution instruction for the ${agentDef.label} agent.
+
+INSTRUCTION QUALITY REQUIREMENTS:
+- Identify the KEY FINDINGS from the report that this agent should build upon — don't repeat analysis, ADD NEW VALUE
+- Reference specific companies, products, numbers from the report
+- Tell the agent what is ALREADY KNOWN (from the report) and what NEW information to discover or produce
+- The instruction must be actionable — the agent should ACT on this, execute its tools, produce deliverables, and return results. Not analyze or plan.`;
 
     const messages: ChatMessage[] = [
       { role: 'system', content: agentDef.systemPrompt },

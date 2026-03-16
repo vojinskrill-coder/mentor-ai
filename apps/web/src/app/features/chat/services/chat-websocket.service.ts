@@ -126,6 +126,13 @@ type AgentResultCallback = (data: AgentResultPayload) => void;
 type AgentErrorCallback = (data: AgentErrorPayload) => void;
 type AgentTextChunkCallback = (data: AgentTextChunkPayload) => void;
 type AgentToolEventCallback = (data: AgentToolEventPayload) => void;
+type DigestReadyCallback = (data: { title: string; timestamp: string }) => void;
+type ScanCompleteCallback = (data: { runId: string; staleFound: number; reExecuted: number; tasksCompleted: number }) => void;
+type InitProgressCallback = (data: { stage: string; persona: string; personaIndex: number; totalPersonas: number; assignedSoFar: number }) => void;
+type StageInitializedCallback = (data: { stage: string; assignmentCount: number; noteCount: number }) => void;
+type ExecutionProgressCallback = (data: { stage: string; total: number; executed: number; failed: number; current: { conceptId: string; conceptName: string; personaType: string } | null }) => void;
+type ExecutionStartedCallback = (data: { stage: string; timestamp: string }) => void;
+type ExecutionCompleteCallback = (data: { stage: string; total: number; executed: number; failed: number; timestamp: string }) => void;
 
 /** Execution persistence types for reconnect resilience */
 export interface ActiveExecution {
@@ -238,6 +245,13 @@ export class ChatWebsocketService {
   private agentErrorCallbacks: AgentErrorCallback[] = [];
   private agentTextChunkCallbacks: AgentTextChunkCallback[] = [];
   private agentToolEventCallbacks: AgentToolEventCallback[] = [];
+  private digestReadyCallbacks: DigestReadyCallback[] = [];
+  private scanCompleteCallbacks: ScanCompleteCallback[] = [];
+  private initProgressCallbacks: InitProgressCallback[] = [];
+  private stageInitializedCallbacks: StageInitializedCallback[] = [];
+  private executionProgressCallbacks: ExecutionProgressCallback[] = [];
+  private executionStartedCallbacks: ExecutionStartedCallback[] = [];
+  private executionCompleteCallbacks: ExecutionCompleteCallback[] = [];
 
   /**
    * Connects to the WebSocket server.
@@ -578,6 +592,32 @@ export class ChatWebsocketService {
 
     this.socket.on('agent:tool-event', (data: AgentToolEventPayload) => {
       this.agentToolEventCallbacks.forEach((cb) => cb(data));
+    });
+
+    // Autonomous maturity events
+    this.socket.on('autonomous:digest-ready', (data: { title: string; timestamp: string }) => {
+      this.digestReadyCallbacks.forEach((cb) => cb(data));
+    });
+
+    this.socket.on('autonomous:scan-complete', (data: { runId: string; staleFound: number; reExecuted: number; tasksCompleted: number }) => {
+      this.scanCompleteCallbacks.forEach((cb) => cb(data));
+    });
+
+    // Maturity stage initialization + execution events
+    this.socket.on('maturity:init-progress', (data: { stage: string; persona: string; personaIndex: number; totalPersonas: number; assignedSoFar: number }) => {
+      this.initProgressCallbacks.forEach((cb) => cb(data));
+    });
+    this.socket.on('maturity:stage-initialized', (data: { stage: string; assignmentCount: number; noteCount: number }) => {
+      this.stageInitializedCallbacks.forEach((cb) => cb(data));
+    });
+    this.socket.on('maturity:execution-started', (data: { stage: string; timestamp: string }) => {
+      this.executionStartedCallbacks.forEach((cb) => cb(data));
+    });
+    this.socket.on('maturity:execution-progress', (data: any) => {
+      this.executionProgressCallbacks.forEach((cb) => cb(data));
+    });
+    this.socket.on('maturity:execution-complete', (data: any) => {
+      this.executionCompleteCallbacks.forEach((cb) => cb(data));
     });
   }
 
@@ -1195,6 +1235,62 @@ export class ChatWebsocketService {
     };
   }
 
+  onDigestReady(callback: DigestReadyCallback): () => void {
+    this.digestReadyCallbacks.push(callback);
+    return () => {
+      const index = this.digestReadyCallbacks.indexOf(callback);
+      if (index > -1) this.digestReadyCallbacks.splice(index, 1);
+    };
+  }
+
+  onScanComplete(callback: ScanCompleteCallback): () => void {
+    this.scanCompleteCallbacks.push(callback);
+    return () => {
+      const index = this.scanCompleteCallbacks.indexOf(callback);
+      if (index > -1) this.scanCompleteCallbacks.splice(index, 1);
+    };
+  }
+
+  onInitProgress(callback: InitProgressCallback): () => void {
+    this.initProgressCallbacks.push(callback);
+    return () => {
+      const index = this.initProgressCallbacks.indexOf(callback);
+      if (index > -1) this.initProgressCallbacks.splice(index, 1);
+    };
+  }
+
+  onStageInitialized(callback: StageInitializedCallback): () => void {
+    this.stageInitializedCallbacks.push(callback);
+    return () => {
+      const index = this.stageInitializedCallbacks.indexOf(callback);
+      if (index > -1) this.stageInitializedCallbacks.splice(index, 1);
+    };
+  }
+
+  onExecutionStarted(callback: ExecutionStartedCallback): () => void {
+    this.executionStartedCallbacks.push(callback);
+    return () => {
+      const index = this.executionStartedCallbacks.indexOf(callback);
+      if (index > -1) this.executionStartedCallbacks.splice(index, 1);
+    };
+  }
+
+  onExecutionProgress(callback: ExecutionProgressCallback): () => void {
+    this.executionProgressCallbacks.push(callback);
+    return () => {
+      const index = this.executionProgressCallbacks.indexOf(callback);
+      if (index > -1) this.executionProgressCallbacks.splice(index, 1);
+    };
+  }
+
+  onExecutionComplete(callback: ExecutionCompleteCallback): () => void {
+    this.executionCompleteCallbacks.push(callback);
+    return () => {
+      const index = this.executionCompleteCallbacks.indexOf(callback);
+      if (index > -1) this.executionCompleteCallbacks.splice(index, 1);
+    };
+  }
+
   clearCallbacks(): void {
     // H6: Include messageDeletedCallbacks in cleanup to prevent accumulation on reconnect
     this.messageDeletedCallbacks = [];
@@ -1251,5 +1347,12 @@ export class ChatWebsocketService {
     this.agentErrorCallbacks = [];
     this.agentTextChunkCallbacks = [];
     this.agentToolEventCallbacks = [];
+    this.digestReadyCallbacks = [];
+    this.scanCompleteCallbacks = [];
+    this.initProgressCallbacks = [];
+    this.stageInitializedCallbacks = [];
+    this.executionProgressCallbacks = [];
+    this.executionStartedCallbacks = [];
+    this.executionCompleteCallbacks = [];
   }
 }

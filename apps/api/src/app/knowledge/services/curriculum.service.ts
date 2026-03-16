@@ -136,7 +136,24 @@ export class CurriculumService {
         continue;
       }
 
-      // Create the ancestor concept
+      // Concept may exist by name (e.g. seeded from Obsidian without curriculumId)
+      const existingByName = await this.prisma.concept.findUnique({
+        where: { name: ancestor.label },
+        select: { id: true },
+      });
+
+      if (existingByName) {
+        // Link existing concept to curriculum node
+        await this.prisma.concept.update({
+          where: { id: existingByName.id },
+          data: { curriculumId: ancestor.id, parentId: parentConceptId },
+        });
+        this.logger.log(`Linked existing concept to curriculum: ${ancestor.id} (${ancestor.label})`);
+        parentConceptId = existingByName.id;
+        continue;
+      }
+
+      // Create new concept
       const conceptId = `cpt_${createId()}`;
       const topLevelCategory = chain[0]?.label ?? 'General'; // Root ancestor label as category
 

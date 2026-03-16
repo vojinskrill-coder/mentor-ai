@@ -26,6 +26,8 @@ import { WebSearchService } from '../web-search/web-search.service';
 import { BrainSeedingService } from '../knowledge/services/brain-seeding.service';
 import { ConceptClassifierService } from '../knowledge/services/concept-classifier.service';
 import { WorkflowService } from '../workflow/workflow.service';
+import { MaturityEngineService } from '../maturity/maturity-engine.service';
+import { MaturityStage } from '@mentor-ai/shared/types';
 import { OnboardingMetricService } from './onboarding-metric.service';
 import {
   QUICK_TASK_TEMPLATES,
@@ -55,7 +57,8 @@ export class OnboardingService {
     private readonly webSearchService: WebSearchService,
     private readonly brainSeedingService: BrainSeedingService,
     private readonly conceptClassifierService: ConceptClassifierService,
-    private readonly workflowService: WorkflowService
+    private readonly workflowService: WorkflowService,
+    private readonly maturityEngineService: MaturityEngineService,
   ) {}
 
   /**
@@ -945,6 +948,19 @@ Kreiraj personalizovani Poslovni Mozak sa tačno 10 prioritizovanih zadataka.`;
         });
       });
 
+    // Auto-initialize BASIC maturity stage (fire-and-forget)
+    // Creates assignments, Note TASKs, and triggers auto-execution with dependency ordering
+    this.maturityEngineService
+      .initializeStage(tenantId, MaturityStage.BASIC, userId)
+      .catch((err) => {
+        this.logger.warn({
+          message: 'Auto-BASIC maturity initialization failed (non-blocking)',
+          tenantId,
+          userId,
+          error: err instanceof Error ? err.message : 'Unknown',
+        });
+      });
+
     this.logger.log({
       message: 'Onboarding completed successfully',
       tenantId,
@@ -958,7 +974,7 @@ Kreiraj personalizovani Poslovni Mozak sa tačno 10 prioritizovanih zadataka.`;
       output: generatedOutput,
       timeSavedMinutes,
       noteId: note.id,
-      celebrationMessage: `Congratulations! You just saved ~${timeSavedMinutes} minutes!`,
+      celebrationMessage: `Čestitamo! Upravo ste uštedeli ~${timeSavedMinutes} minuta!`,
       newTenantStatus: 'ACTIVE' as TenantStatus,
       welcomeConversationId: welcomeConversationId ?? undefined,
       executionMode: (executionMode as 'MANUAL' | 'YOLO') ?? undefined,

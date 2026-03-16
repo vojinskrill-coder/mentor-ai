@@ -35,6 +35,16 @@ Your output instruction MUST:
 - Tell the agent to write ALL output in Serbian language
 - Tell the agent to format output as clean markdown with tables and sections (NO code blocks, NO HTML tags)
 
+QUALITY STANDARDS:
+- Every finding must cite its source — never present data without attribution
+- Distinguish between verified data and estimates/projections
+- Connect findings to the specific business context — explain relevance
+- Prioritize depth over breadth — 5 deep findings beat 20 shallow ones
+- Build on what's already known from the task report — add NEW value
+- Cross-verify key claims from multiple sources
+- For each competitor: pricing, positioning, unique value prop, weaknesses
+- Organize findings by relevance to the business, not by search order
+
 Write in English. Output ONLY the instruction text, under 500 words.`,
       },
     ],
@@ -70,6 +80,15 @@ CRITICAL FORMAT RULES for the agent:
 - Tables use markdown pipe syntax
 - No raw HTML anywhere in the output
 
+QUALITY STANDARDS:
+- Every finding must cite its source — never present data without attribution
+- Distinguish between verified data and estimates/projections
+- Connect findings to the specific business context — explain relevance
+- Prioritize depth over breadth — 5 deep findings beat 20 shallow ones
+- Build on what's already known from the task report — add NEW value
+- Research company's existing content BEFORE creating — match voice and style
+- Each content piece must have clear PURPOSE (awareness/consideration/conversion) and TARGET audience
+
 Write in English. Output ONLY the instruction text, under 600 words.`,
       },
     ],
@@ -98,6 +117,15 @@ Given the task report and business context (injected from memories), write an in
 5. Write ALL output in Serbian language
 6. Use markdown image syntax ![opis](url) — never HTML <img> tags
 7. Never wrap output in code blocks
+
+QUALITY STANDARDS:
+- Every finding must cite its source — never present data without attribution
+- Distinguish between verified data and estimates/projections
+- Connect findings to the specific business context — explain relevance
+- Prioritize depth over breadth — 5 deep findings beat 20 shallow ones
+- Build on what's already known from the task report — add NEW value
+- Start with competitive landscape from task report findings
+- For every recommendation, explain WHY based on research — not generic best practices
 
 Write in English. Output ONLY the instruction text, under 600 words.`,
       },
@@ -131,6 +159,15 @@ Given the task report and business context (injected from memories), write an in
 
 CRITICAL: The instruction MUST contain the exact agentmail-send command syntax. Do not omit email sending.
 
+QUALITY STANDARDS:
+- Every finding must cite its source — never present data without attribution
+- Distinguish between verified data and estimates/projections
+- Connect findings to the specific business context — explain relevance
+- Prioritize depth over breadth — 5 deep findings beat 20 shallow ones
+- Build on what's already known from the task report — add NEW value
+- Base strategy on REAL competitor data from research — not assumptions
+- Email copy must reference something SPECIFIC to recipient's situation
+
 Write in English. Output ONLY the instruction text, under 600 words.`,
       },
     ],
@@ -154,6 +191,16 @@ Given the task report and business context (injected from memories), write an in
 6. Format ALL output as clean markdown with tables and sections
 7. Write ALL output in Serbian language
 8. Cite every benchmark with source URL
+
+QUALITY STANDARDS:
+- Every finding must cite its source — never present data without attribution
+- Distinguish between verified data and estimates/projections
+- Connect findings to the specific business context — explain relevance
+- Prioritize depth over breadth — 5 deep findings beat 20 shallow ones
+- Build on what's already known from the task report — add NEW value
+- All projections must state assumptions explicitly
+- Use benchmarks from research as comparison points, not as targets
+- Include what happens if key assumptions change (sensitivity analysis)
 
 Write in English. Output ONLY the instruction text, under 500 words.`,
       },

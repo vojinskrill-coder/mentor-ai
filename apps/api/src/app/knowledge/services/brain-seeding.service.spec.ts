@@ -52,6 +52,17 @@ describe('BrainSeedingService', () => {
     (c) => !(FOUNDATION_CATEGORIES as readonly string[]).includes(c)
   );
 
+  /**
+   * Mirror the service's categoryMatchClause: builds an OR array with exact
+   * match + endsWith (`. <cat>`) for each category.
+   */
+  const expectedCategoryMatchClause = (categories: readonly string[] | string[]) => ({
+    OR: [...categories].flatMap((cat) => [
+      { category: cat },
+      { category: { endsWith: `. ${cat}` } },
+    ]),
+  });
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -143,16 +154,16 @@ describe('BrainSeedingService', () => {
         'PLATFORM_OWNER'
       );
 
-      // Foundation concepts retrieved with correct where clause
+      // Foundation concepts retrieved with correct where clause (OR with exact + endsWith)
       expect(mockPrismaService.concept.findMany).toHaveBeenNthCalledWith(1, {
-        where: { category: { in: foundationCats } },
+        where: expectedCategoryMatchClause(foundationCats),
         select: { id: true, name: true, category: true },
         orderBy: { sortOrder: 'asc' },
       });
 
-      // Non-foundation concepts retrieved
+      // Non-foundation concepts retrieved (OR with exact + endsWith)
       expect(mockPrismaService.concept.findMany).toHaveBeenNthCalledWith(2, {
-        where: { category: { in: expect.arrayContaining(otherCategories) } },
+        where: expectedCategoryMatchClause(otherCategories),
         select: { id: true, name: true, category: true, sortOrder: true },
         orderBy: { sortOrder: 'asc' },
       });
@@ -282,19 +293,15 @@ describe('BrainSeedingService', () => {
       );
 
       expect(result.seeded).toBe(14);
-      // Department path: single findMany call with visible categories
+      // Department path: single findMany call with visible categories (OR with exact + endsWith)
       expect(mockPrismaService.concept.findMany).toHaveBeenCalledTimes(1);
       expect(mockPrismaService.concept.findMany).toHaveBeenCalledWith({
-        where: {
-          category: {
-            in: expect.arrayContaining([
-              'Uvod u Poslovanje',
-              'Vrednost',
-              'Marketing',
-              'Digitalni Marketing',
-            ]),
-          },
-        },
+        where: expectedCategoryMatchClause([
+          'Uvod u Poslovanje',
+          'Vrednost',
+          'Marketing',
+          'Digitalni Marketing',
+        ]),
         select: { id: true, name: true, category: true },
         orderBy: { sortOrder: 'asc' },
         take: 30,
@@ -335,16 +342,12 @@ describe('BrainSeedingService', () => {
 
       expect(mockPrismaService.concept.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: {
-            category: {
-              in: expect.arrayContaining([
-                'Uvod u Poslovanje',
-                'Vrednost',
-                'Finansije',
-                'Računovodstvo',
-              ]),
-            },
-          },
+          where: expectedCategoryMatchClause([
+            'Uvod u Poslovanje',
+            'Vrednost',
+            'Finansije',
+            'Računovodstvo',
+          ]),
         })
       );
     });
@@ -357,16 +360,12 @@ describe('BrainSeedingService', () => {
 
       expect(mockPrismaService.concept.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: {
-            category: {
-              in: expect.arrayContaining([
-                'Uvod u Poslovanje',
-                'Vrednost',
-                'Prodaja',
-                'Odnosi sa Klijentima',
-              ]),
-            },
-          },
+          where: expectedCategoryMatchClause([
+            'Uvod u Poslovanje',
+            'Vrednost',
+            'Prodaja',
+            'Odnosi sa Klijentima',
+          ]),
         })
       );
     });
@@ -561,11 +560,7 @@ describe('BrainSeedingService', () => {
       expect(result.seeded).toBe(2);
       expect(mockPrismaService.concept.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: {
-            category: {
-              in: expect.arrayContaining(['Uvod u Poslovanje', 'Vrednost']),
-            },
-          },
+          where: expectedCategoryMatchClause(['Uvod u Poslovanje', 'Vrednost']),
         })
       );
     });

@@ -1956,3 +1956,92 @@ export interface TaskHubResponse {
   limit: number;
   domainSummary: DomainSummary[];
 }
+
+// ── Business Maturity Engine ──
+
+export enum MaturityStage {
+  BASIC = 'BASIC',
+  ADVANCED = 'ADVANCED',
+  AUTONOMOUS = 'AUTONOMOUS',
+}
+
+export enum StageConceptStatus {
+  PENDING = 'PENDING',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  STALE = 'STALE',
+}
+
+export interface PersonaStageProgress {
+  total: number;
+  completed: number;
+  pending: number;
+  inProgress: number;
+}
+
+export interface StageProgressSummary {
+  stage: MaturityStage;
+  totalAssignments: number;
+  completed: number;
+  inProgress: number;
+  pending: number;
+  stale: number;
+  completionPercent: number;
+  byPersona: Record<string, PersonaStageProgress>;
+  canTransition: boolean;
+}
+
+export interface StaleConcept {
+  conceptId: string;
+  conceptName: string;
+  reason: string;
+  completedAt: string;
+}
+
+export interface MaturityDashboardData {
+  currentStage: MaturityStage | null;
+  progress: StageProgressSummary | null;
+  staleConcepts: StaleConcept[];
+}
+
+export interface PrerequisiteWarning {
+  conceptName: string;
+  status: StageConceptStatus;
+  message: string;
+}
+
+export interface PrerequisiteCheckResult {
+  canProceed: boolean;
+  warnings: PrerequisiteWarning[];
+  prerequisiteOutputs: Array<{ conceptName: string; outputSummary: string }>;
+}
+
+// ── Autonomous Stage Types ──
+
+export interface AutonomousRunResult {
+  runId: string;
+  runType: string;
+  staleFound: number;
+  reExecuted: number;
+  tasksCompleted: number;
+  durationMs: number;
+  startedAt: string;
+  completedAt: string | null;
+  status: string;
+}
+
+export interface AutonomousStatusData {
+  enabled: boolean;
+  lastRun: AutonomousRunResult | null;
+  recentRuns: AutonomousRunResult[];
+}
+
+// ── Digest Types ──
+
+export interface DigestSummaryItem {
+  id: string;
+  title: string;
+  contentPreview: string;
+  content: string;
+  createdAt: string;
+}

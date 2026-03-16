@@ -1798,6 +1798,56 @@ export class AppShellComponent {
       panel.addEntry('discovery', `Otkriveno ${data.conceptIds.length} novih koncepata`, 'info');
     });
 
+    // ── Maturity Stage Init + Execution ──
+    this.wsService.onInitProgress((data) => {
+      const key = 'maturity-init';
+      const eid = this.entryMap.get(key);
+      const detail = `${data.persona} (${data.personaIndex + 1}/${data.totalPersonas})` +
+        (data.assignedSoFar > 0 ? ` — ${data.assignedSoFar} dodeljeno` : '');
+      if (eid) {
+        panel.updateEntry(eid, { detail });
+      } else {
+        const id = panel.addEntry('maturity', 'Inicijalizacija Maturity...', 'running', detail);
+        this.entryMap.set(key, id);
+      }
+    });
+
+    this.wsService.onStageInitialized((data) => {
+      const eid = this.entryMap.get('maturity-init');
+      if (eid) {
+        panel.completeEntry(eid, `${data.assignmentCount} koncepata, ${data.noteCount} zadataka`);
+        this.entryMap.delete('maturity-init');
+      } else {
+        panel.addEntry('maturity', `${data.stage} inicijalizovan`, 'completed',
+          `${data.assignmentCount} koncepata, ${data.noteCount} zadataka`);
+      }
+    });
+
+    this.wsService.onExecutionStarted(() => {
+      const id = panel.addEntry('maturity', 'Izvršavanje zadataka...', 'running');
+      this.entryMap.set('maturity-exec', id);
+    });
+
+    this.wsService.onExecutionProgress((data) => {
+      const eid = this.entryMap.get('maturity-exec');
+      if (eid) {
+        const detail = `${data.executed}/${data.total} završeno` +
+          (data.failed > 0 ? `, ${data.failed} neuspešno` : '') +
+          (data.current ? ` — ${data.current.conceptName}` : '');
+        panel.updateEntry(eid, { detail });
+      }
+    });
+
+    this.wsService.onExecutionComplete((data) => {
+      const eid = this.entryMap.get('maturity-exec');
+      if (eid) {
+        const detail = `${data.executed}/${data.total} završeno` +
+          (data.failed > 0 ? `, ${data.failed} neuspešno` : '');
+        panel.completeEntry(eid, detail);
+        this.entryMap.delete('maturity-exec');
+      }
+    });
+
     // ── Execution Active State (reconnect resilience) ──
     this.wsService.onExecutionActiveState((data) => {
       if (data.active.length > 0) {

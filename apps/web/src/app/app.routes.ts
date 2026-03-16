@@ -94,6 +94,13 @@ export const appRoutes: Route[] = [
             (m) => m.ProfileSettingsComponent
           ),
       },
+      {
+        path: 'maturity',
+        loadComponent: () =>
+          import('./features/maturity/maturity-dashboard.component').then(
+            (m) => m.MaturityDashboardComponent
+          ),
+      },
       // Platform admin routes
       {
         path: 'admin/llm-config',

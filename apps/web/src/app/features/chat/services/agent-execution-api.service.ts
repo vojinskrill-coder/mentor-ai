@@ -56,6 +56,13 @@ export class AgentExecutionApiService {
     return response.data;
   }
 
+  async retryJob(jobId: string): Promise<JobExecuteResponse> {
+    const response = await firstValueFrom(
+      this.http.post<DataResponse<JobExecuteResponse>>(`${this.baseUrl}/jobs/${jobId}/retry`, {})
+    );
+    return response.data;
+  }
+
   async getTodaysBudget(): Promise<{ spentEur: number; limitEur: number }> {
     const response = await firstValueFrom(
       this.http.get<DataResponse<{ spentEur: number; limitEur: number }>>(

@@ -340,6 +340,7 @@ export class NotesService {
   async findReusableTask(
     tenantId: string,
     conceptId: string,
+    title: string,
     options: { scoreThreshold?: number; maxAgeDays?: number } = {}
   ): Promise<{
     id: string;
@@ -358,6 +359,7 @@ export class NotesService {
       where: {
         tenantId,
         conceptId,
+        title: { equals: title.trim(), mode: 'insensitive' },
         noteType: NoteType.TASK,
         status: NoteStatus.COMPLETED,
         aiScore: { gte: threshold },
