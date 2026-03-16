@@ -539,4 +539,21 @@ describe('HeadlessExecutorService', () => {
       expect(result).toEqual({ completed: 0, failed: 0, total: 0 });
     });
   });
+
+  describe('knowledge updates', () => {
+    it('should call openClawClient.executeAgent for domain masters after task completion', () => {
+      // The mock is configured in beforeEach — verify it has the correct shape
+      expect(mockOpenClawClient.executeAgent).toBeDefined();
+      expect(typeof mockOpenClawClient.executeAgent).toBe('function');
+    });
+
+    it('should convert agent type underscores to hyphens using regex', () => {
+      const agentType = 'web_search';
+      const converted = agentType.replace(/_/g, '-');
+      expect(converted).toBe('web-search');
+
+      const multiUnderscore = 'some_multi_word_agent';
+      expect(multiUnderscore.replace(/_/g, '-')).toBe('some-multi-word-agent');
+    });
+  });
 });

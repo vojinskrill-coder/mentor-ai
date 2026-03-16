@@ -384,8 +384,9 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
       // ── Final consolidation: merge agent research into userReport ──
       // After all OpenClaw jobs, the note should reflect the COMPLETE understanding
       // of the concept — synthesis + all agent findings.
+      let completedJobs: Array<{ agentType: string; agentOutput: string | null; order: number }> | null = null;
       try {
-        const completedJobs = await this.prisma.agentJob.findMany({
+        completedJobs = await this.prisma.agentJob.findMany({
           where: { noteId: taskId, tenantId, status: 'COMPLETED' },
           select: { agentType: true, agentOutput: true, order: true },
           orderBy: { order: 'asc' },
@@ -450,8 +451,9 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku. Minimum 1000 reči.`;
       }
 
       // ── Knowledge Update: Send findings to domain masters + main ──
-      // After consolidation, update domain master agents so they accumulate knowledge
-      // Uses default sessions (no session-id) — sequential per agent type, no lock contention
+      // After consolidation, update domain master agents so they accumulate knowledge.
+      // Uses default sessions (no session-id) for persistent memory.
+      // Stagger delay prevents lock contention when parallel tasks complete simultaneously.
       try {
         const finalNote = await this.prisma.note.findUnique({
           where: { id: taskId },
@@ -459,21 +461,29 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku. Minimum 1000 reči.`;
         });
 
         if (finalNote?.userReport && finalNote.userReport.length > 200) {
-          const completedJobs2 = await this.prisma.agentJob.findMany({
+          // Reuse completedJobs from consolidation above (already fetched at line ~388)
+          // If consolidation was skipped, fetch fresh
+          const jobsForKnowledge = completedJobs ?? await this.prisma.agentJob.findMany({
             where: { noteId: taskId, tenantId, status: 'COMPLETED' },
-            select: { agentType: true },
+            select: { agentType: true, agentOutput: true, order: true },
+            orderBy: { order: 'asc' },
           });
-          const agentTypes = [...new Set(completedJobs2.map((j) => j.agentType))];
+          const agentTypes = [...new Set(jobsForKnowledge.map((j) => j.agentType))];
 
           const knowledgeSummary = finalNote.userReport.substring(0, 3000);
           const conceptName = finalNote.title || 'Unknown';
+          const companyName = cachedTenantData?.name || 'Unknown Company';
 
-          // Update domain masters (sequential — one at a time)
+          // Stagger: random 0-10s delay to spread out parallel task completions
+          await new Promise((r) => setTimeout(r, Math.random() * 10_000));
+
+          // Update domain masters (sequential — one at a time per agent type)
           for (const agentTypeStr of agentTypes) {
             try {
+              const agentId = agentTypeStr.replace(/_/g, '-');
               await this.openClawClient.executeAgent(
-                `KNOWLEDGE UPDATE za Luxury Statues Adria - Koncept: ${conceptName}. Zapamti ove nalaze za buduce istrazivanje i analizu. Ovo su FINALNI, KONSOLIDOVANI rezultati:\n\n${knowledgeSummary}`,
-                { agentId: agentTypeStr.replace('_', '-'), timeoutSeconds: 180 }
+                `KNOWLEDGE UPDATE za ${companyName} - Koncept: ${conceptName}. Zapamti ove nalaze za buduce istrazivanje i analizu. Ovo su FINALNI, KONSOLIDOVANI rezultati:\n\n${knowledgeSummary}`,
+                { agentId, timeoutSeconds: 180 }
               );
               this.logger.log({
                 message: `Headless: knowledge update sent to ${agentTypeStr} master`,
@@ -496,7 +506,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku. Minimum 1000 reči.`;
               select: { personaType: true },
             });
             await this.openClawClient.executeAgent(
-              `KNOWLEDGE UPDATE: Koncept "${conceptName}" (${assignment?.personaType ?? 'UNKNOWN'} perspektiva) zavrsen. Kljucni nalazi:\n${knowledgeSummary.substring(0, 1500)}`,
+              `KNOWLEDGE UPDATE za ${companyName}: Koncept "${conceptName}" (${assignment?.personaType ?? 'UNKNOWN'} perspektiva) zavrsen. Kljucni nalazi:\n${knowledgeSummary.substring(0, 1500)}`,
               { agentId: 'main', timeoutSeconds: 120 }
             );
             this.logger.log({

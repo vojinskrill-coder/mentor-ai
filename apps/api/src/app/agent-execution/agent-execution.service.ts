@@ -24,7 +24,10 @@ import { NotesService } from '../notes/notes.service';
 @Injectable()
 export class AgentExecutionService {
   private readonly logger = new Logger(AgentExecutionService.name);
-  private readonly MAX_CONCURRENT_PER_TENANT = 20;
+  // With STAGE_MAX_CONCURRENCY=5 and 2-4 agent jobs per task, peak is 10-20.
+  // Each job uses a unique session-id, so no OpenClaw lock contention.
+  // This limit prevents runaway execution, not lock issues.
+  private readonly MAX_CONCURRENT_PER_TENANT = 15;
 
   constructor(
     private readonly prisma: PlatformPrismaService,
