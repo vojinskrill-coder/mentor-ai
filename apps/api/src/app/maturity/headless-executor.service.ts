@@ -1,9 +1,7 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
-import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
-import type { ExecutionPlanStep, WorkflowStep } from '@mentor-ai/shared/types';
-import { createId } from '@paralleldrive/cuid2';
+// NoteSource, NoteType, NoteStatus removed — no longer used after workflow step removal
 import { WorkflowService } from '../workflow/workflow.service';
 import { AiGatewayService } from '../ai-gateway/ai-gateway.service';
 import { JobPlannerService } from '../agent-execution/job-planner.service';
@@ -82,7 +80,6 @@ export class HeadlessExecutorService {
         }),
         this.businessContext.getBusinessContext(tenantId).catch(() => ''),
       ]);
-      const stepCachedContext = { tenant: cachedTenantData, brainContext: brainCtx };
 
       // Build lean business context for LLM calls
       const bizContext = this.buildLeanBusinessContext(cachedTenantData);
@@ -96,26 +93,31 @@ export class HeadlessExecutorService {
         auto: true,
       });
 
-      // Load prerequisite concept outputs
-      let prerequisiteContext = '';
+      // Load assignment once for both prerequisite loading and cross-persona intelligence
+      let conceptAssignment: { stage: string; personaType: string } | null = null;
       if (taskNote.conceptId) {
         try {
-          const assignment = await this.prisma.stageConceptAssignment.findFirst({
+          conceptAssignment = await this.prisma.stageConceptAssignment.findFirst({
             where: { tenantId, noteId: taskId },
-            select: { stage: true },
+            select: { stage: true, personaType: true },
           });
-          if (assignment) {
-            const prereqs = await this.maturityEngine.checkPrerequisites(
-              tenantId, taskNote.conceptId, assignment.stage as any,
-            );
-            if (prereqs.prerequisiteOutputs.length > 0) {
-              prerequisiteContext = '\n\n--- REZULTATI PRETHODNO ZAVRSENIH KONCEPATA ---';
-              for (const po of prereqs.prerequisiteOutputs) {
-                prerequisiteContext += `\n### ${po.conceptName}\n${po.outputSummary}`;
-              }
-              prerequisiteContext += '\n--- KRAJ PRETHODNOG KONTEKSTA ---';
-              prerequisiteContext += '\nKORISTI ove nalaze kao TEMELJ — ne ponavljaj ih, NADOGRADI na njima.';
+        } catch { /* non-blocking — assignment may not exist for ad-hoc tasks */ }
+      }
+
+      // Load prerequisite concept outputs
+      let prerequisiteContext = '';
+      if (taskNote.conceptId && conceptAssignment) {
+        try {
+          const prereqs = await this.maturityEngine.checkPrerequisites(
+            tenantId, taskNote.conceptId, conceptAssignment.stage as any,
+          );
+          if (prereqs.prerequisiteOutputs.length > 0) {
+            prerequisiteContext = '\n\n--- REZULTATI PRETHODNO ZAVRSENIH KONCEPATA ---';
+            for (const po of prereqs.prerequisiteOutputs) {
+              prerequisiteContext += `\n### ${po.conceptName}\n${po.outputSummary}`;
             }
+            prerequisiteContext += '\n--- KRAJ PRETHODNOG KONTEKSTA ---';
+            prerequisiteContext += '\nKORISTI ove nalaze kao TEMELJ — ne ponavljaj ih, NADOGRADI na njima.';
           }
         } catch { /* non-blocking */ }
       }
@@ -162,24 +164,18 @@ export class HeadlessExecutorService {
         }
       }
 
-      // --- Cross-persona intelligence (non-blocking) ---
+      // --- Cross-persona intelligence (non-blocking, reuses conceptAssignment) ---
       let crossPersonaContext = '';
-      if (taskNote.conceptId) {
+      if (taskNote.conceptId && conceptAssignment) {
         try {
-          const assignment = await this.prisma.stageConceptAssignment.findFirst({
-            where: { tenantId, noteId: taskId },
-            select: { personaType: true, stage: true },
+          const crossPersona = await this.crossPersonaIntelligence.getRelevantOutputs({
+            tenantId,
+            conceptId: taskNote.conceptId,
+            currentPersonaType: conceptAssignment.personaType,
+            stage: conceptAssignment.stage,
           });
-          if (assignment) {
-            const crossPersona = await this.crossPersonaIntelligence.getRelevantOutputs({
-              tenantId,
-              conceptId: taskNote.conceptId,
-              currentPersonaType: assignment.personaType,
-              stage: assignment.stage,
-            });
-            if (crossPersona.outputs.length > 0) {
-              crossPersonaContext = crossPersona.promptSection;
-            }
+          if (crossPersona.outputs.length > 0) {
+            crossPersonaContext = crossPersona.promptSection;
           }
         } catch { /* non-blocking enrichment */ }
       }
@@ -199,7 +195,7 @@ PRAVILA ZA FINALNI DOKUMENT:
 5. Dodaj sekciju "Sledeći koraci" sa konkretnim akcijama
 6. NIKADA ne piši "u prethodnim koracima smo..." — PRIKAŽI gotov rezultat
 7. Ako postoji kontekst iz prethodno završenih koncepata, NADOGRADI na njima — ne ponavljaj
-8. Minimum 800 reči — ovo je sveobuhvatan dokument
+8. Minimum 1000 reči — ovo je sveobuhvatan dokument
 9. Odgovaraj ISKLJUČIVO na srpskom jeziku
 10. Format: profesionalan Markdown (## zaglavlja, tabele, **bold** za ključne vrednosti, > za izvore)`;
 
@@ -219,6 +215,15 @@ PRAVILA ZA FINALNI DOKUMENT:
           fullContent += chunk;
         }
       );
+
+      this.wsHolder.emitToTenant(tenantId, 'task:ai-step-complete', {
+        taskId,
+        conversationId: convId,
+        stepIndex: 0,
+        totalSteps: 1,
+        stepTitle: 'Analiza i sinteza sa prethodnim znanjem',
+        auto: true,
+      });
 
       // Save synthesis result
       await this.prisma.note.update({
