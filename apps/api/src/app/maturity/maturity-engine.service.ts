@@ -62,14 +62,13 @@ export class MaturityEngineService {
     private readonly crossPersonaIntelligence: CrossPersonaIntelligenceService,
     private readonly configService: ConfigService,
   ) {
-    // Run up to 3 independent tasks in parallel within each wave.
-    // Agent jobs within each task run sequentially (executeJobsInOrder),
-    // so peak concurrent OpenClaw processes = STAGE_MAX_CONCURRENCY.
-    // OpenClaw gateway maxConcurrent=5 with persistent sessions means
-    // max 5 agents can write to session files simultaneously.
-    // Higher values cause session file lock contention (10s timeout → kill).
+    // Run up to 5 independent tasks in parallel within each wave.
+    // Each agent job uses a unique session-id (work-{jobId}-{agent}),
+    // so no file lock contention even with many parallel OpenClaw calls.
+    // After each concept completes, knowledge updates go to domain masters
+    // sequentially (one at a time per agent type, default session, no locks).
     this.stageConcurrency = parseInt(
-      this.configService.get<string>('STAGE_MAX_CONCURRENCY') ?? '3', 10,
+      this.configService.get<string>('STAGE_MAX_CONCURRENCY') ?? '5', 10,
     );
   }
 

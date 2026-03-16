@@ -6,6 +6,7 @@ import { WorkflowService } from '../workflow/workflow.service';
 import { AiGatewayService } from '../ai-gateway/ai-gateway.service';
 import { JobPlannerService } from '../agent-execution/job-planner.service';
 import { AgentExecutionService } from '../agent-execution/agent-execution.service';
+import { OpenClawClientService } from '../agent-execution/openclaw-client.service';
 import { BusinessContextService } from '../knowledge/services/business-context.service';
 import { MaturityEngineService } from './maturity-engine.service';
 import { WsServerHolder } from './ws-server-holder.service';
@@ -35,6 +36,7 @@ export class HeadlessExecutorService {
     private readonly maturityEngine: MaturityEngineService,
     private readonly wsHolder: WsServerHolder,
     private readonly crossPersonaIntelligence: CrossPersonaIntelligenceService,
+    private readonly openClawClient: OpenClawClientService,
     private readonly configService: ConfigService,
   ) {
     // Align job completion timeout with OpenClaw execution time + retry budget
@@ -444,6 +446,77 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku. Minimum 1000 reči.`;
           message: 'Headless: consolidation failed (non-blocking, scored report preserved)',
           taskId,
           error: consolidationErr instanceof Error ? consolidationErr.message : 'Unknown',
+        });
+      }
+
+      // ── Knowledge Update: Send findings to domain masters + main ──
+      // After consolidation, update domain master agents so they accumulate knowledge
+      // Uses default sessions (no session-id) — sequential per agent type, no lock contention
+      try {
+        const finalNote = await this.prisma.note.findUnique({
+          where: { id: taskId },
+          select: { userReport: true, title: true, conceptId: true },
+        });
+
+        if (finalNote?.userReport && finalNote.userReport.length > 200) {
+          const completedJobs2 = await this.prisma.agentJob.findMany({
+            where: { noteId: taskId, tenantId, status: 'COMPLETED' },
+            select: { agentType: true },
+          });
+          const agentTypes = [...new Set(completedJobs2.map((j) => j.agentType))];
+
+          const knowledgeSummary = finalNote.userReport.substring(0, 3000);
+          const conceptName = finalNote.title || 'Unknown';
+
+          // Update domain masters (sequential — one at a time)
+          for (const agentTypeStr of agentTypes) {
+            try {
+              await this.openClawClient.executeAgent(
+                `KNOWLEDGE UPDATE za Luxury Statues Adria - Koncept: ${conceptName}. Zapamti ove nalaze za buduce istrazivanje i analizu. Ovo su FINALNI, KONSOLIDOVANI rezultati:\n\n${knowledgeSummary}`,
+                { agentId: agentTypeStr.replace('_', '-'), timeoutSeconds: 180 }
+              );
+              this.logger.log({
+                message: `Headless: knowledge update sent to ${agentTypeStr} master`,
+                taskId,
+                conceptName,
+              });
+            } catch (kuErr) {
+              this.logger.warn({
+                message: `Headless: knowledge update to ${agentTypeStr} failed (non-blocking)`,
+                taskId,
+                error: kuErr instanceof Error ? kuErr.message : 'Unknown',
+              });
+            }
+          }
+
+          // Update main agent (business brain)
+          try {
+            const assignment = await this.prisma.stageConceptAssignment.findFirst({
+              where: { noteId: taskId, tenantId },
+              select: { personaType: true },
+            });
+            await this.openClawClient.executeAgent(
+              `KNOWLEDGE UPDATE: Koncept "${conceptName}" (${assignment?.personaType ?? 'UNKNOWN'} perspektiva) zavrsen. Kljucni nalazi:\n${knowledgeSummary.substring(0, 1500)}`,
+              { agentId: 'main', timeoutSeconds: 120 }
+            );
+            this.logger.log({
+              message: 'Headless: knowledge update sent to main (business brain)',
+              taskId,
+              conceptName,
+            });
+          } catch (mainErr) {
+            this.logger.warn({
+              message: 'Headless: main knowledge update failed (non-blocking)',
+              taskId,
+              error: mainErr instanceof Error ? mainErr.message : 'Unknown',
+            });
+          }
+        }
+      } catch (knowledgeErr) {
+        this.logger.warn({
+          message: 'Headless: knowledge updates failed (non-blocking)',
+          taskId,
+          error: knowledgeErr instanceof Error ? knowledgeErr.message : 'Unknown',
         });
       }
 

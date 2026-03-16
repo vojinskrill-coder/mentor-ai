@@ -68,6 +68,7 @@ export class OpenClawClientService {
     message: string,
     options?: {
       agentId?: string;
+      sessionId?: string;
       timeoutSeconds?: number;
       onText?: (text: string) => void;
       onTool?: (tool: string, status: 'start' | 'end', query?: string) => void;
@@ -75,6 +76,7 @@ export class OpenClawClientService {
     }
   ): Promise<OpenClawResult> {
     const agentId = options?.agentId ?? 'main';
+    const sessionId = options?.sessionId;
     const timeout = options?.timeoutSeconds ?? this.timeoutSeconds;
     const hasCallbacks = !!(options?.onText || options?.onTool || options?.onStatus);
 
@@ -85,7 +87,7 @@ export class OpenClawClientService {
           onText: options?.onText,
           onTool: options?.onTool,
           onStatus: options?.onStatus,
-        });
+        }, sessionId);
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Unknown error';
         this.logger.warn({
@@ -97,7 +99,7 @@ export class OpenClawClientService {
       }
     }
 
-    return this.executeAgentBlocking(message, agentId, timeout);
+    return this.executeAgentBlocking(message, agentId, timeout, sessionId);
   }
 
   /**
@@ -108,7 +110,8 @@ export class OpenClawClientService {
     message: string,
     agentId: string,
     timeout: number,
-    callbacks: OpenClawStreamCallbacks
+    callbacks: OpenClawStreamCallbacks,
+    sessionId?: string
   ): Promise<OpenClawResult> {
     const streamUrl = this.getStreamUrl();
 
@@ -116,6 +119,7 @@ export class OpenClawClientService {
       message: 'SSE streaming to OpenClaw relay',
       url: streamUrl,
       agentId,
+      sessionId: sessionId || 'default',
       msgLength: message.length,
     });
 
@@ -123,6 +127,9 @@ export class OpenClawClientService {
     const timer = setTimeout(() => controller.abort(), (timeout + 60) * 1000);
 
     try {
+      const requestBody: Record<string, unknown> = { message, agentId, timeoutSeconds: timeout };
+      if (sessionId) requestBody.sessionId = sessionId;
+
       const response = await undiciFetch(streamUrl, {
         method: 'POST',
         headers: {
@@ -130,7 +137,7 @@ export class OpenClawClientService {
           'Authorization': `Bearer ${this.authToken}`,
           'Accept': 'text/event-stream',
         },
-        body: JSON.stringify({ message, agentId, timeoutSeconds: timeout }),
+        body: JSON.stringify(requestBody),
         signal: controller.signal,
         dispatcher: this.dispatcher,
       });
@@ -290,17 +297,22 @@ export class OpenClawClientService {
   private async executeAgentBlocking(
     message: string,
     agentId: string,
-    timeout: number
+    timeout: number,
+    sessionId?: string
   ): Promise<OpenClawResult> {
     this.logger.log({
       message: 'Blocking request to OpenClaw relay',
       agentId,
+      sessionId: sessionId || 'default',
       msgLength: message.length,
       timeoutSeconds: timeout,
     });
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), (timeout + 60) * 1000);
+
+    const requestBody: Record<string, unknown> = { message, agentId, timeoutSeconds: timeout };
+    if (sessionId) requestBody.sessionId = sessionId;
 
     try {
       const response = await undiciFetch(this.relayUrl, {
@@ -309,7 +321,7 @@ export class OpenClawClientService {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.authToken}`,
         },
-        body: JSON.stringify({ message, agentId, timeoutSeconds: timeout }),
+        body: JSON.stringify(requestBody),
         signal: controller.signal,
         dispatcher: this.dispatcher,
       });

@@ -24,7 +24,7 @@ import { NotesService } from '../notes/notes.service';
 @Injectable()
 export class AgentExecutionService {
   private readonly logger = new Logger(AgentExecutionService.name);
-  private readonly MAX_CONCURRENT_PER_TENANT = 5;
+  private readonly MAX_CONCURRENT_PER_TENANT = 20;
 
   constructor(
     private readonly prisma: PlatformPrismaService,
@@ -229,8 +229,11 @@ export class AgentExecutionService {
       });
       heartbeat = this.startHeartbeat(executionId, null, agentType, tenantId, Date.now());
 
+      // Use unique session-id for parallel execution safety
+      const workSessionId = `work-${executionId}-${openClawAgentId}`;
       const result = await this.openClawClient.executeAgent(formattedPrompt, {
         agentId: openClawAgentId,
+        sessionId: workSessionId,
         onText: (text) => {
           this.emitAgentEvent(tenantId, 'agent:text-chunk', {
             executionId, jobId: null, text,
@@ -711,8 +714,11 @@ export class AgentExecutionService {
       });
       heartbeat = this.startHeartbeat(executionId, jobId, agentType, tenantId, Date.now());
 
+      // Use unique session-id per job for parallel execution (no file lock contention)
+      const workSessionId = `work-${jobId}-${openClawAgentId}`;
       const result = await this.openClawClient.executeAgent(formattedPrompt, {
         agentId: openClawAgentId,
+        sessionId: workSessionId,
         onText: (text) => {
           this.emitAgentEvent(tenantId, 'agent:text-chunk', {
             executionId, jobId, text,

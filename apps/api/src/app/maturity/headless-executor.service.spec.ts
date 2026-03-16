@@ -56,6 +56,11 @@ describe('HeadlessExecutorService', () => {
     getRelevantOutputs: jest.fn(),
   };
 
+  const mockOpenClawClient = {
+    executeAgent: jest.fn().mockResolvedValue({ success: true, output: 'acknowledged', durationMs: 1000 }),
+    isConfigured: jest.fn().mockReturnValue(true),
+  };
+
   const TENANT_ID = 'tnt_test';
   const USER_ID = 'usr_test';
   const TASK_ID = 'note_task_1';
@@ -73,6 +78,7 @@ describe('HeadlessExecutorService', () => {
       mockMaturityEngine as any,
       mockWsHolder as any,
       mockCrossPersonaIntelligence as any,
+      mockOpenClawClient as any,
       mockConfigService as any,
     );
   });
