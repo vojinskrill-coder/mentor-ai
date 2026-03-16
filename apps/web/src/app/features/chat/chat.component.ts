@@ -1744,7 +1744,7 @@ interface WorkflowStatusEntry {
       <!-- Left Sidebar -->
       <aside class="sidebar" [class.collapsed]="sidebarCollapsed$()">
         <div class="sidebar-header">
-          <h1>Mentor AI</h1>
+          <h1>Prikaz stabla</h1>
           <button class="sidebar-toggle" (click)="toggleSidebar()">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -1781,7 +1781,7 @@ interface WorkflowStatusEntry {
                 d="M12 4v16m8-8H4"
               />
             </svg>
-            New Conversation
+            Novi razgovor
           </button>
         </div>
 
@@ -1884,7 +1884,7 @@ interface WorkflowStatusEntry {
                 </svg>
                 <h2>{{ folderName$() }}</h2>
               } @else {
-                <h2>{{ activeConversation$()?.title || 'New Conversation' }}</h2>
+                <h2>{{ activeConversation$()?.title || 'Novi razgovor' }}</h2>
                 @if (currentPersonaType$()) {
                   <app-persona-badge [personaType]="currentPersonaType$()" />
                 }
