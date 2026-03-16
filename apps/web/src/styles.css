@@ -751,7 +751,7 @@ input, textarea, select {
    LAPTOP SCREENS (up to 1440px) — reduce all by 4px
    Keeps large screen values untouched.
    ============================================ */
-@media (max-width: 1440px) {
+@media (max-width: 1920px) {
   /* Exec panel content: 16px → 12px */
   .exec-panel-body *:not(h1):not(h2):not(h3):not(svg):not(path):not(canvas) {
     font-size: 12px !important;
@@ -796,7 +796,7 @@ input, textarea, select {
 }
 
 /* Component overrides for laptop screens */
-@media (max-width: 1440px) {
+@media (max-width: 1920px) {
   /* Tree view: 16px → 12px */
   .content-inner .tree-node,
   .content-inner .conv-title,
@@ -835,7 +835,7 @@ input, textarea, select {
 /* ============================================
    SMALL LAPTOPS (up to 1280px) — further reduce
    ============================================ */
-@media (max-width: 1280px) {
+@media (max-width: 1440px) {
   .exec-panel-body *:not(h1):not(h2):not(h3):not(svg):not(path):not(canvas) {
     font-size: 11px !important;
   }
