@@ -379,6 +379,74 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
         });
       }
 
+      // ── Final consolidation: merge agent research into userReport ──
+      // After all OpenClaw jobs, the note should reflect the COMPLETE understanding
+      // of the concept — synthesis + all agent findings.
+      try {
+        const completedJobs = await this.prisma.agentJob.findMany({
+          where: { noteId: taskId, tenantId, status: 'COMPLETED' },
+          select: { agentType: true, agentOutput: true, order: true },
+          orderBy: { order: 'asc' },
+        });
+
+        if (completedJobs.length > 0 && completedJobs.some((j) => j.agentOutput)) {
+          const currentNote = await this.prisma.note.findUnique({
+            where: { id: taskId },
+            select: { userReport: true, title: true },
+          });
+
+          const agentFindings = completedJobs
+            .filter((j) => j.agentOutput)
+            .map((j) => `### ${j.agentType.toUpperCase()} istraživanje\n${j.agentOutput}`)
+            .join('\n\n');
+
+          const consolidationPrompt = `Ti si senior poslovni stručnjak. Imaš dva izvora informacija o jednom konceptu:
+
+1. POČETNA ANALIZA (naša interna):
+${(currentNote?.userReport ?? '').substring(0, 3000)}
+
+2. REZULTATI ISTRAŽIVANJA AGENATA (web istraživanje, analiza tržišta, itd.):
+${agentFindings.substring(0, 5000)}
+
+ZADATAK: Napravi FINALNI, KONSOLIDOVANI dokument za koncept "${currentNote?.title ?? taskNote.title}" koji:
+- Integriše SVE nalaze iz oba izvora u jedinstven, koherentan dokument
+- Daje prednost KONKRETNIM podacima iz agentskog istraživanja (sa izvorima) nad generičkim analizama
+- Zadržava strukturu: ## zaglavlja, tabele, **bold** za ključne vrednosti
+- Uključuje sekciju "Izvori" sa svim URL-ovima iz istraživanja
+- NE ponavlja iste informacije iz oba izvora — konsoliduj ih
+- Ovo je FINALNO stanje znanja o ovom konceptu za kompaniju
+
+Odgovaraj ISKLJUČIVO na srpskom jeziku. Minimum 1000 reči.`;
+
+          let consolidated = '';
+          await this.aiGateway.streamCompletionWithContext(
+            [{ role: 'user', content: consolidationPrompt }],
+            { tenantId, userId, conversationId: convId, businessContext: bizContext, useFallback: true },
+            (chunk: string) => { consolidated += chunk; },
+          );
+
+          if (consolidated.length > 500) {
+            await this.prisma.note.update({
+              where: { id: taskId },
+              data: { userReport: consolidated },
+            });
+
+            this.logger.log({
+              message: 'Headless: consolidated agent findings into userReport',
+              taskId,
+              agentJobCount: completedJobs.length,
+              consolidatedLength: consolidated.length,
+            });
+          }
+        }
+      } catch (consolidationErr) {
+        this.logger.warn({
+          message: 'Headless: consolidation failed (non-blocking, scored report preserved)',
+          taskId,
+          error: consolidationErr instanceof Error ? consolidationErr.message : 'Unknown',
+        });
+      }
+
       // Maturity update (non-blocking)
       try {
         if (taskNote.conceptId) {
