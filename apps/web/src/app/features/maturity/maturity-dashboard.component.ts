@@ -68,6 +68,8 @@ const STAGE_ORDER: MaturityStage[] = [
     `
       :host {
         display: block;
+        height: 100%;
+        overflow-y: auto;
       }
 
       .main {

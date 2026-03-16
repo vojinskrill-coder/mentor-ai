@@ -14,6 +14,8 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
     `
       :host {
         display: block;
+        height: 100%;
+        overflow-y: auto;
       }
 
       /* Main — fluid, fills available space */

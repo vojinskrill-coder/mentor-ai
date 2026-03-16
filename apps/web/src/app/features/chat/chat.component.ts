@@ -89,12 +89,9 @@ interface WorkflowStatusEntry {
     `
       /* All styles inline - no Tailwind dependency */
       :host {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
+        display: block;
+        width: 100%;
         height: 100%;
-        min-height: 0;
-        max-height: 100%;
         overflow: hidden;
       }
       * {
@@ -104,10 +101,8 @@ interface WorkflowStatusEntry {
       }
       .layout {
         display: flex;
-        flex: 1;
+        width: 100%;
         height: 100%;
-        min-height: 0;
-        max-height: 100%;
         overflow: hidden;
         background: #0d0d0d;
         color: #fafafa;
@@ -263,10 +258,11 @@ interface WorkflowStatusEntry {
       }
       .chat-main {
         flex: 1;
-        min-width: 480px;
+        min-width: 0;
         display: flex;
         flex-direction: column;
         background: #0d0d0d;
+        overflow: hidden;
       }
       .chat-header {
         height: 48px;
@@ -442,8 +438,7 @@ interface WorkflowStatusEntry {
         scroll-behavior: smooth;
       }
       .messages-container {
-        max-width: 100%;
-        padding: 0 16px;
+        width: 100%;
       }
       .scroll-to-bottom {
         position: absolute;

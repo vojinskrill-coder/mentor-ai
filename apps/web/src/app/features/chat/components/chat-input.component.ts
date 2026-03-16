@@ -28,8 +28,7 @@ export interface ChatMessagePayload {
         background: #0d0d0d;
       }
       .input-inner {
-        max-width: 100%;
-        padding: 0 16px;
+        width: 100%;
       }
       .file-chips {
         display: flex;
