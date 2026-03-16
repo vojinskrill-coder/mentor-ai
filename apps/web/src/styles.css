@@ -99,14 +99,21 @@
   --spacing-24: 192px;
 
   /* ============================================
-     Layout Dimensions
+     Layout Dimensions — Responsive
      ============================================ */
-  --layout-sidebar-width: 280px;
-  --layout-app-sidebar-width: 220px;
-  --layout-right-panel-width: 360px;
-  --layout-header-height: 48px;
-  --layout-chat-min-width: 480px;
-  --layout-content-max-width: 1440px;
+  --layout-sidebar-width: clamp(240px, 17vw, 320px);
+  --layout-app-sidebar-width: clamp(200px, 14vw, 280px);
+  --layout-right-panel-width: clamp(320px, 22vw, 440px);
+  --layout-header-height: clamp(44px, 3.2vw, 56px);
+  --layout-chat-min-width: 320px;
+  --layout-content-max-width: none;
+
+  /* ============================================
+     Responsive Icon Size
+     ============================================ */
+  --icon-sm: clamp(14px, 0.95vw, 18px);
+  --icon-md: clamp(16px, 1.1vw, 22px);
+  --icon-lg: clamp(20px, 1.4vw, 28px);
 
   /* ============================================
      Typography - Font Families
@@ -117,15 +124,16 @@
     'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
 
   /* ============================================
-     Typography - Type Scale
+     Typography - Responsive Type Scale
+     Uses clamp() for smooth scaling across screen sizes
      ============================================ */
-  --text-display: 32px;
-  --text-h1: 24px;
-  --text-h2: 20px;
-  --text-h3: 16px;
-  --text-body: 15px;
-  --text-small: 13px;
-  --text-tiny: 11px;
+  --text-display: clamp(28px, 2vw, 38px);
+  --text-h1: clamp(20px, 1.5vw, 28px);
+  --text-h2: clamp(17px, 1.2vw, 23px);
+  --text-h3: clamp(14px, 1vw, 18px);
+  --text-body: clamp(13px, 0.9vw, 17px);
+  --text-small: clamp(12px, 0.78vw, 15px);
+  --text-tiny: clamp(10px, 0.66vw, 13px);
 
   /* Line Heights */
   --leading-display: 1.2;
@@ -656,9 +664,63 @@ body {
 }
 
 /* ============================================
-   Responsive scaling for large screens
-   Using font-size scaling only — zoom breaks viewport units (100vh)
+   Global Responsive Overrides
+   These penetrate Angular encapsulation to scale ALL components.
+   Components can still override these with their own scoped styles.
    ============================================ */
+
+/* Base font size scales with viewport */
+html {
+  font-size: clamp(14px, 0.95vw, 18px);
+}
+
+/* Headers across all components */
+h1, .page-title, .stage-title { font-size: var(--text-h1) !important; }
+h2, .section-title { font-size: var(--text-h2) !important; }
+h3, .subsection-title { font-size: var(--text-h3) !important; }
+
+/* Body text, labels, descriptions across all components */
+p, li, td, th, label, .description, .subtitle, .page-desc {
+  font-size: var(--text-body);
+}
+small, .text-small, .label, .badge, .tag, .chip, .stat-label, .meta {
+  font-size: var(--text-small);
+}
+.text-tiny, .timestamp, .hint {
+  font-size: var(--text-tiny);
+}
+
+/* Buttons across all components */
+button, .btn, .btn-primary, .btn-secondary, [class*="btn-"] {
+  font-size: var(--text-small);
+  padding: clamp(6px, 0.5vw, 10px) clamp(12px, 1vw, 20px);
+}
+
+/* Icons across all components */
+svg:not(.graph-svg) {
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+
+/* Input/textarea across all components */
+input, textarea, select {
+  font-size: var(--text-body);
+  padding: clamp(8px, 0.6vw, 12px) clamp(10px, 0.8vw, 16px);
+}
+
+/* Tables across all components */
+table { font-size: var(--text-small); }
+th { font-size: var(--text-small); }
+
+/* Cards, panels — responsive padding */
+.card, .panel, .section, .init-card, .stage-card, .persona-card {
+  padding: clamp(16px, 1.2vw, 24px);
+}
+
+/* Progress bars, stat numbers */
+.stat-value, .progress-label, .score {
+  font-size: var(--text-h3);
+}
 
 /* ============================================
    Light mode support (optional)

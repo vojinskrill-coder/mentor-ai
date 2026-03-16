@@ -26,7 +26,6 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .shell {
         display: flex;
         height: 100vh;
-        max-height: 100vh;
         overflow: hidden;
         background: var(--color-bg-base, #0d0d0d);
         color: var(--color-text-primary, #fafafa);
