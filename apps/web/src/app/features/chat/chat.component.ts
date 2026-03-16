@@ -89,8 +89,11 @@ interface WorkflowStatusEntry {
     `
       /* All styles inline - no Tailwind dependency */
       :host {
-        display: block;
+        display: flex;
+        flex-direction: column;
         height: 100%;
+        max-height: 100%;
+        overflow: hidden;
       }
       * {
         margin: 0;
@@ -100,6 +103,8 @@ interface WorkflowStatusEntry {
       .layout {
         display: flex;
         height: 100%;
+        max-height: 100%;
+        overflow: hidden;
         background: #0d0d0d;
         color: #fafafa;
         font-family: 'Inter', system-ui, sans-serif;
@@ -433,8 +438,8 @@ interface WorkflowStatusEntry {
         scroll-behavior: smooth;
       }
       .messages-container {
-        max-width: min(90%, 960px);
-        margin: 0 auto;
+        max-width: 100%;
+        padding: 0 16px;
       }
       .scroll-to-bottom {
         position: absolute;
@@ -1344,9 +1349,8 @@ interface WorkflowStatusEntry {
         }
       }
       .skeleton-messages {
-        max-width: min(90%, 960px);
-        margin: 0 auto;
-        padding: 24px;
+        max-width: 100%;
+        padding: 24px 16px;
       }
       .skeleton-msg {
         margin-bottom: 20px;
@@ -1380,7 +1384,7 @@ interface WorkflowStatusEntry {
         gap: 8px;
         padding: 8px 14px;
         margin: 8px 0;
-        max-width: min(90%, 960px);
+        max-width: 100%;
         background: #1a1a1a;
         border-left: 3px solid #3b82f6;
         border-radius: 0 6px 6px 0;

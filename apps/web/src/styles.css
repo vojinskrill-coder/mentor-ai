@@ -624,6 +624,14 @@
   }
 }
 
+/* Prevent page-level scroll — app is fully contained in viewport */
+html, body {
+  height: 100%;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
 /* ============================================
    Responsive scaling for large screens
    Uses CSS zoom for true proportional scaling of ALL elements (px, em, rem, everything)

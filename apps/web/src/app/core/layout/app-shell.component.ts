@@ -34,6 +34,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .shell {
         display: flex;
         height: 100vh;
+        max-height: 100vh;
+        overflow: hidden;
         background: var(--color-bg-base, #0d0d0d);
         color: var(--color-text-primary, #fafafa);
         font-family: 'Inter', system-ui, sans-serif;
@@ -299,6 +301,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .content-inner {
         flex: 1;
         min-width: 0;
+        min-height: 0; /* critical for flex child to respect parent height */
         overflow-y: auto;
         overflow-x: hidden;
         display: flex;
