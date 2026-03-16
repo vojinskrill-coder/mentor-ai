@@ -25,6 +25,6 @@ import { AgentExecutionEventBus } from './agent-execution-event-bus.service';
     BudgetService,
     AgentExecutionEventBus,
   ],
-  exports: [AgentExecutionService, JobPlannerService, AgentExecutionEventBus],
+  exports: [AgentExecutionService, JobPlannerService, AgentExecutionEventBus, OpenClawClientService],
 })
 export class AgentExecutionModule {}
