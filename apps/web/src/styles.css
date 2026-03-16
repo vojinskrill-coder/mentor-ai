@@ -624,12 +624,16 @@
   }
 }
 
-/* Prevent page-level scroll — app is fully contained in viewport */
+/* Base reset */
 html, body {
   height: 100%;
-  overflow: hidden;
   margin: 0;
   padding: 0;
+}
+
+/* Standalone pages (login, onboarding) — full page, can scroll */
+body {
+  overflow: auto;
 }
 
 /* ============================================
@@ -661,27 +665,8 @@ html, body {
 
 /* ============================================
    Responsive scaling for large screens
-   Uses CSS zoom for true proportional scaling of ALL elements (px, em, rem, everything)
-   This is the cleanest way to scale an entire app on large screens.
+   Using font-size scaling only — zoom breaks viewport units (100vh)
    ============================================ */
-@media (min-width: 1800px) {
-  html { zoom: 1.05; }
-}
-@media (min-width: 2000px) {
-  html { zoom: 1.1; }
-}
-@media (min-width: 2400px) {
-  html { zoom: 1.2; }
-}
-@media (min-width: 2800px) {
-  html { zoom: 1.3; }
-}
-@media (min-width: 3400px) {
-  html { zoom: 1.4; }
-}
-@media (min-width: 3840px) {
-  html { zoom: 1.5; }
-}
 
 /* ============================================
    Light mode support (optional)
