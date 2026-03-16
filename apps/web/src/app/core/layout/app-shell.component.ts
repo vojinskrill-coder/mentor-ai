@@ -302,14 +302,19 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         flex: 1;
         min-width: 0;
         min-height: 0;
-        overflow: hidden; /* ALL pages handle their own scroll internally */
+        overflow: hidden;
         display: flex;
         flex-direction: column;
       }
-      /* Route components fill the panel */
-      .content-inner > * {
+      /* router-outlet is invisible — collapse it */
+      .content-inner > router-outlet {
+        display: none;
+      }
+      /* Route component (sibling after router-outlet) fills the panel */
+      .content-inner > router-outlet + * {
         flex: 1;
         min-height: 0;
+        width: 100%;
         overflow-y: auto;
       }
 
@@ -1009,9 +1014,9 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         animation: tl-pulse 2s ease-in-out infinite;
       }
 
-      /* Chat/task-hub manage scroll internally — prevent double scroll */
-      .content-inner:has(app-chat) > *,
-      .content-inner:has(app-task-hub) > * {
+      /* Chat/task-hub manage scroll internally — override outer overflow-y:auto */
+      .content-inner > router-outlet + app-chat,
+      .content-inner > router-outlet + app-task-hub {
         overflow: hidden;
       }
 
