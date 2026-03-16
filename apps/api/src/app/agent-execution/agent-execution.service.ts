@@ -183,6 +183,13 @@ export class AgentExecutionService {
     let chunkIndex = 0;
 
     try {
+      // Emit concept activity for graph visualization
+      if (note.conceptId) {
+        this.emitAgentEvent(tenantId, 'agent:concept-activity', {
+          agentType, conceptId: note.conceptId, status: 'started',
+        });
+      }
+
       // Step 1: Format task into agent-specific instruction
       await this.updateStatus(executionId, 'FORMATTING');
       this.emitAgentEvent(tenantId, 'agent:status-change', {
@@ -312,8 +319,22 @@ export class AgentExecutionService {
         durationMs: result.durationMs,
         actualCostEur: actualCost,
       });
+
+      // Stop concept activity for graph visualization
+      if (note.conceptId) {
+        this.emitAgentEvent(tenantId, 'agent:concept-activity', {
+          agentType, conceptId: note.conceptId, status: 'stopped',
+        });
+      }
     } catch (err) {
       if (heartbeat) clearInterval(heartbeat);
+
+      // Stop concept activity on failure too
+      if (note.conceptId) {
+        this.emitAgentEvent(tenantId, 'agent:concept-activity', {
+          agentType, conceptId: note.conceptId, status: 'stopped',
+        });
+      }
 
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       this.logger.error({
@@ -640,6 +661,13 @@ export class AgentExecutionService {
     let chunkIndex = 0;
 
     try {
+      // Emit concept activity for graph visualization
+      if (note.conceptId) {
+        this.emitAgentEvent(tenantId, 'agent:concept-activity', {
+          agentType, conceptId: note.conceptId, status: 'started',
+        });
+      }
+
       // Step 1: Build enriched instruction with dependency context
       await this.updateStatus(executionId, 'FORMATTING');
       this.emitAgentEvent(tenantId, 'agent:status-change', {
@@ -783,8 +811,20 @@ export class AgentExecutionService {
         durationMs: result.durationMs,
         actualCostEur: actualCost,
       });
+
+      if (note.conceptId) {
+        this.emitAgentEvent(tenantId, 'agent:concept-activity', {
+          agentType, conceptId: note.conceptId, status: 'stopped',
+        });
+      }
     } catch (err) {
       if (heartbeat) clearInterval(heartbeat);
+
+      if (note.conceptId) {
+        this.emitAgentEvent(tenantId, 'agent:concept-activity', {
+          agentType, conceptId: note.conceptId, status: 'stopped',
+        });
+      }
 
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       this.logger.error({

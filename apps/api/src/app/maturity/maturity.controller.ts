@@ -120,6 +120,26 @@ export class MaturityController {
   }
 
   /**
+   * GET /api/v1/maturity/graph — graph visualization data (active concepts + edges + agents)
+   */
+  @Get('graph')
+  async getGraphData(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query('stage') stageParam?: string
+  ) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: user.tenantId },
+      select: { maturityStage: true },
+    });
+
+    const stage = stageParam || tenant?.maturityStage || 'BASIC';
+    this.validateStage(stage);
+
+    const data = await this.engine.getGraphData(user.tenantId, stage as MaturityStage);
+    return { data };
+  }
+
+  /**
    * POST /api/v1/maturity/stage/:stage/initialize — initialize a stage
    */
   @Post('stage/:stage/initialize')

@@ -307,6 +307,122 @@ export class MaturityEngineService {
    * Called when a concept task completes. Updates assignment status.
    * Checks if ALL agent jobs for the task are done before marking COMPLETED.
    */
+  // ─── Graph Data ───
+
+  /**
+   * Returns graph visualization data: only concepts with active tasks,
+   * edges between them, and currently active agents.
+   */
+  async getGraphData(tenantId: string, stage: MaturityStage): Promise<{
+    nodes: Array<{
+      id: string; name: string; category: string; status: string;
+      personaType: string; aiScore: number | null; noteId: string;
+    }>;
+    edges: Array<{ source: string; target: string; type: string }>;
+    activeAgents: Array<{
+      agentType: string; conceptId: string; personaType: string; status: string;
+    }>;
+  }> {
+    // Nodes: only concepts with assigned notes (active tasks)
+    const assignments = await this.prisma.stageConceptAssignment.findMany({
+      where: { tenantId, stage, noteId: { not: null } },
+      select: {
+        conceptId: true, status: true, personaType: true, noteId: true,
+      },
+    });
+
+    if (assignments.length === 0) {
+      return { nodes: [], edges: [], activeAgents: [] };
+    }
+
+    const conceptIds = assignments.map((a) => a.conceptId);
+
+    // Batch load concept info
+    const concepts = await this.prisma.concept.findMany({
+      where: { id: { in: conceptIds } },
+      select: { id: true, name: true, category: true },
+    });
+    const conceptMap = new Map(concepts.map((c) => [c.id, c]));
+
+    // Batch load note scores
+    const noteIds = assignments.filter((a) => a.noteId).map((a) => a.noteId!);
+    const notes = noteIds.length > 0
+      ? await this.prisma.note.findMany({
+          where: { id: { in: noteIds } },
+          select: { id: true, aiScore: true },
+        })
+      : [];
+    const noteScoreMap = new Map(notes.map((n) => [n.id, n.aiScore]));
+
+    // Build nodes
+    const nodes = assignments.map((a) => {
+      const concept = conceptMap.get(a.conceptId);
+      return {
+        id: a.conceptId,
+        name: concept?.name ?? a.conceptId,
+        category: concept?.category ?? '',
+        status: a.status,
+        personaType: a.personaType,
+        aiScore: a.noteId ? (noteScoreMap.get(a.noteId) ?? null) : null,
+        noteId: a.noteId!,
+      };
+    });
+
+    // Edges: only between concepts where BOTH are in the active set
+    const conceptIdSet = new Set(conceptIds);
+    const relationships = await this.prisma.conceptRelationship.findMany({
+      where: {
+        sourceConceptId: { in: conceptIds },
+        targetConceptId: { in: conceptIds },
+      },
+      select: { sourceConceptId: true, targetConceptId: true, relationshipType: true },
+    });
+
+    const edgeSet = new Set<string>();
+    const edges: Array<{ source: string; target: string; type: string }> = [];
+    for (const rel of relationships) {
+      if (conceptIdSet.has(rel.sourceConceptId) && conceptIdSet.has(rel.targetConceptId)) {
+        const key = `${rel.sourceConceptId}:${rel.targetConceptId}:${rel.relationshipType}`;
+        if (!edgeSet.has(key)) {
+          edgeSet.add(key);
+          edges.push({
+            source: rel.sourceConceptId,
+            target: rel.targetConceptId,
+            type: rel.relationshipType,
+          });
+        }
+      }
+    }
+
+    // Active agents: running executions linked to concept assignments
+    const activeExecs = await this.prisma.agentExecution.findMany({
+      where: {
+        tenantId,
+        status: { in: ['PENDING', 'FORMATTING', 'EXECUTING'] },
+      },
+      select: { noteId: true, agentType: true, status: true },
+    });
+
+    // Map execution noteId → conceptId via assignments
+    const noteToAssignment = new Map(
+      assignments.map((a) => [a.noteId, a]),
+    );
+
+    const activeAgents = activeExecs
+      .filter((e) => noteToAssignment.has(e.noteId))
+      .map((e) => {
+        const assignment = noteToAssignment.get(e.noteId)!;
+        return {
+          agentType: e.agentType,
+          conceptId: assignment.conceptId,
+          personaType: assignment.personaType,
+          status: e.status,
+        };
+      });
+
+    return { nodes, edges, activeAgents };
+  }
+
   async onConceptCompleted(
     tenantId: string,
     conceptId: string,
