@@ -124,8 +124,8 @@ export interface ChatMessagePayload {
         cursor: not-allowed;
       }
       .attach-btn svg {
-        width: 20px;
-        height: 20px;
+        width: 22px !important;
+        height: 22px !important;
       }
       .textarea-wrap {
         flex: 1;
@@ -172,8 +172,8 @@ export interface ChatMessagePayload {
         cursor: not-allowed;
       }
       .send-btn svg {
-        width: 20px;
-        height: 20px;
+        width: 22px !important;
+        height: 22px !important;
       }
       .hint {
         font-size: 11px;

@@ -819,7 +819,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .tl-entry.is-error .tl-icon { color: #f87171; }
 
       .tl-title {
-        flex: 1; font-size: 12px; font-weight: 500; color: #b0b0b0;
+        flex: 1; font-size: 15px !important; font-weight: 500; color: #b0b0b0;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         line-height: 1.4;
       }
@@ -850,7 +850,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       /* Detail / subtitle text */
       .tl-detail {
         margin-top: 4px;
-        font-size: var(--text-tiny, 11px); color: #707070; line-height: 1.4;
+        font-size: 15px !important; color: #707070; line-height: 1.4;
         padding-left: 24px;
       }
 
