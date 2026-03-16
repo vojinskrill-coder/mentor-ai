@@ -72,12 +72,12 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         padding: clamp(6px, 0.5vw, 10px) 0;
       }
       .nav-section-label {
-        font-size: clamp(10px, 0.7vw, 12px);
-        font-weight: 500;
+        font-size: 11px !important;
+        font-weight: 600;
         color: var(--color-text-muted, #9e9e9e);
         text-transform: uppercase;
-        letter-spacing: 0.05em;
-        padding: clamp(12px, 1vw, 20px) clamp(16px, 1.2vw, 24px) clamp(4px, 0.4vw, 8px);
+        letter-spacing: 0.06em;
+        padding: 16px 20px 6px;
       }
       .nav-item {
         display: flex;
@@ -1016,14 +1016,14 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
             Zadaci
           </a>
           @if (isOwnerOrAdmin()) {
-            <div class="nav-section-label">Upravljanje</div>
             <a class="nav-item" routerLink="/team" routerLinkActive="active">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
               Tim
             </a>
           }
 
-          <div class="nav-section-label">Podešavanja</div>
+          <!-- Separator -->
+          <div style="height: 1px; background: #2a2a2a; margin: 8px 16px;"></div>
           <a class="nav-item" routerLink="/profile-settings" routerLinkActive="active">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
             Podešavanja
