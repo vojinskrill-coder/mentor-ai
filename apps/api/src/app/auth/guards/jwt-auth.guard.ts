@@ -123,7 +123,8 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
    * Result is cached so DB is only queried once per server start.
    */
   private async getDevUser(): Promise<typeof DEV_USER_FALLBACK> {
-    if (this.resolvedDevUser) return this.resolvedDevUser;
+    // No caching — always resolve the latest active tenant.
+    // This prevents stale tenant after onboarding creates a new one.
 
     const prisma = new PrismaClient();
     try {
@@ -141,7 +142,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
         });
 
         if (user) {
-          this.resolvedDevUser = {
+          const resolved = {
             userId: user.id,
             tenantId: tenant.id,
             email: user.email,
@@ -149,12 +150,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
             department: user.department,
             permissions: ['*'],
           };
-          this.logger.log({
-            message: 'Dev mode: resolved real tenant/user',
-            tenantId: tenant.id,
-            userId: user.id,
-          });
-          return this.resolvedDevUser;
+          return resolved;
         }
       }
     } catch (err) {
