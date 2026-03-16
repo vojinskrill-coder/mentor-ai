@@ -171,7 +171,7 @@ const STAGE_ORDER: MaturityStage[] = [
       /* Progress Ring Section */
       .progress-section {
         display: grid;
-        grid-template-columns: 200px 1fr;
+        grid-template-columns: auto 1fr;
         gap: 32px;
         margin-bottom: 32px;
       }
@@ -189,6 +189,7 @@ const STAGE_ORDER: MaturityStage[] = [
         flex-direction: column;
         align-items: center;
         justify-content: center;
+        min-width: fit-content;
       }
       .ring-container {
         position: relative;
