@@ -729,7 +729,7 @@ export class MaturityEngineService {
   ): Promise<number> {
     const pendingAssignments = await this.prisma.stageConceptAssignment.findMany({
       where: { tenantId, stage, status: StageConceptStatus.PENDING, noteId: null },
-      select: { id: true, conceptId: true },
+      select: { id: true, conceptId: true, personaType: true },
     });
 
     if (pendingAssignments.length === 0) return 0;
@@ -770,6 +770,18 @@ export class MaturityEngineService {
 
       const conceptName = conceptMap.get(assignment.conceptId) ?? 'Unknown';
       const noteId = `note_${createId()}`;
+      const conversationId = `sess_${createId()}`;
+
+      // Create conversation for this concept (so it appears in Razgovori panel)
+      await this.prisma.conversation.create({
+        data: {
+          id: conversationId,
+          userId,
+          title: conceptName,
+          personaType: assignment.personaType as any,
+          conceptId: assignment.conceptId,
+        },
+      });
 
       await this.prisma.note.create({
         data: {
@@ -782,6 +794,7 @@ export class MaturityEngineService {
           userId,
           tenantId,
           conceptId: assignment.conceptId,
+          conversationId,
         },
       });
 
