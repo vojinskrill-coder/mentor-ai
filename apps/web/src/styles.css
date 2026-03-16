@@ -711,8 +711,8 @@ small, .text-small, .badge, .tag, .chip, .stat-label, .meta {
   font-size: var(--text-tiny);
 }
 
-/* Buttons across all components — matched to "Brzi vodič" button style */
-button, .btn, .btn-primary, .btn-secondary, [class*="btn-"] {
+/* Primary action buttons only — not navigation/toggle/icon buttons */
+.btn-primary, .btn-secondary, .action-btn, [class*="btn-primary"], [class*="btn-secondary"] {
   font-size: 14px;
   padding: 10px 20px;
 }
