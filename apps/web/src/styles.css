@@ -747,6 +747,113 @@ input, textarea, select {
   padding: clamp(8px, 0.7vw, 16px) clamp(12px, 0.9vw, 20px);
 }
 
+/* ============================================
+   LAPTOP SCREENS (up to 1440px) — reduce all by 4px
+   Keeps large screen values untouched.
+   ============================================ */
+@media (max-width: 1440px) {
+  /* Exec panel content: 16px → 12px */
+  .exec-panel-body *:not(h1):not(h2):not(h3):not(svg):not(path):not(canvas) {
+    font-size: 12px !important;
+  }
+  .exec-panel-body .panel-status-badge {
+    font-size: 10px !important;
+  }
+  .exec-panel-body .panel-step-label {
+    font-size: 10px !important;
+  }
+  .exec-panel-body .panel-job-status {
+    font-size: 10px !important;
+  }
+  .exec-panel-body h3, .exec-panel-body .panel-task-title {
+    font-size: 14px !important;
+  }
+
+  /* Type scale: reduce by 4px */
+  :root, :host {
+    --text-display: 24px;
+    --text-h1: 18px;
+    --text-h2: 14px;
+    --text-h3: 12px;
+    --text-body: 11px;
+    --text-small: 10px;
+    --text-tiny: 9px;
+  }
+
+  /* Action buttons */
+  .btn-primary, .btn-secondary, .action-btn, [class*="btn-primary"], [class*="btn-secondary"] {
+    font-size: 12px;
+    padding: 8px 16px;
+  }
+
+  /* Page content */
+  app-maturity-dashboard .main,
+  app-dashboard .main,
+  app-task-hub .page,
+  app-llm-config .page-content {
+    font-size: 12px;
+  }
+}
+
+/* Component overrides for laptop screens */
+@media (max-width: 1440px) {
+  /* Tree view: 16px → 12px */
+  .content-inner .tree-node,
+  .content-inner .conv-title,
+  .content-inner .search-input,
+  .content-inner .search-no-results,
+  .content-inner .ctx-menu-item {
+    font-size: 12px !important;
+  }
+
+  /* Chat messages: 18px → 14px */
+  .content-inner app-chat-message {
+    font-size: 14px !important;
+  }
+  .content-inner .msg-user-text {
+    font-size: 14px !important;
+  }
+  .content-inner .msg-action-btn {
+    font-size: 12px !important;
+  }
+  .content-inner .ai-time {
+    font-size: 12px !important;
+  }
+
+  /* Task hub: reduce by 4px */
+  .content-inner .task-title {
+    font-size: 11px !important;
+  }
+  .content-inner .domain-pill {
+    font-size: 10px !important;
+  }
+  .content-inner .concept-pill {
+    font-size: 9px !important;
+  }
+}
+
+/* ============================================
+   SMALL LAPTOPS (up to 1280px) — further reduce
+   ============================================ */
+@media (max-width: 1280px) {
+  .exec-panel-body *:not(h1):not(h2):not(h3):not(svg):not(path):not(canvas) {
+    font-size: 11px !important;
+  }
+  .exec-panel-body h3, .exec-panel-body .panel-task-title {
+    font-size: 13px !important;
+  }
+
+  :root, :host {
+    --text-display: 22px;
+    --text-h1: 16px;
+    --text-h2: 13px;
+    --text-h3: 11px;
+    --text-body: 10px;
+    --text-small: 9px;
+    --text-tiny: 8px;
+  }
+}
+
 /* Tables across all components */
 table { font-size: var(--text-small); }
 th { font-size: var(--text-small); font-weight: 600; }
