@@ -1,4 +1,5 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
 import {
@@ -12,6 +13,7 @@ import {
 import { StageClassifierService } from './stage-classifier.service';
 import { WsServerHolder } from './ws-server-holder.service';
 import { HeadlessExecutorService } from './headless-executor.service';
+import { CrossPersonaIntelligenceService } from './cross-persona-intelligence.service';
 import { Department } from '@prisma/client';
 import { createId } from '@paralleldrive/cuid2';
 import {
@@ -49,13 +51,21 @@ export class MaturityEngineService {
     total: number; executed: number; failed: number; current: string | null;
   }>();
 
+  private readonly stageConcurrency: number;
+
   constructor(
     private readonly prisma: PlatformPrismaService,
     private readonly classifier: StageClassifierService,
     private readonly wsHolder: WsServerHolder,
     @Inject(forwardRef(() => HeadlessExecutorService))
     private readonly headlessExecutor: HeadlessExecutorService,
-  ) {}
+    private readonly crossPersonaIntelligence: CrossPersonaIntelligenceService,
+    private readonly configService: ConfigService,
+  ) {
+    this.stageConcurrency = parseInt(
+      this.configService.get<string>('STAGE_MAX_CONCURRENCY') ?? '2', 10,
+    );
+  }
 
   // ─── Stage Initialization ───
 
@@ -713,8 +723,8 @@ export class MaturityEngineService {
     }
     this.runningExecutions.add(tenantId);
 
-    const MAX_CONCURRENCY = 20;
-    this.logger.log({ message: 'Starting stage auto-execution', tenantId, stage });
+    const MAX_CONCURRENCY = this.stageConcurrency;
+    this.logger.log({ message: 'Starting stage auto-execution', tenantId, stage, maxConcurrency: MAX_CONCURRENCY });
 
     try {
       this.wsHolder.emitToTenant(tenantId, 'maturity:execution-started', {
@@ -841,6 +851,10 @@ export class MaturityEngineService {
             failedConcepts.add(assignment.conceptId);
             this.logger.error({ message: 'Stage task error', tenantId, conceptId: assignment.conceptId, error: err instanceof Error ? err.message : 'Unknown' });
           }
+
+          // Clear cross-persona intelligence cache so next tasks in subsequent
+          // chunks see freshly completed results from this task
+          this.crossPersonaIntelligence.clearCache(tenantId);
         };
 
         for (let i = 0; i < ready.length; i += MAX_CONCURRENCY) {

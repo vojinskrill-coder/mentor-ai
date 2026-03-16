@@ -45,6 +45,7 @@ describe('HeadlessExecutorService', () => {
 
   const mockMaturityEngine = {
     onConceptCompleted: jest.fn(),
+    checkPrerequisites: jest.fn().mockResolvedValue({ canProceed: true, warnings: [], prerequisiteOutputs: [] }),
   };
 
   const mockWsHolder = {
@@ -61,6 +62,7 @@ describe('HeadlessExecutorService', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    const mockConfigService = { get: jest.fn().mockReturnValue('600') };
     service = new HeadlessExecutorService(
       mockPrisma as any,
       mockWorkflowService as any,
@@ -71,6 +73,7 @@ describe('HeadlessExecutorService', () => {
       mockMaturityEngine as any,
       mockWsHolder as any,
       mockCrossPersonaIntelligence as any,
+      mockConfigService as any,
     );
   });
 
@@ -236,21 +239,19 @@ describe('HeadlessExecutorService', () => {
       );
     });
 
-    it('should use cached workflow when concept has minimal content', async () => {
+    it('should load prerequisite context for concept tasks', async () => {
       mockPrisma.note.findUnique.mockResolvedValueOnce({
         id: TASK_ID, title: 'T', content: '', status: 'PENDING',
         conversationId: null, conceptId: 'cpt_1', expectedOutcome: null,
       });
       mockPrisma.tenant.findUnique.mockResolvedValue({ name: 'T', industry: null, description: null });
       mockBusinessContext.getBusinessContext.mockResolvedValue('');
-      mockPrisma.concept.findUnique.mockResolvedValue(null);
-      mockPrisma.note.findMany
-        .mockResolvedValueOnce([])  // children check
-        .mockResolvedValueOnce([]); // reload after workflow
-
-      mockWorkflowService.getOrGenerateWorkflow.mockResolvedValue({
-        conceptName: 'C', steps: [],
+      mockPrisma.stageConceptAssignment.findFirst.mockResolvedValueOnce({ stage: 'BASIC' });
+      mockMaturityEngine.checkPrerequisites.mockResolvedValue({
+        canProceed: true, warnings: [],
+        prerequisiteOutputs: [{ conceptName: 'Prereq A', outputSummary: 'Summary A' }],
       });
+      mockPrisma.concept.findUnique.mockResolvedValue(null);
 
       mockAiGateway.streamCompletionWithContext
         .mockImplementationOnce((_m: any, _o: any, cb: (c: string) => void) => { cb('X'); return Promise.resolve(); })
@@ -262,30 +263,22 @@ describe('HeadlessExecutorService', () => {
 
       await service.executeTask({ taskId: TASK_ID, tenantId: TENANT_ID, userId: USER_ID });
 
-      expect(mockWorkflowService.getOrGenerateWorkflow).toHaveBeenCalledWith('cpt_1', TENANT_ID, USER_ID);
-      expect(mockWorkflowService.generateTaskSpecificWorkflow).not.toHaveBeenCalled();
+      expect(mockMaturityEngine.checkPrerequisites).toHaveBeenCalledWith(TENANT_ID, 'cpt_1', 'BASIC');
     });
 
-    it('should use task-specific workflow when content is substantial', async () => {
-      const longContent = 'A'.repeat(300);
+    it('should skip workflow steps and go directly to enriched synthesis', async () => {
       mockPrisma.note.findUnique.mockResolvedValueOnce({
-        id: TASK_ID, title: 'T', content: longContent, status: 'PENDING',
+        id: TASK_ID, title: 'T', content: 'A'.repeat(300), status: 'PENDING',
         conversationId: 'conv_1', conceptId: 'cpt_1', expectedOutcome: null,
       });
       mockPrisma.tenant.findUnique.mockResolvedValue({ name: 'T', industry: null, description: null });
       mockBusinessContext.getBusinessContext.mockResolvedValue('');
+      mockPrisma.stageConceptAssignment.findFirst.mockResolvedValueOnce(null);
       mockPrisma.concept.findUnique.mockResolvedValue(null);
-      mockPrisma.note.findMany
-        .mockResolvedValueOnce([])  // children check
-        .mockResolvedValueOnce([]); // reload after workflow
-
-      mockWorkflowService.generateTaskSpecificWorkflow.mockResolvedValue({
-        conceptName: 'C', steps: [],
-      });
 
       mockAiGateway.streamCompletionWithContext
-        .mockImplementationOnce((_m: any, _o: any, cb: (c: string) => void) => { cb('X'); return Promise.resolve(); })
-        .mockImplementationOnce((_m: any, _o: any, cb: (c: string) => void) => { cb('Y'); return Promise.resolve(); });
+        .mockImplementationOnce((_m: any, _o: any, cb: (c: string) => void) => { cb('Synthesis'); return Promise.resolve(); })
+        .mockImplementationOnce((_m: any, _o: any, cb: (c: string) => void) => { cb('Score 8/10'); return Promise.resolve(); });
 
       mockPrisma.note.update.mockResolvedValue({});
       mockJobPlanner.planJobs.mockResolvedValue([]);
@@ -293,8 +286,11 @@ describe('HeadlessExecutorService', () => {
 
       await service.executeTask({ taskId: TASK_ID, tenantId: TENANT_ID, userId: USER_ID });
 
-      expect(mockWorkflowService.generateTaskSpecificWorkflow).toHaveBeenCalled();
+      // Workflow services should NOT be called — we go direct to synthesis
       expect(mockWorkflowService.getOrGenerateWorkflow).not.toHaveBeenCalled();
+      expect(mockWorkflowService.generateTaskSpecificWorkflow).not.toHaveBeenCalled();
+      // Synthesis + scoring = 2 LLM calls
+      expect(mockAiGateway.streamCompletionWithContext).toHaveBeenCalledTimes(2);
     });
 
     it('should emit maturity:stage-completed when stage completes', async () => {

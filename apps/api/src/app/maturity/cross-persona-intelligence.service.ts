@@ -47,6 +47,18 @@ export class CrossPersonaIntelligenceService {
 
   constructor(private readonly prisma: PlatformPrismaService) {}
 
+  /**
+   * Clear cached cross-persona data for a tenant so subsequent tasks
+   * see freshly completed results instead of stale cached data.
+   */
+  clearCache(tenantId: string): void {
+    for (const key of this.cache.keys()) {
+      if (key.startsWith(`${tenantId}:`)) {
+        this.cache.delete(key);
+      }
+    }
+  }
+
   async getRelevantOutputs(params: {
     tenantId: string;
     conceptId: string;

@@ -45,7 +45,16 @@ INSTRUCTION QUALITY REQUIREMENTS:
 - Identify the KEY FINDINGS from the report that this agent should build upon — don't repeat analysis, ADD NEW VALUE
 - Reference specific companies, products, numbers from the report
 - Tell the agent what is ALREADY KNOWN (from the report) and what NEW information to discover or produce
-- The instruction must be actionable — the agent should ACT on this, execute its tools, produce deliverables, and return results. Not analyze or plan.`;
+- The instruction must be actionable — the agent should ACT on this, execute its tools, produce deliverables, and return results. Not analyze or plan.
+
+MANDATORY — append this block at the end of the instruction:
+---
+NAPOMENA O KONTEKSTU:
+Ako imaš prethodno iskustvo i memoriju o ovoj kompaniji iz ranijih istraživanja — iskoristi to znanje. Nadogradi na postojeće nalaze, ne ponavljaj već istraženo.
+Ako je ovo tvoj prvi zadatak za ovu kompaniju — istraži temeljno od početka koristeći web_search i web_fetch.
+
+FORMAT IZLAZA: Profesionalan Markdown (## zaglavlja, tabele, **bold** za ključne vrednosti, > za izvore sa URL-ovima). SVE na srpskom jeziku. NE objašnjavaj šta ćeš raditi — odmah piši rezultat.
+---`;
 
     const messages: ChatMessage[] = [
       { role: 'system', content: agentDef.systemPrompt },

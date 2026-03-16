@@ -1,4 +1,5 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
 import type { ExecutionPlanStep, WorkflowStep } from '@mentor-ai/shared/types';
@@ -22,6 +23,7 @@ import { CrossPersonaIntelligenceService } from './cross-persona-intelligence.se
 @Injectable()
 export class HeadlessExecutorService {
   private readonly logger = new Logger(HeadlessExecutorService.name);
+  private readonly jobCompletionTimeoutMs: number;
 
   constructor(
     private readonly prisma: PlatformPrismaService,
@@ -34,8 +36,18 @@ export class HeadlessExecutorService {
     @Inject(forwardRef(() => MaturityEngineService))
     private readonly maturityEngine: MaturityEngineService,
     private readonly wsHolder: WsServerHolder,
-    private readonly crossPersonaIntelligence: CrossPersonaIntelligenceService
-  ) {}
+    private readonly crossPersonaIntelligence: CrossPersonaIntelligenceService,
+    private readonly configService: ConfigService,
+  ) {
+    // Align job completion timeout with OpenClaw execution time + retry budget
+    const openclawTimeout = parseInt(
+      this.configService.get<string>('OPENCLAW_TIMEOUT_SECONDS') ?? '600', 10,
+    );
+    // Single OpenClaw call can take up to openclawTimeout + 60s buffer.
+    // Add generous margin for network delays and queue wait.
+    this.jobCompletionTimeoutMs = (openclawTimeout + 60) * 1000 + 120_000;
+    // With defaults: (600 + 60) * 1000 + 120_000 = 780_000ms = 13 min
+  }
 
   /**
    * Execute a single task through the full pipeline.
@@ -75,158 +87,47 @@ export class HeadlessExecutorService {
       // Build lean business context for LLM calls
       const bizContext = this.buildLeanBusinessContext(cachedTenantData);
 
-      // ── Phase 1: Workflow generation + step execution ──
-      let childNotes = await this.prisma.note.findMany({
-        where: { parentNoteId: taskId },
-        select: { title: true, content: true, workflowStepNumber: true, status: true },
-        orderBy: { workflowStepNumber: 'asc' },
+      // ── Phase 1: Build enriched context (prerequisite outputs + cross-persona) ──
+      // Replaces workflow step execution — OpenClaw agents handle research via persistent sessions.
+      this.wsHolder.emitToTenant(tenantId, 'task:ai-workflow-start', {
+        taskId,
+        conversationId: convId,
+        message: 'Pripremam kontekst za izvršavanje...',
+        auto: true,
       });
 
-      if (childNotes.length === 0) {
+      // Load prerequisite concept outputs
+      let prerequisiteContext = '';
+      if (taskNote.conceptId) {
         try {
-          this.wsHolder.emitToTenant(tenantId, 'task:ai-workflow-start', {
-            taskId,
-            conversationId: convId,
-            message: 'Generišem plan izvršavanja...',
-            auto: true,
+          const assignment = await this.prisma.stageConceptAssignment.findFirst({
+            where: { tenantId, noteId: taskId },
+            select: { stage: true },
           });
-
-          const isMinimalContent = !taskNote.content || taskNote.content.length < 200;
-          const hasConcept = !!taskNote.conceptId;
-
-          let workflow: { conceptName: string; steps: WorkflowStep[] };
-          if (hasConcept && isMinimalContent) {
-            workflow = await this.workflowService.getOrGenerateWorkflow(
-              taskNote.conceptId!,
-              tenantId,
-              userId
+          if (assignment) {
+            const prereqs = await this.maturityEngine.checkPrerequisites(
+              tenantId, taskNote.conceptId, assignment.stage as any,
             );
-          } else {
-            workflow = await this.workflowService.generateTaskSpecificWorkflow(
-              {
-                title: taskNote.title,
-                content: taskNote.content ?? '',
-                conversationId: convId || null,
-                conceptId: taskNote.conceptId,
-              },
-              tenantId,
-              userId
-            );
-          }
-
-          this.logger.log({
-            message: 'Headless: workflow generated',
-            taskId,
-            stepCount: workflow.steps.length,
-          });
-
-          const completedSummaries: Array<{
-            title: string;
-            conceptName: string;
-            summary: string;
-          }> = [];
-
-          for (let stepIdx = 0; stepIdx < workflow.steps.length; stepIdx++) {
-            const workflowStep = workflow.steps[stepIdx]!;
-
-            this.wsHolder.emitToTenant(tenantId, 'task:ai-step-progress', {
-              taskId,
-              conversationId: convId,
-              stepIndex: stepIdx,
-              totalSteps: workflow.steps.length,
-              stepTitle: workflowStep.title,
-              auto: true,
-            });
-
-            const step: ExecutionPlanStep = {
-              stepId: `auto_step_${createId()}`,
-              conceptId: taskNote.conceptId ?? '',
-              conceptName: workflow.conceptName,
-              workflowStepNumber: workflowStep.stepNumber,
-              title: workflowStep.title,
-              description: workflowStep.description,
-              estimatedMinutes: workflowStep.estimatedMinutes,
-              departmentTag: workflowStep.departmentTag,
-              status: 'in_progress',
-              taskTitle: taskNote.title,
-              taskContent: taskNote.content ?? undefined,
-              taskConversationId: convId || undefined,
-            };
-
-            const result = await this.workflowService.executeStepAutonomous(
-              step,
-              convId,
-              userId,
-              tenantId,
-              () => {
-                /* headless: collect silently */
-              },
-              completedSummaries,
-              workflow.steps,
-              stepCachedContext
-            );
-
-            // Dedup: check if child note already exists
-            const existingSub = await this.prisma.note.findFirst({
-              where: {
-                tenantId,
-                parentNoteId: taskId,
-                workflowStepNumber: workflowStep.stepNumber,
-                noteType: NoteType.TASK,
-              },
-              select: { id: true },
-            });
-
-            if (!existingSub) {
-              await this.prisma.note.create({
-                data: {
-                  id: `note_${createId()}`,
-                  title: workflowStep.title,
-                  content: result.content,
-                  source: NoteSource.CONVERSATION,
-                  noteType: NoteType.TASK,
-                  status: NoteStatus.READY_FOR_REVIEW,
-                  userId,
-                  tenantId,
-                  conversationId: convId || undefined,
-                  conceptId: taskNote.conceptId ?? undefined,
-                  parentNoteId: taskId,
-                  expectedOutcome: workflowStep.expectedOutcome?.substring(0, 500),
-                  workflowStepNumber: workflowStep.stepNumber,
-                },
-              });
+            if (prereqs.prerequisiteOutputs.length > 0) {
+              prerequisiteContext = '\n\n--- REZULTATI PRETHODNO ZAVRSENIH KONCEPATA ---';
+              for (const po of prereqs.prerequisiteOutputs) {
+                prerequisiteContext += `\n### ${po.conceptName}\n${po.outputSummary}`;
+              }
+              prerequisiteContext += '\n--- KRAJ PRETHODNOG KONTEKSTA ---';
+              prerequisiteContext += '\nKORISTI ove nalaze kao TEMELJ — ne ponavljaj ih, NADOGRADI na njima.';
             }
-
-            completedSummaries.push({
-              title: workflowStep.title,
-              conceptName: workflow.conceptName,
-              summary: result.content.substring(0, 500),
-            });
-
-            this.wsHolder.emitToTenant(tenantId, 'task:ai-step-complete', {
-              taskId,
-              conversationId: convId,
-              stepIndex: stepIdx,
-              totalSteps: workflow.steps.length,
-              stepTitle: workflowStep.title,
-              auto: true,
-            });
           }
-
-          // Re-load children after execution
-          childNotes = await this.prisma.note.findMany({
-            where: { parentNoteId: taskId },
-            select: { title: true, content: true, workflowStepNumber: true, status: true },
-            orderBy: { workflowStepNumber: 'asc' },
-          });
-        } catch (err) {
-          this.logger.warn({
-            message: 'Headless: workflow generation failed, falling back to direct execution',
-            taskId,
-            error: err instanceof Error ? err.message : 'Unknown',
-          });
-        }
+        } catch { /* non-blocking */ }
       }
+
+      this.wsHolder.emitToTenant(tenantId, 'task:ai-step-progress', {
+        taskId,
+        conversationId: convId,
+        stepIndex: 0,
+        totalSteps: 1,
+        stepTitle: 'Analiza i sinteza sa prethodnim znanjem',
+        auto: true,
+      });
 
       // ── Phase 2: Synthesis ──
       let conceptKnowledge = '';
@@ -283,52 +184,32 @@ export class HeadlessExecutorService {
         } catch { /* non-blocking enrichment */ }
       }
 
-      let prompt: string;
-
-      if (childNotes.length > 0) {
-        const workflowResults = childNotes
-          .map((note, i) => {
-            const stepNum = note.workflowStepNumber ?? i + 1;
-            return `--- KORAK ${stepNum}: ${note.title} ---\n${note.content}`;
-          })
-          .join('\n\n');
-
-        prompt = `Ti si vrhunski poslovni stručnjak. Tvoj tim je završio detaljnu analizu kroz ${childNotes.length} koraka workflow-a. Sintetiši SVE rezultate u FINALNI DOKUMENT koji vlasnik može odmah koristiti.
+      const prompt = `Ti si vrhunski poslovni stručnjak. Izvrši detaljnu analizu i proizvedi FINALNI DOKUMENT koji vlasnik može odmah koristiti.
 
 ZADATAK: ${taskNote.title}
 ${taskNote.content ? `OPIS ZADATKA: ${taskNote.content}` : ''}
 ${taskNote.expectedOutcome ? `OČEKIVANI REZULTAT: ${taskNote.expectedOutcome}` : ''}
-
-REZULTATI ISTRAŽIVANJA I ANALIZE (koristi SVE podatke iz svih koraka):
-${workflowResults}
-${crossPersonaContext}${conceptKnowledge}
+${prerequisiteContext}${crossPersonaContext}${conceptKnowledge}
 
 PRAVILA ZA FINALNI DOKUMENT:
 1. Ovo je FINALNI DELIVERABLE — gotov dokument, NE izveštaj o radu
-2. Sintetiši rezultate iz koraka u koherentan, upotrebljiv dokument
-3. NIKADA ne piši "trebalo bi da..." za digitalne zadatke — URADI to
-4. Koristi SPECIFIČNE podatke, brojke i nalaze iz koraka — ne generalizuj
-5. Strukturiraj sa ## zaglavljima, tabelama, nabrajanjima
-6. Dodaj sekciju "Sledeći koraci" sa konkretnim akcijama
-7. NIKADA ne piši "u prethodnim koracima smo..." — PRIKAŽI gotov rezultat
-8. Minimum 1000 reči — ovo je sveobuhvatan dokument
-9. Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
-      } else {
-        prompt = `Ti si poslovni stručnjak. IZVRŠI sledeći zadatak u potpunosti.
-
-ZADATAK: ${taskNote.title}
-${taskNote.content ? `OPIS:\n${taskNote.content}` : ''}
-${taskNote.expectedOutcome ? `OČEKIVANI REZULTAT: ${taskNote.expectedOutcome}` : ''}
-${crossPersonaContext}${conceptKnowledge}
-
-PRAVILA:
-1. Proizvedi KOMPLETAN, GOTOV dokument
-2. NIKADA ne piši "trebalo bi da..." za digitalne zadatke — NAPRAVI to sam
-3. NIKADA ne izmišljaj podatke — ako nemaš podatak, naznači "[POPUNITI: ...]"
+2. NIKADA ne piši "trebalo bi da..." za digitalne zadatke — URADI to
+3. Koristi SPECIFIČNE podatke, brojke i nalaze iz prethodnih koncepata — ne generalizuj
 4. Strukturiraj sa ## zaglavljima, tabelama, nabrajanjima
-5. Minimum 800 reči za analitičke zadatke
-6. Odgovaraj ISKLJUČIVO na srpskom jeziku`;
-      }
+5. Dodaj sekciju "Sledeći koraci" sa konkretnim akcijama
+6. NIKADA ne piši "u prethodnim koracima smo..." — PRIKAŽI gotov rezultat
+7. Ako postoji kontekst iz prethodno završenih koncepata, NADOGRADI na njima — ne ponavljaj
+8. Minimum 800 reči — ovo je sveobuhvatan dokument
+9. Odgovaraj ISKLJUČIVO na srpskom jeziku
+10. Format: profesionalan Markdown (## zaglavlja, tabele, **bold** za ključne vrednosti, > za izvore)`;
+
+      this.logger.log({
+        message: 'Headless: synthesizing with enriched context',
+        taskId,
+        hasPrereqs: prerequisiteContext.length > 0,
+        hasCrossPersona: crossPersonaContext.length > 0,
+        hasConceptKnowledge: conceptKnowledge.length > 0,
+      });
 
       let fullContent = '';
       await this.aiGateway.streamCompletionWithContext(
@@ -666,12 +547,13 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
   private async waitForJobCompletion(
     jobId: string,
     tenantId: string,
-    timeoutMs = 300_000, // 5 minutes max per job
+    timeoutMs?: number,
   ): Promise<void> {
+    const effectiveTimeout = timeoutMs ?? this.jobCompletionTimeoutMs;
     const start = Date.now();
     const pollInterval = 3_000; // 3 seconds
 
-    while (Date.now() - start < timeoutMs) {
+    while (Date.now() - start < effectiveTimeout) {
       const job = await this.prisma.agentJob.findFirst({
         where: { id: jobId, tenantId },
         select: { status: true, executionId: true },
@@ -688,7 +570,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
     this.logger.warn({
       message: 'Headless: agent job timed out — marking FAILED',
       jobId,
-      timeoutMs,
+      timeoutMs: effectiveTimeout,
     });
 
     try {
@@ -700,13 +582,13 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
       if (job && !['COMPLETED', 'FAILED'].includes(job.status)) {
         await this.prisma.agentJob.update({
           where: { id: jobId },
-          data: { status: 'FAILED', error: `Timed out after ${timeoutMs / 1000}s` },
+          data: { status: 'FAILED', error: `Timed out after ${effectiveTimeout / 1000}s` },
         });
 
         if (job.executionId) {
           await this.prisma.agentExecution.update({
             where: { id: job.executionId },
-            data: { status: 'FAILED', error: `Timed out after ${timeoutMs / 1000}s` },
+            data: { status: 'FAILED', error: `Timed out after ${effectiveTimeout / 1000}s` },
           });
         }
       }

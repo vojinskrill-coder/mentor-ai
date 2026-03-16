@@ -58,11 +58,15 @@ describe('MaturityEngineService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    const mockCrossPersonaIntelligence = { clearCache: jest.fn() };
+    const mockConfigService = { get: jest.fn().mockReturnValue('2') };
     service = new MaturityEngineService(
       mockPrisma as any,
       mockClassifier as any,
       mockWsHolder as any,
       mockHeadlessExecutor as any,
+      mockCrossPersonaIntelligence as any,
+      mockConfigService as any,
     );
   });
 
