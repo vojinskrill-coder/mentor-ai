@@ -63,9 +63,11 @@ export class MaturityEngineService {
     private readonly configService: ConfigService,
   ) {
     // Run up to 3 independent tasks in parallel within each wave.
-    // Each task spawns 3-4 OpenClaw agent jobs, so 3 tasks = ~12 concurrent
-    // agent processes. OpenClaw gateway maxConcurrent=5 queues the rest.
-    // Higher values cause session file lock contention and agent kills.
+    // Agent jobs within each task run sequentially (executeJobsInOrder),
+    // so peak concurrent OpenClaw processes = STAGE_MAX_CONCURRENCY.
+    // OpenClaw gateway maxConcurrent=5 with persistent sessions means
+    // max 5 agents can write to session files simultaneously.
+    // Higher values cause session file lock contention (10s timeout → kill).
     this.stageConcurrency = parseInt(
       this.configService.get<string>('STAGE_MAX_CONCURRENCY') ?? '3', 10,
     );
