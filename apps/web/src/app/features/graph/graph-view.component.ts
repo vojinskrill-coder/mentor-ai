@@ -209,11 +209,10 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private nodeRadius(node: GraphNode): number {
     const conn = node.connectionCount ?? 0;
-    // Range: 3 (isolated) to 12 (hub with 20+ connections)
-    // Logarithmic scaling for natural proportions
-    const base = 3 + Math.log2(1 + conn) * 2.5;
-    const completedBonus = node.status === 'COMPLETED' ? 1.5 : 0;
-    return Math.min(14, base + completedBonus);
+    // Obsidian-style: small dots. Range: 1.5 (isolated) to 5 (hub with 20+ connections)
+    const base = 1.5 + Math.log2(1 + conn) * 1;
+    const completedBonus = node.status === 'COMPLETED' ? 0.5 : 0;
+    return Math.min(6, base + completedBonus);
   }
 
   // ─── Premium Rendering ───
@@ -329,8 +328,8 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const isCompleted = node.status === 'COMPLETED';
     const nr = this.nodeRadius(node);
 
-    // Outer ambient glow — proportional to node size
-    const bloomR = nr * 3.5;
+    // Outer ambient glow — subtle, proportional
+    const bloomR = nr * 4;
     const glowGrad = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, bloomR);
     glowGrad.addColorStop(0, isHovered ? colors.glow : colors.dim);
     glowGrad.addColorStop(1, 'rgba(0,0,0,0)');
@@ -370,38 +369,18 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
     const r = this.nodeRadius(node) * scale;
 
-    // Node body — subtle radial gradient for depth
-    const nodeGrad = ctx.createRadialGradient(
-      node.x - r * 0.3, node.y - r * 0.3, 0,
-      node.x, node.y, r
-    );
-    nodeGrad.addColorStop(0, this.lighten(colors.core, 30));
-    nodeGrad.addColorStop(0.7, colors.core);
-    nodeGrad.addColorStop(1, this.darken(colors.core, 20));
-
+    // Simple flat fill — clean, Obsidian-style
     ctx.beginPath();
     ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
-    ctx.fillStyle = nodeGrad;
-    ctx.fill();
-
-    // Subtle inner highlight (glass effect) — clean, no borders
-    const highlight = ctx.createRadialGradient(
-      node.x - r * 0.25, node.y - r * 0.35, 0,
-      node.x, node.y, r * 0.8
-    );
-    highlight.addColorStop(0, 'rgba(255,255,255,0.2)');
-    highlight.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.beginPath();
-    ctx.arc(node.x, node.y, r * 0.8, 0, Math.PI * 2);
-    ctx.fillStyle = highlight;
+    ctx.fillStyle = colors.core;
     ctx.fill();
 
     // Completed indicator — thin green ring
     if (node.status === 'COMPLETED') {
       ctx.beginPath();
-      ctx.arc(node.x, node.y, r + 2, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(110,231,183,0.5)';
-      ctx.lineWidth = 0.8;
+      ctx.arc(node.x, node.y, r + 1.5, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(110,231,183,0.45)';
+      ctx.lineWidth = 0.6;
       ctx.stroke();
     }
   }
@@ -437,24 +416,16 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!node || node.x == null || node.y == null) return;
 
     const colors = PREMIUM_PERSONA_COLORS[agent.personaType] ?? DEFAULT_COLORS;
-    const orbitR = this.nodeRadius(node) + 10;
+    const orbitR = this.nodeRadius(node) + 6;
     const agentIdx = this.activeAgents.filter((a) => a.conceptId === agent.conceptId).indexOf(agent);
     const angle = (this.animTime / 5000) * Math.PI * 2 + (agentIdx * Math.PI * 2 / 3);
 
     const ax = node.x + Math.cos(angle) * orbitR;
     const ay = node.y + Math.sin(angle) * orbitR;
 
-    // Agent dot with glow
-    const dotGlow = ctx.createRadialGradient(ax, ay, 0, ax, ay, 6);
-    dotGlow.addColorStop(0, `rgba(${this.hexToRgb(colors.core)},0.4)`);
-    dotGlow.addColorStop(1, 'rgba(0,0,0,0)');
+    // Agent dot — small, clean
     ctx.beginPath();
-    ctx.arc(ax, ay, 6, 0, Math.PI * 2);
-    ctx.fillStyle = dotGlow;
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(ax, ay, 2.5, 0, Math.PI * 2);
+    ctx.arc(ax, ay, 1.5, 0, Math.PI * 2);
     ctx.fillStyle = colors.core;
     ctx.fill();
 
@@ -464,8 +435,8 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
       const phase = ((this.animTime / 1800 + i / count) % 1);
       const px = ax + (node.x - ax) * phase;
       const py = ay + (node.y - ay) * phase;
-      const particleAlpha = (1 - phase) * 0.5;
-      const particleR = 1 + (1 - phase) * 1;
+      const particleAlpha = (1 - phase) * 0.4;
+      const particleR = 0.5 + (1 - phase) * 0.5;
 
       ctx.beginPath();
       ctx.arc(px, py, particleR, 0, Math.PI * 2);
