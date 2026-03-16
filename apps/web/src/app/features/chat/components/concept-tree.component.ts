@@ -64,7 +64,7 @@ interface TreeRow {
         border-radius: 6px;
         padding: 8px 10px 8px 30px;
         color: #fafafa;
-        font-size: 16px !important;
+        font-size: 12px;
         font-family: inherit;
       }
       .search-input:focus {
@@ -95,7 +95,7 @@ interface TreeRow {
       .search-no-results {
         padding: 24px 12px;
         text-align: center;
-        font-size: 16px !important;
+        font-size: 12px;
         color: #9e9e9e;
       }
 
@@ -114,7 +114,7 @@ interface TreeRow {
         gap: 6px;
         padding: 5px 8px 5px 4px;
         cursor: pointer;
-        font-size: 16px !important;
+        font-size: 12px;
         font-weight: 500;
         color: #a1a1a1;
         border-radius: 4px;
@@ -129,7 +129,7 @@ interface TreeRow {
         color: #fafafa;
       }
       .tree-node.root-node {
-        font-size: 16px !important;
+        font-size: 12px;
         font-weight: 600;
         color: #c0c0c0;
         letter-spacing: 0.02em;
@@ -204,7 +204,7 @@ interface TreeRow {
       }
 
       .conv-title {
-        font-size: 16px !important;
+        font-size: 12px;
         color: #a1a1a1;
         white-space: nowrap;
         overflow: hidden;
@@ -405,7 +405,7 @@ interface TreeRow {
         border: none;
         background: none;
         color: #e0e0e0;
-        font-size: 16px !important;
+        font-size: 12px;
         font-family: inherit;
         cursor: pointer;
         border-radius: 4px;

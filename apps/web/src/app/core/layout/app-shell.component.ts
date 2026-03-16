@@ -86,7 +86,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         padding: clamp(6px, 0.5vw, 10px) clamp(16px, 1.2vw, 24px);
         margin: 1px clamp(6px, 0.5vw, 10px);
         border-radius: 6px;
-        font-size: 17px !important;
+        font-size: 13px;
         font-weight: 500;
         color: var(--color-text-secondary, #a1a1a1);
         text-decoration: none;

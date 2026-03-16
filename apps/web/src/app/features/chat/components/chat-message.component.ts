@@ -39,7 +39,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
       :host {
         display: block;
         animation: msgFadeIn 0.3s ease-out;
-        font-size: 18px;
+        font-size: 14px;
       }
       @keyframes msgFadeIn {
         from {
@@ -63,7 +63,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         padding: 12px 16px;
       }
       .msg-user-text {
-        font-size: 18px !important;
+        font-size: 14px;
         line-height: 1.6;
         white-space: pre-wrap;
         word-break: break-word;
@@ -370,7 +370,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         border-top: 1px solid #2a2a2a;
       }
       .ai-time {
-        font-size: 16px !important;
+        font-size: 12px;
         color: #9e9e9e;
       }
       .improvement-row {
@@ -587,7 +587,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         border-radius: 6px;
         background: transparent;
         color: #707070;
-        font-size: 16px !important;
+        font-size: 12px;
         font-family: inherit;
         cursor: pointer;
         transition: all 0.15s;
