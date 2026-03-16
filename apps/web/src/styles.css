@@ -717,11 +717,7 @@ small, .text-small, .badge, .tag, .chip, .stat-label, .meta {
   padding: 10px 20px;
 }
 
-/* Icons across all components */
-svg:not(.graph-svg) {
-  width: var(--icon-md);
-  height: var(--icon-md);
-}
+/* Icon sizing handled by individual components — no global SVG override */
 
 /* Input/textarea across all components */
 input, textarea, select {
