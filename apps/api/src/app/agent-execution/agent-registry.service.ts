@@ -28,12 +28,14 @@ export class AgentRegistryService {
 Given the task report and business context (injected from memories), write an instruction that tells the agent EXACTLY what to search for and what data to return.
 
 Your output instruction MUST:
-- List 3-5 specific web searches to execute (exact search queries)
+- List 3-5 specific web searches to execute (exact search queries) — ALL searches must be directly related to the task concept
 - Name specific competitor websites to analyze with web_fetch
 - Specify the exact data points to extract (prices, stats, market size, trends)
-- Tell the agent to cite every finding with a source URL
+- Tell the agent to cite every finding with a source URL — NO source = DO NOT include the finding
 - Tell the agent to write ALL output in Serbian language
 - Tell the agent to format output as clean markdown with tables and sections (NO code blocks, NO HTML tags)
+- Tell the agent to STAY FOCUSED on the assigned concept — do NOT research unrelated topics
+- Tell the agent to NEVER fabricate data, sources, or statistics — if data is not found, state "[POTREBNO ISTRAŽITI]"
 
 QUALITY STANDARDS:
 - Every finding must cite its source — never present data without attribution

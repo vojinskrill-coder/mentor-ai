@@ -67,11 +67,17 @@ INSTRUCTION QUALITY REQUIREMENTS:
       }
     );
 
-    // Programmatically append memory instruction + format requirements
+    // Programmatically append memory instruction + concept grounding + format requirements
     // (not left to LLM generation — guarantees it's always present)
     const memoryBlock = `
 
 ---
+KRITIČNO — UZEMLJENJE:
+- Radi ISKLJUČIVO na zadatku opisanom iznad. NE širi se na druge teme.
+- NIKADA ne izmišljaj podatke, izvore ili statistike. Ako ne možeš pronaći podatak, napiši "[POTREBNO ISTRAŽITI]".
+- Svaki nalaz MORA imati izvor (URL). Bez izvora = ne uključuj u rezultat.
+- NE ponavljaj generičke poslovne savete — samo SPECIFIČNE nalaze za ovu kompaniju i ovaj koncept.
+
 NAPOMENA O KONTEKSTU:
 Ako imaš prethodno iskustvo i memoriju o ovoj kompaniji iz ranijih istraživanja — iskoristi to znanje. Nadogradi na postojeće nalaze, ne ponavljaj već istraženo.
 Ako je ovo tvoj prvi zadatak za ovu kompaniju — istraži temeljno od početka koristeći web_search i web_fetch.

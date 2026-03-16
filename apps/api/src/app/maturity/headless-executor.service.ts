@@ -197,6 +197,14 @@ ${taskNote.content ? `OPIS ZADATKA: ${taskNote.content}` : ''}
 ${taskNote.expectedOutcome ? `OČEKIVANI REZULTAT: ${taskNote.expectedOutcome}` : ''}
 ${prerequisiteContext}${crossPersonaContext}${conceptKnowledge}
 
+KRITIČNO — UZEMLJENJE NA KONCEPT:
+- Tvoj zadatak je ISKLJUČIVO analiza koncepta navedenog u BAZI ZNANJA iznad.
+- SVAKI deo dokumenta MORA biti direktno vezan za taj koncept i njegovu definiciju.
+- NIKADA ne izmišljaj koncepte, termine ili podatke koji ne postoje u bazi znanja ili izvorima.
+- Ako nešto ne znaš — napiši "[POTREBNO ISTRAŽITI]" umesto da izmišljaš.
+- NE širi se na teme koje nisu direktno povezane sa zadatim konceptom.
+- Ako postoje POVEZANI KONCEPTI u bazi znanja, možeš ih POMENUTI ali fokus ostaje na glavnom konceptu.
+
 PRAVILA ZA FINALNI DOKUMENT:
 1. Ovo je FINALNI DELIVERABLE — gotov dokument, NE izveštaj o radu
 2. NIKADA ne piši "trebalo bi da..." za digitalne zadatke — URADI to

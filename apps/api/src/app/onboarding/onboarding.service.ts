@@ -948,8 +948,8 @@ Kreiraj personalizovani Poslovni Mozak sa tačno 10 prioritizovanih zadataka.`;
         });
       });
 
-    // Auto-initialize BASIC maturity stage (fire-and-forget)
-    // Creates assignments, Note TASKs, and triggers auto-execution with dependency ordering
+    // Initialize BASIC maturity stage (fire-and-forget)
+    // Creates assignments + Note TASKs. Execution triggered separately from dashboard.
     this.maturityEngineService
       .initializeStage(tenantId, MaturityStage.BASIC, userId)
       .catch((err) => {
