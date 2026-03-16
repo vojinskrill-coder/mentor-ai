@@ -32,12 +32,12 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
         margin-bottom: 20px;
       }
       .page-title {
-        font-size: 24px;
+        font-size: 26px;
         font-weight: 600;
         margin-bottom: 4px;
       }
       .page-desc {
-        font-size: 14px;
+        font-size: 16px;
         color: #a1a1a1;
       }
 
@@ -56,7 +56,7 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
         border-radius: 999px;
         background: #1a1a1a;
         border: 1px solid #2a2a2a;
-        font-size: 12px;
+        font-size: 14px;
         font-weight: 500;
         color: #a1a1a1;
         cursor: pointer;
@@ -75,7 +75,7 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
         background: #242424;
         padding: 1px 6px;
         border-radius: 999px;
-        font-size: 11px;
+        font-size: 13px;
         font-weight: 600;
       }
       .domain-pill.active .domain-count {
@@ -112,7 +112,7 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
         border: 1px solid #2a2a2a;
         background: #1a1a1a;
         color: #fafafa;
-        font-size: 13px;
+        font-size: 14px;
         font-family: inherit;
         outline: none;
         transition: border-color 0.15s;
@@ -125,7 +125,7 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
         border: 1px solid #2a2a2a;
         background: #1a1a1a;
         color: #fafafa;
-        font-size: 13px;
+        font-size: 14px;
         font-family: inherit;
         outline: none;
         cursor: pointer;
@@ -185,7 +185,7 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
         min-width: 0;
       }
       .task-title {
-        font-size: 13px;
+        font-size: 15px;
         font-weight: 500;
         line-height: 1.4;
         margin-bottom: 4px;
@@ -204,7 +204,7 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
         padding: 2px 8px;
         border-radius: 999px;
         background: #242424;
-        font-size: 11px;
+        font-size: 13px;
         font-weight: 500;
         color: #a1a1a1;
       }
@@ -235,7 +235,7 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
         flex-shrink: 0;
         padding: 2px 8px;
         border-radius: 999px;
-        font-size: 11px;
+        font-size: 13px;
         font-weight: 600;
       }
       .score-high { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
@@ -299,7 +299,7 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
         margin-bottom: 8px;
       }
       .empty-state p {
-        font-size: 14px;
+        font-size: 16px;
         color: #a1a1a1;
         margin-bottom: 24px;
         max-width: 360px;
@@ -334,7 +334,7 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
         border-radius: 8px;
         margin-bottom: 16px;
         color: #f87171;
-        font-size: 13px;
+        font-size: 14px;
       }
       .error-banner svg { width: 18px; height: 18px; flex-shrink: 0; }
       .retry-btn {
@@ -344,7 +344,7 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
         border: none;
         background: rgba(239, 68, 68, 0.2);
         color: #f87171;
-        font-size: 13px;
+        font-size: 14px;
         font-weight: 500;
         cursor: pointer;
         font-family: inherit;
