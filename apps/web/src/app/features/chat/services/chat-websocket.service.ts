@@ -252,6 +252,7 @@ export class ChatWebsocketService {
   private executionProgressCallbacks: ExecutionProgressCallback[] = [];
   private executionStartedCallbacks: ExecutionStartedCallback[] = [];
   private executionCompleteCallbacks: ExecutionCompleteCallback[] = [];
+  private agentConceptActivityCallbacks: Array<(data: { agentType: string; conceptId: string; status: string }) => void> = [];
 
   /**
    * Connects to the WebSocket server.
@@ -618,6 +619,11 @@ export class ChatWebsocketService {
     });
     this.socket.on('maturity:execution-complete', (data: any) => {
       this.executionCompleteCallbacks.forEach((cb) => cb(data));
+    });
+
+    // Agent concept activity (for graph visualization)
+    this.socket.on('agent:concept-activity', (data: { agentType: string; conceptId: string; status: string }) => {
+      this.agentConceptActivityCallbacks.forEach((cb) => cb(data));
     });
   }
 
@@ -1291,6 +1297,14 @@ export class ChatWebsocketService {
     };
   }
 
+  onAgentConceptActivity(callback: (data: { agentType: string; conceptId: string; status: string }) => void): () => void {
+    this.agentConceptActivityCallbacks.push(callback);
+    return () => {
+      const index = this.agentConceptActivityCallbacks.indexOf(callback);
+      if (index > -1) this.agentConceptActivityCallbacks.splice(index, 1);
+    };
+  }
+
   clearCallbacks(): void {
     // H6: Include messageDeletedCallbacks in cleanup to prevent accumulation on reconnect
     this.messageDeletedCallbacks = [];
@@ -1354,5 +1368,6 @@ export class ChatWebsocketService {
     this.executionProgressCallbacks = [];
     this.executionStartedCallbacks = [];
     this.executionCompleteCallbacks = [];
+    this.agentConceptActivityCallbacks = [];
   }
 }

@@ -9,11 +9,13 @@ import { JobPanelComponent } from '../../features/chat/components/job-panel.comp
 import { MarkdownPipe } from '@mentor-ai/shared/ui';
 import { NotesApiService } from '../../features/chat/services/notes-api.service';
 import { ChatWebsocketService } from '../../features/chat/services/chat-websocket.service';
+import { GraphViewComponent } from '../../features/graph/graph-view.component';
+import { GraphPopupComponent } from '../../features/graph/graph-popup.component';
 
 @Component({
   selector: 'app-shell',
   standalone: true,
-  imports: [CommonModule, RouterModule, RouterLink, RouterLinkActive, ToastContainerComponent, JobPanelComponent, MarkdownPipe],
+  imports: [CommonModule, RouterModule, RouterLink, RouterLinkActive, ToastContainerComponent, JobPanelComponent, MarkdownPipe, GraphViewComponent, GraphPopupComponent],
   styles: [
     `
       :host {
@@ -260,6 +262,18 @@ import { ChatWebsocketService } from '../../features/chat/services/chat-websocke
         position: fixed;
         inset: 0;
         z-index: 99;
+      }
+
+      /* Graph panel in exec panel upper half */
+      .graph-panel {
+        height: 280px;
+        border-bottom: 1px solid #2A2A2A;
+        overflow: hidden;
+        transition: height 0.2s ease;
+      }
+      .graph-panel.hidden {
+        height: 0;
+        border-bottom: none;
       }
 
       /* Content area — row layout for content + exec panel */
@@ -1086,6 +1100,15 @@ import { ChatWebsocketService } from '../../features/chat/services/chat-websocke
                 </button>
               </div>
 
+              <!-- Knowledge Graph (upper half of panel) -->
+              <div class="graph-panel" [class.hidden]="!showGraph()">
+                <app-graph-view
+                  [embedded]="true"
+                  (noteActivated)="onGraphNoteActivated($event)"
+                  (expandRequested)="showGraphPopup.set(true)">
+                </app-graph-view>
+              </div>
+
               <div class="exec-panel-body" #panelBody>
                 <!-- Activity Feed — Claude-style Timeline -->
                 @if (execPanel.activityFeed().length > 0) {
@@ -1291,6 +1314,12 @@ import { ChatWebsocketService } from '../../features/chat/services/chat-websocke
       </div>
     </div>
     <app-toast-container />
+    @if (showGraphPopup()) {
+      <app-graph-popup
+        (closed)="showGraphPopup.set(false)"
+        (noteActivated)="onGraphNoteActivated($event)">
+      </app-graph-popup>
+    }
   `,
 })
 export class AppShellComponent {
@@ -1306,6 +1335,8 @@ export class AppShellComponent {
 
   readonly dropdownOpen = signal(false);
   readonly routeLoading = signal(false);
+  readonly showGraph = signal(true);
+  readonly showGraphPopup = signal(false);
 
   /** Map of context keys (taskId, batchId, etc.) → activity entry IDs */
   private readonly entryMap = new Map<string, string>();
@@ -1406,6 +1437,13 @@ export class AppShellComponent {
     } catch {
       // Silently ignore — panel stays with stale data
     }
+  }
+
+  onGraphNoteActivated(event: { noteId: string; conceptId: string }): void {
+    // Navigate to the task hub or chat with this note
+    // For now, navigate to task hub with search
+    this.router.navigate(['/tasks'], { queryParams: { search: event.conceptId } });
+    this.showGraphPopup.set(false);
   }
 
   formatRelativeTime(date: Date): string {
