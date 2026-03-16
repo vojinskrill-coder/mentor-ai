@@ -86,7 +86,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         padding: clamp(6px, 0.5vw, 10px) clamp(16px, 1.2vw, 24px);
         margin: 1px clamp(6px, 0.5vw, 10px);
         border-radius: 6px;
-        font-size: 13px;
+        font-size: 17px !important;
         font-weight: 500;
         color: var(--color-text-secondary, #a1a1a1);
         text-decoration: none;
@@ -363,7 +363,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         box-sizing: border-box;
       }
       .exec-panel-title {
-        font-size: var(--text-small, 13px);
+        font-size: clamp(14px, 0.9vw, 17px) !important;
         font-weight: 600;
         flex: 1;
         white-space: nowrap;
@@ -686,7 +686,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         margin-bottom: 12px;
       }
       .feed-header-title {
-        font-size: var(--text-small, 13px); font-weight: 600;
+        font-size: clamp(14px, 0.9vw, 17px) !important; font-weight: 600;
         letter-spacing: 0.02em; color: #808080;
         display: flex; align-items: center; gap: 8px;
       }
