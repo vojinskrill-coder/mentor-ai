@@ -113,15 +113,27 @@ interface WorkflowStatusEntry {
       }
       .sidebar {
         width: clamp(240px, 17vw, 320px);
-        min-width: clamp(240px, 17vw, 320px);
+        min-width: 200px;
         background: #0d0d0d;
         border-right: 1px solid #2a2a2a;
         display: flex;
         flex-direction: column;
-        transition:
-          width 0.25s ease,
-          min-width 0.25s ease;
         overflow: hidden;
+        position: relative;
+        flex-shrink: 0;
+      }
+      .sidebar-resize {
+        position: absolute;
+        right: -3px;
+        top: 0;
+        bottom: 0;
+        width: 6px;
+        cursor: col-resize;
+        z-index: 10;
+      }
+      .sidebar-resize:hover,
+      .sidebar-resize.active {
+        background: rgba(59, 130, 246, 0.3);
       }
       .sidebar.collapsed {
         width: 0;
@@ -1742,7 +1754,10 @@ interface WorkflowStatusEntry {
         <div class="sidebar-overlay" (click)="toggleSidebar()"></div>
       }
       <!-- Left Sidebar -->
-      <aside class="sidebar" [class.collapsed]="sidebarCollapsed$()">
+      <aside class="sidebar" [class.collapsed]="sidebarCollapsed$()" [style.width.px]="sidebarWidth$()">
+        <div class="sidebar-resize"
+          [class.active]="isResizingSidebar"
+          (mousedown)="onSidebarResizeStart($event)"></div>
         <div class="sidebar-header">
           <h1>Prikaz stabla</h1>
           <button class="sidebar-toggle" (click)="toggleSidebar()">
@@ -3042,6 +3057,8 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   readonly isStreaming$ = signal(false);
   readonly showScrollToBottom$ = signal(false);
   readonly sidebarCollapsed$ = signal(false);
+  readonly sidebarWidth$ = signal(280);
+  isResizingSidebar = false;
   readonly isLoadingConversation$ = signal(false);
   readonly streamingContent$ = signal('');
   readonly streamingMessage$ = computed(
@@ -4072,6 +4089,29 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Toggle sidebar collapsed state */
   toggleSidebar(): void {
     this.sidebarCollapsed$.set(!this.sidebarCollapsed$());
+  }
+
+  onSidebarResizeStart(event: MouseEvent): void {
+    event.preventDefault();
+    this.isResizingSidebar = true;
+    const startX = event.clientX;
+    const startW = this.sidebarWidth$();
+
+    const onMove = (e: MouseEvent) => {
+      const delta = e.clientX - startX;
+      this.sidebarWidth$.set(Math.max(180, Math.min(600, startW + delta)));
+    };
+    const onUp = () => {
+      this.isResizingSidebar = false;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   }
 
   /** Handle suggestion card click from empty state */

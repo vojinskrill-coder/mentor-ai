@@ -128,13 +128,13 @@
      Uses clamp() for smooth scaling across screen sizes
      Min = 1080p, Preferred = scales with vw, Max = 4K
      ============================================ */
-  --text-display: clamp(32px, 2.6vw, 52px);
-  --text-h1: clamp(24px, 2vw, 40px);
-  --text-h2: clamp(20px, 1.6vw, 32px);
-  --text-h3: clamp(16px, 1.3vw, 26px);
-  --text-body: clamp(15px, 1.1vw, 22px);
-  --text-small: clamp(14px, 0.95vw, 19px);
-  --text-tiny: clamp(12px, 0.8vw, 16px);
+  --text-display: clamp(28px, 2.2vw, 42px);
+  --text-h1: clamp(21px, 1.6vw, 32px);
+  --text-h2: clamp(17px, 1.3vw, 26px);
+  --text-h3: clamp(14px, 1.1vw, 21px);
+  --text-body: clamp(13px, 0.95vw, 18px);
+  --text-small: clamp(12px, 0.82vw, 16px);
+  --text-tiny: clamp(11px, 0.7vw, 14px);
 
   /* Line Heights */
   --leading-display: 1.2;
@@ -672,7 +672,23 @@ body {
 
 /* Base font size scales with viewport — affects all rem values */
 html {
-  font-size: clamp(15px, 1.1vw, 24px);
+  font-size: clamp(14px, 0.95vw, 19px);
+}
+
+/* Prevent text from escaping parent containers */
+* {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+/* Labels and single-line text truncate instead of wrapping */
+span, a, label, th, .nav-item, .btn, button {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Multi-line elements can wrap normally */
+p, li, td, div, textarea, h1, h2, h3, h4 {
+  white-space: normal;
 }
 
 /* Force readable text inside content and exec panels.
