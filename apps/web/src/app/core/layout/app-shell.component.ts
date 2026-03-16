@@ -482,7 +482,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         gap: 4px;
         padding: 4px 10px;
         border-radius: 999px;
-        font-size: 13px;
+        font-size: 16px;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.03em;
@@ -495,7 +495,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         margin-left: auto;
         padding: 3px 10px;
         border-radius: 999px;
-        font-size: 14px;
+        font-size: 16px;
         font-weight: 600;
       }
       .panel-score.high { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
@@ -514,7 +514,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         padding: 3px 10px;
         border-radius: 999px;
         background: #242424;
-        font-size: 14px;
+        font-size: 16px;
         font-weight: 500;
         color: #a1a1a1;
         margin-bottom: 16px;
@@ -556,7 +556,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         50% { opacity: 0.4; }
       }
       .panel-step-label {
-        font-size: 12px;
+        font-size: 16px;
         color: #707070;
         white-space: nowrap;
       }
@@ -576,7 +576,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         margin-bottom: 16px;
       }
       .panel-section-label {
-        font-size: 13px;
+        font-size: 16px;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
@@ -618,13 +618,13 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         margin-bottom: 8px;
       }
       .panel-jobs-title {
-        font-size: 14px;
+        font-size: 16px;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
         color: #707070;
       }
-      .panel-jobs-count { font-size: 14px; color: #9e9e9e; }
+      .panel-jobs-count { font-size: 16px; color: #9e9e9e; }
       .panel-job-row {
         display: flex;
         align-items: center;
@@ -650,7 +650,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         color: #d0d0d0;
       }
       .panel-job-status {
-        font-size: 13px;
+        font-size: 16px;
         font-weight: 500;
         text-transform: uppercase;
         letter-spacing: 0.03em;
@@ -667,7 +667,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         gap: 10px;
         padding-top: 12px;
         border-top: 1px solid #2a2a2a;
-        font-size: 14px;
+        font-size: 16px;
         color: #707070;
       }
       .panel-chat-link {
