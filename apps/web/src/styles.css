@@ -672,8 +672,21 @@ body {
 
 /* Base font size scales with viewport — affects all rem values */
 html {
-  font-size: clamp(14px, 1.05vw, 22px);
+  font-size: clamp(15px, 1.1vw, 24px);
 }
+
+/* Force readable text inside content and exec panels.
+   Overrides Angular scoped 11px/12px/13px hardcoded values. */
+.content-inner span, .content-inner div:not(.shell):not(.layout),
+.content-inner a:not(.nav-item), .content-inner p, .content-inner li,
+.content-inner td, .content-inner th, .content-inner label,
+.exec-panel span, .exec-panel div:not(.graph-panel),
+.exec-panel a, .exec-panel p, .exec-panel li, .exec-panel td {
+  font-size: var(--text-small);
+}
+.content-inner h1, .exec-panel h1 { font-size: var(--text-h1) !important; }
+.content-inner h2, .exec-panel h2 { font-size: var(--text-h2) !important; }
+.content-inner h3, .exec-panel h3 { font-size: var(--text-h3) !important; }
 
 /* Headers across all components */
 h1, .page-title, .stage-title { font-size: var(--text-h1) !important; }
@@ -727,6 +740,54 @@ th { font-size: var(--text-small); font-weight: 600; }
 .nav-section-label {
   font-size: var(--text-tiny) !important;
   letter-spacing: 0.05em;
+}
+
+/* ============================================
+   Force minimum readable font sizes across ALL components.
+   Angular scoped styles use hardcoded 11px, 12px, 13px —
+   these overrides ensure nothing is unreadably small on large screens.
+   ============================================ */
+@media (min-width: 1600px) {
+  /* Anything set to 10-11px → bump to 13px */
+  *[style*="font-size: 10px"],
+  *[style*="font-size: 11px"] {
+    font-size: 13px !important;
+  }
+}
+
+/* Universal minimum font size on large screens */
+@media (min-width: 1440px) {
+  /* Tree view items, chat messages, labels, descriptions, list items, spans */
+  .concept-node, .tree-label, .tree-item, .tree-node,
+  .conv-title, .conv-item, .conversation-item,
+  .msg-text, .msg-user-text, .message-text,
+  .description, .subtitle, .page-desc,
+  .stat-label, .persona-label, .persona-name,
+  .stage-label, .stage-desc, .phase-label,
+  .card-title, .card-desc, .card-label,
+  .tab-label, .tab-item,
+  .domain-pill, .filter-btn,
+  .task-title, .task-desc, .task-meta,
+  .job-name, .job-status,
+  .tl-label, .tl-detail, .tl-stream-content,
+  .feed-label, .feed-detail,
+  .panel-task-title, .panel-concept, .panel-description,
+  .panel-section-label, .panel-status-badge, .panel-score,
+  .panel-job-name, .panel-job-status, .panel-jobs-title,
+  .panel-meta, .panel-chat-link, .panel-expected,
+  .exec-panel-title,
+  .init-card p, .stage-card p,
+  .progress-label, .completion-text,
+  .ws-indicator-label,
+  .empty-title, .empty-desc {
+    font-size: var(--text-small) !important;
+  }
+
+  /* Titles within panels and cards */
+  .panel-task-title, .card-title, .task-title, .conv-title,
+  .concept-name, .init-card h2, .stage-card h2 {
+    font-size: var(--text-body) !important;
+  }
 }
 
 /* ============================================
