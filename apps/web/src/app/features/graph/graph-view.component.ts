@@ -24,9 +24,9 @@ const PREMIUM_PERSONA_COLORS: Record<string, { core: string; glow: string; dim: 
 const DEFAULT_COLORS = { core: '#D1D5DB', glow: 'rgba(209,213,219,0.12)', dim: 'rgba(209,213,219,0.04)' };
 
 const EDGE_OPACITIES: Record<string, number> = {
-  PREREQUISITE: 0.18,
-  RELATED: 0.08,
-  ADVANCED: 0.06,
+  PREREQUISITE: 0.35,
+  RELATED: 0.18,
+  ADVANCED: 0.12,
 };
 
 @Component({
@@ -292,7 +292,7 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // Gradient line that fades at both ends
     const grad = ctx.createLinearGradient(source.x, source.y, ex, ey);
-    const edgeColor = isConnected ? 'rgba(200,210,240,' : 'rgba(120,140,180,';
+    const edgeColor = isConnected ? 'rgba(210,220,245,' : 'rgba(160,175,210,';
     grad.addColorStop(0, edgeColor + (finalOpacity * 0.3) + ')');
     grad.addColorStop(0.2, edgeColor + finalOpacity + ')');
     grad.addColorStop(0.8, edgeColor + finalOpacity + ')');

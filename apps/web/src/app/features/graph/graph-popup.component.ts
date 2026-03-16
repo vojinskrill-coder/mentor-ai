@@ -17,7 +17,7 @@ import { GraphViewComponent } from './graph-view.component';
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
     .popup {
-      width: 75vw; height: 75vh;
+      width: 80vw; height: 80vh;
       background: #06080C;
       border: 1px solid rgba(255,255,255,0.06);
       border-radius: 16px;
@@ -29,14 +29,14 @@ import { GraphViewComponent } from './graph-view.component';
     @keyframes scaleIn { from { transform: scale(0.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
     .close-btn {
-      position: absolute; top: 14px; right: 14px; z-index: 10;
-      width: 30px; height: 30px; border-radius: 10px;
-      background: rgba(15,17,23,0.8); border: 1px solid rgba(255,255,255,0.06); color: rgba(255,255,255,0.4);
-      font-size: 14px; cursor: pointer;
+      position: absolute; top: 12px; right: 12px; z-index: 100;
+      width: 36px; height: 36px; border-radius: 10px;
+      background: rgba(20,22,30,0.95); border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.6);
+      font-size: 16px; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       backdrop-filter: blur(8px); transition: all 0.2s;
     }
-    .close-btn:hover { background: rgba(239,68,68,0.2); border-color: rgba(239,68,68,0.3); color: #F87171; }
+    .close-btn:hover { background: rgba(239,68,68,0.3); border-color: rgba(239,68,68,0.4); color: #F87171; }
 
     .title {
       position: absolute; top: 16px; left: 20px; z-index: 10;
