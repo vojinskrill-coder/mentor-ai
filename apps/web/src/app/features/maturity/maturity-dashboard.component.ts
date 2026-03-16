@@ -73,15 +73,8 @@ const STAGE_ORDER: MaturityStage[] = [
       }
 
       .main {
-        max-width: min(95%, 1600px);
-        margin: 0 auto;
-        padding: 32px 24px;
-      }
-      @media (min-width: 1800px) {
-        .main {
-          max-width: min(90%, 1800px);
-          padding: 40px 32px;
-        }
+        width: 100%;
+        padding: clamp(20px, 2vw, 40px) clamp(20px, 2vw, 40px);
       }
 
       /* Header */

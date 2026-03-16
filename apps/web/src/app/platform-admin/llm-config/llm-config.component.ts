@@ -24,9 +24,8 @@ import { LlmProviderType, type LlmProviderStatus } from '@mentor-ai/shared/types
 
       /* Main Content */
       .page-content {
-        max-width: min(95%, 1200px);
-        margin: 0 auto;
-        padding: 0 24px 32px;
+        width: 100%;
+        padding: 0 clamp(20px, 2vw, 40px) clamp(20px, 2vw, 40px);
       }
 
       /* Loading */

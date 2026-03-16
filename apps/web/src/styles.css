@@ -101,19 +101,19 @@
   /* ============================================
      Layout Dimensions — Responsive
      ============================================ */
-  --layout-sidebar-width: clamp(240px, 17vw, 320px);
-  --layout-app-sidebar-width: clamp(200px, 14vw, 280px);
-  --layout-right-panel-width: clamp(320px, 22vw, 440px);
-  --layout-header-height: clamp(44px, 3.2vw, 56px);
+  --layout-sidebar-width: clamp(250px, 18vw, 380px);
+  --layout-app-sidebar-width: clamp(210px, 15vw, 320px);
+  --layout-right-panel-width: clamp(340px, 24vw, 560px);
+  --layout-header-height: clamp(46px, 3.4vw, 64px);
   --layout-chat-min-width: 320px;
   --layout-content-max-width: none;
 
   /* ============================================
      Responsive Icon Size
      ============================================ */
-  --icon-sm: clamp(14px, 0.95vw, 18px);
-  --icon-md: clamp(16px, 1.1vw, 22px);
-  --icon-lg: clamp(20px, 1.4vw, 28px);
+  --icon-sm: clamp(14px, 1vw, 22px);
+  --icon-md: clamp(16px, 1.2vw, 26px);
+  --icon-lg: clamp(20px, 1.6vw, 34px);
 
   /* ============================================
      Typography - Font Families
@@ -126,14 +126,15 @@
   /* ============================================
      Typography - Responsive Type Scale
      Uses clamp() for smooth scaling across screen sizes
+     Min = 1080p, Preferred = scales with vw, Max = 4K
      ============================================ */
-  --text-display: clamp(28px, 2vw, 38px);
-  --text-h1: clamp(20px, 1.5vw, 28px);
-  --text-h2: clamp(17px, 1.2vw, 23px);
-  --text-h3: clamp(14px, 1vw, 18px);
-  --text-body: clamp(13px, 0.9vw, 17px);
-  --text-small: clamp(12px, 0.78vw, 15px);
-  --text-tiny: clamp(10px, 0.66vw, 13px);
+  --text-display: clamp(30px, 2.4vw, 48px);
+  --text-h1: clamp(22px, 1.8vw, 36px);
+  --text-h2: clamp(18px, 1.4vw, 28px);
+  --text-h3: clamp(15px, 1.15vw, 22px);
+  --text-body: clamp(14px, 1vw, 20px);
+  --text-small: clamp(12px, 0.85vw, 17px);
+  --text-tiny: clamp(11px, 0.72vw, 15px);
 
   /* Line Heights */
   --leading-display: 1.2;
@@ -669,9 +670,9 @@ body {
    Components can still override these with their own scoped styles.
    ============================================ */
 
-/* Base font size scales with viewport */
+/* Base font size scales with viewport — affects all rem values */
 html {
-  font-size: clamp(14px, 0.95vw, 18px);
+  font-size: clamp(14px, 1.05vw, 22px);
 }
 
 /* Headers across all components */
@@ -683,7 +684,7 @@ h3, .subsection-title { font-size: var(--text-h3) !important; }
 p, li, td, th, label, .description, .subtitle, .page-desc {
   font-size: var(--text-body);
 }
-small, .text-small, .label, .badge, .tag, .chip, .stat-label, .meta {
+small, .text-small, .badge, .tag, .chip, .stat-label, .meta {
   font-size: var(--text-small);
 }
 .text-tiny, .timestamp, .hint {
@@ -693,7 +694,7 @@ small, .text-small, .label, .badge, .tag, .chip, .stat-label, .meta {
 /* Buttons across all components */
 button, .btn, .btn-primary, .btn-secondary, [class*="btn-"] {
   font-size: var(--text-small);
-  padding: clamp(6px, 0.5vw, 10px) clamp(12px, 1vw, 20px);
+  padding: clamp(7px, 0.55vw, 14px) clamp(14px, 1.1vw, 26px);
 }
 
 /* Icons across all components */
@@ -705,21 +706,27 @@ svg:not(.graph-svg) {
 /* Input/textarea across all components */
 input, textarea, select {
   font-size: var(--text-body);
-  padding: clamp(8px, 0.6vw, 12px) clamp(10px, 0.8vw, 16px);
+  padding: clamp(8px, 0.7vw, 16px) clamp(12px, 0.9vw, 20px);
 }
 
 /* Tables across all components */
 table { font-size: var(--text-small); }
-th { font-size: var(--text-small); }
+th { font-size: var(--text-small); font-weight: 600; }
 
 /* Cards, panels — responsive padding */
 .card, .panel, .section, .init-card, .stage-card, .persona-card {
-  padding: clamp(16px, 1.2vw, 24px);
+  padding: clamp(16px, 1.4vw, 32px);
 }
 
 /* Progress bars, stat numbers */
 .stat-value, .progress-label, .score {
   font-size: var(--text-h3);
+}
+
+/* Nav section labels */
+.nav-section-label {
+  font-size: var(--text-tiny) !important;
+  letter-spacing: 0.05em;
 }
 
 /* ============================================

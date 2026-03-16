@@ -34,8 +34,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
 
       /* ===== SIDEBAR ===== */
       .sidebar {
-        width: clamp(200px, 14vw, 280px);
-        min-width: clamp(200px, 14vw, 280px);
+        width: clamp(200px, 14vw, 260px);
+        min-width: clamp(200px, 14vw, 260px);
         background: var(--color-bg-base, #0d0d0d);
         border-right: 1px solid var(--color-border-subtle, #2a2a2a);
         display: flex;
@@ -44,7 +44,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         overflow: hidden;
       }
       .sidebar-brand {
-        height: clamp(44px, 3.2vw, 56px);
+        height: clamp(44px, 3vw, 52px);
         display: flex;
         align-items: center;
         padding: 0 clamp(16px, 1.2vw, 24px);
@@ -86,7 +86,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         padding: clamp(6px, 0.5vw, 10px) clamp(16px, 1.2vw, 24px);
         margin: 1px clamp(6px, 0.5vw, 10px);
         border-radius: 6px;
-        font-size: clamp(12px, 0.8vw, 15px);
+        font-size: clamp(13px, 0.85vw, 16px);
         font-weight: 500;
         color: var(--color-text-secondary, #a1a1a1);
         text-decoration: none;
@@ -113,8 +113,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         background: var(--color-primary, #3b82f6);
       }
       .nav-item svg {
-        width: clamp(16px, 1.1vw, 22px);
-        height: clamp(16px, 1.1vw, 22px);
+        width: clamp(16px, 1.1vw, 20px);
+        height: clamp(16px, 1.1vw, 20px);
         flex-shrink: 0;
         opacity: 0.7;
       }
@@ -133,8 +133,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
 
       /* Topbar — aligned with sidebar brand */
       .topbar {
-        height: clamp(44px, 3.2vw, 56px);
-        min-height: clamp(44px, 3.2vw, 56px);
+        height: clamp(44px, 3vw, 52px);
+        min-height: clamp(44px, 3vw, 52px);
         display: flex;
         align-items: center;
         justify-content: flex-end;
@@ -181,7 +181,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         color: var(--color-text-primary, #fafafa);
         cursor: pointer;
         font-family: inherit;
-        font-size: clamp(12px, 0.8vw, 15px);
+        font-size: clamp(13px, 0.85vw, 16px);
         font-weight: 500;
         transition: background 0.15s ease;
       }
@@ -233,7 +233,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         border: none;
         background: transparent;
         color: var(--color-text-secondary, #a1a1a1);
-        font-size: clamp(12px, 0.8vw, 15px);
+        font-size: clamp(13px, 0.85vw, 16px);
         font-weight: 500;
         font-family: inherit;
         cursor: pointer;
@@ -300,7 +300,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
 
       /* ===== EXECUTION PANEL (right sidebar) — responsive width ===== */
       .exec-panel {
-        width: clamp(380px, 26vw, 600px);
+        width: clamp(400px, 28vw, 700px);
         min-width: clamp(340px, 22vw, 500px);
         max-width: 55vw;
         flex-shrink: 0;
@@ -346,11 +346,11 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         padding: clamp(10px, 0.8vw, 16px) clamp(12px, 1vw, 20px);
         border-bottom: 1px solid #2a2a2a;
         flex-shrink: 0;
-        min-height: clamp(44px, 3.2vw, 56px);
+        min-height: clamp(44px, 3vw, 52px);
         box-sizing: border-box;
       }
       .exec-panel-title {
-        font-size: clamp(12px, 0.8vw, 15px);
+        font-size: clamp(13px, 0.85vw, 16px);
         font-weight: 600;
         flex: 1;
         white-space: nowrap;
@@ -1015,11 +1015,6 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
             Zadaci
           </a>
-          <a class="nav-item" routerLink="/maturity" routerLinkActive="active">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
-            Poslovni mozak
-          </a>
-
           @if (isOwnerOrAdmin()) {
             <div class="nav-section-label">Upravljanje</div>
             <a class="nav-item" routerLink="/team" routerLinkActive="active">
