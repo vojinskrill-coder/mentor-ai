@@ -47,6 +47,155 @@ export class HeadlessExecutorService {
     // Add generous margin for network delays and queue wait.
     this.jobCompletionTimeoutMs = (openclawTimeout + 60) * 1000 + 120_000;
     // With defaults: (600 + 60) * 1000 + 120_000 = 780_000ms = 13 min
+
+    // Start stuck job watchdog — checks every 30s for jobs stuck >10 min
+    this.startStuckJobWatchdog();
+  }
+
+  /**
+   * Periodic watchdog: detects stuck EXECUTING/RUNNING jobs and resets them for retry.
+   * Jobs get stuck when OpenClaw completes but the response is never received
+   * (connection drop, relay crash, timeout).
+   *
+   * Resets stuck job to PLANNED + cleans up the execution record.
+   * The headless executor's executeJobsInOrder/waitForJobCompletion loop will
+   * automatically pick up the reset job on its next poll cycle.
+   * Max 2 automatic retries per job, then permanently fails.
+   */
+  private stuckRetryCount = new Map<string, number>();
+
+  private startStuckJobWatchdog(): void {
+    const STUCK_THRESHOLD_MS = 10 * 60_000; // 10 minutes
+    const CHECK_INTERVAL_MS = 30_000; // 30 seconds
+    const MAX_AUTO_RETRIES = 2;
+
+    setInterval(async () => {
+      try {
+        const cutoff = new Date(Date.now() - STUCK_THRESHOLD_MS);
+
+        // Find stuck executions
+        const stuckExecs = await this.prisma.agentExecution.findMany({
+          where: {
+            status: { in: ['EXECUTING', 'FORMATTING', 'PENDING'] },
+            startedAt: { lt: cutoff },
+          },
+          select: { id: true, agentType: true, startedAt: true },
+        });
+
+        if (stuckExecs.length === 0) return;
+
+        this.logger.warn({
+          message: `Watchdog: found ${stuckExecs.length} stuck executions (>10min)`,
+          executionIds: stuckExecs.map((e) => e.id),
+        });
+
+        for (const exec of stuckExecs) {
+          // Find linked job
+          const linkedJob = await this.prisma.agentJob.findFirst({
+            where: { executionId: exec.id },
+            select: { id: true, status: true },
+          });
+
+          const jobId = linkedJob?.id ?? exec.id;
+          const retries = this.stuckRetryCount.get(jobId) ?? 0;
+
+          // Force-fail the execution to release concurrency slot
+          await this.prisma.agentExecution.update({
+            where: { id: exec.id },
+            data: {
+              status: 'FAILED',
+              error: `Watchdog: stuck >10min (retry ${retries + 1}/${MAX_AUTO_RETRIES})`,
+              completedAt: new Date(),
+            },
+          });
+
+          if (linkedJob && ['RUNNING', 'PENDING'].includes(linkedJob.status)) {
+            if (retries < MAX_AUTO_RETRIES) {
+              // Reset job to PLANNED for automatic retry
+              await this.prisma.agentJob.update({
+                where: { id: linkedJob.id },
+                data: { status: 'PLANNED', executionId: null, error: null },
+              });
+              this.stuckRetryCount.set(jobId, retries + 1);
+              this.logger.log({
+                message: `Watchdog: reset job to PLANNED for retry`,
+                jobId: linkedJob.id,
+                attempt: retries + 1,
+                maxRetries: MAX_AUTO_RETRIES,
+              });
+            } else {
+              // Exceeded retries — permanently fail
+              await this.prisma.agentJob.update({
+                where: { id: linkedJob.id },
+                data: { status: 'FAILED', error: `Watchdog: exceeded ${MAX_AUTO_RETRIES} auto-retries` },
+              });
+              this.stuckRetryCount.delete(jobId);
+              this.logger.warn({
+                message: `Watchdog: job permanently failed after ${MAX_AUTO_RETRIES} retries`,
+                jobId: linkedJob.id,
+              });
+            }
+          }
+        }
+        // Also check for PLANNED jobs whose dependencies are all done but weren't picked up
+        const plannedJobs = await this.prisma.agentJob.findMany({
+          where: { status: 'PLANNED' },
+          select: { id: true, dependsOn: true, noteId: true, agentType: true, createdAt: true },
+        });
+
+        for (const job of plannedJobs) {
+          const ageMs = Date.now() - new Date(job.createdAt).getTime();
+          if (ageMs < 60_000) continue; // skip if less than 1 min old (still being set up)
+
+          if (job.dependsOn.length === 0) {
+            // No dependencies — should have been started already
+            this.logger.warn({
+              message: 'Watchdog: orphan PLANNED job with no dependencies, triggering',
+              jobId: job.id, agentType: job.agentType, ageMin: Math.round(ageMs / 60000),
+            });
+          } else {
+            // Check if all dependencies are terminal
+            const deps = await this.prisma.agentJob.findMany({
+              where: { id: { in: job.dependsOn } },
+              select: { status: true },
+            });
+            const allTerminal = deps.every((d) => ['COMPLETED', 'FAILED'].includes(d.status));
+            if (!allTerminal) continue; // dependencies still running — normal
+
+            this.logger.warn({
+              message: 'Watchdog: PLANNED job with all deps done, triggering',
+              jobId: job.id, agentType: job.agentType, depStatuses: deps.map((d) => d.status),
+            });
+          }
+
+          // Find tenant/user from the note
+          const note = await this.prisma.note.findUnique({
+            where: { id: job.noteId },
+            select: { tenantId: true, userId: true },
+          });
+          if (!note) continue;
+
+          try {
+            await this.agentExecutionService.executeJob(job.id, note.userId, note.tenantId);
+            this.logger.log({ message: `Watchdog: triggered PLANNED job ${job.id}` });
+          } catch (triggerErr) {
+            const msg = triggerErr instanceof Error ? triggerErr.message : '';
+            if (!msg.includes('concurrent') && !msg.includes('Maximum')) {
+              this.logger.warn({
+                message: `Watchdog: failed to trigger job ${job.id}`,
+                error: msg,
+              });
+            }
+            // concurrent limit hit — will retry on next watchdog cycle
+          }
+        }
+      } catch (err) {
+        this.logger.error({
+          message: 'Watchdog: error checking stuck jobs',
+          error: err instanceof Error ? err.message : 'Unknown',
+        });
+      }
+    }, CHECK_INTERVAL_MS);
   }
 
   /**
