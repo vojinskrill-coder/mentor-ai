@@ -193,8 +193,8 @@ const STAGE_ORDER: MaturityStage[] = [
       }
       .ring-container {
         position: relative;
-        width: 120px;
-        height: 120px;
+        width: 150px;
+        height: 150px;
       }
       .ring-svg {
         transform: rotate(-90deg);
@@ -901,7 +901,7 @@ const STAGE_ORDER: MaturityStage[] = [
           <!-- Ring -->
           <div class="ring-card">
             <div class="ring-container">
-              <svg class="ring-svg" width="120" height="120" viewBox="0 0 120 120">
+              <svg class="ring-svg" width="150" height="150" viewBox="0 0 120 120">
                 <circle class="ring-bg" cx="60" cy="60" r="52" />
                 <circle class="ring-progress"
                         cx="60" cy="60" r="52"
