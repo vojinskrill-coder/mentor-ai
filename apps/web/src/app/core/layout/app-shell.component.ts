@@ -35,8 +35,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
 
       /* ===== SIDEBAR ===== */
       .sidebar {
-        width: 220px;
-        min-width: 220px;
+        width: clamp(200px, 14vw, 280px);
+        min-width: clamp(200px, 14vw, 280px);
         background: var(--color-bg-base, #0d0d0d);
         border-right: 1px solid var(--color-border-subtle, #2a2a2a);
         display: flex;
@@ -45,49 +45,49 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         overflow: hidden;
       }
       .sidebar-brand {
-        height: 48px;
+        height: clamp(44px, 3.2vw, 56px);
         display: flex;
         align-items: center;
-        padding: 0 20px;
+        padding: 0 clamp(16px, 1.2vw, 24px);
         border-bottom: 1px solid var(--color-border-subtle, #2a2a2a);
         flex-shrink: 0;
       }
       .sidebar-brand h1 {
-        font-size: 15px;
+        font-size: clamp(14px, 0.9vw, 17px);
         font-weight: 600;
         color: var(--color-text-primary, #fafafa);
         letter-spacing: -0.01em;
       }
       .sidebar-brand .brand-dot {
         display: inline-block;
-        width: 8px;
-        height: 8px;
+        width: clamp(7px, 0.5vw, 10px);
+        height: clamp(7px, 0.5vw, 10px);
         border-radius: 50%;
         background: var(--color-primary, #3b82f6);
-        margin-right: 10px;
+        margin-right: clamp(8px, 0.6vw, 12px);
         flex-shrink: 0;
       }
       .sidebar-nav {
         flex: 1;
         overflow-y: auto;
-        padding: 8px 0;
+        padding: clamp(6px, 0.5vw, 10px) 0;
       }
       .nav-section-label {
-        font-size: 11px;
+        font-size: clamp(10px, 0.7vw, 12px);
         font-weight: 500;
         color: var(--color-text-muted, #9e9e9e);
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        padding: 16px 20px 6px;
+        padding: clamp(12px, 1vw, 20px) clamp(16px, 1.2vw, 24px) clamp(4px, 0.4vw, 8px);
       }
       .nav-item {
         display: flex;
         align-items: center;
-        gap: 10px;
-        padding: 8px 20px;
-        margin: 1px 8px;
+        gap: clamp(8px, 0.6vw, 12px);
+        padding: clamp(6px, 0.5vw, 10px) clamp(16px, 1.2vw, 24px);
+        margin: 1px clamp(6px, 0.5vw, 10px);
         border-radius: 6px;
-        font-size: 13px;
+        font-size: clamp(12px, 0.8vw, 15px);
         font-weight: 500;
         color: var(--color-text-secondary, #a1a1a1);
         text-decoration: none;
@@ -114,8 +114,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         background: var(--color-primary, #3b82f6);
       }
       .nav-item svg {
-        width: 18px;
-        height: 18px;
+        width: clamp(16px, 1.1vw, 22px);
+        height: clamp(16px, 1.1vw, 22px);
         flex-shrink: 0;
         opacity: 0.7;
       }
@@ -134,12 +134,12 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
 
       /* Topbar — aligned with sidebar brand */
       .topbar {
-        height: 48px;
-        min-height: 48px;
+        height: clamp(44px, 3.2vw, 56px);
+        min-height: clamp(44px, 3.2vw, 56px);
         display: flex;
         align-items: center;
         justify-content: flex-end;
-        padding: 0 24px;
+        padding: 0 clamp(16px, 1.5vw, 32px);
         border-bottom: 1px solid var(--color-border-subtle, #2a2a2a);
         background: var(--color-bg-base, #0d0d0d);
         flex-shrink: 0;
@@ -174,7 +174,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .user-btn {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: clamp(6px, 0.5vw, 10px);
         padding: 4px 8px 4px 4px;
         border-radius: 6px;
         border: none;
@@ -182,7 +182,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         color: var(--color-text-primary, #fafafa);
         cursor: pointer;
         font-family: inherit;
-        font-size: 13px;
+        font-size: clamp(12px, 0.8vw, 15px);
         font-weight: 500;
         transition: background 0.15s ease;
       }
@@ -190,15 +190,15 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         background: var(--color-bg-surface, #1a1a1a);
       }
       .user-avatar {
-        width: 28px;
-        height: 28px;
+        width: clamp(26px, 1.8vw, 34px);
+        height: clamp(26px, 1.8vw, 34px);
         border-radius: 50%;
         background: var(--color-primary, #3b82f6);
         display: flex;
         align-items: center;
         justify-content: center;
         color: white;
-        font-size: 11px;
+        font-size: clamp(10px, 0.7vw, 13px);
         font-weight: 600;
         flex-shrink: 0;
       }
@@ -227,14 +227,14 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .dropdown-item {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: clamp(6px, 0.5vw, 10px);
         width: 100%;
-        padding: 8px 12px;
+        padding: clamp(6px, 0.5vw, 10px) clamp(10px, 0.8vw, 16px);
         border-radius: 6px;
         border: none;
         background: transparent;
         color: var(--color-text-secondary, #a1a1a1);
-        font-size: 13px;
+        font-size: clamp(12px, 0.8vw, 15px);
         font-weight: 500;
         font-family: inherit;
         cursor: pointer;
@@ -293,6 +293,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         flex: 1;
         min-width: 0;
         min-height: 0;
+        max-width: none;
         overflow: hidden;
         display: flex;
         flex-direction: column;
@@ -300,8 +301,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
 
       /* ===== EXECUTION PANEL (right sidebar) — responsive width ===== */
       .exec-panel {
-        width: 420px;
-        min-width: 360px;
+        width: clamp(380px, 26vw, 600px);
+        min-width: clamp(340px, 22vw, 500px);
         max-width: 55vw;
         flex-shrink: 0;
         height: 100%;
@@ -313,9 +314,6 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         transition: width 0.2s ease, min-width 0.2s ease, opacity 0.15s ease;
         position: relative;
       }
-      /* Scale exec panel on large screens */
-      @media (min-width: 1800px) { .exec-panel { width: 480px; } }
-      @media (min-width: 2200px) { .exec-panel { width: 540px; } }
       .exec-panel.collapsed {
         width: 0;
         min-width: 0;
@@ -345,15 +343,15 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .exec-panel-header {
         display: flex;
         align-items: center;
-        gap: 10px;
-        padding: 12px 16px;
+        gap: clamp(8px, 0.6vw, 12px);
+        padding: clamp(10px, 0.8vw, 16px) clamp(12px, 1vw, 20px);
         border-bottom: 1px solid #2a2a2a;
         flex-shrink: 0;
-        min-height: 48px; /* align with sidebar brand */
+        min-height: clamp(44px, 3.2vw, 56px);
         box-sizing: border-box;
       }
       .exec-panel-title {
-        font-size: 13px;
+        font-size: clamp(12px, 0.8vw, 15px);
         font-weight: 600;
         flex: 1;
         white-space: nowrap;
@@ -393,7 +391,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .exec-panel-body {
         flex: 1;
         overflow-y: auto;
-        padding: 16px;
+        padding: clamp(12px, 1vw, 20px);
         scrollbar-width: thin;
         scrollbar-color: #2a2a2a transparent;
       }
@@ -407,12 +405,12 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         border: 1px solid #2a2a2a;
         color: #707070;
         cursor: pointer;
-        padding: 6px 8px;
+        padding: clamp(4px, 0.4vw, 8px) clamp(6px, 0.5vw, 10px);
         border-radius: 6px;
         display: flex;
         align-items: center;
-        gap: 6px;
-        font-size: 12px;
+        gap: clamp(4px, 0.4vw, 8px);
+        font-size: clamp(11px, 0.75vw, 14px);
         font-family: inherit;
         transition: color 0.15s, border-color 0.15s, background 0.15s;
       }

@@ -173,7 +173,7 @@
   }
 
   html {
-    font-size: 16px;
+    font-size: clamp(14px, 0.95vw, 18px);
     line-height: 1.5;
     font-family: var(--font-sans);
   }
@@ -614,15 +614,6 @@
 /* ============================================
    Large Screen Responsiveness
    ============================================ */
-@media (min-width: 1536px) {
-  .message-content {
-    max-width: 720px;
-  }
-  .chat-main {
-    max-width: 960px;
-    margin: 0 auto;
-  }
-}
 
 /* Base reset */
 html, body {
@@ -652,6 +643,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  max-width: none;
 }
 /* Pages that scroll their own content (maturity, dashboard, tasks, settings) */
 .content-inner > app-maturity-dashboard,

@@ -90,7 +90,7 @@ interface WorkflowStatusEntry {
       /* All styles inline - no Tailwind dependency */
       :host {
         display: flex;
-        flex-direction: column;
+        flex: 1;
         width: 100%;
         height: 100%;
         min-height: 0;
@@ -106,13 +106,14 @@ interface WorkflowStatusEntry {
         flex: 1;
         min-height: 0;
         overflow: hidden;
+        width: 100%;
         background: #0d0d0d;
         color: #fafafa;
         font-family: 'Inter', system-ui, sans-serif;
       }
       .sidebar {
-        width: 280px;
-        min-width: 280px;
+        width: clamp(240px, 17vw, 320px);
+        min-width: clamp(240px, 17vw, 320px);
         background: #0d0d0d;
         border-right: 1px solid #2a2a2a;
         display: flex;
@@ -201,32 +202,32 @@ interface WorkflowStatusEntry {
         }
       }
       .sidebar-header {
-        height: 48px;
+        height: clamp(44px, 3.2vw, 56px);
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0 16px;
+        padding: 0 clamp(12px, 1vw, 20px);
         border-bottom: 1px solid #2a2a2a;
       }
       .sidebar-header h1 {
-        font-size: 15px;
+        font-size: clamp(14px, 0.9vw, 17px);
         font-weight: 600;
       }
       .sidebar-actions {
-        padding: 12px;
+        padding: clamp(10px, 0.8vw, 16px);
       }
       .new-chat-btn {
         width: 100%;
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 8px;
+        gap: clamp(6px, 0.5vw, 10px);
         background: #3b82f6;
         color: white;
         border: none;
-        padding: 10px 16px;
+        padding: clamp(8px, 0.6vw, 12px) clamp(12px, 1vw, 20px);
         border-radius: 8px;
-        font-size: 13px;
+        font-size: clamp(12px, 0.8vw, 15px);
         font-weight: 500;
         cursor: pointer;
       }
@@ -238,7 +239,7 @@ interface WorkflowStatusEntry {
         cursor: not-allowed;
       }
       .sidebar-footer {
-        padding: 12px;
+        padding: clamp(10px, 0.8vw, 16px);
         border-top: 1px solid #2a2a2a;
         display: flex;
         flex-direction: column;
@@ -247,11 +248,11 @@ interface WorkflowStatusEntry {
       .sidebar-footer a {
         display: flex;
         align-items: center;
-        gap: 8px;
-        font-size: 13px;
+        gap: clamp(6px, 0.5vw, 10px);
+        font-size: clamp(12px, 0.8vw, 15px);
         color: #9e9e9e;
         text-decoration: none;
-        padding: 6px 4px;
+        padding: clamp(5px, 0.4vw, 8px) 4px;
         border-radius: 4px;
       }
       .sidebar-footer a:hover {
@@ -261,17 +262,18 @@ interface WorkflowStatusEntry {
       .chat-main {
         flex: 1;
         min-width: 0;
+        max-width: none;
         display: flex;
         flex-direction: column;
         background: #0d0d0d;
         overflow: hidden;
       }
       .chat-header {
-        height: 48px;
+        height: clamp(44px, 3.2vw, 56px);
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0 16px;
+        padding: 0 clamp(12px, 1vw, 20px);
         border-bottom: 1px solid #2a2a2a;
       }
       .chat-header-left {
@@ -280,18 +282,18 @@ interface WorkflowStatusEntry {
         gap: 12px;
       }
       .chat-header h2 {
-        font-size: 15px;
+        font-size: clamp(14px, 0.9vw, 17px);
         font-weight: 500;
       }
       .switch-btn {
         background: none;
         border: none;
         color: #9e9e9e;
-        font-size: 13px;
+        font-size: clamp(12px, 0.8vw, 15px);
         cursor: pointer;
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: clamp(4px, 0.4vw, 8px);
       }
       .switch-btn:hover:not(:disabled) {
         color: #fafafa;
@@ -436,11 +438,12 @@ interface WorkflowStatusEntry {
       .chat-messages {
         flex: 1;
         overflow-y: auto;
-        padding: 24px;
+        padding: clamp(16px, 1.5vw, 32px);
         scroll-behavior: smooth;
       }
       .messages-container {
         width: 100%;
+        max-width: none;
       }
       .scroll-to-bottom {
         position: absolute;
@@ -543,26 +546,26 @@ interface WorkflowStatusEntry {
         justify-content: center;
       }
       .empty-title {
-        font-size: 24px;
+        font-size: clamp(20px, 1.5vw, 28px);
         font-weight: 600;
         margin-bottom: 8px;
       }
       .empty-desc {
-        font-size: 15px;
+        font-size: clamp(14px, 0.9vw, 17px);
         color: #a1a1a1;
-        margin-bottom: 24px;
+        margin-bottom: clamp(16px, 1.5vw, 32px);
         line-height: 1.5;
       }
       .start-btn {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
+        gap: clamp(6px, 0.5vw, 10px);
         background: #3b82f6;
         color: white;
         border: none;
-        padding: 12px 24px;
+        padding: clamp(10px, 0.8vw, 16px) clamp(18px, 1.5vw, 32px);
         border-radius: 8px;
-        font-size: 15px;
+        font-size: clamp(14px, 0.9vw, 17px);
         font-weight: 500;
         cursor: pointer;
       }
@@ -595,13 +598,13 @@ interface WorkflowStatusEntry {
         margin-bottom: 8px;
       }
       .suggestion-card-title {
-        font-size: 13px;
+        font-size: clamp(12px, 0.8vw, 15px);
         font-weight: 500;
         color: #fafafa;
         margin-bottom: 4px;
       }
       .suggestion-card-desc {
-        font-size: 12px;
+        font-size: clamp(11px, 0.75vw, 14px);
         color: #9e9e9e;
         line-height: 1.4;
       }
@@ -613,11 +616,11 @@ interface WorkflowStatusEntry {
         margin-top: 24px;
       }
       .domain-pill {
-        padding: 8px 16px;
+        padding: clamp(6px, 0.5vw, 10px) clamp(12px, 1vw, 20px);
         background: #1a1a1a;
         border: 1px solid #2a2a2a;
         border-radius: 20px;
-        font-size: 13px;
+        font-size: clamp(12px, 0.8vw, 15px);
         font-weight: 500;
         color: #a1a1a1;
         cursor: pointer;
@@ -742,8 +745,8 @@ interface WorkflowStatusEntry {
         color: #fafafa;
       }
       .right-panel {
-        width: 360px;
-        min-width: 360px;
+        width: clamp(320px, 22vw, 440px);
+        min-width: clamp(320px, 22vw, 440px);
         background: #0d0d0d;
         border-left: 1px solid #2a2a2a;
         display: flex;
