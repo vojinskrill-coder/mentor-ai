@@ -129,11 +129,10 @@ interface TreeRow {
         color: #fafafa;
       }
       .tree-node.root-node {
-        font-size: 11px;
+        font-size: 12px;
         font-weight: 600;
-        color: #9e9e9e;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        color: #c0c0c0;
+        letter-spacing: 0.02em;
       }
 
       .chevron {

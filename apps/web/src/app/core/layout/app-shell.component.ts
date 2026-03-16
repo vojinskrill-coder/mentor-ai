@@ -266,19 +266,32 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         z-index: 99;
       }
 
-      /* Graph panel in exec panel upper half — responsive height */
+      /* Graph panel in exec panel upper half — resizable */
       .graph-panel {
-        height: 35%;
-        min-height: 220px;
-        max-height: 450px;
+        min-height: 150px;
+        max-height: 80%;
         border-bottom: 1px solid #2A2A2A;
         overflow: hidden;
-        transition: height 0.2s ease;
+        position: relative;
+        flex-shrink: 0;
       }
       .graph-panel.hidden {
-        height: 0;
+        height: 0 !important;
         min-height: 0;
         border-bottom: none;
+      }
+      .graph-resize-handle {
+        position: absolute;
+        bottom: -3px;
+        left: 0;
+        right: 0;
+        height: 6px;
+        cursor: row-resize;
+        z-index: 10;
+      }
+      .graph-resize-handle:hover,
+      .graph-resize-handle.active {
+        background: rgba(59, 130, 246, 0.3);
       }
 
       /* Content area — row layout for content + exec panel */
@@ -1115,8 +1128,11 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
                 </button>
               </div>
 
-              <!-- Knowledge Graph (upper half of panel) -->
-              <div class="graph-panel" [class.hidden]="!showGraph()">
+              <!-- Knowledge Graph (upper half of panel, resizable) -->
+              <div class="graph-panel" [class.hidden]="!showGraph()" [style.height.px]="graphHeight()">
+                <div class="graph-resize-handle"
+                  [class.active]="isResizingGraph"
+                  (mousedown)="onGraphResizeStart($event)"></div>
                 <app-graph-view
                   [embedded]="true"
                   (noteActivated)="onGraphNoteActivated($event)"
@@ -1353,7 +1369,9 @@ export class AppShellComponent {
   readonly showGraph = signal(true);
   readonly showGraphPopup = signal(false);
   readonly panelWidth = signal(parseInt(localStorage.getItem('execPanelWidth') ?? '420', 10));
+  readonly graphHeight = signal(parseInt(localStorage.getItem('graphHeight') ?? '280', 10));
   isResizingPanel = false;
+  isResizingGraph = false;
   private resizeStartX = 0;
   private resizeStartWidth = 0;
 
@@ -1482,6 +1500,30 @@ export class AppShellComponent {
     };
 
     document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  onGraphResizeStart(event: MouseEvent): void {
+    event.preventDefault();
+    this.isResizingGraph = true;
+    const startY = event.clientY;
+    const startH = this.graphHeight();
+
+    const onMove = (e: MouseEvent) => {
+      const delta = e.clientY - startY;
+      this.graphHeight.set(Math.max(120, Math.min(800, startH + delta)));
+    };
+    const onUp = () => {
+      this.isResizingGraph = false;
+      localStorage.setItem('graphHeight', String(this.graphHeight()));
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'row-resize';
     document.body.style.userSelect = 'none';
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
