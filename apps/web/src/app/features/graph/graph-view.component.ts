@@ -10,18 +10,18 @@ import { GraphStateService, GraphNode, GraphEdge, ActiveAgent, PERSONA_COLORS } 
 interface Transform { x: number; y: number; scale: number; }
 
 // ─── Premium Color System ───
-// Luminous, desaturated pastels that glow against deep dark — inspired by Obsidian
+// Sophisticated, muted jewel tones — luxury feel against deep dark
 const PREMIUM_PERSONA_COLORS: Record<string, { core: string; glow: string; dim: string }> = {
-  CFO:        { core: '#34D399', glow: 'rgba(52,211,153,0.25)', dim: 'rgba(52,211,153,0.08)' },
-  CMO:        { core: '#FBBF24', glow: 'rgba(251,191,36,0.25)', dim: 'rgba(251,191,36,0.08)' },
-  CTO:        { core: '#818CF8', glow: 'rgba(129,140,248,0.25)', dim: 'rgba(129,140,248,0.08)' },
-  OPERATIONS: { core: '#F87171', glow: 'rgba(248,113,113,0.25)', dim: 'rgba(248,113,113,0.08)' },
-  LEGAL:      { core: '#A78BFA', glow: 'rgba(167,139,250,0.25)', dim: 'rgba(167,139,250,0.08)' },
-  CREATIVE:   { core: '#F472B6', glow: 'rgba(244,114,182,0.25)', dim: 'rgba(244,114,182,0.08)' },
-  CSO:        { core: '#2DD4BF', glow: 'rgba(45,212,191,0.25)', dim: 'rgba(45,212,191,0.08)' },
-  SALES:      { core: '#FB923C', glow: 'rgba(251,146,60,0.25)', dim: 'rgba(251,146,60,0.08)' },
+  CFO:        { core: '#6EE7B7', glow: 'rgba(110,231,183,0.18)', dim: 'rgba(110,231,183,0.05)' },  // soft emerald
+  CMO:        { core: '#FCD34D', glow: 'rgba(252,211,77,0.18)', dim: 'rgba(252,211,77,0.05)' },    // warm gold
+  CTO:        { core: '#A5B4FC', glow: 'rgba(165,180,252,0.18)', dim: 'rgba(165,180,252,0.05)' },  // soft lavender
+  OPERATIONS: { core: '#FCA5A5', glow: 'rgba(252,165,165,0.18)', dim: 'rgba(252,165,165,0.05)' },  // soft coral
+  LEGAL:      { core: '#C4B5FD', glow: 'rgba(196,181,253,0.18)', dim: 'rgba(196,181,253,0.05)' },  // soft violet
+  CREATIVE:   { core: '#F9A8D4', glow: 'rgba(249,168,212,0.18)', dim: 'rgba(249,168,212,0.05)' },  // soft rose
+  CSO:        { core: '#99F6E4', glow: 'rgba(153,246,228,0.18)', dim: 'rgba(153,246,228,0.05)' },  // soft teal
+  SALES:      { core: '#FDBA74', glow: 'rgba(253,186,116,0.18)', dim: 'rgba(253,186,116,0.05)' },  // soft amber
 };
-const DEFAULT_COLORS = { core: '#9CA3AF', glow: 'rgba(156,163,175,0.2)', dim: 'rgba(156,163,175,0.06)' };
+const DEFAULT_COLORS = { core: '#D1D5DB', glow: 'rgba(209,213,219,0.12)', dim: 'rgba(209,213,219,0.04)' };
 
 const EDGE_OPACITIES: Record<string, number> = {
   PREREQUISITE: 0.18,
@@ -104,6 +104,8 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private dragNode: GraphNode | null = null;
   private dragStart = { x: 0, y: 0 };
   private hoveredNode: GraphNode | null = null;
+  private mouseDownPos = { x: 0, y: 0 };
+  private mouseDownTime = 0;
 
   private animTime = 0;
   private nodeCreationTimes = new Map<string, number>();
@@ -155,12 +157,15 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.resizeObserver.observe(canvas.parentElement!);
     this.resize();
 
+    // Obsidian-style physics: strong center gravity, moderate repulsion, slow elegant settling
     this.simulation = d3Force.forceSimulation<GraphNode, GraphEdge>()
-      .force('charge', d3Force.forceManyBody().strength(-180))
-      .force('center', d3Force.forceCenter(this.width / 2, this.height / 2))
-      .force('collide', d3Force.forceCollide(28))
-      .alphaDecay(0.015)
-      .velocityDecay(0.35)
+      .force('charge', d3Force.forceManyBody().strength(-120).distanceMax(300))
+      .force('center', d3Force.forceCenter(this.width / 2, this.height / 2).strength(0.08))
+      .force('collide', d3Force.forceCollide<GraphNode>((d) => this.nodeRadius(d) + 6).strength(0.7))
+      .force('x', d3Force.forceX(this.width / 2).strength(0.03))
+      .force('y', d3Force.forceY(this.height / 2).strength(0.03))
+      .alphaDecay(0.012)
+      .velocityDecay(0.4)
       .on('tick', () => { /* render in animFrame */ });
 
     this.zone.runOutsideAngular(() => {
@@ -191,11 +196,24 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.simulation.force('link',
       d3Force.forceLink<GraphNode, GraphEdge>(this.edges)
         .id((d) => d.id)
-        .distance(90)
-        .strength(0.2)
+        .distance(70)
+        .strength(0.25)
     );
-    this.simulation.force('center', d3Force.forceCenter(this.width / 2, this.height / 2));
+    this.simulation.force('center', d3Force.forceCenter(this.width / 2, this.height / 2).strength(0.08));
+    this.simulation.force('x', d3Force.forceX(this.width / 2).strength(0.03));
+    this.simulation.force('y', d3Force.forceY(this.height / 2).strength(0.03));
     this.simulation.alpha(0.25).restart();
+  }
+
+  // ─── Node Sizing (proportional to connections) ───
+
+  private nodeRadius(node: GraphNode): number {
+    const conn = node.connectionCount ?? 0;
+    // Range: 3 (isolated) to 12 (hub with 20+ connections)
+    // Logarithmic scaling for natural proportions
+    const base = 3 + Math.log2(1 + conn) * 2.5;
+    const completedBonus = node.status === 'COMPLETED' ? 1.5 : 0;
+    return Math.min(14, base + completedBonus);
   }
 
   // ─── Premium Rendering ───
@@ -309,9 +327,10 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const colors = PREMIUM_PERSONA_COLORS[node.personaType] ?? DEFAULT_COLORS;
     const isHovered = this.hoveredNode === node;
     const isCompleted = node.status === 'COMPLETED';
+    const nr = this.nodeRadius(node);
 
-    // Outer ambient glow
-    const bloomR = isCompleted ? 30 : 22;
+    // Outer ambient glow — proportional to node size
+    const bloomR = nr * 3.5;
     const glowGrad = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, bloomR);
     glowGrad.addColorStop(0, isHovered ? colors.glow : colors.dim);
     glowGrad.addColorStop(1, 'rgba(0,0,0,0)');
@@ -323,7 +342,7 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Pulse bloom (when active)
     if (node.isPulsing) {
       const phase = (Math.sin(this.animTime / 800) + 1) / 2;
-      const pulseR = 20 + phase * 18;
+      const pulseR = nr * 3 + phase * nr * 2.5;
       const pulseGrad = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, pulseR);
       pulseGrad.addColorStop(0, `rgba(${this.hexToRgb(colors.core)},${0.12 + phase * 0.08})`);
       pulseGrad.addColorStop(0.6, `rgba(${this.hexToRgb(colors.core)},${0.04 * (1 - phase)})`);
@@ -340,8 +359,6 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
     const colors = PREMIUM_PERSONA_COLORS[node.personaType] ?? DEFAULT_COLORS;
     const isHovered = this.hoveredNode === node;
-    const isCompleted = node.status === 'COMPLETED';
-
     // Creation animation
     let scale = 1;
     const createdAt = this.nodeCreationTimes.get(node.id);
@@ -351,8 +368,7 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
       if (elapsed > 400) this.nodeCreationTimes.delete(node.id);
     }
 
-    const baseR = isCompleted ? 6.5 : 5;
-    const r = baseR * scale;
+    const r = this.nodeRadius(node) * scale;
 
     // Node body — subtle radial gradient for depth
     const nodeGrad = ctx.createRadialGradient(
@@ -368,33 +384,24 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     ctx.fillStyle = nodeGrad;
     ctx.fill();
 
-    // Subtle inner highlight (glass effect)
+    // Subtle inner highlight (glass effect) — clean, no borders
     const highlight = ctx.createRadialGradient(
       node.x - r * 0.25, node.y - r * 0.35, 0,
       node.x, node.y, r * 0.8
     );
-    highlight.addColorStop(0, 'rgba(255,255,255,0.25)');
+    highlight.addColorStop(0, 'rgba(255,255,255,0.2)');
     highlight.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.beginPath();
     ctx.arc(node.x, node.y, r * 0.8, 0, Math.PI * 2);
     ctx.fillStyle = highlight;
     ctx.fill();
 
-    // Status ring for completed
-    if (isCompleted) {
+    // Completed indicator — thin green ring
+    if (node.status === 'COMPLETED') {
       ctx.beginPath();
-      ctx.arc(node.x, node.y, r + 1.5, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(${this.hexToRgb(colors.core)},0.4)`;
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
-    }
-
-    // Hover ring
-    if (isHovered) {
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, r + 4, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(255,255,255,0.2)`;
-      ctx.lineWidth = 0.5;
+      ctx.arc(node.x, node.y, r + 2, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(110,231,183,0.5)';
+      ctx.lineWidth = 0.8;
       ctx.stroke();
     }
   }
@@ -413,13 +420,16 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     ctx.font = `300 ${fontSize}px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", sans-serif`;
     ctx.textAlign = 'center';
 
+    const nr = this.nodeRadius(node);
+    const labelY = node.y + nr + 10;
+
     // Text shadow for readability
     ctx.fillStyle = 'rgba(6,8,12,0.8)';
-    ctx.fillText(label, node.x + 0.5, node.y + (node.status === 'COMPLETED' ? 9 : 8) + 8.5);
+    ctx.fillText(label, node.x + 0.5, labelY + 0.5);
 
-    // Label text — slightly tinted by persona color when hovered
+    // Label text
     ctx.fillStyle = isHovered ? `rgba(255,255,255,0.9)` : `rgba(200,205,215,0.55)`;
-    ctx.fillText(label, node.x, node.y + (node.status === 'COMPLETED' ? 9 : 8) + 8);
+    ctx.fillText(label, node.x, labelY);
   }
 
   private drawAgentDot(ctx: CanvasRenderingContext2D, agent: ActiveAgent): void {
@@ -427,7 +437,7 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!node || node.x == null || node.y == null) return;
 
     const colors = PREMIUM_PERSONA_COLORS[agent.personaType] ?? DEFAULT_COLORS;
-    const orbitR = 16;
+    const orbitR = this.nodeRadius(node) + 10;
     const agentIdx = this.activeAgents.filter((a) => a.conceptId === agent.conceptId).indexOf(agent);
     const angle = (this.animTime / 5000) * Math.PI * 2 + (agentIdx * Math.PI * 2 / 3);
 
@@ -579,7 +589,7 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     for (let i = this.nodes.length - 1; i >= 0; i--) {
       const n = this.nodes[i]!;
       if (n == null || n.x == null || n.y == null) continue;
-      const r = n.status === 'COMPLETED' ? 10 : 8;
+      const r = this.nodeRadius(n) + 3; // extra 3px for easier click target
       const dx = wx - n.x;
       const dy = wy - n.y;
       if (dx * dx + dy * dy < r * r) return n;
@@ -588,6 +598,9 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onMouseDown(event: MouseEvent): void {
+    this.mouseDownPos = { x: event.clientX, y: event.clientY };
+    this.mouseDownTime = performance.now();
+
     const rect = this.canvasRef.nativeElement.getBoundingClientRect();
     const { x: wx, y: wy } = this.screenToWorld(event.clientX - rect.left, event.clientY - rect.top);
     const hit = this.hitTest(wx, wy);
@@ -617,8 +630,17 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  onMouseUp(_event: MouseEvent): void {
+  onMouseUp(event: MouseEvent): void {
+    const wasClick = this.dragNode &&
+      Math.abs(event.clientX - this.mouseDownPos.x) < 4 &&
+      Math.abs(event.clientY - this.mouseDownPos.y) < 4 &&
+      (performance.now() - this.mouseDownTime) < 300;
+
     if (this.dragNode) {
+      // If it was a click (not drag), navigate
+      if (wasClick) {
+        this.noteActivated.emit({ noteId: this.dragNode.noteId, conceptId: this.dragNode.id });
+      }
       this.dragNode.fx = null;
       this.dragNode.fy = null;
       this.simulation.alphaTarget(0);
@@ -627,11 +649,8 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.isDragging = false;
   }
 
-  onDoubleClick(event: MouseEvent): void {
-    const rect = this.canvasRef.nativeElement.getBoundingClientRect();
-    const { x: wx, y: wy } = this.screenToWorld(event.clientX - rect.left, event.clientY - rect.top);
-    const hit = this.hitTest(wx, wy);
-    if (hit) this.noteActivated.emit({ noteId: hit.noteId, conceptId: hit.id });
+  onDoubleClick(_event: MouseEvent): void {
+    // Navigation handled by single click in onMouseUp
   }
 
   onWheel(event: WheelEvent): void {

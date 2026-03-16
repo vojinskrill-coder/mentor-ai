@@ -62,8 +62,12 @@ export class MaturityEngineService {
     private readonly crossPersonaIntelligence: CrossPersonaIntelligenceService,
     private readonly configService: ConfigService,
   ) {
+    // Run up to 5 independent tasks in parallel within each wave.
+    // Tasks within a wave have no PREREQUISITE dependency on each other,
+    // so parallel execution is safe. Cross-persona intelligence cache is
+    // cleared after each task completes so later chunks see fresh data.
     this.stageConcurrency = parseInt(
-      this.configService.get<string>('STAGE_MAX_CONCURRENCY') ?? '2', 10,
+      this.configService.get<string>('STAGE_MAX_CONCURRENCY') ?? '5', 10,
     );
   }
 

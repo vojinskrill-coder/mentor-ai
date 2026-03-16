@@ -18,6 +18,8 @@ export interface GraphNode {
   vy?: number;
   fx?: number | null;
   fy?: number | null;
+  // computed
+  connectionCount?: number;
   // animation flags
   isNew?: boolean;
   isPulsing?: boolean;
@@ -69,24 +71,53 @@ export class GraphStateService implements OnDestroy {
   loadGraph(stage?: string): void {
     const params = stage ? `?stage=${stage}` : '';
     this.http.get<{ data: {
-      nodes: Array<Omit<GraphNode, 'x' | 'y' | 'vx' | 'vy' | 'fx' | 'fy' | 'isNew' | 'isPulsing'>>;
+      nodes: Array<Omit<GraphNode, 'x' | 'y' | 'vx' | 'vy' | 'fx' | 'fy' | 'isNew' | 'isPulsing' | 'connectionCount'>>;
       edges: Array<{ source: string; target: string; type: string }>;
       activeAgents: ActiveAgent[];
     } }>(`/api/v1/maturity/graph${params}`).subscribe({
       next: (res) => {
+        // Count connections per node
+        const connCount = new Map<string, number>();
+        for (const e of res.data.edges) {
+          connCount.set(e.source, (connCount.get(e.source) ?? 0) + 1);
+          connCount.set(e.target, (connCount.get(e.target) ?? 0) + 1);
+        }
+
         const nodeMap = new Map<string, GraphNode>();
         for (const n of res.data.nodes) {
-          nodeMap.set(n.id, { ...n, isNew: !this.loaded });
+          nodeMap.set(n.id, { ...n, connectionCount: connCount.get(n.id) ?? 0, isNew: !this.loaded });
         }
-        this._nodes.next(nodeMap);
+
+        // Find root node (most connections) for orphan linking
+        let rootId = '';
+        let maxConn = 0;
+        for (const [id, count] of connCount) {
+          if (count > maxConn) { maxConn = count; rootId = id; }
+        }
 
         const edgeMap = new Map<string, GraphEdge>();
         for (const e of res.data.edges) {
           const key = `${e.source}:${e.target}:${e.type}`;
           edgeMap.set(key, { ...e, isNew: !this.loaded });
         }
-        this._edges.next(edgeMap);
 
+        // Connect orphan nodes (0 connections) to root node
+        if (rootId) {
+          for (const [id, node] of nodeMap) {
+            if ((node.connectionCount ?? 0) === 0 && id !== rootId) {
+              const key = `${rootId}:${id}:RELATED`;
+              if (!edgeMap.has(key)) {
+                edgeMap.set(key, { source: rootId, target: id, type: 'RELATED', isNew: !this.loaded });
+                node.connectionCount = 1;
+                const rootNode = nodeMap.get(rootId);
+                if (rootNode) rootNode.connectionCount = (rootNode.connectionCount ?? 0) + 1;
+              }
+            }
+          }
+        }
+
+        this._nodes.next(nodeMap);
+        this._edges.next(edgeMap);
         this._activeAgents.next(res.data.activeAgents);
         this._graphUpdated.next({ type: 'full-load' });
         this.loaded = true;
