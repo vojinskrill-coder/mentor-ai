@@ -406,6 +406,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         padding: clamp(12px, 1vw, 20px);
         scrollbar-width: thin;
         scrollbar-color: #2a2a2a transparent;
+        font-size: var(--text-tiny, 11px);
       }
       .exec-panel-body::-webkit-scrollbar { width: 4px; }
       .exec-panel-body::-webkit-scrollbar-track { background: transparent; }
@@ -849,7 +850,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       /* Detail / subtitle text */
       .tl-detail {
         margin-top: 4px;
-        font-size: 11px; color: #707070; line-height: 1.4;
+        font-size: var(--text-tiny, 11px); color: #707070; line-height: 1.4;
         padding-left: 24px;
       }
 
