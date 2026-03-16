@@ -62,12 +62,12 @@ export class MaturityEngineService {
     private readonly crossPersonaIntelligence: CrossPersonaIntelligenceService,
     private readonly configService: ConfigService,
   ) {
-    // Run up to 5 independent tasks in parallel within each wave.
-    // Tasks within a wave have no PREREQUISITE dependency on each other,
-    // so parallel execution is safe. Cross-persona intelligence cache is
-    // cleared after each task completes so later chunks see fresh data.
+    // Run up to 3 independent tasks in parallel within each wave.
+    // Each task spawns 3-4 OpenClaw agent jobs, so 3 tasks = ~12 concurrent
+    // agent processes. OpenClaw gateway maxConcurrent=5 queues the rest.
+    // Higher values cause session file lock contention and agent kills.
     this.stageConcurrency = parseInt(
-      this.configService.get<string>('STAGE_MAX_CONCURRENCY') ?? '5', 10,
+      this.configService.get<string>('STAGE_MAX_CONCURRENCY') ?? '3', 10,
     );
   }
 
