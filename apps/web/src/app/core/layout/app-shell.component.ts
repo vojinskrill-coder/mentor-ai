@@ -301,11 +301,16 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .content-inner {
         flex: 1;
         min-width: 0;
-        min-height: 0; /* critical for flex child to respect parent height */
-        overflow-y: auto;
-        overflow-x: hidden;
+        min-height: 0;
+        overflow: hidden; /* ALL pages handle their own scroll internally */
         display: flex;
         flex-direction: column;
+      }
+      /* Route components fill the panel */
+      .content-inner > * {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
       }
 
       /* ===== EXECUTION PANEL (right sidebar) — responsive width ===== */
@@ -1004,10 +1009,9 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         animation: tl-pulse 2s ease-in-out infinite;
       }
 
-      /* Full-height routes: chat and task hub need their own scroll management */
-      :host-context(app-chat) .content-inner,
-      .content-inner:has(app-chat),
-      .content-inner:has(app-task-hub) {
+      /* Chat/task-hub manage scroll internally — prevent double scroll */
+      .content-inner:has(app-chat) > *,
+      .content-inner:has(app-task-hub) > * {
         overflow: hidden;
       }
 

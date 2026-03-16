@@ -91,7 +91,9 @@ interface WorkflowStatusEntry {
       :host {
         display: flex;
         flex-direction: column;
+        flex: 1;
         height: 100%;
+        min-height: 0;
         max-height: 100%;
         overflow: hidden;
       }
@@ -102,7 +104,9 @@ interface WorkflowStatusEntry {
       }
       .layout {
         display: flex;
+        flex: 1;
         height: 100%;
+        min-height: 0;
         max-height: 100%;
         overflow: hidden;
         background: #0d0d0d;
