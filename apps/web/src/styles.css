@@ -719,6 +719,28 @@ small, .text-small, .badge, .tag, .chip, .stat-label, .meta {
 
 /* Icon sizing handled by individual components — no global SVG override */
 
+/* ============================================
+   NUCLEAR: Force 16px on ALL exec panel content
+   Angular scoped styles use [_ngcontent] attributes which have
+   equal specificity to global selectors. Using !important here
+   ensures these override everything.
+   ============================================ */
+.exec-panel-body *:not(h1):not(h2):not(h3):not(svg):not(path):not(canvas) {
+  font-size: 16px !important;
+}
+.exec-panel-body .panel-status-badge {
+  font-size: 14px !important;
+}
+.exec-panel-body .panel-step-label {
+  font-size: 14px !important;
+}
+.exec-panel-body .panel-job-status {
+  font-size: 14px !important;
+}
+.exec-panel-body h3, .exec-panel-body .panel-task-title {
+  font-size: 18px !important;
+}
+
 /* Input/textarea across all components */
 input, textarea, select {
   font-size: var(--text-body);
