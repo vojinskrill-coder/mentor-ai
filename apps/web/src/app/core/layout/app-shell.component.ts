@@ -139,18 +139,19 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         overflow: hidden;
       }
 
-      /* Topbar */
+      /* Topbar — aligned with sidebar brand */
       .topbar {
-        height: 48px;
-        min-height: 48px;
+        height: calc(48px * var(--ui-scale));
+        min-height: calc(48px * var(--ui-scale));
         display: flex;
         align-items: center;
         justify-content: flex-end;
-        padding: 0 24px;
+        padding: 0 calc(24px * var(--ui-scale));
         border-bottom: 1px solid var(--color-border-subtle, #2a2a2a);
         background: var(--color-bg-base, #0d0d0d);
         flex-shrink: 0;
         position: relative;
+        box-sizing: border-box;
       }
 
       /* Route loading bar */
@@ -172,7 +173,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .topbar-right {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: calc(8px * var(--ui-scale));
       }
       .user-menu {
         position: relative;
@@ -180,15 +181,15 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .user-btn {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 4px 8px 4px 4px;
+        gap: calc(8px * var(--ui-scale));
+        padding: calc(4px * var(--ui-scale)) calc(8px * var(--ui-scale)) calc(4px * var(--ui-scale)) calc(4px * var(--ui-scale));
         border-radius: 6px;
         border: none;
         background: transparent;
         color: var(--color-text-primary, #fafafa);
         cursor: pointer;
         font-family: inherit;
-        font-size: 13px;
+        font-size: calc(13px * var(--ui-scale));
         font-weight: 500;
         transition: background 0.15s ease;
       }
@@ -413,12 +414,12 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         border: 1px solid #2a2a2a;
         color: #707070;
         cursor: pointer;
-        padding: 6px 8px;
+        padding: calc(6px * var(--ui-scale)) calc(8px * var(--ui-scale));
         border-radius: 6px;
         display: flex;
         align-items: center;
-        gap: 6px;
-        font-size: 12px;
+        gap: calc(6px * var(--ui-scale));
+        font-size: calc(12px * var(--ui-scale));
         font-family: inherit;
         transition: color 0.15s, border-color 0.15s, background 0.15s;
       }
@@ -432,8 +433,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         background: rgba(59, 130, 246, 0.08);
       }
       .panel-toggle-btn svg {
-        width: 16px;
-        height: 16px;
+        width: calc(16px * var(--ui-scale));
+        height: calc(16px * var(--ui-scale));
       }
 
       /* Panel empty state */
