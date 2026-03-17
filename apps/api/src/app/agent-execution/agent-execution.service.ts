@@ -625,19 +625,15 @@ export class AgentExecutionService {
     if (!job) {
       throw new NotFoundException(`Job ${jobId} not found`);
     }
-    if (job.status !== 'FAILED') {
-      throw new BadRequestException(
-        `Only FAILED jobs can be retried, current status: ${job.status}`,
-      );
-    }
 
-    // Reset to PLANNED so executeJob() can pick it up
+    // Allow re-run from any status (COMPLETED, FAILED, PLANNED)
+    // Reset to PLANNED so executeJob() can pick it up fresh
     await this.prisma.agentJob.update({
       where: { id: jobId },
-      data: { status: 'PLANNED', executionId: null, error: null },
+      data: { status: 'PLANNED', executionId: null, error: null, agentOutput: null },
     });
 
-    this.logger.log({ message: 'Retrying failed job', jobId, tenantId });
+    this.logger.log({ message: 'Re-running job', jobId, status: job.status, tenantId });
 
     return this.executeJob(jobId, userId, tenantId);
   }

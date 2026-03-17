@@ -363,6 +363,49 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
         pointer-events: none;
       }
 
+      .agent-job-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        border-radius: 4px;
+        border: 1px solid transparent;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.15s;
+        padding: 0;
+        line-height: 1;
+      }
+      .agent-job-btn.completed {
+        background: rgba(34, 197, 94, 0.15);
+        color: #22c55e;
+        border-color: rgba(34, 197, 94, 0.3);
+      }
+      .agent-job-btn.failed {
+        background: rgba(239, 68, 68, 0.15);
+        color: #ef4444;
+        border-color: rgba(239, 68, 68, 0.3);
+      }
+      .agent-job-btn.planned, .agent-job-btn.running {
+        background: rgba(59, 130, 246, 0.15);
+        color: #3b82f6;
+        border-color: rgba(59, 130, 246, 0.3);
+      }
+      .agent-job-btn:hover:not(:disabled) {
+        transform: scale(1.2);
+        border-color: #f59e0b;
+        box-shadow: 0 0 6px rgba(245, 158, 11, 0.3);
+      }
+      .agent-job-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      .job-spinner {
+        width: 10px; height: 10px;
+        border: 2px solid rgba(245, 158, 11, 0.3);
+        border-top-color: #f59e0b;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+      }
+
       .retry-all-btn {
         padding: 10px 20px;
         border-radius: 8px;
@@ -485,7 +528,16 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
                   @if (task.agentJobs.length > 0) {
                     <div class="agent-pipeline">
                       @for (job of task.agentJobs; track job.id) {
-                        <span class="agent-dot" [class]="job.status.toLowerCase()" [title]="job.agentType + ' - ' + job.status"></span>
+                        <button class="agent-job-btn" [class]="job.status.toLowerCase()"
+                                [disabled]="rerunningJobs().has(job.id)"
+                                (click)="rerunJob(job, $event)"
+                                [title]="job.agentType + ' - ' + job.status + ' (klikni za ponovo pokretanje)'">
+                          @if (rerunningJobs().has(job.id)) {
+                            <span class="job-spinner"></span>
+                          } @else {
+                            {{ getAgentIcon(job.agentType) }}
+                          }
+                        </button>
                       }
                     </div>
                   }
@@ -532,6 +584,7 @@ export class TaskHubComponent implements OnInit {
   );
 
   readonly isRetryingAll = signal(false);
+  readonly rerunningJobs = signal(new Set<string>());
   readonly skeletonCards = [1, 2, 3, 4, 5, 6];
 
   private readonly searchSubject = new Subject<string>();
@@ -617,6 +670,44 @@ export class TaskHubComponent implements OnInit {
 
   stripCategoryNumber(category: string): string {
     return category.replace(/^\d+\.\s*/, '');
+  }
+
+  getAgentIcon(agentType: string): string {
+    const icons: Record<string, string> = {
+      web_search: '🔍', content: '✏️', marketing: '📈',
+      sales: '💼', financial: '💰',
+    };
+    return icons[agentType] || '⚙️';
+  }
+
+  rerunJob(job: { id: string; agentType: string }, event: Event): void {
+    event.stopPropagation();
+    const current = new Set(this.rerunningJobs());
+    current.add(job.id);
+    this.rerunningJobs.set(current);
+
+    this.taskHubService.retryJob(job.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.toastService.success(`${job.agentType} ponovo pokrenut`);
+          // Poll for completion
+          const poll = setInterval(() => this.loadTasks(), 5_000);
+          setTimeout(() => {
+            clearInterval(poll);
+            const updated = new Set(this.rerunningJobs());
+            updated.delete(job.id);
+            this.rerunningJobs.set(updated);
+            this.loadTasks();
+          }, 5 * 60_000);
+        },
+        error: (err) => {
+          const updated = new Set(this.rerunningJobs());
+          updated.delete(job.id);
+          this.rerunningJobs.set(updated);
+          this.toastService.error('Greška: ' + (err.error?.detail || err.message || 'Nepoznata'));
+        },
+      });
   }
 
   retryAllPending(): void {
