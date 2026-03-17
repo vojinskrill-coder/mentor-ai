@@ -528,16 +528,7 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
                   @if (task.agentJobs.length > 0) {
                     <div class="agent-pipeline">
                       @for (job of task.agentJobs; track job.id) {
-                        <button class="agent-job-btn" [class]="job.status.toLowerCase()"
-                                [disabled]="rerunningJobs().has(job.id)"
-                                (click)="rerunJob(job, $event)"
-                                [title]="job.agentType + ' - ' + job.status + ' (klikni za ponovo pokretanje)'">
-                          @if (rerunningJobs().has(job.id)) {
-                            <span class="job-spinner"></span>
-                          } @else {
-                            {{ getAgentIcon(job.agentType) }}
-                          }
-                        </button>
+                        <span class="agent-dot" [class]="job.status.toLowerCase()" [title]="job.agentType + ' - ' + job.status"></span>
                       }
                     </div>
                   }
