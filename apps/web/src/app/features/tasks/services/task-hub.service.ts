@@ -16,6 +16,12 @@ export interface TaskHubQuery {
 export class TaskHubService {
   private readonly http = inject(HttpClient);
 
+  retryAllPending(): Observable<{ totalJobs: number; message: string }> {
+    return this.http.post<{ totalJobs: number; message: string }>(
+      '/api/v1/agent-execution/retry-all-pending', {}
+    );
+  }
+
   getTasks(query: TaskHubQuery = {}): Observable<{ data: TaskHubResponse }> {
     let params = new HttpParams();
     if (query.status) params = params.set('status', query.status);

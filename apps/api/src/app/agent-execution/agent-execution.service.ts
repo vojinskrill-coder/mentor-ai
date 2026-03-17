@@ -642,6 +642,128 @@ export class AgentExecutionService {
     return this.executeJob(jobId, userId, tenantId);
   }
 
+  /**
+   * Retry all PLANNED and FAILED jobs in waves of 5, respecting dependencies.
+   * FAILED jobs are first reset to PLANNED. Then processes waves until all done.
+   */
+  async retryAllPendingJobs(
+    userId: string,
+    tenantId: string,
+  ): Promise<{ totalJobs: number; message: string }> {
+    // Reset all FAILED jobs to PLANNED
+    const failedJobs = await this.prisma.agentJob.updateMany({
+      where: { tenantId, status: 'FAILED' },
+      data: { status: 'PLANNED', executionId: null, error: null },
+    });
+
+    const totalPlanned = await this.prisma.agentJob.count({
+      where: { tenantId, status: 'PLANNED' },
+    });
+
+    if (totalPlanned === 0) {
+      return { totalJobs: 0, message: 'No pending jobs to retry' };
+    }
+
+    this.logger.log({
+      message: 'Retry all pending: starting wave execution',
+      tenantId,
+      resetFailed: failedJobs.count,
+      totalPlanned,
+    });
+
+    // Fire-and-forget: process waves in background
+    this.processJobWaves(userId, tenantId).catch((err) => {
+      this.logger.error({
+        message: 'Retry all pending: wave processing failed',
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+    });
+
+    return { totalJobs: totalPlanned, message: `Processing ${totalPlanned} jobs in waves of 5` };
+  }
+
+  private async processJobWaves(userId: string, tenantId: string): Promise<void> {
+    const WAVE_SIZE = 5;
+    const MAX_WAIT_PER_JOB_MS = 15 * 60_000; // 15 min max per job
+    const POLL_INTERVAL_MS = 5_000;
+
+    let processedTotal = 0;
+
+    while (true) {
+      // Find PLANNED jobs whose dependencies are all terminal
+      const allPlanned = await this.prisma.agentJob.findMany({
+        where: { tenantId, status: 'PLANNED' },
+        select: { id: true, agentType: true, dependsOn: true, noteId: true },
+      });
+
+      if (allPlanned.length === 0) {
+        this.logger.log({ message: `Retry all: complete. Processed ${processedTotal} jobs.`, tenantId });
+        break;
+      }
+
+      // Filter to ready jobs (all deps COMPLETED or FAILED)
+      const ready: typeof allPlanned = [];
+      for (const job of allPlanned) {
+        if (job.dependsOn.length === 0) {
+          ready.push(job);
+          continue;
+        }
+        const deps = await this.prisma.agentJob.findMany({
+          where: { id: { in: job.dependsOn } },
+          select: { status: true },
+        });
+        if (deps.every((d) => ['COMPLETED', 'FAILED'].includes(d.status))) {
+          ready.push(job);
+        }
+      }
+
+      if (ready.length === 0) {
+        this.logger.warn({
+          message: `Retry all: ${allPlanned.length} PLANNED but none ready (unmet deps). Stopping.`,
+          tenantId,
+        });
+        break;
+      }
+
+      // Take wave of WAVE_SIZE
+      const wave = ready.slice(0, WAVE_SIZE);
+      this.logger.log({
+        message: `Retry all: wave of ${wave.length} jobs (${allPlanned.length} remaining)`,
+        tenantId,
+        jobTypes: wave.map((j) => j.agentType),
+      });
+
+      // Execute wave in parallel
+      const wavePromises = wave.map(async (job) => {
+        try {
+          await this.executeJob(job.id, userId, tenantId);
+
+          // Poll for completion
+          const start = Date.now();
+          while (Date.now() - start < MAX_WAIT_PER_JOB_MS) {
+            const current = await this.prisma.agentJob.findFirst({
+              where: { id: job.id },
+              select: { status: true },
+            });
+            if (!current || ['COMPLETED', 'FAILED'].includes(current.status)) break;
+            await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+          }
+        } catch (err) {
+          this.logger.warn({
+            message: `Retry all: job ${job.id} failed to start`,
+            error: err instanceof Error ? err.message : 'Unknown',
+          });
+        }
+      });
+
+      await Promise.all(wavePromises);
+      processedTotal += wave.length;
+
+      // Short pause between waves
+      await new Promise((r) => setTimeout(r, 2_000));
+    }
+  }
+
   private async executeJobPipeline(
     executionId: string,
     jobId: string,

@@ -100,6 +100,18 @@ export class AgentExecutionController {
     return { data: result };
   }
 
+  /**
+   * POST /api/v1/agent-execution/retry-all-pending
+   * Retry all PLANNED/FAILED jobs in waves of 5, respecting dependencies.
+   * Fire-and-forget — returns immediately, processes in background.
+   */
+  @Post('retry-all-pending')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async retryAllPending(@CurrentUser() user: CurrentUserPayload) {
+    const result = await this.agentExecutionService.retryAllPendingJobs(user.userId, user.tenantId);
+    return { data: result };
+  }
+
   @Get(':executionId')
   async getExecution(
     @Param('executionId') executionId: string,

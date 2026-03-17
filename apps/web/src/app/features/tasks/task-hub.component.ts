@@ -362,6 +362,40 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
         z-index: 1;
         pointer-events: none;
       }
+
+      .retry-all-btn {
+        padding: 10px 20px;
+        border-radius: 8px;
+        border: 1px solid #3b82f6;
+        background: rgba(59, 130, 246, 0.1);
+        color: #3b82f6;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+      }
+      .retry-all-btn:hover:not(:disabled) {
+        background: rgba(59, 130, 246, 0.2);
+        border-color: #60a5fa;
+      }
+      .retry-all-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .spinner {
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(59, 130, 246, 0.3);
+        border-top-color: #3b82f6;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+        display: inline-block;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
     `,
   ],
   template: `
@@ -371,6 +405,15 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
           <h1 class="page-title">Zadaci</h1>
           <p class="page-desc">Pregledajte i pratite zadatke sa AI agentima.</p>
         </div>
+        <button class="retry-all-btn"
+                [disabled]="isRetryingAll()"
+                (click)="retryAllPending()">
+          @if (isRetryingAll()) {
+            <span class="spinner"></span> Izvršava se...
+          } @else {
+            Pokreni neizvršene
+          }
+        </button>
       </div>
 
       @if (error()) {
@@ -488,6 +531,7 @@ export class TaskHubComponent implements OnInit {
     this.domainSummary().reduce((sum, d) => sum + d.total, 0)
   );
 
+  readonly isRetryingAll = signal(false);
   readonly skeletonCards = [1, 2, 3, 4, 5, 6];
 
   private readonly searchSubject = new Subject<string>();
@@ -573,5 +617,34 @@ export class TaskHubComponent implements OnInit {
 
   stripCategoryNumber(category: string): string {
     return category.replace(/^\d+\.\s*/, '');
+  }
+
+  retryAllPending(): void {
+    this.isRetryingAll.set(true);
+    this.taskHubService.retryAllPending()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (result) => {
+          if (result.totalJobs === 0) {
+            this.toastService.info('Nema neizvršenih zadataka.');
+            this.isRetryingAll.set(false);
+          } else {
+            this.toastService.success(`Pokrenuto ${result.totalJobs} zadataka u talasima po 5.`);
+            // Keep button disabled, poll for completion
+            const poll = setInterval(() => {
+              this.loadTasks();
+            }, 10_000);
+            // Auto-stop polling after 30 min
+            setTimeout(() => {
+              clearInterval(poll);
+              this.isRetryingAll.set(false);
+            }, 30 * 60_000);
+          }
+        },
+        error: (err) => {
+          this.isRetryingAll.set(false);
+          this.toastService.error('Greška pri pokretanju: ' + (err.message || 'Nepoznata greška'));
+        },
+      });
   }
 }
