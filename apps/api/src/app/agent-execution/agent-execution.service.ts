@@ -759,8 +759,81 @@ export class AgentExecutionService {
       await Promise.all(wavePromises);
       processedTotal += wave.length;
 
+      // Send knowledge updates to domain masters + main for completed jobs in this wave
+      await this.sendKnowledgeUpdatesForWave(wave, tenantId);
+
       // Short pause between waves
       await new Promise((r) => setTimeout(r, 2_000));
+    }
+  }
+
+  /**
+   * After a wave of jobs completes, send knowledge updates to domain master agents
+   * and the main business brain agent. Groups by noteId to send one update per concept.
+   */
+  private async sendKnowledgeUpdatesForWave(
+    jobs: Array<{ id: string; agentType: string; noteId: string }>,
+    tenantId: string,
+  ): Promise<void> {
+    // Group completed jobs by noteId
+    const noteIds = [...new Set(jobs.map((j) => j.noteId))];
+
+    for (const noteId of noteIds) {
+      try {
+        const note = await this.prisma.note.findUnique({
+          where: { id: noteId },
+          select: { userReport: true, title: true },
+        });
+        if (!note?.userReport || note.userReport.length < 200) continue;
+
+        const tenant = await this.prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { name: true },
+        });
+
+        const completedJobs = await this.prisma.agentJob.findMany({
+          where: { noteId, status: 'COMPLETED' },
+          select: { agentType: true },
+        });
+        const agentTypes = [...new Set(completedJobs.map((j) => j.agentType))];
+        const companyName = tenant?.name || 'Unknown Company';
+        const summary = note.userReport.substring(0, 3000);
+
+        // Stagger to avoid lock contention
+        await new Promise((r) => setTimeout(r, Math.random() * 5_000));
+
+        // Update domain masters
+        for (const agentTypeStr of agentTypes) {
+          try {
+            const agentId = agentTypeStr.replace(/_/g, '-');
+            await this.openClawClient.executeAgent(
+              `KNOWLEDGE UPDATE za ${companyName} - Koncept: ${note.title}. Zapamti ove nalaze:\n\n${summary}`,
+              { agentId, timeoutSeconds: 180 },
+            );
+          } catch { /* non-blocking */ }
+        }
+
+        // Update main
+        try {
+          await this.openClawClient.executeAgent(
+            `KNOWLEDGE UPDATE za ${companyName}: Koncept "${note.title}" zavrsen. Nalazi:\n${summary.substring(0, 1500)}`,
+            { agentId: 'main', timeoutSeconds: 120 },
+          );
+        } catch { /* non-blocking */ }
+
+        this.logger.log({
+          message: 'Knowledge updates sent for concept',
+          noteId,
+          conceptName: note.title,
+          agentTypes,
+        });
+      } catch (err) {
+        this.logger.warn({
+          message: 'Knowledge update failed (non-blocking)',
+          noteId,
+          error: err instanceof Error ? err.message : 'Unknown',
+        });
+      }
     }
   }
 
