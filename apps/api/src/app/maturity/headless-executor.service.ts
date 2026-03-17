@@ -65,7 +65,7 @@ export class HeadlessExecutorService {
   private stuckRetryCount = new Map<string, number>();
 
   private startStuckJobWatchdog(): void {
-    const STUCK_THRESHOLD_MS = 10 * 60_000; // 10 minutes
+    const STUCK_THRESHOLD_MS = 20 * 60_000; // 20 minutes (agents with multiple web_search calls need 10-15 min)
     const CHECK_INTERVAL_MS = 30_000; // 30 seconds
     const MAX_AUTO_RETRIES = 2;
 
