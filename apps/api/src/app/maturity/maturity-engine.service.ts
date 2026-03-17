@@ -918,6 +918,45 @@ export class MaturityEngineService {
       const remaining = new Map(pendingAssignments.map((a) => [a.conceptId, a]));
 
       while (remaining.size > 0) {
+        // Refresh completedConcepts from DB — pick up assignments completed by
+        // onConceptCompleted, watchdog retries, or prior waves that weren't tracked
+        const freshCompleted = await this.prisma.stageConceptAssignment.findMany({
+          where: { tenantId, stage, status: StageConceptStatus.COMPLETED },
+          select: { conceptId: true },
+        });
+        for (const fc of freshCompleted) {
+          if (!completedConcepts.has(fc.conceptId)) {
+            completedConcepts.add(fc.conceptId);
+            remaining.delete(fc.conceptId); // remove from remaining if still there
+          }
+        }
+
+        // Also check: assignments still PENDING but whose notes are COMPLETED
+        // (onConceptCompleted might have missed them)
+        for (const [conceptId, assignment] of remaining) {
+          if (assignment.noteId) {
+            const note = await this.prisma.note.findUnique({
+              where: { id: assignment.noteId },
+              select: { status: true },
+            });
+            if (note?.status === 'COMPLETED') {
+              this.logger.warn({
+                message: 'Wave loop: force-completing assignment (note COMPLETED but assignment still PENDING)',
+                tenantId, conceptId,
+              });
+              await this.prisma.stageConceptAssignment.update({
+                where: { id: assignment.id },
+                data: { status: StageConceptStatus.COMPLETED, completedAt: new Date() },
+              });
+              completedConcepts.add(conceptId);
+              remaining.delete(conceptId);
+              executed++;
+            }
+          }
+        }
+
+        if (remaining.size === 0) break;
+
         const ready: typeof pendingAssignments = [];
         for (const [conceptId, assignment] of remaining) {
           const deps = depMap.get(conceptId);
@@ -1011,6 +1050,28 @@ export class MaturityEngineService {
       });
 
       this.logger.log({ message: 'Stage auto-execution complete', tenantId, stage, total, executed, failed });
+
+      // Auto-continue: if there are still PENDING assignments, re-trigger execution.
+      // This handles cases where assignments were completed outside the loop
+      // (watchdog retries, manual retries) and new waves became ready.
+      const stillPending = await this.prisma.stageConceptAssignment.count({
+        where: { tenantId, stage, status: { in: ['PENDING', 'IN_PROGRESS'] }, noteId: { not: null } },
+      });
+      if (stillPending > 0) {
+        this.logger.log({
+          message: `Auto-continue: ${stillPending} assignments still pending, re-triggering`,
+          tenantId, stage,
+        });
+        // Release lock first, then re-trigger after short delay
+        this.runningExecutions.delete(tenantId);
+        this.executionProgress.delete(tenantId);
+        setTimeout(() => {
+          this.runStageExecution(tenantId, stage, userId).catch((err) => {
+            this.logger.error({ message: 'Auto-continue failed', error: err instanceof Error ? err.message : 'Unknown' });
+          });
+        }, 5_000);
+        return; // skip the finally block's delete (already done)
+      }
     } finally {
       this.runningExecutions.delete(tenantId);
       this.executionProgress.delete(tenantId);
