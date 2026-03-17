@@ -62,13 +62,12 @@ export class MaturityEngineService {
     private readonly crossPersonaIntelligence: CrossPersonaIntelligenceService,
     private readonly configService: ConfigService,
   ) {
-    // Run up to 5 independent tasks in parallel within each wave.
-    // Each agent job uses a unique session-id (work-{jobId}-{agent}),
-    // so no file lock contention even with many parallel OpenClaw calls.
-    // After each concept completes, knowledge updates go to domain masters
-    // sequentially (one at a time per agent type, default session, no locks).
+    // Run up to 2 tasks in parallel within each wave.
+    // Each task has 2-4 agent jobs → 2 tasks = max ~8 concurrent OpenClaw calls.
+    // Higher values cause DeepSeek/Brave rate limits and timeouts.
+    // Cross-persona cooperation works between chunks (not within).
     this.stageConcurrency = parseInt(
-      this.configService.get<string>('STAGE_MAX_CONCURRENCY') ?? '5', 10,
+      this.configService.get<string>('STAGE_MAX_CONCURRENCY') ?? '2', 10,
     );
   }
 
