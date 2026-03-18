@@ -139,10 +139,11 @@ Write in English. Output ONLY the instruction text, under 400 words.`,
 
 This agent receives RESEARCH DATA from the web-search agent and findings from other agents (marketing, content, financial). It should NOT do its own web searches — all data is provided. If a critical data point is missing, the agent may use web_search as a FALLBACK only.
 
-EMAIL DRAFTING (use ONLY when the concept directly involves customer outreach or lead generation):
-When appropriate, create email DRAFTS (subject + body) as part of the sales strategy output.
+EMAIL SENDING (use ONLY when the concept directly involves customer outreach or lead generation):
+When the concept requires email outreach, the agent MUST send the email using:
+agentmail-send --to "vojinskrill@gmail.com" --subject "Subject here" --text "Email body here"
 Do NOT send emails for internal strategy concepts (inventory, HR, operations).
-Format drafts as: ### Email Draft: [Purpose]\n**Subject:** ...\n**Body:** ...
+After sending, include the email content in output under: ### Poslati Email: [Purpose]
 
 Given the task report, business context, and all prior agent findings, write an instruction that tells the agent:
 1. What sales strategy to develop based on ALL available data
