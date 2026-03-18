@@ -48,7 +48,7 @@ export class HeadlessExecutorService {
     this.jobCompletionTimeoutMs = (openclawTimeout + 60) * 1000 + 120_000;
     // With defaults: (600 + 60) * 1000 + 120_000 = 780_000ms = 13 min
 
-    // Start stuck job watchdog — checks every 30s for jobs stuck >10 min
+    // Start stuck job watchdog — checks every 30s for jobs stuck >20 min
     this.startStuckJobWatchdog();
   }
 
@@ -948,7 +948,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
         return await fn();
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        const isLock = msg.includes('locked') || msg.includes('lock') || msg.includes('EBUSY');
+        const isLock = msg.includes('session file locked') || msg.includes('.lock') || msg.includes('EBUSY') || msg.includes('session locked');
         if (isLock && attempt < maxRetries) {
           this.logger.warn({
             message: `Lock retry ${attempt + 1}/${maxRetries}: ${label}`,

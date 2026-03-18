@@ -296,23 +296,26 @@ export class AgentExecutionService {
         await this.budgetService.recordSpend(tenantId, costDifference);
       }
 
-      // Step 5: Mark completed + link result note
-      await this.prisma.agentExecution.update({
-        where: { id: executionId },
-        data: {
-          status: 'COMPLETED',
-          agentOutput: result.output,
-          actualCostEur: actualCost,
-          completedAt: new Date(),
-          durationMs: result.durationMs,
-          resultNoteId,
-        },
-      });
+      // Step 5: Mark completed + link result note (guard: don't overwrite if manually stopped)
+      const currentExec = await this.prisma.agentExecution.findUnique({ where: { id: executionId }, select: { status: true } });
+      if (currentExec?.status !== 'FAILED') {
+        await this.prisma.agentExecution.update({
+          where: { id: executionId },
+          data: {
+            status: 'COMPLETED',
+            agentOutput: result.output,
+            actualCostEur: actualCost,
+            completedAt: new Date(),
+            durationMs: result.durationMs,
+            resultNoteId,
+          },
+        });
 
-      this.emitAgentEvent(tenantId, 'agent:status-change', {
-        executionId, jobId: null, noteId: note.id, agentType, status: 'COMPLETED',
-        label: `${agentLabel}: Završeno`,
-      });
+        this.emitAgentEvent(tenantId, 'agent:status-change', {
+          executionId, jobId: null, noteId: note.id, agentType, status: 'COMPLETED',
+          label: `${agentLabel}: Završeno`,
+        });
+      }
       this.emitAgentEvent(tenantId, 'agent:result', {
         executionId, jobId: null, agentType,
         output: result.output, durationMs: result.durationMs,
@@ -812,7 +815,7 @@ export class AgentExecutionService {
         });
 
         const completedJobs = await this.prisma.agentJob.findMany({
-          where: { noteId, status: 'COMPLETED' },
+          where: { noteId, tenantId, status: 'COMPLETED' },
           select: { agentType: true },
         });
         const agentTypes = [...new Set(completedJobs.map((j) => j.agentType))];
@@ -903,7 +906,7 @@ export class AgentExecutionService {
       // For web_search: tell it which domain agents follow so it prepares data for them
       if (agentType === AgentType.WEB_SEARCH) {
         const siblingJobs = await this.prisma.agentJob.findMany({
-          where: { noteId: note.id, tenantId, agentType: { not: 'web_search' } },
+          where: { noteId: note.id, tenantId, agentType: { not: AgentType.WEB_SEARCH } },
           select: { agentType: true },
           orderBy: { order: 'asc' },
         });
@@ -1022,23 +1025,26 @@ export class AgentExecutionService {
         await this.budgetService.recordSpend(tenantId, costDifference);
       }
 
-      // Step 5: Mark execution completed + link result note
-      await this.prisma.agentExecution.update({
-        where: { id: executionId },
-        data: {
-          status: 'COMPLETED',
-          agentOutput: result.output,
-          actualCostEur: actualCost,
-          completedAt: new Date(),
-          durationMs: result.durationMs,
-          resultNoteId: jobResultNoteId,
-        },
-      });
+      // Step 5: Mark execution completed (guard: don't overwrite if manually stopped)
+      const currentExec2 = await this.prisma.agentExecution.findUnique({ where: { id: executionId }, select: { status: true } });
+      if (currentExec2?.status !== 'FAILED') {
+        await this.prisma.agentExecution.update({
+          where: { id: executionId },
+          data: {
+            status: 'COMPLETED',
+            agentOutput: result.output,
+            actualCostEur: actualCost,
+            completedAt: new Date(),
+            durationMs: result.durationMs,
+            resultNoteId: jobResultNoteId,
+          },
+        });
 
-      this.emitAgentEvent(tenantId, 'agent:status-change', {
-        executionId, jobId, noteId: note.id, agentType, status: 'COMPLETED',
-        label: `${agentLabel}: Završeno`,
-      });
+        this.emitAgentEvent(tenantId, 'agent:status-change', {
+          executionId, jobId, noteId: note.id, agentType, status: 'COMPLETED',
+          label: `${agentLabel}: Završeno`,
+        });
+      }
       this.emitAgentEvent(tenantId, 'agent:result', {
         executionId, jobId, agentType,
         output: result.output, durationMs: result.durationMs,
