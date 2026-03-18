@@ -345,9 +345,12 @@ export class HeadlessExecutorService {
       let mainPreCheckContext = '';
       if (this.openClawClient.isConfigured()) {
         try {
-          const preCheckResult = await this.openClawClient.executeAgent(
-            `Šta znaš o konceptu "${taskNote.title}" za kompaniju ${cachedTenantData?.name || 'Unknown'}? Koji aspekti su već pokriveni iz prethodnih koncepata? Šta treba NOVO istražiti? Odgovori kratko, u 200-300 reči.`,
-            { agentId: 'main', timeoutSeconds: 60 }
+          const preCheckResult = await this.executeWithLockRetry(
+            () => this.openClawClient.executeAgent(
+              `Šta znaš o konceptu "${taskNote.title}" za kompaniju ${cachedTenantData?.name || 'Unknown'}? Koji aspekti su već pokriveni iz prethodnih koncepata? Šta treba NOVO istražiti? Odgovori kratko, u 200-300 reči.`,
+              { agentId: 'main', timeoutSeconds: 60 }
+            ),
+            'pre-check-main',
           );
           if (preCheckResult.success && preCheckResult.output.length > 50) {
             mainPreCheckContext = preCheckResult.output;
@@ -626,13 +629,16 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
           // Stagger: random 0-10s delay to spread out parallel task completions
           await new Promise((r) => setTimeout(r, Math.random() * 10_000));
 
-          // Update domain masters (sequential — one at a time per agent type)
+          // Update domain masters (sequential, with retry on lock)
           for (const agentTypeStr of agentTypes) {
             try {
               const agentId = agentTypeStr.replace(/_/g, '-');
-              await this.openClawClient.executeAgent(
-                `KNOWLEDGE UPDATE za ${companyName} - Koncept: ${conceptName}. Zapamti ove nalaze za buduce istrazivanje i analizu. Ovo su FINALNI, KONSOLIDOVANI rezultati:\n\n${knowledgeSummary}`,
-                { agentId, timeoutSeconds: 180 }
+              await this.executeWithLockRetry(
+                () => this.openClawClient.executeAgent(
+                  `KNOWLEDGE UPDATE za ${companyName} - Koncept: ${conceptName}. Zapamti ove nalaze za buduce istrazivanje i analizu. Ovo su FINALNI, KONSOLIDOVANI rezultati:\n\n${knowledgeSummary}`,
+                  { agentId, timeoutSeconds: 180 }
+                ),
+                `knowledge-update-${agentId}`,
               );
               this.logger.log({
                 message: `Headless: knowledge update sent to ${agentTypeStr} master`,
@@ -654,9 +660,12 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
               where: { noteId: taskId, tenantId },
               select: { personaType: true },
             });
-            await this.openClawClient.executeAgent(
-              `KNOWLEDGE UPDATE za ${companyName}: Koncept "${conceptName}" (${assignment?.personaType ?? 'UNKNOWN'} perspektiva) zavrsen. Zapamti i organizuj ove nalaze:\n${knowledgeSummary.substring(0, 3000)}`,
-              { agentId: 'main', timeoutSeconds: 120 }
+            await this.executeWithLockRetry(
+              () => this.openClawClient.executeAgent(
+                `KNOWLEDGE UPDATE za ${companyName}: Koncept "${conceptName}" (${assignment?.personaType ?? 'UNKNOWN'} perspektiva) zavrsen. Zapamti i organizuj ove nalaze:\n${knowledgeSummary.substring(0, 3000)}`,
+                { agentId: 'main', timeoutSeconds: 120 }
+              ),
+              'knowledge-update-main',
             );
             this.logger.log({
               message: 'Headless: knowledge update sent to main (business brain)',
@@ -922,6 +931,36 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
         error: cleanupErr instanceof Error ? cleanupErr.message : 'Unknown',
       });
     }
+  }
+
+  /**
+   * Execute an async operation with retry on session lock errors.
+   * Retries up to 5 times with 10s delay between attempts.
+   */
+  private async executeWithLockRetry<T>(
+    fn: () => Promise<T>,
+    label: string,
+    maxRetries = 5,
+    delayMs = 10_000,
+  ): Promise<T> {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const isLock = msg.includes('locked') || msg.includes('lock') || msg.includes('EBUSY');
+        if (isLock && attempt < maxRetries) {
+          this.logger.warn({
+            message: `Lock retry ${attempt + 1}/${maxRetries}: ${label}`,
+            error: msg.slice(0, 100),
+          });
+          await new Promise((r) => setTimeout(r, delayMs));
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw new Error(`Lock retry exhausted for ${label}`);
   }
 
   private buildLeanBusinessContext(
