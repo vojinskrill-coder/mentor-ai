@@ -4,233 +4,116 @@ import { AgentRegistryService } from './agent-registry.service';
 
 describe('AgentPromptService', () => {
   let service: AgentPromptService;
-  let mockAiGateway: any;
   let registry: AgentRegistryService;
 
   beforeEach(() => {
     registry = new AgentRegistryService();
-
-    mockAiGateway = {
-      streamCompletionWithContext: jest.fn(),
-    };
-
-    service = new AgentPromptService(mockAiGateway, registry);
+    service = new AgentPromptService(registry);
   });
 
-  function setupStreamResponse(chunks: string[]) {
-    mockAiGateway.streamCompletionWithContext.mockImplementation(
-      async (_messages: any, _opts: any, onChunk: (c: string) => void) => {
-        for (const chunk of chunks) {
-          onChunk(chunk);
-        }
-      }
-    );
-  }
-
   describe('formatPrompt()', () => {
-    it('should return accumulated stream chunks as trimmed result', async () => {
-      setupStreamResponse(['  Research the market', ' for CRM tools  ']);
+    const baseParams = {
+      agentType: AgentType.WEB_SEARCH,
+      taskTitle: 'Test Task',
+      taskContent: 'Test content',
+      userReport: 'Test report with details',
+      expectedOutcome: null as string | null,
+      tenantId: 'tnt_test',
+      userId: 'usr_test',
+    };
 
-      const result = await service.formatPrompt({
-        agentType: AgentType.WEB_SEARCH,
-        taskTitle: 'Market Analysis',
-        taskContent: 'Analyze CRM market in Serbia',
-        userReport: 'I found some data...',
-        tenantId: 'tenant-1',
-        userId: 'user-1',
-      });
-
-      expect(result).toBe('Research the market for CRM tools');
+    it('should return a string (sync, no async)', () => {
+      const result = service.formatPrompt(baseParams);
+      expect(typeof result).toBe('string');
+      expect(result.length).toBeGreaterThan(100);
     });
 
-    it('should pass correct system prompt from registry', async () => {
-      setupStreamResponse(['instruction']);
-
-      await service.formatPrompt({
-        agentType: AgentType.CONTENT,
-        taskTitle: 'Create blog',
-        taskContent: 'Write blog post',
-        userReport: 'Company details',
-        tenantId: 't1',
-        userId: 'u1',
-      });
-
-      const messages = mockAiGateway.streamCompletionWithContext.mock.calls[0][0];
-      expect(messages[0].role).toBe('system');
-      expect(messages[0].content).toBe(registry.getAgent(AgentType.CONTENT).systemPrompt);
+    it('should include task title and content', () => {
+      const result = service.formatPrompt(baseParams);
+      expect(result).toContain('ZADATAK: Test Task');
+      expect(result).toContain('OPIS: Test content');
     });
 
-    it('should construct user message with task title, content, and report', async () => {
-      setupStreamResponse(['ok']);
-
-      await service.formatPrompt({
-        agentType: AgentType.WEB_SEARCH,
-        taskTitle: 'My Task Title',
-        taskContent: 'My Task Content',
-        userReport: 'My Report Data',
-        tenantId: 't1',
-        userId: 'u1',
-      });
-
-      const messages = mockAiGateway.streamCompletionWithContext.mock.calls[0][0];
-      const userMsg = messages[1].content;
-      expect(userMsg).toContain('My Task Title');
-      expect(userMsg).toContain('My Task Content');
-      expect(userMsg).toContain('My Report Data');
+    it('should include grounding block with anti-hallucination rules', () => {
+      const result = service.formatPrompt(baseParams);
+      expect(result).toContain('NIKADA ne izmišljaj podatke');
+      expect(result).toContain('UZEMLJENJE');
+      expect(result).toContain('srpskom jeziku');
     });
 
-    it('should include expectedOutcome when provided', async () => {
-      setupStreamResponse(['ok']);
-
-      await service.formatPrompt({
-        agentType: AgentType.WEB_SEARCH,
-        taskTitle: 'Task',
-        taskContent: 'Content',
-        userReport: 'Report',
-        expectedOutcome: 'Deliverable doc',
-        tenantId: 't1',
-        userId: 'u1',
-      });
-
-      const userMsg = mockAiGateway.streamCompletionWithContext.mock.calls[0][0][1].content;
-      expect(userMsg).toContain('Expected Outcome: Deliverable doc');
-    });
-
-    it('should NOT include Expected Outcome when null', async () => {
-      setupStreamResponse(['ok']);
-
-      await service.formatPrompt({
-        agentType: AgentType.WEB_SEARCH,
-        taskTitle: 'Task',
-        taskContent: 'Content',
-        userReport: 'Report',
-        expectedOutcome: null,
-        tenantId: 't1',
-        userId: 'u1',
-      });
-
-      const userMsg = mockAiGateway.streamCompletionWithContext.mock.calls[0][0][1].content;
-      expect(userMsg).not.toContain('Expected Outcome');
-    });
-
-    it('should truncate userReport to 3000 chars', async () => {
-      setupStreamResponse(['ok']);
-      const longReport = 'A'.repeat(5000);
-
-      await service.formatPrompt({
-        agentType: AgentType.WEB_SEARCH,
-        taskTitle: 'Task',
-        taskContent: 'Content',
+    it('should include user report as context', () => {
+      const longReport = 'Detailed report about business performance with enough content to exceed the 100 character minimum threshold for inclusion in the prompt context section.';
+      const result = service.formatPrompt({
+        ...baseParams,
         userReport: longReport,
-        tenantId: 't1',
-        userId: 'u1',
       });
-
-      const userMsg = mockAiGateway.streamCompletionWithContext.mock.calls[0][0][1].content;
-      // The report in the message should be truncated
-      const reportMatch = userMsg.match(/User's Completed Report:\n(A+)/);
-      expect(reportMatch[1].length).toBe(3000);
+      expect(result).toContain('TRENUTNI IZVEŠTAJ');
+      expect(result).toContain('Detailed report about business performance');
     });
 
-    it('should pass skipRateLimit and skipQuotaCheck options', async () => {
-      setupStreamResponse(['ok']);
-
-      await service.formatPrompt({
-        agentType: AgentType.WEB_SEARCH,
-        taskTitle: 'Task',
-        taskContent: 'Content',
-        userReport: 'Report',
-        tenantId: 'tenant-abc',
-        userId: 'user-xyz',
+    it('should include expected outcome when provided', () => {
+      const result = service.formatPrompt({
+        ...baseParams,
+        expectedOutcome: 'Increase revenue by 20%',
       });
-
-      const opts = mockAiGateway.streamCompletionWithContext.mock.calls[0][1];
-      expect(opts.tenantId).toBe('tenant-abc');
-      expect(opts.userId).toBe('user-xyz');
-      expect(opts.skipRateLimit).toBe(true);
-      expect(opts.skipQuotaCheck).toBe(true);
+      expect(result).toContain('OČEKIVANI REZULTAT: Increase revenue by 20%');
     });
 
-    it('should invoke onChunk callback for each chunk', async () => {
-      setupStreamResponse(['chunk1', 'chunk2', 'chunk3']);
-      const chunks: string[] = [];
-
-      await service.formatPrompt({
-        agentType: AgentType.WEB_SEARCH,
-        taskTitle: 'Task',
-        taskContent: 'Content',
-        userReport: 'Report',
-        tenantId: 't1',
-        userId: 'u1',
-        onChunk: (c) => chunks.push(c),
-      });
-
-      expect(chunks).toEqual(['chunk1', 'chunk2', 'chunk3']);
+    it('should NOT include expected outcome when null', () => {
+      const result = service.formatPrompt(baseParams);
+      expect(result).not.toContain('OČEKIVANI REZULTAT');
     });
 
-    it('should work without onChunk callback (optional)', async () => {
-      setupStreamResponse(['result text']);
-
-      const result = await service.formatPrompt({
-        agentType: AgentType.WEB_SEARCH,
-        taskTitle: 'Task',
-        taskContent: 'Content',
-        userReport: 'Report',
-        tenantId: 't1',
-        userId: 'u1',
+    it('should include pre-check context when provided', () => {
+      const result = service.formatPrompt({
+        ...baseParams,
+        preCheckContext: 'Main agent knows about CCC 180-240 days and material variance 28.5%',
       });
-
-      expect(result).toBe('result text');
+      expect(result).toContain('VEĆ POZNATO');
+      expect(result).toContain('CCC 180-240');
+      expect(result).toContain('ne istraži ponovo');
     });
 
-    it('should handle empty stream response', async () => {
-      setupStreamResponse([]);
-
-      const result = await service.formatPrompt({
-        agentType: AgentType.WEB_SEARCH,
-        taskTitle: 'Task',
-        taskContent: 'Content',
-        userReport: 'Report',
-        tenantId: 't1',
-        userId: 'u1',
+    it('should NOT include pre-check block when context is empty', () => {
+      const result = service.formatPrompt({
+        ...baseParams,
+        preCheckContext: null,
       });
-
-      expect(result).toBe('');
+      expect(result).not.toContain('VEĆ POZNATO');
     });
 
-    it('should include agent label in user message', async () => {
-      setupStreamResponse(['ok']);
-
-      await service.formatPrompt({
-        agentType: AgentType.MARKETING,
-        taskTitle: 'Task',
-        taskContent: 'Content',
-        userReport: 'Report',
-        tenantId: 't1',
-        userId: 'u1',
+    it('should truncate user report to 4000 chars', () => {
+      const longReport = 'A'.repeat(5000);
+      const result = service.formatPrompt({
+        ...baseParams,
+        userReport: longReport,
       });
-
-      const userMsg = mockAiGateway.streamCompletionWithContext.mock.calls[0][0][1].content;
-      expect(userMsg).toContain('Marketing analiza');
+      // Should contain truncated report, not full 5000
+      const reportSection = result.split('TRENUTNI IZVEŠTAJ')[1]?.split('KRAJ IZVEŠTAJA')[0] ?? '';
+      expect(reportSection.length).toBeLessThan(4500);
     });
 
-    it('should use correct system prompt for each agent type', async () => {
-      for (const type of Object.values(AgentType)) {
-        mockAiGateway.streamCompletionWithContext.mockClear();
-        setupStreamResponse(['ok']);
+    it('should call onChunk callback with full prompt', () => {
+      const onChunk = jest.fn();
+      const result = service.formatPrompt({ ...baseParams, onChunk });
+      expect(onChunk).toHaveBeenCalledWith(result);
+    });
 
-        await service.formatPrompt({
-          agentType: type,
-          taskTitle: 'T',
-          taskContent: 'C',
-          userReport: 'R',
-          tenantId: 't',
-          userId: 'u',
-        });
-
-        const systemMsg = mockAiGateway.streamCompletionWithContext.mock.calls[0][0][0];
-        expect(systemMsg.content).toBe(registry.getAgent(type).systemPrompt);
+    it('should work for all agent types', () => {
+      const types = [AgentType.WEB_SEARCH, AgentType.CONTENT, AgentType.MARKETING, AgentType.SALES, AgentType.FINANCIAL];
+      for (const agentType of types) {
+        const result = service.formatPrompt({ ...baseParams, agentType });
+        expect(typeof result).toBe('string');
+        expect(result.length).toBeGreaterThan(50);
       }
+    });
+
+    it('should skip report section when report is too short', () => {
+      const result = service.formatPrompt({
+        ...baseParams,
+        userReport: 'Short',
+      });
+      expect(result).not.toContain('TRENUTNI IZVEŠTAJ');
     });
   });
 });

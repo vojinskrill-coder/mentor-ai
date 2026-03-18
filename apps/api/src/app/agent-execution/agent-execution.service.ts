@@ -793,7 +793,7 @@ export class AgentExecutionService {
         });
         const agentTypes = [...new Set(completedJobs.map((j) => j.agentType))];
         const companyName = tenant?.name || 'Unknown Company';
-        const summary = note.userReport.substring(0, 3000);
+        const summary = note.userReport.substring(0, 5000);
 
         // Stagger to avoid lock contention
         await new Promise((r) => setTimeout(r, Math.random() * 5_000));
@@ -812,7 +812,7 @@ export class AgentExecutionService {
         // Update main
         try {
           await this.openClawClient.executeAgent(
-            `KNOWLEDGE UPDATE za ${companyName}: Koncept "${note.title}" zavrsen. Nalazi:\n${summary.substring(0, 1500)}`,
+            `KNOWLEDGE UPDATE za ${companyName}: Koncept "${note.title}" zavrsen. Zapamti i organizuj:\n${summary.substring(0, 3000)}`,
             { agentId: 'main', timeoutSeconds: 120 },
           );
         } catch { /* non-blocking */ }
@@ -889,12 +889,16 @@ export class AgentExecutionService {
         }
       }
 
+      // Retrieve pre-check context from main agent (stored during headless execution)
+      const preCheckContext = (note as any).agentEnrichments?.mainPreCheck ?? null;
+
       const formattedPrompt = this.agentPrompt.formatPrompt({
         agentType,
         taskTitle: note.title,
         taskContent: enrichedInstruction,
         userReport: note.userReport!,
         expectedOutcome: note.expectedOutcome,
+        preCheckContext,
         tenantId,
         userId,
         onChunk: (chunk) => {

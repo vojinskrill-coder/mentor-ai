@@ -85,7 +85,7 @@ export class HeadlessExecutorService {
         if (stuckExecs.length === 0) return;
 
         this.logger.warn({
-          message: `Watchdog: found ${stuckExecs.length} stuck executions (>10min)`,
+          message: `Watchdog: found ${stuckExecs.length} stuck executions (>20min)`,
           executionIds: stuckExecs.map((e) => e.id),
         });
 
@@ -104,7 +104,7 @@ export class HeadlessExecutorService {
             where: { id: exec.id },
             data: {
               status: 'FAILED',
-              error: `Watchdog: stuck >10min (retry ${retries + 1}/${MAX_AUTO_RETRIES})`,
+              error: `Watchdog: stuck >20min (retry ${retries + 1}/${MAX_AUTO_RETRIES})`,
               completedAt: new Date(),
             },
           });
@@ -488,11 +488,33 @@ OVO JE NACRT — biće obogaćen istraživanjem agenata:
           select: { userReport: true, title: true },
         });
 
-        // Build agent findings WITHOUT truncation — include ALL output
-        const agentFindings = completedJobs
-          .filter((j) => j.agentOutput)
-          .map((j) => `### ${j.agentType.toUpperCase()} istraživanje\n${j.agentOutput}`)
-          .join('\n\n');
+        // Summarize each agent's output to preserve key findings without context overflow
+        const SUMMARY_THRESHOLD = 3000; // Only summarize if output exceeds this
+        const agentParts: string[] = [];
+
+        for (const job of completedJobs.filter((j) => j.agentOutput)) {
+          const output = job.agentOutput!;
+          if (output.length <= SUMMARY_THRESHOLD) {
+            agentParts.push(`### ${job.agentType.toUpperCase()} istraživanje\n${output}`);
+          } else {
+            // Summarize long outputs via LLM to preserve key findings
+            try {
+              let summary = '';
+              await this.aiGateway.streamCompletionWithContext(
+                [{ role: 'user', content: `Sumiraj KLJUČNE NALAZE iz ovog istraživanja u 800-1200 reči. Zadrži sve konkretne podatke, brojke, izvore (URL-ove) i preporuke. NE gubiiteralnu ni jednu konkretnu činjenicu.\n\n${output}` }],
+                { tenantId, userId, conversationId: convId, businessContext: bizContext, useFallback: true },
+                (chunk: string) => { summary += chunk; },
+              );
+              agentParts.push(`### ${job.agentType.toUpperCase()} istraživanje (sumirano)\n${summary}`);
+              this.logger.log({ message: `Headless: summarized ${job.agentType} output`, taskId, original: output.length, summarized: summary.length });
+            } catch {
+              // Fallback to first 3000 chars if summarization fails
+              agentParts.push(`### ${job.agentType.toUpperCase()} istraživanje\n${output.substring(0, SUMMARY_THRESHOLD)}`);
+            }
+          }
+        }
+
+        const agentFindings = agentParts.join('\n\n');
 
         let tenantInfo = '';
         if (cachedTenantData) {
