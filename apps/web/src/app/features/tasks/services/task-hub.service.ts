@@ -16,6 +16,12 @@ export interface TaskHubQuery {
 export class TaskHubService {
   private readonly http = inject(HttpClient);
 
+  stopAllAgents(): Observable<{ stoppedExecutions: number; stoppedJobs: number }> {
+    return this.http.post<{ stoppedExecutions: number; stoppedJobs: number }>(
+      '/api/v1/agent-execution/stop-all', {}
+    );
+  }
+
   retryJob(jobId: string): Observable<{ data: { jobId: string; executionId: string } }> {
     return this.http.post<{ data: { jobId: string; executionId: string } }>(
       `/api/v1/agent-execution/jobs/${jobId}/retry`, {}

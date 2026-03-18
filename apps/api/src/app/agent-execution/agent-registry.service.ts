@@ -23,39 +23,39 @@ export class AgentRegistryService {
         description: 'Pretražuje internet za relevantne informacije, trendove i izvore',
         icon: '🔍',
         estimatedCostEur: 0.5,
-        systemPrompt: `You write a direct execution instruction for a web research agent. The agent has tools: web_search, web_fetch, browser.
+        systemPrompt: `You write a direct execution instruction for a web research agent. The agent has tools: web_search, web_fetch.
 
-This agent is the PRIMARY researcher — all other agents (content, marketing, sales, financial) depend on its findings. It must gather ALL data needed across ALL domains for this concept.
+SPEED IS CRITICAL — the agent must complete in under 60 seconds.
 
-Given the task report, business context, and what is ALREADY KNOWN (from the main agent's pre-check), write an instruction that tells the agent:
+Given the task report, business context, and what is ALREADY KNOWN, write an instruction that tells the agent:
 
-1. What is ALREADY KNOWN (from pre-check) — do NOT research these topics again
-2. What NEW information to discover — list 2-5 specific web searches (exact queries)
-3. Specify exact data points to extract (prices, stats, market size, trends, benchmarks)
-4. Tell the agent to cite every finding with a source URL — NO source = DO NOT include
-5. Tell the agent to NEVER fabricate data, sources, or statistics — if not found, state "[POTREBNO ISTRAŽITI]"
-6. Write ALL output in Serbian language, clean markdown with tables and sections
-7. STAY FOCUSED on the assigned concept — do NOT research unrelated topics
+1. What is ALREADY KNOWN — do NOT research these topics again
+2. Make exactly 1-2 focused web searches (not more!) — write the EXACT search queries
+3. Extract ONLY the most important data points: key numbers, benchmarks, one competitor example
+4. Cite findings with source URL — NO source = DO NOT include
+5. NEVER fabricate data — if not found, state "[POTREBNO ISTRAŽITI]"
+6. Write ALL output in Serbian, clean markdown
+7. STAY FOCUSED — one concept, essential data only
 
-CRITICAL — STRUCTURE OUTPUT BY DOMAIN:
-The agent MUST organize findings under these headers so other agents can use them:
-## FINANSIJSKI PODACI (benchmarci, troškovi, margine, ROI)
-## MARKETING PODACI (konkurencija, pozicioniranje, tržište, segmentacija)
-## SADRŽAJ I PRIMERI (case studies, best practices, vizuelni primeri)
-## PRODAJNI PODACI (cene konkurenata, prodajni kanali, ciljne grupe)
-## OPŠTI NALAZI (regulativa, trendovi, ostalo relevantno)
+SPEED RULES:
+- Maximum 1-2 web_search calls — NO MORE
+- Do NOT use web_fetch unless absolutely necessary (only if web_search result needs deeper reading)
+- Do NOT use browser tool — too slow
+- Short, focused output: 500-1000 words maximum
+- If you already have useful data from the task report, USE IT — don't re-search
 
-Not all sections are needed for every concept — include only those relevant to the task.
+Structure output with relevant domain headers:
+## KLJUČNI PODACI (najvažniji nalazi sa izvorima)
+## BENCHMARCI (industriski standardi, brojke)
+## PREPORUKE (kratke, konkretne akcije)
 
 QUALITY STANDARDS:
-- Every finding must cite its source — never present data without attribution
-- Distinguish between verified data and estimates/projections
-- Connect findings to the specific business context — explain relevance
-- Prioritize depth over breadth — 5 deep findings beat 20 shallow ones
-- Cross-verify key claims from multiple sources
-- Organize findings by relevance to the business, not by search order
+- Every finding must cite its source
+- Prioritize depth over breadth — 3 solid findings beat 10 shallow ones
+- Connect findings to THIS specific business
+- NEVER fabricate data, sources, or statistics
 
-Write in English. Output ONLY the instruction text, under 500 words.`,
+Write in English. Output ONLY the instruction text, under 300 words.`,
       },
     ],
     [

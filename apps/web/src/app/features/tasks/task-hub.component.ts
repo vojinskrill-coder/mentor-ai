@@ -406,6 +406,21 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
         animation: spin 0.6s linear infinite;
       }
 
+      .stop-btn {
+        padding: 10px 20px;
+        border-radius: 8px;
+        border: 1px solid #ef4444;
+        background: rgba(239, 68, 68, 0.1);
+        color: #ef4444;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s;
+        white-space: nowrap;
+      }
+      .stop-btn:hover:not(:disabled) { background: rgba(239, 68, 68, 0.2); }
+      .stop-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
       .retry-all-btn {
         padding: 10px 20px;
         border-radius: 8px;
@@ -448,15 +463,26 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
           <h1 class="page-title">Zadaci</h1>
           <p class="page-desc">Pregledajte i pratite zadatke sa AI agentima.</p>
         </div>
-        <button class="retry-all-btn"
-                [disabled]="isRetryingAll()"
-                (click)="retryAllPending()">
-          @if (isRetryingAll()) {
-            <span class="spinner"></span> Izvršava se...
-          } @else {
-            Pokreni neizvršene
-          }
-        </button>
+        <div style="display:flex;gap:8px;">
+          <button class="retry-all-btn"
+                  [disabled]="isRetryingAll()"
+                  (click)="retryAllPending()">
+            @if (isRetryingAll()) {
+              <span class="spinner"></span> Izvršava se...
+            } @else {
+              Pokreni neizvršene
+            }
+          </button>
+          <button class="stop-btn"
+                  [disabled]="isStopping()"
+                  (click)="stopAllAgents()">
+            @if (isStopping()) {
+              Zaustavljam...
+            } @else {
+              Zaustavi agente
+            }
+          </button>
+        </div>
       </div>
 
       @if (error()) {
@@ -575,6 +601,7 @@ export class TaskHubComponent implements OnInit {
   );
 
   readonly isRetryingAll = signal(false);
+  readonly isStopping = signal(false);
   readonly rerunningJobs = signal(new Set<string>());
   readonly skeletonCards = [1, 2, 3, 4, 5, 6];
 
@@ -697,6 +724,24 @@ export class TaskHubComponent implements OnInit {
           updated.delete(job.id);
           this.rerunningJobs.set(updated);
           this.toastService.error('Greška: ' + (err.error?.detail || err.message || 'Nepoznata'));
+        },
+      });
+  }
+
+  stopAllAgents(): void {
+    this.isStopping.set(true);
+    this.taskHubService.stopAllAgents()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (result) => {
+          this.isStopping.set(false);
+          this.isRetryingAll.set(false);
+          this.toastService.success(`Zaustavljeno: ${result.stoppedExecutions} izvršavanja, ${result.stoppedJobs} poslova`);
+          this.loadTasks();
+        },
+        error: () => {
+          this.isStopping.set(false);
+          this.toastService.error('Greška pri zaustavljanju');
         },
       });
   }

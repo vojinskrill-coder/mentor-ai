@@ -105,6 +105,17 @@ export class AgentExecutionController {
    * Retry all PLANNED/FAILED jobs in waves of 5, respecting dependencies.
    * Fire-and-forget — returns immediately, processes in background.
    */
+  /**
+   * POST /api/v1/agent-execution/stop-all
+   * Force-stop all running agent executions and jobs.
+   */
+  @Post('stop-all')
+  @HttpCode(HttpStatus.OK)
+  async stopAll(@CurrentUser() user: CurrentUserPayload) {
+    const result = await this.agentExecutionService.stopAllExecutions(user.tenantId);
+    return result;
+  }
+
   @Post('retry-all-pending')
   @HttpCode(HttpStatus.ACCEPTED)
   async retryAllPending(@CurrentUser() user: CurrentUserPayload) {

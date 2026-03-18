@@ -639,6 +639,30 @@ export class AgentExecutionService {
   }
 
   /**
+   * Force-stop all running executions and jobs for a tenant.
+   */
+  async stopAllExecutions(tenantId: string): Promise<{ stoppedExecutions: number; stoppedJobs: number }> {
+    const execs = await this.prisma.agentExecution.updateMany({
+      where: { tenantId, status: { in: ['EXECUTING', 'FORMATTING', 'PENDING'] } },
+      data: { status: 'FAILED', error: 'Manually stopped by user', completedAt: new Date() },
+    });
+
+    const jobs = await this.prisma.agentJob.updateMany({
+      where: { tenantId, status: 'RUNNING' },
+      data: { status: 'FAILED', error: 'Manually stopped by user' },
+    });
+
+    this.logger.log({
+      message: 'All executions stopped by user',
+      tenantId,
+      stoppedExecutions: execs.count,
+      stoppedJobs: jobs.count,
+    });
+
+    return { stoppedExecutions: execs.count, stoppedJobs: jobs.count };
+  }
+
+  /**
    * Retry all PLANNED and FAILED jobs in waves of 5, respecting dependencies.
    * FAILED jobs are first reset to PLANNED. Then processes waves until all done.
    */
