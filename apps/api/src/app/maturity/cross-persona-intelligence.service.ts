@@ -31,8 +31,8 @@ const RELATIONSHIP_PRIORITY: Record<string, number> = {
   ADVANCED: 2,
 };
 
-const DEFAULT_TOKEN_BUDGET = 2000;
-const MAX_OUTPUT_CHARS = 1500;
+const DEFAULT_TOKEN_BUDGET = 4000;
+const MAX_OUTPUT_CHARS = 3000;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 interface CacheEntry {

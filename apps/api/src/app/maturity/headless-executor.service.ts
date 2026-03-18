@@ -292,7 +292,7 @@ export class HeadlessExecutorService {
         auto: true,
       });
 
-      // ── Phase 2: Synthesis ──
+      // ── Phase 2: Pre-check main agent + Build context ──
       let conceptKnowledge = '';
       if (taskNote.conceptId) {
         try {
@@ -341,12 +341,47 @@ export class HeadlessExecutorService {
         } catch { /* non-blocking enrichment */ }
       }
 
-      const prompt = `Ti si vrhunski poslovni stručnjak. Izvrši detaljnu analizu i proizvedi FINALNI DOKUMENT koji vlasnik može odmah koristiti.
+      // --- Pre-check main agent: what does the business brain already know? ---
+      let mainPreCheckContext = '';
+      if (this.openClawClient.isConfigured()) {
+        try {
+          const preCheckResult = await this.openClawClient.executeAgent(
+            `Šta znaš o konceptu "${taskNote.title}" za kompaniju ${cachedTenantData?.name || 'Unknown'}? Koji aspekti su već pokriveni iz prethodnih koncepata? Šta treba NOVO istražiti? Odgovori kratko, u 200-300 reči.`,
+            { agentId: 'main', timeoutSeconds: 60 }
+          );
+          if (preCheckResult.success && preCheckResult.output.length > 50) {
+            mainPreCheckContext = preCheckResult.output;
+            this.logger.log({
+              message: 'Headless: main pre-check completed',
+              taskId,
+              preCheckLength: mainPreCheckContext.length,
+            });
+          }
+        } catch {
+          this.logger.warn({ message: 'Headless: main pre-check failed (non-blocking)', taskId });
+        }
+      }
+
+      // Store pre-check context for later use by agent prompts
+      if (mainPreCheckContext) {
+        await this.prisma.note.update({
+          where: { id: taskId },
+          data: {
+            agentEnrichments: {
+              ...(taskNote.agentEnrichments as Record<string, unknown> || {}),
+              mainPreCheck: mainPreCheckContext,
+            },
+          },
+        });
+      }
+
+      const prompt = `Ti si vrhunski poslovni stručnjak. Napravi NACRT analize koji će biti obogaćen istraživanjem AI agenata.
 
 ZADATAK: ${taskNote.title}
 ${taskNote.content ? `OPIS ZADATKA: ${taskNote.content}` : ''}
 ${taskNote.expectedOutcome ? `OČEKIVANI REZULTAT: ${taskNote.expectedOutcome}` : ''}
 ${prerequisiteContext}${crossPersonaContext}${conceptKnowledge}
+${mainPreCheckContext ? `\n--- ŠTA JE VEĆ POZNATO (iz poslovnog mozga) ---\n${mainPreCheckContext}\n--- KRAJ POZNATOG ---` : ''}
 
 KRITIČNO — UZEMLJENJE NA KONCEPT:
 - Tvoj zadatak je ISKLJUČIVO analiza koncepta navedenog u BAZI ZNANJA iznad.
@@ -354,19 +389,14 @@ KRITIČNO — UZEMLJENJE NA KONCEPT:
 - NIKADA ne izmišljaj koncepte, termine ili podatke koji ne postoje u bazi znanja ili izvorima.
 - Ako nešto ne znaš — napiši "[POTREBNO ISTRAŽITI]" umesto da izmišljaš.
 - NE širi se na teme koje nisu direktno povezane sa zadatim konceptom.
-- Ako postoje POVEZANI KONCEPTI u bazi znanja, možeš ih POMENUTI ali fokus ostaje na glavnom konceptu.
 
-PRAVILA ZA FINALNI DOKUMENT:
-1. Ovo je FINALNI DELIVERABLE — gotov dokument, NE izveštaj o radu
-2. NIKADA ne piši "trebalo bi da..." za digitalne zadatke — URADI to
-3. Koristi SPECIFIČNE podatke, brojke i nalaze iz prethodnih koncepata — ne generalizuj
-4. Strukturiraj sa ## zaglavljima, tabelama, nabrajanjima
-5. Dodaj sekciju "Sledeći koraci" sa konkretnim akcijama
-6. NIKADA ne piši "u prethodnim koracima smo..." — PRIKAŽI gotov rezultat
-7. Ako postoji kontekst iz prethodno završenih koncepata, NADOGRADI na njima — ne ponavljaj
-8. Minimum 1000 reči — ovo je sveobuhvatan dokument
-9. Odgovaraj ISKLJUČIVO na srpskom jeziku
-10. Format: profesionalan Markdown (## zaglavlja, tabele, **bold** za ključne vrednosti, > za izvore)`;
+OVO JE NACRT — biće obogaćen istraživanjem agenata:
+1. Strukturiraj analizu sa ## zaglavljima, tabelama
+2. Identifikuj KLJUČNE TEME za istraživanje — označi ih sa "[ISTRAŽITI]"
+3. Koristi podatke iz prethodnih koncepata i poznatog konteksta
+4. 300-800 reči — fokusiraj se na strukturu i analizu, ne na dužinu
+5. Odgovaraj ISKLJUČIVO na srpskom jeziku
+6. Format: Markdown (## zaglavlja, tabele, **bold**, > za izvore)`;
 
       this.logger.log({
         message: 'Headless: synthesizing with enriched context',
@@ -407,103 +437,15 @@ PRAVILA ZA FINALNI DOKUMENT:
         auto: true,
       });
 
-      // ── Phase 3: Scoring ──
-      let tenantInfo = '';
-      if (cachedTenantData) {
-        tenantInfo = `\nKOMPANIJA: ${cachedTenantData.name}${cachedTenantData.industry ? ` | INDUSTRIJA: ${cachedTenantData.industry}` : ''}`;
-      }
-
-      let conceptScoreContext = '';
-      if (taskNote.conceptId) {
-        const concept = await this.prisma.concept.findUnique({
-          where: { id: taskNote.conceptId },
-          select: { name: true, category: true, definition: true },
-        });
-        if (concept) {
-          conceptScoreContext = `\nKONCEPT: ${concept.name} (${concept.category}) — ${concept.definition}`;
-        }
-      }
-
-      const scorePrompt = `Ti si senior poslovni konsultant koji recenzira deliverable-e. Tvoj zadatak je da:
-
-1. OPTIMIZUJEŠ rezultat — napravi finalnu, poliranu verziju:
-   - Poboljšaj strukturu (## zaglavlja, tabele, nabrajanja)
-   - Dodaj konkretne brojke, rokove i metrike gde nedostaju
-   - Zameni generičke preporuke SPECIFIČNIM akcijama prilagođenim kompaniji
-   - Ukloni redundantni tekst i ponavljanja
-   - Dodaj sekciju "Sledeći koraci" ako ne postoji
-
-2. OCENI rezultat po 5 kriterijuma (svaki 1-10):
-   - PRIMENLJIVOST: Da li se može odmah implementirati?
-   - SPECIFIČNOST: Da li sadrži konkretne brojke, nazive, rokove?
-   - KOMPLETNOST: Da li pokriva sve aspekte zadatka?
-   - RELEVANTNOST: Da li je prilagođen industriji i kompaniji?
-   - KVALITET: Da li je profesionalno strukturiran i jasan?
-${tenantInfo}${conceptScoreContext}
-
-ZADATAK: ${taskNote.title}
-${taskNote.content ? `OPIS: ${taskNote.content}` : ''}
-${taskNote.expectedOutcome ? `OČEKIVANI REZULTAT: ${taskNote.expectedOutcome}` : ''}
-
-IZLAZ KOJI TREBA OCENITI I OPTIMIZOVATI:
-${fullContent}
-
-FORMAT ODGOVORA:
-1. Napiši OPTIMIZOVANI REZULTAT (kompletan dokument)
-2. Na samom kraju dodaj:
----
-EVALUACIJA:
-- Primenljivost: X/10
-- Specifičnost: X/10
-- Kompletnost: X/10
-- Relevantnost: X/10
-- Kvalitet: X/10
-OCENA: X/10
----
-
-Gde je OCENA prosek svih pet kriterijuma (zaokružen na ceo broj).
-Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
-
-      let scoreResult = '';
-      await this.aiGateway.streamCompletionWithContext(
-        [{ role: 'user', content: scorePrompt }],
-        {
-          tenantId,
-          userId,
-          conversationId: convId,
-          businessContext: bizContext,
-          useFallback: true,
-        },
-        (chunk: string) => {
-          scoreResult += chunk;
-        }
-      );
-
-      // Extract score
-      let score: number | null = null;
-      const scoreMatch = scoreResult.match(/OCENA:\s*(\d{1,2})\s*\/\s*10/i);
-      if (scoreMatch) {
-        const rawScore = parseInt(scoreMatch[1]!, 10);
-        if (rawScore >= 1 && rawScore <= 10) {
-          score = rawScore * 10;
-        }
-      }
-
-      // Save optimized result + score
-      await this.prisma.note.update({
-        where: { id: taskId },
-        data: {
-          userReport: scoreResult,
-          aiScore: score,
-          aiFeedback: score !== null ? `AI ocena: ${score}/100` : null,
-        },
-      });
+      // ── Phase 3: Skip scoring rewrite — scoring happens AFTER consolidation ──
+      // The draft is sufficient for job planning. Final scoring happens after agents enrich it.
+      // Save draft as initial userReport (will be replaced by consolidation later).
 
       this.wsHolder.emitToTenant(tenantId, 'task:result-complete', {
         taskId,
         conversationId: convId,
-        score,
-        finalResult: scoreResult,
+        score: null, // Scoring happens after consolidation
+        finalResult: fullContent,
         timestamp: new Date().toISOString(),
         auto: true,
       });
@@ -530,9 +472,9 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
         });
       }
 
-      // ── Final consolidation: merge agent research into userReport ──
-      // After all OpenClaw jobs, the note should reflect the COMPLETE understanding
-      // of the concept — synthesis + all agent findings.
+      // ── Final consolidation + scoring (single step, replaces 3 separate rewrites) ──
+      // Merges draft synthesis + ALL agent findings into one final document with scores.
+      // NO truncation — all agent outputs included in full.
       let completedJobs: Array<{ agentType: string; agentOutput: string | null; order: number }> | null = null;
       try {
         completedJobs = await this.prisma.agentJob.findMany({
@@ -541,59 +483,95 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
           orderBy: { order: 'asc' },
         });
 
-        if (completedJobs.length > 0 && completedJobs.some((j) => j.agentOutput)) {
-          const currentNote = await this.prisma.note.findUnique({
+        const currentNote = await this.prisma.note.findUnique({
+          where: { id: taskId },
+          select: { userReport: true, title: true },
+        });
+
+        // Build agent findings WITHOUT truncation — include ALL output
+        const agentFindings = completedJobs
+          .filter((j) => j.agentOutput)
+          .map((j) => `### ${j.agentType.toUpperCase()} istraživanje\n${j.agentOutput}`)
+          .join('\n\n');
+
+        let tenantInfo = '';
+        if (cachedTenantData) {
+          tenantInfo = `KOMPANIJA: ${cachedTenantData.name}${cachedTenantData.industry ? ` | INDUSTRIJA: ${cachedTenantData.industry}` : ''}`;
+        }
+
+        const consolidationPrompt = `Ti si senior poslovni stručnjak. Napravi FINALNI dokument i OCENI ga.
+
+${tenantInfo}
+KONCEPT: ${currentNote?.title ?? taskNote.title}
+
+1. NACRT ANALIZE:
+${currentNote?.userReport ?? fullContent}
+
+${agentFindings.length > 0 ? `2. REZULTATI ISTRAŽIVANJA AGENATA:\n${agentFindings}` : '(Nema rezultata istraživanja agenata)'}
+
+ZADATAK — DVE STVARI:
+
+A) NAPRAVI FINALNI DOKUMENT koji:
+- Integriše SVE nalaze iz nacrta i agentskog istraživanja
+- Daje prednost KONKRETNIM podacima sa izvorima nad generičkim analizama
+- Strukturiraj: ## zaglavlja, tabele, **bold** za ključne vrednosti
+- Uključi sekciju "Izvori" sa URL-ovima iz istraživanja
+- NE ponavljaj iste informacije — konsoliduj ih
+- Proporcionalna dužina: jednostavni koncepti 300-500 reči, strateški 800-1500, kompleksni 1500+
+- Dodaj sekciju "Sledeći koraci" sa konkretnim akcijama
+- NIKADA ne izmišljaj podatke — ako nešto nije istraženo, napiši "[POTREBNO ISTRAŽITI]"
+
+B) NA KRAJU DOKUMENTA OCENI po 5 kriterijuma (svaki 1-10):
+---
+EVALUACIJA:
+- Primenljivost: X/10
+- Specifičnost: X/10
+- Kompletnost: X/10
+- Relevantnost: X/10
+- Kvalitet: X/10
+OCENA: X/10
+---
+
+Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
+
+        let consolidated = '';
+        await this.aiGateway.streamCompletionWithContext(
+          [{ role: 'user', content: consolidationPrompt }],
+          { tenantId, userId, conversationId: convId, businessContext: bizContext, useFallback: true },
+          (chunk: string) => { consolidated += chunk; },
+        );
+
+        // Extract score from consolidated output
+        let score: number | null = null;
+        const scoreMatch = consolidated.match(/OCENA:\s*(\d{1,2})\s*\/\s*10/i);
+        if (scoreMatch) {
+          const rawScore = parseInt(scoreMatch[1]!, 10);
+          if (rawScore >= 1 && rawScore <= 10) {
+            score = rawScore * 10;
+          }
+        }
+
+        if (consolidated.length > 300) {
+          await this.prisma.note.update({
             where: { id: taskId },
-            select: { userReport: true, title: true },
+            data: {
+              userReport: consolidated,
+              aiScore: score,
+              aiFeedback: score !== null ? `AI ocena: ${score}/100` : null,
+            },
           });
 
-          const agentFindings = completedJobs
-            .filter((j) => j.agentOutput)
-            .map((j) => `### ${j.agentType.toUpperCase()} istraživanje\n${j.agentOutput}`)
-            .join('\n\n');
-
-          const consolidationPrompt = `Ti si senior poslovni stručnjak. Imaš dva izvora informacija o jednom konceptu:
-
-1. POČETNA ANALIZA (naša interna):
-${(currentNote?.userReport ?? '').substring(0, 3000)}
-
-2. REZULTATI ISTRAŽIVANJA AGENATA (web istraživanje, analiza tržišta, itd.):
-${agentFindings.substring(0, 5000)}
-
-ZADATAK: Napravi FINALNI, KONSOLIDOVANI dokument za koncept "${currentNote?.title ?? taskNote.title}" koji:
-- Integriše SVE nalaze iz oba izvora u jedinstven, koherentan dokument
-- Daje prednost KONKRETNIM podacima iz agentskog istraživanja (sa izvorima) nad generičkim analizama
-- Zadržava strukturu: ## zaglavlja, tabele, **bold** za ključne vrednosti
-- Uključuje sekciju "Izvori" sa svim URL-ovima iz istraživanja
-- NE ponavlja iste informacije iz oba izvora — konsoliduj ih
-- Ovo je FINALNO stanje znanja o ovom konceptu za kompaniju
-
-Odgovaraj ISKLJUČIVO na srpskom jeziku. Minimum 1000 reči.`;
-
-          let consolidated = '';
-          await this.aiGateway.streamCompletionWithContext(
-            [{ role: 'user', content: consolidationPrompt }],
-            { tenantId, userId, conversationId: convId, businessContext: bizContext, useFallback: true },
-            (chunk: string) => { consolidated += chunk; },
-          );
-
-          if (consolidated.length > 500) {
-            await this.prisma.note.update({
-              where: { id: taskId },
-              data: { userReport: consolidated },
-            });
-
-            this.logger.log({
-              message: 'Headless: consolidated agent findings into userReport',
-              taskId,
-              agentJobCount: completedJobs.length,
-              consolidatedLength: consolidated.length,
-            });
-          }
+          this.logger.log({
+            message: 'Headless: consolidated + scored',
+            taskId,
+            agentJobCount: completedJobs.length,
+            consolidatedLength: consolidated.length,
+            aiScore: score,
+          });
         }
       } catch (consolidationErr) {
         this.logger.warn({
-          message: 'Headless: consolidation failed (non-blocking, scored report preserved)',
+          message: 'Headless: consolidation+scoring failed (non-blocking, draft preserved)',
           taskId,
           error: consolidationErr instanceof Error ? consolidationErr.message : 'Unknown',
         });
@@ -619,7 +597,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku. Minimum 1000 reči.`;
           });
           const agentTypes = [...new Set(jobsForKnowledge.map((j) => j.agentType))];
 
-          const knowledgeSummary = finalNote.userReport.substring(0, 3000);
+          const knowledgeSummary = finalNote.userReport.substring(0, 5000);
           const conceptName = finalNote.title || 'Unknown';
           const companyName = cachedTenantData?.name || 'Unknown Company';
 
@@ -655,7 +633,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku. Minimum 1000 reči.`;
               select: { personaType: true },
             });
             await this.openClawClient.executeAgent(
-              `KNOWLEDGE UPDATE za ${companyName}: Koncept "${conceptName}" (${assignment?.personaType ?? 'UNKNOWN'} perspektiva) zavrsen. Kljucni nalazi:\n${knowledgeSummary.substring(0, 1500)}`,
+              `KNOWLEDGE UPDATE za ${companyName}: Koncept "${conceptName}" (${assignment?.personaType ?? 'UNKNOWN'} perspektiva) zavrsen. Zapamti i organizuj ove nalaze:\n${knowledgeSummary.substring(0, 3000)}`,
               { agentId: 'main', timeoutSeconds: 120 }
             );
             this.logger.log({

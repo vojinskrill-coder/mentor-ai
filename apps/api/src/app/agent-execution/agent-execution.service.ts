@@ -200,7 +200,7 @@ export class AgentExecutionService {
         label: `${agentLabel}: Priprema instrukcija...`,
       });
 
-      const formattedPrompt = await this.agentPrompt.formatPrompt({
+      const formattedPrompt = this.agentPrompt.formatPrompt({
         agentType,
         taskTitle: note.title,
         taskContent: note.content,
@@ -872,11 +872,24 @@ export class AgentExecutionService {
         label: `${agentLabel}: Priprema instrukcija...`,
       });
 
-      const enrichedInstruction = dependencyContext
+      let enrichedInstruction = dependencyContext
         ? `${jobInstruction}\n\nContext from previous agent results:\n${dependencyContext}`
         : jobInstruction;
 
-      const formattedPrompt = await this.agentPrompt.formatPrompt({
+      // For web_search: tell it which domain agents follow so it prepares data for them
+      if (agentType === AgentType.WEB_SEARCH) {
+        const siblingJobs = await this.prisma.agentJob.findMany({
+          where: { noteId: note.id, tenantId, agentType: { not: 'web_search' } },
+          select: { agentType: true },
+          orderBy: { order: 'asc' },
+        });
+        if (siblingJobs.length > 0) {
+          const agentNames = siblingJobs.map((j) => this.registry.getAgent(j.agentType as AgentType).label).join(', ');
+          enrichedInstruction += `\n\nSLEDEĆI AGENTI KOJI ČEKAJU TVOJE REZULTATE: ${agentNames}. Pripremi podatke za SVE njih — strukturiraj output sa odgovarajućim domenskim sekcijama.`;
+        }
+      }
+
+      const formattedPrompt = this.agentPrompt.formatPrompt({
         agentType,
         taskTitle: note.title,
         taskContent: enrichedInstruction,

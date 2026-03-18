@@ -67,7 +67,7 @@ export class MaturityEngineService {
     // Higher values cause DeepSeek/Brave rate limits and timeouts.
     // Cross-persona cooperation works between chunks (not within).
     this.stageConcurrency = parseInt(
-      this.configService.get<string>('STAGE_MAX_CONCURRENCY') ?? '2', 10,
+      this.configService.get<string>('STAGE_MAX_CONCURRENCY') ?? '3', 10,
     );
   }
 

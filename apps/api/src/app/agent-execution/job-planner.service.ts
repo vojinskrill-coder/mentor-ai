@@ -46,35 +46,43 @@ export class JobPlannerService {
       .map((a) => `- ${a.type}: ${a.label} — ${a.description}`)
       .join('\n');
 
-    const systemPrompt = `You are a business operations planner. Given a completed task report, you MUST create an execution plan of AI agent jobs that will enrich the report with real-world data and produce concrete deliverables.
+    const systemPrompt = `You are a business operations planner. Given a completed task report, create an execution plan of AI agent jobs.
 
 Available agent types:
 ${agentDescriptions}
 
+ARCHITECTURE — HOW AGENTS COLLABORATE:
+1. web_search is ALWAYS the first job — it researches ALL aspects and structures output by domain
+2. Domain agents (content, marketing, sales, financial) receive web_search output and do their SPECIALIZED work
+3. Domain agents execute SEQUENTIALLY — each sees output from ALL previous agents
+4. Domain agents do NOT do their own web research — they USE the data from web_search
+
 DECISION FRAMEWORK:
-- Analyze the task report and identify WHAT IS MISSING — if there are no concrete market data points, web_search is critical; if there is no ready-to-use content, content is critical; if there is no competitive pricing data, web_search + financial is critical.
-- Do NOT create jobs for things the report already covers well — focus on GAPS and NEW VALUE.
+- web_search is ALWAYS included (order 1, no dependencies)
+- Add domain agents ONLY when the concept needs their expertise:
+  * financial: when concept involves costs, ROI, budgets, pricing, cash flow
+  * content: when concept needs written deliverables, brand materials, visual content
+  * marketing: when concept involves positioning, competition, market strategy
+  * sales: when concept involves customer outreach, selling strategy, pricing negotiation
+- Create 1-4 jobs total. Simple concepts may need ONLY web_search (1 job).
 
 Rules:
-- ALWAYS create 2-4 jobs. The report is a starting point — agents add real-world research, competitor data, market validation, and actionable content.
-- ALWAYS start with web_search to gather current market data, competitor intelligence, and industry benchmarks.
-- Jobs execute sequentially: later jobs receive outputs from earlier jobs as context.
-- Common chains: web_search → content, web_search → marketing, web_search → sales
-- Each job instruction MUST reference CONCRETE findings from the task report — not generate an independent instruction.
-- A job that depends on a previous job MUST explicitly state WHAT to take from the previous output (e.g., "Using the competitor pricing data from the research step, ...").
-- Instructions must tell agents WHAT to do and what tools to use — they should execute web searches, fetch competitor websites, and produce deliverables.
-- Write instructions in English (agents will produce Serbian output).
+- web_search instruction MUST tell the agent to structure output with domain headers:
+  ## FINANSIJSKI PODACI, ## MARKETING PODACI, ## SADRŽAJ I PRIMERI, ## PRODAJNI PODACI
+- Each domain agent instruction MUST say "Using the research data provided, ..." — NOT "Search for..."
+- Domain agents depend on web_search (and optionally on each other for collaboration)
+- Write instructions in English (agents produce Serbian output)
 - Respond ONLY with a JSON array, no other text.
 
 Output format:
-[{"agentType":"web_search","order":1,"dependsOnOrders":[],"instruction":"Research..."},{"agentType":"content","order":2,"dependsOnOrders":[1],"instruction":"Using the research results, create..."}]`;
+[{"agentType":"web_search","order":1,"dependsOnOrders":[],"instruction":"Research ALL aspects of [topic]..."},{"agentType":"financial","order":2,"dependsOnOrders":[1],"instruction":"Using the financial data from research, calculate..."}]`;
 
     const userMessage = `Task: ${note.title}
 
 Description: ${note.content.substring(0, 500)}
 
-${note.expectedOutcome ? `Expected Outcome: ${note.expectedOutcome}\n` : ''}Completed Report (first 2000 chars):
-${note.userReport.substring(0, 2000)}
+${note.expectedOutcome ? `Expected Outcome: ${note.expectedOutcome}\n` : ''}Completed Report:
+${note.userReport.substring(0, 4000)}
 
 Create an execution plan of agent jobs for this task. Return JSON array only.`;
 

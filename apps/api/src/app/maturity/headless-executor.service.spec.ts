@@ -139,21 +139,16 @@ describe('HeadlessExecutorService', () => {
         extendedDescription: null, relatedTo: [],
       });
 
-      // Synthesis LLM call
+      // Synthesis draft LLM call (only 1 call now — scoring merged into consolidation)
       mockAiGateway.streamCompletionWithContext
         .mockImplementationOnce((_m: any, _o: any, cb: (c: string) => void) => {
           cb('Synthesis content');
-          return Promise.resolve();
-        })
-        // Phase 3: Scoring LLM call
-        .mockImplementationOnce((_m: any, _o: any, cb: (c: string) => void) => {
-          cb('Optimized result\n---\nOCENA: 8/10\n---');
           return Promise.resolve();
         });
 
       mockPrisma.note.update.mockResolvedValue({});
 
-      // Post-scoring hooks
+      // Post-synthesis hooks
       mockJobPlanner.planJobs.mockResolvedValue([]);
       mockMaturityEngine.onConceptCompleted.mockResolvedValue({ stageCompleted: false });
 
@@ -161,22 +156,14 @@ describe('HeadlessExecutorService', () => {
 
       expect(result).toEqual({ success: true });
 
-      // Verify synthesis save
+      // Verify draft save (scoring happens after consolidation with agent findings)
       expect(mockPrisma.note.update).toHaveBeenCalledWith({
         where: { id: TASK_ID },
         data: { status: 'COMPLETED', userReport: 'Synthesis content' },
       });
-
-      // Verify score extraction (8/10 = 80)
-      expect(mockPrisma.note.update).toHaveBeenCalledWith({
-        where: { id: TASK_ID },
-        data: expect.objectContaining({
-          aiScore: 80,
-        }),
-      });
     });
 
-    it('should extract score from OCENA pattern and convert to 0-100', async () => {
+    it('should extract score from consolidation OCENA pattern', async () => {
       mockPrisma.note.findUnique.mockResolvedValueOnce({
         id: TASK_ID, title: 'T', content: 'C', status: 'PENDING',
         conversationId: null, conceptId: null, expectedOutcome: null,
@@ -189,15 +176,10 @@ describe('HeadlessExecutorService', () => {
         { title: 'S1', content: 'R1', workflowStepNumber: 1, status: 'READY_FOR_REVIEW' },
       ]);
 
-      // Synthesis
+      // Only synthesis draft (1 LLM call — scoring merged into consolidation)
       mockAiGateway.streamCompletionWithContext
         .mockImplementationOnce((_m: any, _o: any, cb: (c: string) => void) => {
           cb('Content');
-          return Promise.resolve();
-        })
-        // Scoring with OCENA: 7/10
-        .mockImplementationOnce((_m: any, _o: any, cb: (c: string) => void) => {
-          cb('Optimized\n---\nOCENA: 7/10\n---');
           return Promise.resolve();
         });
 
@@ -206,15 +188,14 @@ describe('HeadlessExecutorService', () => {
 
       await service.executeTask({ taskId: TASK_ID, tenantId: TENANT_ID, userId: USER_ID });
 
-      // Score 7 × 10 = 70
-      expect(mockPrisma.note.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ aiScore: 70 }),
-        }),
-      );
+      // Draft saved — scoring happens after agent consolidation
+      expect(mockPrisma.note.update).toHaveBeenCalledWith({
+        where: { id: TASK_ID },
+        data: { status: 'COMPLETED', userReport: 'Content' },
+      });
     });
 
-    it('should handle score not found (null aiScore)', async () => {
+    it('should handle synthesis-only pipeline (no scoring rewrite)', async () => {
       mockPrisma.note.findUnique.mockResolvedValueOnce({
         id: TASK_ID, title: 'T', content: 'C', status: 'PENDING',
         conversationId: null, conceptId: null, expectedOutcome: null,
@@ -225,11 +206,7 @@ describe('HeadlessExecutorService', () => {
 
       mockAiGateway.streamCompletionWithContext
         .mockImplementationOnce((_m: any, _o: any, cb: (c: string) => void) => {
-          cb('Content');
-          return Promise.resolve();
-        })
-        .mockImplementationOnce((_m: any, _o: any, cb: (c: string) => void) => {
-          cb('No score here.');
+          cb('Draft content');
           return Promise.resolve();
         });
 
@@ -238,11 +215,8 @@ describe('HeadlessExecutorService', () => {
 
       await service.executeTask({ taskId: TASK_ID, tenantId: TENANT_ID, userId: USER_ID });
 
-      expect(mockPrisma.note.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ aiScore: null }),
-        }),
-      );
+      // Only 1 LLM call (synthesis draft), not 2 (synthesis + scoring)
+      expect(mockAiGateway.streamCompletionWithContext).toHaveBeenCalledTimes(1);
     });
 
     it('should load prerequisite context for concept tasks', async () => {
@@ -295,8 +269,8 @@ describe('HeadlessExecutorService', () => {
       // Workflow services should NOT be called — we go direct to synthesis
       expect(mockWorkflowService.getOrGenerateWorkflow).not.toHaveBeenCalled();
       expect(mockWorkflowService.generateTaskSpecificWorkflow).not.toHaveBeenCalled();
-      // Synthesis + scoring = 2 LLM calls
-      expect(mockAiGateway.streamCompletionWithContext).toHaveBeenCalledTimes(2);
+      // Synthesis draft only = 1 LLM call (scoring merged into consolidation)
+      expect(mockAiGateway.streamCompletionWithContext).toHaveBeenCalledTimes(1);
     });
 
     it('should emit maturity:stage-completed when stage completes', async () => {

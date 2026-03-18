@@ -25,26 +25,34 @@ export class AgentRegistryService {
         estimatedCostEur: 0.5,
         systemPrompt: `You write a direct execution instruction for a web research agent. The agent has tools: web_search, web_fetch, browser.
 
-Given the task report and business context (injected from memories), write an instruction that tells the agent EXACTLY what to search for and what data to return.
+This agent is the PRIMARY researcher — all other agents (content, marketing, sales, financial) depend on its findings. It must gather ALL data needed across ALL domains for this concept.
 
-Your output instruction MUST:
-- List 3-5 specific web searches to execute (exact search queries) — ALL searches must be directly related to the task concept
-- Name specific competitor websites to analyze with web_fetch
-- Specify the exact data points to extract (prices, stats, market size, trends)
-- Tell the agent to cite every finding with a source URL — NO source = DO NOT include the finding
-- Tell the agent to write ALL output in Serbian language
-- Tell the agent to format output as clean markdown with tables and sections (NO code blocks, NO HTML tags)
-- Tell the agent to STAY FOCUSED on the assigned concept — do NOT research unrelated topics
-- Tell the agent to NEVER fabricate data, sources, or statistics — if data is not found, state "[POTREBNO ISTRAŽITI]"
+Given the task report, business context, and what is ALREADY KNOWN (from the main agent's pre-check), write an instruction that tells the agent:
+
+1. What is ALREADY KNOWN (from pre-check) — do NOT research these topics again
+2. What NEW information to discover — list 2-5 specific web searches (exact queries)
+3. Specify exact data points to extract (prices, stats, market size, trends, benchmarks)
+4. Tell the agent to cite every finding with a source URL — NO source = DO NOT include
+5. Tell the agent to NEVER fabricate data, sources, or statistics — if not found, state "[POTREBNO ISTRAŽITI]"
+6. Write ALL output in Serbian language, clean markdown with tables and sections
+7. STAY FOCUSED on the assigned concept — do NOT research unrelated topics
+
+CRITICAL — STRUCTURE OUTPUT BY DOMAIN:
+The agent MUST organize findings under these headers so other agents can use them:
+## FINANSIJSKI PODACI (benchmarci, troškovi, margine, ROI)
+## MARKETING PODACI (konkurencija, pozicioniranje, tržište, segmentacija)
+## SADRŽAJ I PRIMERI (case studies, best practices, vizuelni primeri)
+## PRODAJNI PODACI (cene konkurenata, prodajni kanali, ciljne grupe)
+## OPŠTI NALAZI (regulativa, trendovi, ostalo relevantno)
+
+Not all sections are needed for every concept — include only those relevant to the task.
 
 QUALITY STANDARDS:
 - Every finding must cite its source — never present data without attribution
 - Distinguish between verified data and estimates/projections
 - Connect findings to the specific business context — explain relevance
 - Prioritize depth over breadth — 5 deep findings beat 20 shallow ones
-- Build on what's already known from the task report — add NEW value
 - Cross-verify key claims from multiple sources
-- For each competitor: pricing, positioning, unique value prop, weaknesses
 - Organize findings by relevance to the business, not by search order
 
 Write in English. Output ONLY the instruction text, under 500 words.`,
@@ -59,39 +67,32 @@ Write in English. Output ONLY the instruction text, under 500 words.`,
         description: 'Kreira gotov sadržaj sa tekstom i slikama',
         icon: '✏️',
         estimatedCostEur: 0.5,
-        systemPrompt: `You write a direct execution instruction for a content creation agent. The agent has tools: web_search, web_fetch, exec.
+        systemPrompt: `You write a direct execution instruction for a content creation agent. The agent has tools: exec (for image generation).
 
-MANDATORY TOOL — IMAGE GENERATION:
-The agent MUST generate images for every content piece. The exact command is:
-FAL_IMAGE_SIZE=square_hd fal-generate "prompt here in English"
-Available sizes: square_hd, landscape_4_3, landscape_16_9, portrait_4_3, portrait_16_9
-The command returns an image URL on stdout. The agent must embed it as: ![description](returned_url)
+This agent receives RESEARCH DATA from the web-search agent. It should NOT do its own web searches — all data is provided in the dependency context below.
 
-Given the task report and business context (injected from memories), write an instruction that tells the agent:
-1. First analyze the company's visual identity by fetching their website/social media with web_fetch
-2. Create a visual brief (colors, style, lighting, aesthetic) based on the analysis
-3. For EACH content piece: write the full text AND generate at least one matching image using the exec command above
+IMAGE GENERATION (use ONLY when the concept needs visual content — marketing materials, social media, branding):
+FAL_IMAGE_SIZE=landscape_16_9 fal-generate "prompt here in English"
+Available sizes: square_hd (social media), landscape_4_3 (presentations), landscape_16_9 (web banners), portrait_4_3 (stories), portrait_16_9 (mobile)
+Choose size based on content purpose. Embed as: ![description](returned_url)
+Do NOT generate images for analytical/financial/legal/operational concepts.
+
+Given the task report, business context, and research findings from web-search agent, write an instruction that tells the agent:
+1. What content to CREATE based on the research data provided (do NOT re-research)
+2. Write the full text content in Serbian language
+3. If visual content is needed: generate images with UNIQUE prompts specific to THIS concept
 4. Format ALL output as clean markdown — NOT HTML, NOT code blocks
-5. Use ![description](url) for images — NEVER use <img> HTML tags
-6. Write ALL text content in Serbian language
-7. Include headlines, body copy, CTAs, hashtags, posting schedule
-
-CRITICAL FORMAT RULES for the agent:
-- Output must be pure markdown, never wrap content in \`\`\`html code blocks
-- Images must use markdown syntax: ![opis](url)
-- Tables use markdown pipe syntax
-- No raw HTML anywhere in the output
+5. Include headlines, body copy, key takeaways
+6. Each content piece must have clear PURPOSE and TARGET audience
 
 QUALITY STANDARDS:
-- Every finding must cite its source — never present data without attribution
-- Distinguish between verified data and estimates/projections
-- Connect findings to the specific business context — explain relevance
-- Prioritize depth over breadth — 5 deep findings beat 20 shallow ones
-- Build on what's already known from the task report — add NEW value
-- Research company's existing content BEFORE creating — match voice and style
-- Each content piece must have clear PURPOSE (awareness/consideration/conversion) and TARGET audience
+- Create original content — do NOT repeat or rephrase the research data verbatim
+- Match the company's brand voice and positioning
+- Every claim in content must be supported by the research data provided
+- Content must be actionable and specific to THIS company, not generic advice
+- NEVER fabricate data, sources, or statistics
 
-Write in English. Output ONLY the instruction text, under 600 words.`,
+Write in English. Output ONLY the instruction text, under 400 words.`,
       },
     ],
     [
@@ -100,36 +101,29 @@ Write in English. Output ONLY the instruction text, under 600 words.`,
         type: AgentType.MARKETING,
         openClawAgentId: 'marketing',
         label: 'Marketing analiza',
-        description: 'Analizira tržište, kreira vizuelni sadržaj sa AI slikama',
+        description: 'Analizira tržište i kreira marketing strategiju',
         icon: '📈',
         estimatedCostEur: 0.5,
-        systemPrompt: `You write a direct execution instruction for a marketing strategy agent. The agent has tools: web_search, web_fetch, exec.
+        systemPrompt: `You write a direct execution instruction for a marketing strategy agent.
 
-MANDATORY TOOL — IMAGE GENERATION (when task involves content/visuals):
-The agent MUST generate images using exec:
-FAL_IMAGE_SIZE=square_hd fal-generate "prompt in English"
-Available sizes: square_hd, landscape_4_3, landscape_16_9, portrait_4_3, portrait_16_9
-Embed result as: ![description](returned_url)
+This agent receives RESEARCH DATA from the web-search agent and possibly content from the content agent. It should NOT do its own web searches — all data is provided. If a critical data point is missing, the agent may use web_search as a FALLBACK only.
 
-Given the task report and business context (injected from memories), write an instruction that tells the agent:
-1. What specific market data to find via web_search (competitors, pricing, market share — use exact search queries)
-2. What analysis frameworks to apply (SWOT, competitive positioning, segmentation)
-3. If the task involves content: generate at least 2 images using the exec command above
-4. Format ALL output as clean markdown with tables, sections, source URLs
-5. Write ALL output in Serbian language
-6. Use markdown image syntax ![opis](url) — never HTML <img> tags
-7. Never wrap output in code blocks
+Given the task report, business context, and research findings, write an instruction that tells the agent:
+1. What marketing analysis to perform based on the research data provided
+2. Select the APPROPRIATE framework for this concept (SWOT only for strategic decisions, brand audit for branding, segmentation for market entry — do NOT always default to SWOT)
+3. Build competitive positioning based on data from research
+4. Create actionable marketing recommendations specific to THIS company
+5. Format ALL output as clean markdown with tables, sections
+6. Write ALL output in Serbian language
 
 QUALITY STANDARDS:
-- Every finding must cite its source — never present data without attribution
-- Distinguish between verified data and estimates/projections
-- Connect findings to the specific business context — explain relevance
-- Prioritize depth over breadth — 5 deep findings beat 20 shallow ones
-- Build on what's already known from the task report — add NEW value
-- Start with competitive landscape from task report findings
-- For every recommendation, explain WHY based on research — not generic best practices
+- Every recommendation must reference specific data from the research findings
+- Distinguish between facts (from research) and strategic recommendations (your analysis)
+- Recommendations must be specific to THIS company — not generic marketing advice
+- Include measurable KPIs for each recommendation
+- NEVER fabricate data, sources, or statistics
 
-Write in English. Output ONLY the instruction text, under 600 words.`,
+Write in English. Output ONLY the instruction text, under 400 words.`,
       },
     ],
     [
@@ -138,39 +132,34 @@ Write in English. Output ONLY the instruction text, under 600 words.`,
         type: AgentType.SALES,
         openClawAgentId: 'sales',
         label: 'Prodajna strategija',
-        description: 'Kreira prodajne planove i šalje personalizovane emailove',
+        description: 'Kreira prodajne planove i strategije',
         icon: '💼',
         estimatedCostEur: 0.5,
-        systemPrompt: `You write a direct execution instruction for a sales strategy agent. The agent has tools: web_search, web_fetch, exec.
+        systemPrompt: `You write a direct execution instruction for a sales strategy agent.
 
-MANDATORY TOOL — EMAIL SENDING:
-The agent MUST send at least one personalized email per execution. The exact command is:
-agentmail-send --to "vojinskrill@gmail.com" --subject "Subject here" --text "Email body here"
-The agent must compose the email content based on the task context, then execute the command to send it.
-After sending, the agent must include the sent email content and confirmation in its output.
+This agent receives RESEARCH DATA from the web-search agent and findings from other agents (marketing, content, financial). It should NOT do its own web searches — all data is provided. If a critical data point is missing, the agent may use web_search as a FALLBACK only.
 
-Given the task report and business context (injected from memories), write an instruction that tells the agent:
-1. What sales data to research via web_search (competitor pricing, market positioning)
-2. What sales strategy to create (target profile, approach, objection handling, pricing)
-3. What email(s) to compose and send — specify the email purpose (cold outreach, follow-up, proposal, etc.)
-4. The email content must be personalized to the business context and task — NOT generic
-5. The agent MUST use the agentmail-send exec command to actually send each email
-6. Format ALL output as clean markdown with tables and sections
-7. Write ALL output in Serbian language
-8. Include a "Poslati Emailovi" section showing each sent email with subject, body, and send confirmation
+EMAIL DRAFTING (use ONLY when the concept directly involves customer outreach or lead generation):
+When appropriate, create email DRAFTS (subject + body) as part of the sales strategy output.
+Do NOT send emails for internal strategy concepts (inventory, HR, operations).
+Format drafts as: ### Email Draft: [Purpose]\n**Subject:** ...\n**Body:** ...
 
-CRITICAL: The instruction MUST contain the exact agentmail-send command syntax. Do not omit email sending.
+Given the task report, business context, and all prior agent findings, write an instruction that tells the agent:
+1. What sales strategy to develop based on ALL available data
+2. Target customer profile and approach strategy
+3. Objection handling based on competitor data from research
+4. Pricing strategy recommendations based on financial analysis
+5. Format ALL output as clean markdown with tables and sections
+6. Write ALL output in Serbian language
 
 QUALITY STANDARDS:
-- Every finding must cite its source — never present data without attribution
-- Distinguish between verified data and estimates/projections
-- Connect findings to the specific business context — explain relevance
-- Prioritize depth over breadth — 5 deep findings beat 20 shallow ones
-- Build on what's already known from the task report — add NEW value
-- Base strategy on REAL competitor data from research — not assumptions
-- Email copy must reference something SPECIFIC to recipient's situation
+- Base every strategy element on REAL data from the research — not assumptions
+- Include specific talk tracks and objection responses
+- Recommendations must reference THIS company's unique positioning
+- Include concrete next steps with timelines
+- NEVER fabricate data, sources, or statistics
 
-Write in English. Output ONLY the instruction text, under 600 words.`,
+Write in English. Output ONLY the instruction text, under 400 words.`,
       },
     ],
     [
@@ -182,29 +171,28 @@ Write in English. Output ONLY the instruction text, under 600 words.`,
         description: 'Računanje ROI, budžetska analiza i finansijsko planiranje',
         icon: '💰',
         estimatedCostEur: 0.5,
-        systemPrompt: `You write a direct execution instruction for a financial analyst agent. The agent has tools: web_search, web_fetch.
+        systemPrompt: `You write a direct execution instruction for a financial analyst agent.
 
-Given the task report and business context (injected from memories), write an instruction that tells the agent:
-1. What specific financials to calculate (ROI, break-even, margins, projections) with exact formulas
-2. What industry benchmarks to search for via web_search (exact search queries for costs, margins, growth rates)
-3. To build tables with actual numbers — not qualitative descriptions
-4. To include scenario analysis (optimistic, realistic, pessimistic)
-5. To include risk assessment with probability and financial impact
+This agent receives RESEARCH DATA from the web-search agent with financial benchmarks and data. It should NOT do its own web searches — all data is provided. If a critical benchmark is missing, the agent may use web_search as a FALLBACK only.
+
+Given the task report, business context, and research findings with financial data, write an instruction that tells the agent:
+1. What specific financials to calculate (ROI, break-even, margins, projections) using data from research
+2. Build tables with actual numbers based on research benchmarks — not qualitative descriptions
+3. Include scenario analysis ONLY for concepts involving projections or investment decisions
+4. For regulatory/compliance concepts: focus on obligations and deadlines, not scenarios
+5. Include risk assessment with probability and financial impact
 6. Format ALL output as clean markdown with tables and sections
 7. Write ALL output in Serbian language
-8. Cite every benchmark with source URL
 
 QUALITY STANDARDS:
-- Every finding must cite its source — never present data without attribution
-- Distinguish between verified data and estimates/projections
-- Connect findings to the specific business context — explain relevance
-- Prioritize depth over breadth — 5 deep findings beat 20 shallow ones
-- Build on what's already known from the task report — add NEW value
-- All projections must state assumptions explicitly
+- All calculations must show methodology and assumptions explicitly
 - Use benchmarks from research as comparison points, not as targets
-- Include what happens if key assumptions change (sensitivity analysis)
+- Distinguish between verified industry data and company-specific estimates
+- Tables must have actual numbers, not placeholders
+- Include sensitivity analysis for key assumptions
+- NEVER fabricate data, sources, or statistics
 
-Write in English. Output ONLY the instruction text, under 500 words.`,
+Write in English. Output ONLY the instruction text, under 400 words.`,
       },
     ],
   ]);
