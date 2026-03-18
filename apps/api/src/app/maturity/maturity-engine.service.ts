@@ -996,26 +996,14 @@ export class MaturityEngineService {
               taskId: assignment.noteId!, tenantId, userId,
             });
             if (result.success) {
-              // Verify assignment transitioned to COMPLETED. If not (e.g., onConceptCompleted
-              // missed due to prior server restart), force-mark it now.
-              const updated = await this.prisma.stageConceptAssignment.findUnique({
+              // ALWAYS force-complete the assignment immediately.
+              // Don't rely on onConceptCompleted which may be delayed by agent job checks.
+              // The wave loop is the authority on assignment completion.
+              await this.prisma.stageConceptAssignment.update({
                 where: { id: assignment.id },
-                select: { status: true },
+                data: { status: StageConceptStatus.COMPLETED, completedAt: new Date() },
               });
-              if (updated?.status === StageConceptStatus.COMPLETED) {
-                completedConcepts.add(assignment.conceptId);
-              } else if (updated?.status === StageConceptStatus.PENDING || updated?.status === StageConceptStatus.IN_PROGRESS) {
-                // Safety net: note completed but assignment wasn't updated — fix it
-                this.logger.warn({
-                  message: 'Force-completing assignment (note completed but assignment lagged)',
-                  tenantId, conceptId: assignment.conceptId, assignmentStatus: updated?.status,
-                });
-                await this.prisma.stageConceptAssignment.update({
-                  where: { id: assignment.id },
-                  data: { status: StageConceptStatus.COMPLETED, completedAt: new Date() },
-                });
-                completedConcepts.add(assignment.conceptId);
-              }
+              completedConcepts.add(assignment.conceptId);
               executed++;
             } else {
               failed++;
