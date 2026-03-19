@@ -17650,7 +17650,7 @@ let AgentExecutionService = AgentExecutionService_1 = class AgentExecutionServic
                 executionId, jobId: null, noteId: note.id, agentType, status: 'FORMATTING',
                 label: `${agentLabel}: Priprema instrukcija...`,
             });
-            const formattedPrompt = await this.agentPrompt.formatPrompt({
+            const formattedPrompt = this.agentPrompt.formatPrompt({
                 agentType,
                 taskTitle: note.title,
                 taskContent: note.content,
@@ -17734,22 +17734,25 @@ let AgentExecutionService = AgentExecutionService_1 = class AgentExecutionServic
             if (Math.abs(costDifference) > 0.0001) {
                 await this.budgetService.recordSpend(tenantId, costDifference);
             }
-            // Step 5: Mark completed + link result note
-            await this.prisma.agentExecution.update({
-                where: { id: executionId },
-                data: {
-                    status: 'COMPLETED',
-                    agentOutput: result.output,
-                    actualCostEur: actualCost,
-                    completedAt: new Date(),
-                    durationMs: result.durationMs,
-                    resultNoteId,
-                },
-            });
-            this.emitAgentEvent(tenantId, 'agent:status-change', {
-                executionId, jobId: null, noteId: note.id, agentType, status: 'COMPLETED',
-                label: `${agentLabel}: Završeno`,
-            });
+            // Step 5: Mark completed + link result note (guard: don't overwrite if manually stopped)
+            const currentExec = await this.prisma.agentExecution.findUnique({ where: { id: executionId }, select: { status: true } });
+            if (currentExec?.status !== 'FAILED') {
+                await this.prisma.agentExecution.update({
+                    where: { id: executionId },
+                    data: {
+                        status: 'COMPLETED',
+                        agentOutput: result.output,
+                        actualCostEur: actualCost,
+                        completedAt: new Date(),
+                        durationMs: result.durationMs,
+                        resultNoteId,
+                    },
+                });
+                this.emitAgentEvent(tenantId, 'agent:status-change', {
+                    executionId, jobId: null, noteId: note.id, agentType, status: 'COMPLETED',
+                    label: `${agentLabel}: Završeno`,
+                });
+            }
             this.emitAgentEvent(tenantId, 'agent:result', {
                 executionId, jobId: null, agentType,
                 output: result.output, durationMs: result.durationMs,
@@ -18010,6 +18013,26 @@ let AgentExecutionService = AgentExecutionService_1 = class AgentExecutionServic
         return this.executeJob(jobId, userId, tenantId);
     }
     /**
+     * Force-stop all running executions and jobs for a tenant.
+     */
+    async stopAllExecutions(tenantId) {
+        const execs = await this.prisma.agentExecution.updateMany({
+            where: { tenantId, status: { in: ['EXECUTING', 'FORMATTING', 'PENDING'] } },
+            data: { status: 'FAILED', error: 'Manually stopped by user', completedAt: new Date() },
+        });
+        const jobs = await this.prisma.agentJob.updateMany({
+            where: { tenantId, status: 'RUNNING' },
+            data: { status: 'FAILED', error: 'Manually stopped by user' },
+        });
+        this.logger.log({
+            message: 'All executions stopped by user',
+            tenantId,
+            stoppedExecutions: execs.count,
+            stoppedJobs: jobs.count,
+        });
+        return { stoppedExecutions: execs.count, stoppedJobs: jobs.count };
+    }
+    /**
      * Retry all PLANNED and FAILED jobs in waves of 5, respecting dependencies.
      * FAILED jobs are first reset to PLANNED. Then processes waves until all done.
      */
@@ -18135,12 +18158,12 @@ let AgentExecutionService = AgentExecutionService_1 = class AgentExecutionServic
                     select: { name: true },
                 });
                 const completedJobs = await this.prisma.agentJob.findMany({
-                    where: { noteId, status: 'COMPLETED' },
+                    where: { noteId, tenantId, status: 'COMPLETED' },
                     select: { agentType: true },
                 });
                 const agentTypes = [...new Set(completedJobs.map((j) => j.agentType))];
                 const companyName = tenant?.name || 'Unknown Company';
-                const summary = note.userReport.substring(0, 3000);
+                const summary = note.userReport.substring(0, 5000);
                 // Stagger to avoid lock contention
                 await new Promise((r) => setTimeout(r, Math.random() * 5_000));
                 // Update domain masters
@@ -18153,7 +18176,7 @@ let AgentExecutionService = AgentExecutionService_1 = class AgentExecutionServic
                 }
                 // Update main
                 try {
-                    await this.openClawClient.executeAgent(`KNOWLEDGE UPDATE za ${companyName}: Koncept "${note.title}" zavrsen. Nalazi:\n${summary.substring(0, 1500)}`, { agentId: 'main', timeoutSeconds: 120 });
+                    await this.openClawClient.executeAgent(`KNOWLEDGE UPDATE za ${companyName}: Koncept "${note.title}" zavrsen. Zapamti i organizuj:\n${summary.substring(0, 3000)}`, { agentId: 'main', timeoutSeconds: 120 });
                 }
                 catch { /* non-blocking */ }
                 this.logger.log({
@@ -18190,15 +18213,30 @@ let AgentExecutionService = AgentExecutionService_1 = class AgentExecutionServic
                 executionId, jobId, noteId: note.id, agentType, status: 'FORMATTING',
                 label: `${agentLabel}: Priprema instrukcija...`,
             });
-            const enrichedInstruction = dependencyContext
+            let enrichedInstruction = dependencyContext
                 ? `${jobInstruction}\n\nContext from previous agent results:\n${dependencyContext}`
                 : jobInstruction;
-            const formattedPrompt = await this.agentPrompt.formatPrompt({
+            // For web_search: tell it which domain agents follow so it prepares data for them
+            if (agentType === types_1.AgentType.WEB_SEARCH) {
+                const siblingJobs = await this.prisma.agentJob.findMany({
+                    where: { noteId: note.id, tenantId, agentType: { not: types_1.AgentType.WEB_SEARCH } },
+                    select: { agentType: true },
+                    orderBy: { order: 'asc' },
+                });
+                if (siblingJobs.length > 0) {
+                    const agentNames = siblingJobs.map((j) => this.registry.getAgent(j.agentType).label).join(', ');
+                    enrichedInstruction += `\n\nSLEDEĆI AGENTI KOJI ČEKAJU TVOJE REZULTATE: ${agentNames}. Pripremi podatke za SVE njih — strukturiraj output sa odgovarajućim domenskim sekcijama.`;
+                }
+            }
+            // Retrieve pre-check context from main agent (stored during headless execution)
+            const preCheckContext = note.agentEnrichments?.mainPreCheck ?? null;
+            const formattedPrompt = this.agentPrompt.formatPrompt({
                 agentType,
                 taskTitle: note.title,
                 taskContent: enrichedInstruction,
                 userReport: note.userReport,
                 expectedOutcome: note.expectedOutcome,
+                preCheckContext,
                 tenantId,
                 userId,
                 onChunk: (chunk) => {
@@ -18285,22 +18323,25 @@ let AgentExecutionService = AgentExecutionService_1 = class AgentExecutionServic
             if (Math.abs(costDifference) > 0.0001) {
                 await this.budgetService.recordSpend(tenantId, costDifference);
             }
-            // Step 5: Mark execution completed + link result note
-            await this.prisma.agentExecution.update({
-                where: { id: executionId },
-                data: {
-                    status: 'COMPLETED',
-                    agentOutput: result.output,
-                    actualCostEur: actualCost,
-                    completedAt: new Date(),
-                    durationMs: result.durationMs,
-                    resultNoteId: jobResultNoteId,
-                },
-            });
-            this.emitAgentEvent(tenantId, 'agent:status-change', {
-                executionId, jobId, noteId: note.id, agentType, status: 'COMPLETED',
-                label: `${agentLabel}: Završeno`,
-            });
+            // Step 5: Mark execution completed (guard: don't overwrite if manually stopped)
+            const currentExec2 = await this.prisma.agentExecution.findUnique({ where: { id: executionId }, select: { status: true } });
+            if (currentExec2?.status !== 'FAILED') {
+                await this.prisma.agentExecution.update({
+                    where: { id: executionId },
+                    data: {
+                        status: 'COMPLETED',
+                        agentOutput: result.output,
+                        actualCostEur: actualCost,
+                        completedAt: new Date(),
+                        durationMs: result.durationMs,
+                        resultNoteId: jobResultNoteId,
+                    },
+                });
+                this.emitAgentEvent(tenantId, 'agent:status-change', {
+                    executionId, jobId, noteId: note.id, agentType, status: 'COMPLETED',
+                    label: `${agentLabel}: Završeno`,
+                });
+            }
             this.emitAgentEvent(tenantId, 'agent:result', {
                 executionId, jobId, agentType,
                 output: result.output, durationMs: result.durationMs,
@@ -18759,77 +18800,70 @@ module.exports = require("undici");
 
 
 var AgentPromptService_1;
-var _a, _b;
+var _a;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.AgentPromptService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const ai_gateway_service_1 = __webpack_require__(90);
 const agent_registry_service_1 = __webpack_require__(157);
 let AgentPromptService = AgentPromptService_1 = class AgentPromptService {
-    constructor(aiGateway, registry) {
-        this.aiGateway = aiGateway;
+    constructor(registry) {
         this.registry = registry;
         this.logger = new common_1.Logger(AgentPromptService_1.name);
     }
     /**
-     * Generates a per-agent-type prompt for the OpenClaw agent.
-     * Uses AiGatewayService which automatically injects tenant memories
-     * (company name, industry, brand, goals, style, target audience).
+     * Builds the final prompt for an OpenClaw agent by combining:
+     * 1. The job planner's instruction (already contextualized)
+     * 2. Task context (title, content, report excerpt)
+     * 3. Pre-check context from main agent (what's already known)
+     * 4. Grounding block (concept focus, format, anti-hallucination)
+     *
+     * NO LLM call — deterministic template assembly.
+     * The job planner's LLM call already produced a contextualized instruction.
+     * Adding another LLM call to "reformat" it was redundant.
      */
-    async formatPrompt(params) {
-        const { agentType, taskTitle, taskContent, userReport, expectedOutcome, tenantId, userId } = params;
+    formatPrompt(params) {
+        const { agentType, taskTitle, taskContent, userReport, expectedOutcome, preCheckContext } = params;
         const agentDef = this.registry.getAgent(agentType);
-        const userMessage = `Task: ${taskTitle}
-
-Description: ${taskContent}
-
-${expectedOutcome ? `Expected Outcome: ${expectedOutcome}\n` : ''}User's Completed Report:
-${userReport.substring(0, 3000)}
-
-Based on this task report and the business context from memories, generate a direct execution instruction for the ${agentDef.label} agent.
-
-INSTRUCTION QUALITY REQUIREMENTS:
-- Identify the KEY FINDINGS from the report that this agent should build upon — don't repeat analysis, ADD NEW VALUE
-- Reference specific companies, products, numbers from the report
-- Tell the agent what is ALREADY KNOWN (from the report) and what NEW information to discover or produce
-- The instruction must be actionable — the agent should ACT on this, execute its tools, produce deliverables, and return results. Not analyze or plan.`;
-        const messages = [
-            { role: 'system', content: agentDef.systemPrompt },
-            { role: 'user', content: userMessage },
-        ];
-        let result = '';
-        await this.aiGateway.streamCompletionWithContext(messages, {
-            tenantId,
-            userId,
-            skipRateLimit: true,
-            skipQuotaCheck: true,
-        }, (chunk) => {
-            result += chunk;
-            params.onChunk?.(chunk);
-        });
-        // Programmatically append memory instruction + concept grounding + format requirements
-        // (not left to LLM generation — guarantees it's always present)
-        const memoryBlock = `
-
+        // Build the prompt from components — no LLM call needed
+        const parts = [];
+        // 1. Task context
+        parts.push(`ZADATAK: ${taskTitle}`);
+        parts.push(`OPIS: ${taskContent}`);
+        if (expectedOutcome) {
+            parts.push(`OČEKIVANI REZULTAT: ${expectedOutcome}`);
+        }
+        // 2. What is already known (from main agent pre-check)
+        if (preCheckContext && preCheckContext.length > 50) {
+            parts.push(`\n--- VEĆ POZNATO (ne istraži ponovo) ---\n${preCheckContext}\n--- KRAJ VEĆ POZNATOG ---`);
+        }
+        // 3. Current report excerpt for context
+        if (userReport && userReport.length > 100) {
+            parts.push(`\n--- TRENUTNI IZVEŠTAJ (kontekst) ---\n${userReport.substring(0, 4000)}\n--- KRAJ IZVEŠTAJA ---`);
+        }
+        // 4. Grounding block — ALWAYS appended
+        parts.push(`
 ---
 KRITIČNO — UZEMLJENJE:
 - Radi ISKLJUČIVO na zadatku opisanom iznad. NE širi se na druge teme.
 - NIKADA ne izmišljaj podatke, izvore ili statistike. Ako ne možeš pronaći podatak, napiši "[POTREBNO ISTRAŽITI]".
 - Svaki nalaz MORA imati izvor (URL). Bez izvora = ne uključuj u rezultat.
 - NE ponavljaj generičke poslovne savete — samo SPECIFIČNE nalaze za ovu kompaniju i ovaj koncept.
-
-NAPOMENA O KONTEKSTU:
-Ako imaš prethodno iskustvo i memoriju o ovoj kompaniji iz ranijih istraživanja — iskoristi to znanje. Nadogradi na postojeće nalaze, ne ponavljaj već istraženo.
-Ako je ovo tvoj prvi zadatak za ovu kompaniju — istraži temeljno od početka koristeći web_search i web_fetch.
+- Ako imaš prethodno iskustvo i memoriju o ovoj kompaniji — iskoristi to znanje. Nadogradi na postojeće nalaze.
+- Ako je ovo tvoj prvi zadatak — istraži temeljno od početka.
 
 FORMAT IZLAZA: Profesionalan Markdown (## zaglavlja, tabele, **bold** za ključne vrednosti, > za izvore sa URL-ovima). SVE na srpskom jeziku. NE objašnjavaj šta ćeš raditi — odmah piši rezultat.
----`;
-        const finalPrompt = result.trim() + memoryBlock;
+---`);
+        const finalPrompt = parts.join('\n\n');
+        // Emit chunks for streaming feedback (simulate progress)
+        if (params.onChunk) {
+            params.onChunk(finalPrompt);
+        }
         this.logger.log({
-            message: 'Prompt formatted for agent',
+            message: 'Prompt assembled for agent (no LLM call)',
             agentType,
             taskTitle,
+            hasPreCheck: !!preCheckContext,
             instructionLength: finalPrompt.length,
         });
         return finalPrompt;
@@ -18838,7 +18872,7 @@ FORMAT IZLAZA: Profesionalan Markdown (## zaglavlja, tabele, **bold** za ključn
 exports.AgentPromptService = AgentPromptService;
 exports.AgentPromptService = AgentPromptService = AgentPromptService_1 = tslib_1.__decorate([
     (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _a : Object, typeof (_b = typeof agent_registry_service_1.AgentRegistryService !== "undefined" && agent_registry_service_1.AgentRegistryService) === "function" ? _b : Object])
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof agent_registry_service_1.AgentRegistryService !== "undefined" && agent_registry_service_1.AgentRegistryService) === "function" ? _a : Object])
 ], AgentPromptService);
 
 
@@ -18864,31 +18898,39 @@ let AgentRegistryService = class AgentRegistryService {
                     description: 'Pretražuje internet za relevantne informacije, trendove i izvore',
                     icon: '🔍',
                     estimatedCostEur: 0.5,
-                    systemPrompt: `You write a direct execution instruction for a web research agent. The agent has tools: web_search, web_fetch, browser.
+                    systemPrompt: `You write a direct execution instruction for a web research agent. The agent has tools: web_search, web_fetch.
 
-Given the task report and business context (injected from memories), write an instruction that tells the agent EXACTLY what to search for and what data to return.
+SPEED IS CRITICAL — the agent must complete in under 60 seconds.
 
-Your output instruction MUST:
-- List 3-5 specific web searches to execute (exact search queries) — ALL searches must be directly related to the task concept
-- Name specific competitor websites to analyze with web_fetch
-- Specify the exact data points to extract (prices, stats, market size, trends)
-- Tell the agent to cite every finding with a source URL — NO source = DO NOT include the finding
-- Tell the agent to write ALL output in Serbian language
-- Tell the agent to format output as clean markdown with tables and sections (NO code blocks, NO HTML tags)
-- Tell the agent to STAY FOCUSED on the assigned concept — do NOT research unrelated topics
-- Tell the agent to NEVER fabricate data, sources, or statistics — if data is not found, state "[POTREBNO ISTRAŽITI]"
+Given the task report, business context, and what is ALREADY KNOWN, write an instruction that tells the agent:
+
+1. What is ALREADY KNOWN — do NOT research these topics again
+2. Make exactly 1-2 focused web searches (not more!) — write the EXACT search queries
+3. Extract ONLY the most important data points: key numbers, benchmarks, one competitor example
+4. Cite findings with source URL — NO source = DO NOT include
+5. NEVER fabricate data — if not found, state "[POTREBNO ISTRAŽITI]"
+6. Write ALL output in Serbian, clean markdown
+7. STAY FOCUSED — one concept, essential data only
+
+SPEED RULES:
+- Maximum 1-2 web_search calls — NO MORE
+- Do NOT use web_fetch unless absolutely necessary (only if web_search result needs deeper reading)
+- Do NOT use browser tool — too slow
+- Short, focused output: 500-1000 words maximum
+- If you already have useful data from the task report, USE IT — don't re-search
+
+Structure output with relevant domain headers:
+## KLJUČNI PODACI (najvažniji nalazi sa izvorima)
+## BENCHMARCI (industriski standardi, brojke)
+## PREPORUKE (kratke, konkretne akcije)
 
 QUALITY STANDARDS:
-- Every finding must cite its source — never present data without attribution
-- Distinguish between verified data and estimates/projections
-- Connect findings to the specific business context — explain relevance
-- Prioritize depth over breadth — 5 deep findings beat 20 shallow ones
-- Build on what's already known from the task report — add NEW value
-- Cross-verify key claims from multiple sources
-- For each competitor: pricing, positioning, unique value prop, weaknesses
-- Organize findings by relevance to the business, not by search order
+- Every finding must cite its source
+- Prioritize depth over breadth — 3 solid findings beat 10 shallow ones
+- Connect findings to THIS specific business
+- NEVER fabricate data, sources, or statistics
 
-Write in English. Output ONLY the instruction text, under 500 words.`,
+Write in English. Output ONLY the instruction text, under 300 words.`,
                 },
             ],
             [
@@ -18900,39 +18942,32 @@ Write in English. Output ONLY the instruction text, under 500 words.`,
                     description: 'Kreira gotov sadržaj sa tekstom i slikama',
                     icon: '✏️',
                     estimatedCostEur: 0.5,
-                    systemPrompt: `You write a direct execution instruction for a content creation agent. The agent has tools: web_search, web_fetch, exec.
+                    systemPrompt: `You write a direct execution instruction for a content creation agent. The agent has tools: exec (for image generation).
 
-MANDATORY TOOL — IMAGE GENERATION:
-The agent MUST generate images for every content piece. The exact command is:
-FAL_IMAGE_SIZE=square_hd fal-generate "prompt here in English"
-Available sizes: square_hd, landscape_4_3, landscape_16_9, portrait_4_3, portrait_16_9
-The command returns an image URL on stdout. The agent must embed it as: ![description](returned_url)
+This agent receives RESEARCH DATA from the web-search agent. It should NOT do its own web searches — all data is provided in the dependency context below.
 
-Given the task report and business context (injected from memories), write an instruction that tells the agent:
-1. First analyze the company's visual identity by fetching their website/social media with web_fetch
-2. Create a visual brief (colors, style, lighting, aesthetic) based on the analysis
-3. For EACH content piece: write the full text AND generate at least one matching image using the exec command above
+IMAGE GENERATION (use ONLY when the concept needs visual content — marketing materials, social media, branding):
+FAL_IMAGE_SIZE=landscape_16_9 fal-generate "prompt here in English"
+Available sizes: square_hd (social media), landscape_4_3 (presentations), landscape_16_9 (web banners), portrait_4_3 (stories), portrait_16_9 (mobile)
+Choose size based on content purpose. Embed as: ![description](returned_url)
+Do NOT generate images for analytical/financial/legal/operational concepts.
+
+Given the task report, business context, and research findings from web-search agent, write an instruction that tells the agent:
+1. What content to CREATE based on the research data provided (do NOT re-research)
+2. Write the full text content in Serbian language
+3. If visual content is needed: generate images with UNIQUE prompts specific to THIS concept
 4. Format ALL output as clean markdown — NOT HTML, NOT code blocks
-5. Use ![description](url) for images — NEVER use <img> HTML tags
-6. Write ALL text content in Serbian language
-7. Include headlines, body copy, CTAs, hashtags, posting schedule
-
-CRITICAL FORMAT RULES for the agent:
-- Output must be pure markdown, never wrap content in \`\`\`html code blocks
-- Images must use markdown syntax: ![opis](url)
-- Tables use markdown pipe syntax
-- No raw HTML anywhere in the output
+5. Include headlines, body copy, key takeaways
+6. Each content piece must have clear PURPOSE and TARGET audience
 
 QUALITY STANDARDS:
-- Every finding must cite its source — never present data without attribution
-- Distinguish between verified data and estimates/projections
-- Connect findings to the specific business context — explain relevance
-- Prioritize depth over breadth — 5 deep findings beat 20 shallow ones
-- Build on what's already known from the task report — add NEW value
-- Research company's existing content BEFORE creating — match voice and style
-- Each content piece must have clear PURPOSE (awareness/consideration/conversion) and TARGET audience
+- Create original content — do NOT repeat or rephrase the research data verbatim
+- Match the company's brand voice and positioning
+- Every claim in content must be supported by the research data provided
+- Content must be actionable and specific to THIS company, not generic advice
+- NEVER fabricate data, sources, or statistics
 
-Write in English. Output ONLY the instruction text, under 600 words.`,
+Write in English. Output ONLY the instruction text, under 400 words.`,
                 },
             ],
             [
@@ -18941,36 +18976,29 @@ Write in English. Output ONLY the instruction text, under 600 words.`,
                     type: types_1.AgentType.MARKETING,
                     openClawAgentId: 'marketing',
                     label: 'Marketing analiza',
-                    description: 'Analizira tržište, kreira vizuelni sadržaj sa AI slikama',
+                    description: 'Analizira tržište i kreira marketing strategiju',
                     icon: '📈',
                     estimatedCostEur: 0.5,
-                    systemPrompt: `You write a direct execution instruction for a marketing strategy agent. The agent has tools: web_search, web_fetch, exec.
+                    systemPrompt: `You write a direct execution instruction for a marketing strategy agent.
 
-MANDATORY TOOL — IMAGE GENERATION (when task involves content/visuals):
-The agent MUST generate images using exec:
-FAL_IMAGE_SIZE=square_hd fal-generate "prompt in English"
-Available sizes: square_hd, landscape_4_3, landscape_16_9, portrait_4_3, portrait_16_9
-Embed result as: ![description](returned_url)
+This agent receives RESEARCH DATA from the web-search agent and possibly content from the content agent. It should NOT do its own web searches — all data is provided. If a critical data point is missing, the agent may use web_search as a FALLBACK only.
 
-Given the task report and business context (injected from memories), write an instruction that tells the agent:
-1. What specific market data to find via web_search (competitors, pricing, market share — use exact search queries)
-2. What analysis frameworks to apply (SWOT, competitive positioning, segmentation)
-3. If the task involves content: generate at least 2 images using the exec command above
-4. Format ALL output as clean markdown with tables, sections, source URLs
-5. Write ALL output in Serbian language
-6. Use markdown image syntax ![opis](url) — never HTML <img> tags
-7. Never wrap output in code blocks
+Given the task report, business context, and research findings, write an instruction that tells the agent:
+1. What marketing analysis to perform based on the research data provided
+2. Select the APPROPRIATE framework for this concept (SWOT only for strategic decisions, brand audit for branding, segmentation for market entry — do NOT always default to SWOT)
+3. Build competitive positioning based on data from research
+4. Create actionable marketing recommendations specific to THIS company
+5. Format ALL output as clean markdown with tables, sections
+6. Write ALL output in Serbian language
 
 QUALITY STANDARDS:
-- Every finding must cite its source — never present data without attribution
-- Distinguish between verified data and estimates/projections
-- Connect findings to the specific business context — explain relevance
-- Prioritize depth over breadth — 5 deep findings beat 20 shallow ones
-- Build on what's already known from the task report — add NEW value
-- Start with competitive landscape from task report findings
-- For every recommendation, explain WHY based on research — not generic best practices
+- Every recommendation must reference specific data from the research findings
+- Distinguish between facts (from research) and strategic recommendations (your analysis)
+- Recommendations must be specific to THIS company — not generic marketing advice
+- Include measurable KPIs for each recommendation
+- NEVER fabricate data, sources, or statistics
 
-Write in English. Output ONLY the instruction text, under 600 words.`,
+Write in English. Output ONLY the instruction text, under 400 words.`,
                 },
             ],
             [
@@ -18979,39 +19007,35 @@ Write in English. Output ONLY the instruction text, under 600 words.`,
                     type: types_1.AgentType.SALES,
                     openClawAgentId: 'sales',
                     label: 'Prodajna strategija',
-                    description: 'Kreira prodajne planove i šalje personalizovane emailove',
+                    description: 'Kreira prodajne planove i strategije',
                     icon: '💼',
                     estimatedCostEur: 0.5,
-                    systemPrompt: `You write a direct execution instruction for a sales strategy agent. The agent has tools: web_search, web_fetch, exec.
+                    systemPrompt: `You write a direct execution instruction for a sales strategy agent.
 
-MANDATORY TOOL — EMAIL SENDING:
-The agent MUST send at least one personalized email per execution. The exact command is:
+This agent receives RESEARCH DATA from the web-search agent and findings from other agents (marketing, content, financial). It should NOT do its own web searches — all data is provided. If a critical data point is missing, the agent may use web_search as a FALLBACK only.
+
+EMAIL SENDING (use ONLY when the concept directly involves customer outreach or lead generation):
+When the concept requires email outreach, the agent MUST send the email using:
 agentmail-send --to "vojinskrill@gmail.com" --subject "Subject here" --text "Email body here"
-The agent must compose the email content based on the task context, then execute the command to send it.
-After sending, the agent must include the sent email content and confirmation in its output.
+Do NOT send emails for internal strategy concepts (inventory, HR, operations).
+After sending, include the email content in output under: ### Poslati Email: [Purpose]
 
-Given the task report and business context (injected from memories), write an instruction that tells the agent:
-1. What sales data to research via web_search (competitor pricing, market positioning)
-2. What sales strategy to create (target profile, approach, objection handling, pricing)
-3. What email(s) to compose and send — specify the email purpose (cold outreach, follow-up, proposal, etc.)
-4. The email content must be personalized to the business context and task — NOT generic
-5. The agent MUST use the agentmail-send exec command to actually send each email
-6. Format ALL output as clean markdown with tables and sections
-7. Write ALL output in Serbian language
-8. Include a "Poslati Emailovi" section showing each sent email with subject, body, and send confirmation
-
-CRITICAL: The instruction MUST contain the exact agentmail-send command syntax. Do not omit email sending.
+Given the task report, business context, and all prior agent findings, write an instruction that tells the agent:
+1. What sales strategy to develop based on ALL available data
+2. Target customer profile and approach strategy
+3. Objection handling based on competitor data from research
+4. Pricing strategy recommendations based on financial analysis
+5. Format ALL output as clean markdown with tables and sections
+6. Write ALL output in Serbian language
 
 QUALITY STANDARDS:
-- Every finding must cite its source — never present data without attribution
-- Distinguish between verified data and estimates/projections
-- Connect findings to the specific business context — explain relevance
-- Prioritize depth over breadth — 5 deep findings beat 20 shallow ones
-- Build on what's already known from the task report — add NEW value
-- Base strategy on REAL competitor data from research — not assumptions
-- Email copy must reference something SPECIFIC to recipient's situation
+- Base every strategy element on REAL data from the research — not assumptions
+- Include specific talk tracks and objection responses
+- Recommendations must reference THIS company's unique positioning
+- Include concrete next steps with timelines
+- NEVER fabricate data, sources, or statistics
 
-Write in English. Output ONLY the instruction text, under 600 words.`,
+Write in English. Output ONLY the instruction text, under 400 words.`,
                 },
             ],
             [
@@ -19023,29 +19047,28 @@ Write in English. Output ONLY the instruction text, under 600 words.`,
                     description: 'Računanje ROI, budžetska analiza i finansijsko planiranje',
                     icon: '💰',
                     estimatedCostEur: 0.5,
-                    systemPrompt: `You write a direct execution instruction for a financial analyst agent. The agent has tools: web_search, web_fetch.
+                    systemPrompt: `You write a direct execution instruction for a financial analyst agent.
 
-Given the task report and business context (injected from memories), write an instruction that tells the agent:
-1. What specific financials to calculate (ROI, break-even, margins, projections) with exact formulas
-2. What industry benchmarks to search for via web_search (exact search queries for costs, margins, growth rates)
-3. To build tables with actual numbers — not qualitative descriptions
-4. To include scenario analysis (optimistic, realistic, pessimistic)
-5. To include risk assessment with probability and financial impact
+This agent receives RESEARCH DATA from the web-search agent with financial benchmarks and data. It should NOT do its own web searches — all data is provided. If a critical benchmark is missing, the agent may use web_search as a FALLBACK only.
+
+Given the task report, business context, and research findings with financial data, write an instruction that tells the agent:
+1. What specific financials to calculate (ROI, break-even, margins, projections) using data from research
+2. Build tables with actual numbers based on research benchmarks — not qualitative descriptions
+3. Include scenario analysis ONLY for concepts involving projections or investment decisions
+4. For regulatory/compliance concepts: focus on obligations and deadlines, not scenarios
+5. Include risk assessment with probability and financial impact
 6. Format ALL output as clean markdown with tables and sections
 7. Write ALL output in Serbian language
-8. Cite every benchmark with source URL
 
 QUALITY STANDARDS:
-- Every finding must cite its source — never present data without attribution
-- Distinguish between verified data and estimates/projections
-- Connect findings to the specific business context — explain relevance
-- Prioritize depth over breadth — 5 deep findings beat 20 shallow ones
-- Build on what's already known from the task report — add NEW value
-- All projections must state assumptions explicitly
+- All calculations must show methodology and assumptions explicitly
 - Use benchmarks from research as comparison points, not as targets
-- Include what happens if key assumptions change (sensitivity analysis)
+- Distinguish between verified industry data and company-specific estimates
+- Tables must have actual numbers, not placeholders
+- Include sensitivity analysis for key assumptions
+- NEVER fabricate data, sources, or statistics
 
-Write in English. Output ONLY the instruction text, under 500 words.`,
+Write in English. Output ONLY the instruction text, under 400 words.`,
                 },
             ],
         ]);
@@ -19277,6 +19300,14 @@ let AgentExecutionController = class AgentExecutionController {
      * Retry all PLANNED/FAILED jobs in waves of 5, respecting dependencies.
      * Fire-and-forget — returns immediately, processes in background.
      */
+    /**
+     * POST /api/v1/agent-execution/stop-all
+     * Force-stop all running agent executions and jobs.
+     */
+    async stopAll(user) {
+        const result = await this.agentExecutionService.stopAllExecutions(user.tenantId);
+        return result;
+    }
     async retryAllPending(user) {
         const result = await this.agentExecutionService.retryAllPendingJobs(user.userId, user.tenantId);
         return { data: result };
@@ -19341,6 +19372,14 @@ tslib_1.__decorate([
     tslib_1.__metadata("design:paramtypes", [String, Object]),
     tslib_1.__metadata("design:returntype", Promise)
 ], AgentExecutionController.prototype, "retryJob", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('stop-all'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "stopAll", null);
 tslib_1.__decorate([
     (0, common_1.Post)('retry-all-pending'),
     (0, common_1.HttpCode)(common_1.HttpStatus.ACCEPTED),
@@ -19414,34 +19453,42 @@ let JobPlannerService = JobPlannerService_1 = class JobPlannerService {
             .getAllAgents()
             .map((a) => `- ${a.type}: ${a.label} — ${a.description}`)
             .join('\n');
-        const systemPrompt = `You are a business operations planner. Given a completed task report, you MUST create an execution plan of AI agent jobs that will enrich the report with real-world data and produce concrete deliverables.
+        const systemPrompt = `You are a business operations planner. Given a completed task report, create an execution plan of AI agent jobs.
 
 Available agent types:
 ${agentDescriptions}
 
+ARCHITECTURE — HOW AGENTS COLLABORATE:
+1. web_search is ALWAYS the first job — it researches ALL aspects and structures output by domain
+2. Domain agents (content, marketing, sales, financial) receive web_search output and do their SPECIALIZED work
+3. Domain agents execute SEQUENTIALLY — each sees output from ALL previous agents
+4. Domain agents do NOT do their own web research — they USE the data from web_search
+
 DECISION FRAMEWORK:
-- Analyze the task report and identify WHAT IS MISSING — if there are no concrete market data points, web_search is critical; if there is no ready-to-use content, content is critical; if there is no competitive pricing data, web_search + financial is critical.
-- Do NOT create jobs for things the report already covers well — focus on GAPS and NEW VALUE.
+- web_search is ALWAYS included (order 1, no dependencies)
+- Add domain agents ONLY when the concept needs their expertise:
+  * financial: when concept involves costs, ROI, budgets, pricing, cash flow
+  * content: when concept needs written deliverables, brand materials, visual content
+  * marketing: when concept involves positioning, competition, market strategy
+  * sales: when concept involves customer outreach, selling strategy, pricing negotiation
+- Create 1-4 jobs total. Simple concepts may need ONLY web_search (1 job).
 
 Rules:
-- ALWAYS create 2-4 jobs. The report is a starting point — agents add real-world research, competitor data, market validation, and actionable content.
-- ALWAYS start with web_search to gather current market data, competitor intelligence, and industry benchmarks.
-- Jobs execute sequentially: later jobs receive outputs from earlier jobs as context.
-- Common chains: web_search → content, web_search → marketing, web_search → sales
-- Each job instruction MUST reference CONCRETE findings from the task report — not generate an independent instruction.
-- A job that depends on a previous job MUST explicitly state WHAT to take from the previous output (e.g., "Using the competitor pricing data from the research step, ...").
-- Instructions must tell agents WHAT to do and what tools to use — they should execute web searches, fetch competitor websites, and produce deliverables.
-- Write instructions in English (agents will produce Serbian output).
+- web_search instruction MUST tell the agent to structure output with domain headers:
+  ## FINANSIJSKI PODACI, ## MARKETING PODACI, ## SADRŽAJ I PRIMERI, ## PRODAJNI PODACI
+- Each domain agent instruction MUST say "Using the research data provided, ..." — NOT "Search for..."
+- Domain agents depend on web_search (and optionally on each other for collaboration)
+- Write instructions in English (agents produce Serbian output)
 - Respond ONLY with a JSON array, no other text.
 
 Output format:
-[{"agentType":"web_search","order":1,"dependsOnOrders":[],"instruction":"Research..."},{"agentType":"content","order":2,"dependsOnOrders":[1],"instruction":"Using the research results, create..."}]`;
+[{"agentType":"web_search","order":1,"dependsOnOrders":[],"instruction":"Research ALL aspects of [topic]..."},{"agentType":"financial","order":2,"dependsOnOrders":[1],"instruction":"Using the financial data from research, calculate..."}]`;
         const userMessage = `Task: ${note.title}
 
 Description: ${note.content.substring(0, 500)}
 
-${note.expectedOutcome ? `Expected Outcome: ${note.expectedOutcome}\n` : ''}Completed Report (first 2000 chars):
-${note.userReport.substring(0, 2000)}
+${note.expectedOutcome ? `Expected Outcome: ${note.expectedOutcome}\n` : ''}Completed Report:
+${note.userReport.substring(0, 4000)}
 
 Create an execution plan of agent jobs for this task. Return JSON array only.`;
         const messages = [
@@ -19653,7 +19700,7 @@ let MaturityEngineService = MaturityEngineService_1 = class MaturityEngineServic
         // Each task has 2-4 agent jobs → 2 tasks = max ~8 concurrent OpenClaw calls.
         // Higher values cause DeepSeek/Brave rate limits and timeouts.
         // Cross-persona cooperation works between chunks (not within).
-        this.stageConcurrency = parseInt(this.configService.get('STAGE_MAX_CONCURRENCY') ?? '2', 10);
+        this.stageConcurrency = parseInt(this.configService.get('STAGE_MAX_CONCURRENCY') ?? '3', 10);
     }
     // ─── Stage Initialization ───
     /**
@@ -20417,27 +20464,14 @@ let MaturityEngineService = MaturityEngineService_1 = class MaturityEngineServic
                             taskId: assignment.noteId, tenantId, userId,
                         });
                         if (result.success) {
-                            // Verify assignment transitioned to COMPLETED. If not (e.g., onConceptCompleted
-                            // missed due to prior server restart), force-mark it now.
-                            const updated = await this.prisma.stageConceptAssignment.findUnique({
+                            // ALWAYS force-complete the assignment immediately.
+                            // Don't rely on onConceptCompleted which may be delayed by agent job checks.
+                            // The wave loop is the authority on assignment completion.
+                            await this.prisma.stageConceptAssignment.update({
                                 where: { id: assignment.id },
-                                select: { status: true },
+                                data: { status: types_1.StageConceptStatus.COMPLETED, completedAt: new Date() },
                             });
-                            if (updated?.status === types_1.StageConceptStatus.COMPLETED) {
-                                completedConcepts.add(assignment.conceptId);
-                            }
-                            else if (updated?.status === types_1.StageConceptStatus.PENDING || updated?.status === types_1.StageConceptStatus.IN_PROGRESS) {
-                                // Safety net: note completed but assignment wasn't updated — fix it
-                                this.logger.warn({
-                                    message: 'Force-completing assignment (note completed but assignment lagged)',
-                                    tenantId, conceptId: assignment.conceptId, assignmentStatus: updated?.status,
-                                });
-                                await this.prisma.stageConceptAssignment.update({
-                                    where: { id: assignment.id },
-                                    data: { status: types_1.StageConceptStatus.COMPLETED, completedAt: new Date() },
-                                });
-                                completedConcepts.add(assignment.conceptId);
-                            }
+                            completedConcepts.add(assignment.conceptId);
                             executed++;
                         }
                         else {
@@ -20794,7 +20828,7 @@ let HeadlessExecutorService = HeadlessExecutorService_1 = class HeadlessExecutor
         // Add generous margin for network delays and queue wait.
         this.jobCompletionTimeoutMs = (openclawTimeout + 60) * 1000 + 120_000;
         // With defaults: (600 + 60) * 1000 + 120_000 = 780_000ms = 13 min
-        // Start stuck job watchdog — checks every 30s for jobs stuck >10 min
+        // Start stuck job watchdog — checks every 30s for jobs stuck >20 min
         this.startStuckJobWatchdog();
     }
     startStuckJobWatchdog() {
@@ -20815,7 +20849,7 @@ let HeadlessExecutorService = HeadlessExecutorService_1 = class HeadlessExecutor
                 if (stuckExecs.length === 0)
                     return;
                 this.logger.warn({
-                    message: `Watchdog: found ${stuckExecs.length} stuck executions (>10min)`,
+                    message: `Watchdog: found ${stuckExecs.length} stuck executions (>20min)`,
                     executionIds: stuckExecs.map((e) => e.id),
                 });
                 for (const exec of stuckExecs) {
@@ -20831,7 +20865,7 @@ let HeadlessExecutorService = HeadlessExecutorService_1 = class HeadlessExecutor
                         where: { id: exec.id },
                         data: {
                             status: 'FAILED',
-                            error: `Watchdog: stuck >10min (retry ${retries + 1}/${MAX_AUTO_RETRIES})`,
+                            error: `Watchdog: stuck >20min (retry ${retries + 1}/${MAX_AUTO_RETRIES})`,
                             completedAt: new Date(),
                         },
                     });
@@ -21006,7 +21040,7 @@ let HeadlessExecutorService = HeadlessExecutorService_1 = class HeadlessExecutor
                 stepTitle: 'Analiza i sinteza sa prethodnim znanjem',
                 auto: true,
             });
-            // ── Phase 2: Synthesis ──
+            // ── Phase 2: Pre-check main agent + Build context ──
             let conceptKnowledge = '';
             if (taskNote.conceptId) {
                 try {
@@ -21055,12 +21089,43 @@ let HeadlessExecutorService = HeadlessExecutorService_1 = class HeadlessExecutor
                 }
                 catch { /* non-blocking enrichment */ }
             }
-            const prompt = `Ti si vrhunski poslovni stručnjak. Izvrši detaljnu analizu i proizvedi FINALNI DOKUMENT koji vlasnik može odmah koristiti.
+            // --- Pre-check main agent: what does the business brain already know? ---
+            let mainPreCheckContext = '';
+            if (this.openClawClient.isConfigured()) {
+                try {
+                    const preCheckResult = await this.executeWithLockRetry(() => this.openClawClient.executeAgent(`Šta znaš o konceptu "${taskNote.title}" za kompaniju ${cachedTenantData?.name || 'Unknown'}? Koji aspekti su već pokriveni iz prethodnih koncepata? Šta treba NOVO istražiti? Odgovori kratko, u 200-300 reči.`, { agentId: 'main', timeoutSeconds: 60 }), 'pre-check-main');
+                    if (preCheckResult.success && preCheckResult.output.length > 50) {
+                        mainPreCheckContext = preCheckResult.output;
+                        this.logger.log({
+                            message: 'Headless: main pre-check completed',
+                            taskId,
+                            preCheckLength: mainPreCheckContext.length,
+                        });
+                    }
+                }
+                catch {
+                    this.logger.warn({ message: 'Headless: main pre-check failed (non-blocking)', taskId });
+                }
+            }
+            // Store pre-check context for later use by agent prompts
+            if (mainPreCheckContext) {
+                await this.prisma.note.update({
+                    where: { id: taskId },
+                    data: {
+                        agentEnrichments: {
+                            ...(taskNote.agentEnrichments || {}),
+                            mainPreCheck: mainPreCheckContext,
+                        },
+                    },
+                });
+            }
+            const prompt = `Ti si vrhunski poslovni stručnjak. Napravi NACRT analize koji će biti obogaćen istraživanjem AI agenata.
 
 ZADATAK: ${taskNote.title}
 ${taskNote.content ? `OPIS ZADATKA: ${taskNote.content}` : ''}
 ${taskNote.expectedOutcome ? `OČEKIVANI REZULTAT: ${taskNote.expectedOutcome}` : ''}
 ${prerequisiteContext}${crossPersonaContext}${conceptKnowledge}
+${mainPreCheckContext ? `\n--- ŠTA JE VEĆ POZNATO (iz poslovnog mozga) ---\n${mainPreCheckContext}\n--- KRAJ POZNATOG ---` : ''}
 
 KRITIČNO — UZEMLJENJE NA KONCEPT:
 - Tvoj zadatak je ISKLJUČIVO analiza koncepta navedenog u BAZI ZNANJA iznad.
@@ -21068,19 +21133,14 @@ KRITIČNO — UZEMLJENJE NA KONCEPT:
 - NIKADA ne izmišljaj koncepte, termine ili podatke koji ne postoje u bazi znanja ili izvorima.
 - Ako nešto ne znaš — napiši "[POTREBNO ISTRAŽITI]" umesto da izmišljaš.
 - NE širi se na teme koje nisu direktno povezane sa zadatim konceptom.
-- Ako postoje POVEZANI KONCEPTI u bazi znanja, možeš ih POMENUTI ali fokus ostaje na glavnom konceptu.
 
-PRAVILA ZA FINALNI DOKUMENT:
-1. Ovo je FINALNI DELIVERABLE — gotov dokument, NE izveštaj o radu
-2. NIKADA ne piši "trebalo bi da..." za digitalne zadatke — URADI to
-3. Koristi SPECIFIČNE podatke, brojke i nalaze iz prethodnih koncepata — ne generalizuj
-4. Strukturiraj sa ## zaglavljima, tabelama, nabrajanjima
-5. Dodaj sekciju "Sledeći koraci" sa konkretnim akcijama
-6. NIKADA ne piši "u prethodnim koracima smo..." — PRIKAŽI gotov rezultat
-7. Ako postoji kontekst iz prethodno završenih koncepata, NADOGRADI na njima — ne ponavljaj
-8. Minimum 1000 reči — ovo je sveobuhvatan dokument
-9. Odgovaraj ISKLJUČIVO na srpskom jeziku
-10. Format: profesionalan Markdown (## zaglavlja, tabele, **bold** za ključne vrednosti, > za izvore)`;
+OVO JE NACRT — biće obogaćen istraživanjem agenata:
+1. Strukturiraj analizu sa ## zaglavljima, tabelama
+2. Identifikuj KLJUČNE TEME za istraživanje — označi ih sa "[ISTRAŽITI]"
+3. Koristi podatke iz prethodnih koncepata i poznatog konteksta
+4. 300-800 reči — fokusiraj se na strukturu i analizu, ne na dužinu
+5. Odgovaraj ISKLJUČIVO na srpskom jeziku
+6. Format: Markdown (## zaglavlja, tabele, **bold**, > za izvore)`;
             this.logger.log({
                 message: 'Headless: synthesizing with enriched context',
                 taskId,
@@ -21111,93 +21171,14 @@ PRAVILA ZA FINALNI DOKUMENT:
                 conversationId: convId,
                 auto: true,
             });
-            // ── Phase 3: Scoring ──
-            let tenantInfo = '';
-            if (cachedTenantData) {
-                tenantInfo = `\nKOMPANIJA: ${cachedTenantData.name}${cachedTenantData.industry ? ` | INDUSTRIJA: ${cachedTenantData.industry}` : ''}`;
-            }
-            let conceptScoreContext = '';
-            if (taskNote.conceptId) {
-                const concept = await this.prisma.concept.findUnique({
-                    where: { id: taskNote.conceptId },
-                    select: { name: true, category: true, definition: true },
-                });
-                if (concept) {
-                    conceptScoreContext = `\nKONCEPT: ${concept.name} (${concept.category}) — ${concept.definition}`;
-                }
-            }
-            const scorePrompt = `Ti si senior poslovni konsultant koji recenzira deliverable-e. Tvoj zadatak je da:
-
-1. OPTIMIZUJEŠ rezultat — napravi finalnu, poliranu verziju:
-   - Poboljšaj strukturu (## zaglavlja, tabele, nabrajanja)
-   - Dodaj konkretne brojke, rokove i metrike gde nedostaju
-   - Zameni generičke preporuke SPECIFIČNIM akcijama prilagođenim kompaniji
-   - Ukloni redundantni tekst i ponavljanja
-   - Dodaj sekciju "Sledeći koraci" ako ne postoji
-
-2. OCENI rezultat po 5 kriterijuma (svaki 1-10):
-   - PRIMENLJIVOST: Da li se može odmah implementirati?
-   - SPECIFIČNOST: Da li sadrži konkretne brojke, nazive, rokove?
-   - KOMPLETNOST: Da li pokriva sve aspekte zadatka?
-   - RELEVANTNOST: Da li je prilagođen industriji i kompaniji?
-   - KVALITET: Da li je profesionalno strukturiran i jasan?
-${tenantInfo}${conceptScoreContext}
-
-ZADATAK: ${taskNote.title}
-${taskNote.content ? `OPIS: ${taskNote.content}` : ''}
-${taskNote.expectedOutcome ? `OČEKIVANI REZULTAT: ${taskNote.expectedOutcome}` : ''}
-
-IZLAZ KOJI TREBA OCENITI I OPTIMIZOVATI:
-${fullContent}
-
-FORMAT ODGOVORA:
-1. Napiši OPTIMIZOVANI REZULTAT (kompletan dokument)
-2. Na samom kraju dodaj:
----
-EVALUACIJA:
-- Primenljivost: X/10
-- Specifičnost: X/10
-- Kompletnost: X/10
-- Relevantnost: X/10
-- Kvalitet: X/10
-OCENA: X/10
----
-
-Gde je OCENA prosek svih pet kriterijuma (zaokružen na ceo broj).
-Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
-            let scoreResult = '';
-            await this.aiGateway.streamCompletionWithContext([{ role: 'user', content: scorePrompt }], {
-                tenantId,
-                userId,
-                conversationId: convId,
-                businessContext: bizContext,
-                useFallback: true,
-            }, (chunk) => {
-                scoreResult += chunk;
-            });
-            // Extract score
-            let score = null;
-            const scoreMatch = scoreResult.match(/OCENA:\s*(\d{1,2})\s*\/\s*10/i);
-            if (scoreMatch) {
-                const rawScore = parseInt(scoreMatch[1], 10);
-                if (rawScore >= 1 && rawScore <= 10) {
-                    score = rawScore * 10;
-                }
-            }
-            // Save optimized result + score
-            await this.prisma.note.update({
-                where: { id: taskId },
-                data: {
-                    userReport: scoreResult,
-                    aiScore: score,
-                    aiFeedback: score !== null ? `AI ocena: ${score}/100` : null,
-                },
-            });
+            // ── Phase 3: Skip scoring rewrite — scoring happens AFTER consolidation ──
+            // The draft is sufficient for job planning. Final scoring happens after agents enrich it.
+            // Save draft as initial userReport (will be replaced by consolidation later).
             this.wsHolder.emitToTenant(tenantId, 'task:result-complete', {
                 taskId,
                 conversationId: convId,
-                score,
-                finalResult: scoreResult,
+                score: null, // Scoring happens after consolidation
+                finalResult: fullContent,
                 timestamp: new Date().toISOString(),
                 auto: true,
             });
@@ -21221,9 +21202,9 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                     error: jobErr instanceof Error ? jobErr.message : 'Unknown',
                 });
             }
-            // ── Final consolidation: merge agent research into userReport ──
-            // After all OpenClaw jobs, the note should reflect the COMPLETE understanding
-            // of the concept — synthesis + all agent findings.
+            // ── Final consolidation + scoring (single step, replaces 3 separate rewrites) ──
+            // Merges draft synthesis + ALL agent findings into one final document with scores.
+            // NO truncation — all agent outputs included in full.
             let completedJobs = null;
             try {
                 completedJobs = await this.prisma.agentJob.findMany({
@@ -21231,51 +21212,103 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                     select: { agentType: true, agentOutput: true, order: true },
                     orderBy: { order: 'asc' },
                 });
-                if (completedJobs.length > 0 && completedJobs.some((j) => j.agentOutput)) {
-                    const currentNote = await this.prisma.note.findUnique({
-                        where: { id: taskId },
-                        select: { userReport: true, title: true },
-                    });
-                    const agentFindings = completedJobs
-                        .filter((j) => j.agentOutput)
-                        .map((j) => `### ${j.agentType.toUpperCase()} istraživanje\n${j.agentOutput}`)
-                        .join('\n\n');
-                    const consolidationPrompt = `Ti si senior poslovni stručnjak. Imaš dva izvora informacija o jednom konceptu:
-
-1. POČETNA ANALIZA (naša interna):
-${(currentNote?.userReport ?? '').substring(0, 3000)}
-
-2. REZULTATI ISTRAŽIVANJA AGENATA (web istraživanje, analiza tržišta, itd.):
-${agentFindings.substring(0, 5000)}
-
-ZADATAK: Napravi FINALNI, KONSOLIDOVANI dokument za koncept "${currentNote?.title ?? taskNote.title}" koji:
-- Integriše SVE nalaze iz oba izvora u jedinstven, koherentan dokument
-- Daje prednost KONKRETNIM podacima iz agentskog istraživanja (sa izvorima) nad generičkim analizama
-- Zadržava strukturu: ## zaglavlja, tabele, **bold** za ključne vrednosti
-- Uključuje sekciju "Izvori" sa svim URL-ovima iz istraživanja
-- NE ponavlja iste informacije iz oba izvora — konsoliduj ih
-- Ovo je FINALNO stanje znanja o ovom konceptu za kompaniju
-
-Odgovaraj ISKLJUČIVO na srpskom jeziku. Minimum 1000 reči.`;
-                    let consolidated = '';
-                    await this.aiGateway.streamCompletionWithContext([{ role: 'user', content: consolidationPrompt }], { tenantId, userId, conversationId: convId, businessContext: bizContext, useFallback: true }, (chunk) => { consolidated += chunk; });
-                    if (consolidated.length > 500) {
-                        await this.prisma.note.update({
-                            where: { id: taskId },
-                            data: { userReport: consolidated },
-                        });
-                        this.logger.log({
-                            message: 'Headless: consolidated agent findings into userReport',
-                            taskId,
-                            agentJobCount: completedJobs.length,
-                            consolidatedLength: consolidated.length,
-                        });
+                const currentNote = await this.prisma.note.findUnique({
+                    where: { id: taskId },
+                    select: { userReport: true, title: true },
+                });
+                // Summarize each agent's output to preserve key findings without context overflow
+                const SUMMARY_THRESHOLD = 3000; // Only summarize if output exceeds this
+                const agentParts = [];
+                for (const job of completedJobs.filter((j) => j.agentOutput)) {
+                    const output = job.agentOutput;
+                    if (output.length <= SUMMARY_THRESHOLD) {
+                        agentParts.push(`### ${job.agentType.toUpperCase()} istraživanje\n${output}`);
                     }
+                    else {
+                        // Summarize long outputs via LLM to preserve key findings
+                        try {
+                            let summary = '';
+                            await this.aiGateway.streamCompletionWithContext([{ role: 'user', content: `Sumiraj KLJUČNE NALAZE iz ovog istraživanja u 800-1200 reči. Zadrži sve konkretne podatke, brojke, izvore (URL-ove) i preporuke. NE gubiiteralnu ni jednu konkretnu činjenicu.\n\n${output}` }], { tenantId, userId, conversationId: convId, businessContext: bizContext, useFallback: true }, (chunk) => { summary += chunk; });
+                            agentParts.push(`### ${job.agentType.toUpperCase()} istraživanje (sumirano)\n${summary}`);
+                            this.logger.log({ message: `Headless: summarized ${job.agentType} output`, taskId, original: output.length, summarized: summary.length });
+                        }
+                        catch {
+                            // Fallback to first 3000 chars if summarization fails
+                            agentParts.push(`### ${job.agentType.toUpperCase()} istraživanje\n${output.substring(0, SUMMARY_THRESHOLD)}`);
+                        }
+                    }
+                }
+                const agentFindings = agentParts.join('\n\n');
+                let tenantInfo = '';
+                if (cachedTenantData) {
+                    tenantInfo = `KOMPANIJA: ${cachedTenantData.name}${cachedTenantData.industry ? ` | INDUSTRIJA: ${cachedTenantData.industry}` : ''}`;
+                }
+                const consolidationPrompt = `Ti si senior poslovni stručnjak. Napravi FINALNI dokument i OCENI ga.
+
+${tenantInfo}
+KONCEPT: ${currentNote?.title ?? taskNote.title}
+
+1. NACRT ANALIZE:
+${currentNote?.userReport ?? fullContent}
+
+${agentFindings.length > 0 ? `2. REZULTATI ISTRAŽIVANJA AGENATA:\n${agentFindings}` : '(Nema rezultata istraživanja agenata)'}
+
+ZADATAK — DVE STVARI:
+
+A) NAPRAVI FINALNI DOKUMENT koji:
+- Integriše SVE nalaze iz nacrta i agentskog istraživanja
+- Daje prednost KONKRETNIM podacima sa izvorima nad generičkim analizama
+- Strukturiraj: ## zaglavlja, tabele, **bold** za ključne vrednosti
+- Uključi sekciju "Izvori" sa URL-ovima iz istraživanja
+- NE ponavljaj iste informacije — konsoliduj ih
+- Proporcionalna dužina: jednostavni koncepti 300-500 reči, strateški 800-1500, kompleksni 1500+
+- Dodaj sekciju "Sledeći koraci" sa konkretnim akcijama
+- NIKADA ne izmišljaj podatke — ako nešto nije istraženo, napiši "[POTREBNO ISTRAŽITI]"
+
+B) NA KRAJU DOKUMENTA OCENI po 5 kriterijuma (svaki 1-10):
+---
+EVALUACIJA:
+- Primenljivost: X/10
+- Specifičnost: X/10
+- Kompletnost: X/10
+- Relevantnost: X/10
+- Kvalitet: X/10
+OCENA: X/10
+---
+
+Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
+                let consolidated = '';
+                await this.aiGateway.streamCompletionWithContext([{ role: 'user', content: consolidationPrompt }], { tenantId, userId, conversationId: convId, businessContext: bizContext, useFallback: true }, (chunk) => { consolidated += chunk; });
+                // Extract score from consolidated output
+                let score = null;
+                const scoreMatch = consolidated.match(/OCENA:\s*(\d{1,2})\s*\/\s*10/i);
+                if (scoreMatch) {
+                    const rawScore = parseInt(scoreMatch[1], 10);
+                    if (rawScore >= 1 && rawScore <= 10) {
+                        score = rawScore * 10;
+                    }
+                }
+                if (consolidated.length > 300) {
+                    await this.prisma.note.update({
+                        where: { id: taskId },
+                        data: {
+                            userReport: consolidated,
+                            aiScore: score,
+                            aiFeedback: score !== null ? `AI ocena: ${score}/100` : null,
+                        },
+                    });
+                    this.logger.log({
+                        message: 'Headless: consolidated + scored',
+                        taskId,
+                        agentJobCount: completedJobs.length,
+                        consolidatedLength: consolidated.length,
+                        aiScore: score,
+                    });
                 }
             }
             catch (consolidationErr) {
                 this.logger.warn({
-                    message: 'Headless: consolidation failed (non-blocking, scored report preserved)',
+                    message: 'Headless: consolidation+scoring failed (non-blocking, draft preserved)',
                     taskId,
                     error: consolidationErr instanceof Error ? consolidationErr.message : 'Unknown',
                 });
@@ -21298,16 +21331,16 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku. Minimum 1000 reči.`;
                         orderBy: { order: 'asc' },
                     });
                     const agentTypes = [...new Set(jobsForKnowledge.map((j) => j.agentType))];
-                    const knowledgeSummary = finalNote.userReport.substring(0, 3000);
+                    const knowledgeSummary = finalNote.userReport.substring(0, 5000);
                     const conceptName = finalNote.title || 'Unknown';
                     const companyName = cachedTenantData?.name || 'Unknown Company';
                     // Stagger: random 0-10s delay to spread out parallel task completions
                     await new Promise((r) => setTimeout(r, Math.random() * 10_000));
-                    // Update domain masters (sequential — one at a time per agent type)
+                    // Update domain masters (sequential, with retry on lock)
                     for (const agentTypeStr of agentTypes) {
                         try {
                             const agentId = agentTypeStr.replace(/_/g, '-');
-                            await this.openClawClient.executeAgent(`KNOWLEDGE UPDATE za ${companyName} - Koncept: ${conceptName}. Zapamti ove nalaze za buduce istrazivanje i analizu. Ovo su FINALNI, KONSOLIDOVANI rezultati:\n\n${knowledgeSummary}`, { agentId, timeoutSeconds: 180 });
+                            await this.executeWithLockRetry(() => this.openClawClient.executeAgent(`KNOWLEDGE UPDATE za ${companyName} - Koncept: ${conceptName}. Zapamti ove nalaze za buduce istrazivanje i analizu. Ovo su FINALNI, KONSOLIDOVANI rezultati:\n\n${knowledgeSummary}`, { agentId, timeoutSeconds: 180 }), `knowledge-update-${agentId}`);
                             this.logger.log({
                                 message: `Headless: knowledge update sent to ${agentTypeStr} master`,
                                 taskId,
@@ -21328,7 +21361,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku. Minimum 1000 reči.`;
                             where: { noteId: taskId, tenantId },
                             select: { personaType: true },
                         });
-                        await this.openClawClient.executeAgent(`KNOWLEDGE UPDATE za ${companyName}: Koncept "${conceptName}" (${assignment?.personaType ?? 'UNKNOWN'} perspektiva) zavrsen. Kljucni nalazi:\n${knowledgeSummary.substring(0, 1500)}`, { agentId: 'main', timeoutSeconds: 120 });
+                        await this.executeWithLockRetry(() => this.openClawClient.executeAgent(`KNOWLEDGE UPDATE za ${companyName}: Koncept "${conceptName}" (${assignment?.personaType ?? 'UNKNOWN'} perspektiva) zavrsen. Zapamti i organizuj ove nalaze:\n${knowledgeSummary.substring(0, 3000)}`, { agentId: 'main', timeoutSeconds: 120 }), 'knowledge-update-main');
                         this.logger.log({
                             message: 'Headless: knowledge update sent to main (business brain)',
                             taskId,
@@ -21555,6 +21588,31 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku. Minimum 1000 reči.`;
                 error: cleanupErr instanceof Error ? cleanupErr.message : 'Unknown',
             });
         }
+    }
+    /**
+     * Execute an async operation with retry on session lock errors.
+     * Retries up to 5 times with 10s delay between attempts.
+     */
+    async executeWithLockRetry(fn, label, maxRetries = 5, delayMs = 10_000) {
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                return await fn();
+            }
+            catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                const isLock = msg.includes('session file locked') || msg.includes('.lock') || msg.includes('EBUSY') || msg.includes('session locked');
+                if (isLock && attempt < maxRetries) {
+                    this.logger.warn({
+                        message: `Lock retry ${attempt + 1}/${maxRetries}: ${label}`,
+                        error: msg.slice(0, 100),
+                    });
+                    await new Promise((r) => setTimeout(r, delayMs));
+                    continue;
+                }
+                throw err;
+            }
+        }
+        throw new Error(`Lock retry exhausted for ${label}`);
     }
     buildLeanBusinessContext(tenant) {
         if (!tenant)
@@ -23300,8 +23358,8 @@ const RELATIONSHIP_PRIORITY = {
     RELATED: 1,
     ADVANCED: 2,
 };
-const DEFAULT_TOKEN_BUDGET = 2000;
-const MAX_OUTPUT_CHARS = 1500;
+const DEFAULT_TOKEN_BUDGET = 4000;
+const MAX_OUTPUT_CHARS = 3000;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 let CrossPersonaIntelligenceService = CrossPersonaIntelligenceService_1 = class CrossPersonaIntelligenceService {
     constructor(prisma) {

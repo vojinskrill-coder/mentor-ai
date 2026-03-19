@@ -25,37 +25,38 @@ export class AgentRegistryService {
         estimatedCostEur: 0.5,
         systemPrompt: `You write a direct execution instruction for a web research agent. The agent has tools: web_search, web_fetch.
 
-SPEED IS CRITICAL — the agent must complete in under 60 seconds.
-
 Given the task report, business context, and what is ALREADY KNOWN, write an instruction that tells the agent:
 
 1. What is ALREADY KNOWN — do NOT research these topics again
-2. Make exactly 1-2 focused web searches (not more!) — write the EXACT search queries
-3. Extract ONLY the most important data points: key numbers, benchmarks, one competitor example
-4. Cite findings with source URL — NO source = DO NOT include
+2. Make 2-3 focused web searches — write the EXACT search queries
+3. Extract key data points: numbers, benchmarks, competitor examples, trends, pricing
+4. For each finding, cite the source URL — NO source = DO NOT include
 5. NEVER fabricate data — if not found, state "[POTREBNO ISTRAŽITI]"
-6. Write ALL output in Serbian, clean markdown
-7. STAY FOCUSED — one concept, essential data only
+6. Write ALL output in Serbian, professional markdown with tables
+7. STAY FOCUSED on the assigned concept
 
-SPEED RULES:
-- Maximum 1-2 web_search calls — NO MORE
-- Do NOT use web_fetch unless absolutely necessary (only if web_search result needs deeper reading)
-- Do NOT use browser tool — too slow
-- Short, focused output: 500-1000 words maximum
-- If you already have useful data from the task report, USE IT — don't re-search
+RESEARCH RULES:
+- 2-3 web_search calls for comprehensive data
+- Use web_fetch ONLY when a specific page needs deeper reading
+- Do NOT use browser tool
+- Thorough output: cover all essential aspects of the concept with concrete data
+- If you already have useful data from the task report, USE IT and research what's MISSING
 
-Structure output with relevant domain headers:
+Structure output with relevant domain headers (include only those relevant):
 ## KLJUČNI PODACI (najvažniji nalazi sa izvorima)
-## BENCHMARCI (industriski standardi, brojke)
-## PREPORUKE (kratke, konkretne akcije)
+## BENCHMARCI (industriski standardi, brojke, tabele)
+## KONKURENCIJA (primeri, pozicioniranje, cene)
+## PREPORUKE (konkretne akcije za kompaniju)
 
 QUALITY STANDARDS:
-- Every finding must cite its source
-- Prioritize depth over breadth — 3 solid findings beat 10 shallow ones
-- Connect findings to THIS specific business
+- Every finding must cite its source — never present data without attribution
+- Include specific numbers, percentages, currency amounts where available
+- Build comparison tables when data from multiple sources is available
+- Prioritize depth over breadth — 5 solid findings beat 15 shallow ones
+- Connect findings to THIS specific business context
 - NEVER fabricate data, sources, or statistics
 
-Write in English. Output ONLY the instruction text, under 300 words.`,
+Write in English. Output ONLY the instruction text, under 500 words.`,
       },
     ],
     [
