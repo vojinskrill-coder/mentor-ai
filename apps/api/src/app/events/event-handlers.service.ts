@@ -28,50 +28,72 @@ import {
 export class AppEventHandlers {
   private readonly logger = new Logger(AppEventHandlers.name);
 
+  // Per-agent queue: ensures only ONE knowledge update per agent at a time (no lock contention)
+  private readonly agentQueues = new Map<string, Promise<void>>();
+
   constructor(
     private readonly prisma: PlatformPrismaService,
     private readonly openClawClient: OpenClawClientService,
   ) {}
 
-  // ─── Knowledge Updates (fire-and-forget, non-blocking) ───
+  /**
+   * Queue a task per agent — ensures sequential execution per agent session.
+   * Different agents can run in parallel, but same agent is always sequential.
+   */
+  private async enqueueForAgent(agentId: string, task: () => Promise<void>): Promise<void> {
+    const current = this.agentQueues.get(agentId) ?? Promise.resolve();
+    const next = current.then(task).catch(() => {}).then(() => {
+      // Clean up if this was the last task
+      if (this.agentQueues.get(agentId) === next) {
+        this.agentQueues.delete(agentId);
+      }
+    });
+    this.agentQueues.set(agentId, next);
+    return next;
+  }
+
+  // ─── Knowledge Updates (queued per agent, no lock contention) ───
 
   @OnEvent(APP_EVENTS.KNOWLEDGE_UPDATE_NEEDED, { async: true })
   async handleKnowledgeUpdate(event: KnowledgeUpdateEvent): Promise<void> {
-    const { tenantId, conceptName, agentTypes, summary, companyName, personaType } = event;
+    const { conceptName, agentTypes, summary, companyName, personaType } = event;
 
-    // Random stagger to avoid lock contention
-    await new Promise((r) => setTimeout(r, Math.random() * 5_000));
+    // Queue updates per agent — parallel across agents, sequential within each agent
+    const promises: Promise<void>[] = [];
 
-    // Update domain masters
     for (const agentTypeStr of agentTypes) {
-      try {
-        const agentId = agentTypeStr.replace(/_/g, '-');
-        await this.executeWithRetry(
-          () => this.openClawClient.executeAgent(
-            `KNOWLEDGE UPDATE za ${companyName} - Koncept: ${conceptName}. Zapamti ove nalaze:\n\n${summary}`,
-            { agentId, timeoutSeconds: 180 }
-          ),
-          `knowledge-${agentId}`,
-        );
-        this.logger.log({ message: `Knowledge update: ${agentTypeStr} master`, conceptName });
-      } catch (err) {
-        this.logger.warn({ message: `Knowledge update failed: ${agentTypeStr}`, error: err instanceof Error ? err.message : 'Unknown' });
-      }
+      const agentId = agentTypeStr.replace(/_/g, '-');
+      promises.push(
+        this.enqueueForAgent(agentId, async () => {
+          try {
+            await this.openClawClient.executeAgent(
+              `KNOWLEDGE UPDATE za ${companyName} - Koncept: ${conceptName}. Zapamti ove nalaze:\n\n${summary}`,
+              { agentId, timeoutSeconds: 180 }
+            );
+            this.logger.log({ message: `Knowledge update: ${agentTypeStr} master`, conceptName });
+          } catch (err) {
+            this.logger.warn({ message: `Knowledge update failed: ${agentTypeStr}`, error: err instanceof Error ? err.message : 'Unknown' });
+          }
+        })
+      );
     }
 
-    // Update main agent
-    try {
-      await this.executeWithRetry(
-        () => this.openClawClient.executeAgent(
-          `KNOWLEDGE UPDATE za ${companyName}: Koncept "${conceptName}" (${personaType ?? 'UNKNOWN'}) zavrsen. Zapamti:\n${summary.substring(0, 3000)}`,
-          { agentId: 'main', timeoutSeconds: 120 }
-        ),
-        'knowledge-main',
-      );
-      this.logger.log({ message: 'Knowledge update: main', conceptName });
-    } catch (err) {
-      this.logger.warn({ message: 'Knowledge update failed: main', error: err instanceof Error ? err.message : 'Unknown' });
-    }
+    // Main agent — also queued
+    promises.push(
+      this.enqueueForAgent('main', async () => {
+        try {
+          await this.openClawClient.executeAgent(
+            `KNOWLEDGE UPDATE za ${companyName}: Koncept "${conceptName}" (${personaType ?? 'UNKNOWN'}) zavrsen. Zapamti:\n${summary.substring(0, 3000)}`,
+            { agentId: 'main', timeoutSeconds: 120 }
+          );
+          this.logger.log({ message: 'Knowledge update: main', conceptName });
+        } catch (err) {
+          this.logger.warn({ message: 'Knowledge update failed: main', error: err instanceof Error ? err.message : 'Unknown' });
+        }
+      })
+    );
+
+    await Promise.all(promises);
   }
 
   // ─── Stuck Job Recovery ───
