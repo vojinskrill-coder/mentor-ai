@@ -424,24 +424,28 @@ OVO JE NACRT — biće obogaćen istraživanjem agenata:
 
       // ── Post-scoring hooks ──
 
-      // Job planning + execution
-      try {
-        const jobs = await this.jobPlanner.planJobs(taskId, tenantId, userId);
-        if (jobs.length > 0) {
-          this.wsHolder.emitToTenant(tenantId, 'jobs:planned', {
-            noteId: taskId,
-            conversationId: convId,
-            jobs,
-          });
-
-          await this.executeJobsInOrder(jobs, userId, tenantId);
-        }
-      } catch (jobErr) {
-        this.logger.error({
-          message: 'Headless: job planning/execution failed',
-          taskId,
-          error: jobErr instanceof Error ? jobErr.message : 'Unknown',
+      // Job planning + execution (MUST complete before continuing)
+      const jobs = await this.jobPlanner.planJobs(taskId, tenantId, userId);
+      if (jobs.length > 0) {
+        this.wsHolder.emitToTenant(tenantId, 'jobs:planned', {
+          noteId: taskId,
+          conversationId: convId,
+          jobs,
         });
+
+        await this.executeJobsInOrder(jobs, userId, tenantId);
+
+        // Verify all jobs reached terminal state before continuing
+        const pendingJobs = await this.prisma.agentJob.count({
+          where: { noteId: taskId, tenantId, status: { in: ['PLANNED', 'RUNNING'] } },
+        });
+        if (pendingJobs > 0) {
+          this.logger.warn({
+            message: `Headless: ${pendingJobs} jobs still pending after executeJobsInOrder — marking task as incomplete`,
+            taskId,
+          });
+          throw new Error(`${pendingJobs} agent jobs did not complete`);
+        }
       }
 
       // ── Final consolidation + scoring (single step, replaces 3 separate rewrites) ──
