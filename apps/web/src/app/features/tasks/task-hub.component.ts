@@ -1,4 +1,4 @@
-import { Component, DestroyRef, inject, signal, computed, OnInit } from '@angular/core';
+import { Component, DestroyRef, inject, signal, computed, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -579,7 +579,7 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
     </div>
   `,
 })
-export class TaskHubComponent implements OnInit {
+export class TaskHubComponent implements OnInit, OnDestroy {
   private readonly taskHubService = inject(TaskHubService);
   private readonly toastService = inject(ToastService);
   private readonly execPanel = inject(ExecutionPanelService);
@@ -607,8 +607,17 @@ export class TaskHubComponent implements OnInit {
 
   private readonly searchSubject = new Subject<string>();
 
+  private autoRefreshInterval: ReturnType<typeof setInterval> | null = null;
+
   ngOnInit(): void {
     this.loadTasks();
+
+    // Auto-refresh every 15s to show real-time agent job statuses
+    this.autoRefreshInterval = setInterval(() => {
+      if (!this.isFiltering()) {
+        this.loadTasks();
+      }
+    }, 15_000);
 
     this.searchSubject
       .pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
@@ -616,6 +625,12 @@ export class TaskHubComponent implements OnInit {
         this.searchTerm.set(term);
         this.loadTasks(true);
       });
+  }
+
+  ngOnDestroy(): void {
+    if (this.autoRefreshInterval) {
+      clearInterval(this.autoRefreshInterval);
+    }
   }
 
   loadTasks(isFilter = false): void {
