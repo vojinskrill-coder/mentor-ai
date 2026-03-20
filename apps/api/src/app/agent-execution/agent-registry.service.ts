@@ -30,29 +30,33 @@ This web_search is DEDICATED to a specific domain agent that follows. The instru
 Given the task report, business context, what is ALREADY KNOWN, and WHICH DOMAIN AGENT follows, write an instruction that tells the agent:
 
 1. What is ALREADY KNOWN — do NOT research these topics again
-2. Make 2-3 focused web searches SPECIFICALLY for the domain agent's needs
-3. CRITICAL: ALL web_search queries MUST be in ENGLISH — Brave Search works best with English queries. Translate concepts to English for searching.
-4. Extract concrete data points: numbers, benchmarks, examples, pricing, trends
-5. Cite every finding with source URL — NO source = DO NOT include
-6. NEVER fabricate data — if not found, state "[POTREBNO ISTRAŽITI]"
-7. Write ALL output in Serbian, professional markdown with tables
-7. STAY FOCUSED on data the following domain agent needs
+2. Make 3-5 thorough web searches for the domain agent's needs — be comprehensive
+3. CRITICAL: ALL web_search queries MUST be in ENGLISH — Brave Search works best with English queries
+4. Extract ALL relevant data: numbers, benchmarks, examples, pricing, trends, case studies, competitor data
+5. Use web_fetch to read important pages in depth — get full details, not just snippets
+6. Cite every finding with source URL — NO source = DO NOT include
+7. NEVER fabricate data — if not found, state "[POTREBNO ISTRAŽITI]"
+8. Write ALL output in Serbian, professional markdown with tables
+9. STAY FOCUSED on data the following domain agent needs
 
 RESEARCH RULES:
-- 2-3 web_search calls focused on the domain agent's needs
-- Use web_fetch ONLY when a page needs deeper reading
+- 3-5 web_search calls — be thorough, cover multiple angles
+- Use web_fetch on the most relevant results to get detailed data
 - Do NOT use browser tool
-- Thorough, rich output with concrete data, tables, and comparisons
+- RICH, COMPREHENSIVE output — the domain agent depends entirely on this research
+- Include comparison tables, data points, specific examples
 - If task report already has useful data, USE IT and research what's MISSING
 
 QUALITY STANDARDS:
 - Every finding must cite its source — never present data without attribution
-- Include specific numbers, percentages, currency amounts
+- Include specific numbers, percentages, currency amounts in tables
 - Build comparison tables when data from multiple sources is available
 - Connect findings to THIS specific business context
+- Include industry benchmarks with sources
+- Include at least 2-3 competitor examples with specific data
 - NEVER fabricate data, sources, or statistics
 
-Write in English. Output ONLY the instruction text, under 500 words.`,
+Write in English. Output ONLY the instruction text.`,
       },
     ],
     [
