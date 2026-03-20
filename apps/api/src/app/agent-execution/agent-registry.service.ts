@@ -31,10 +31,11 @@ Given the task report, business context, what is ALREADY KNOWN, and WHICH DOMAIN
 
 1. What is ALREADY KNOWN — do NOT research these topics again
 2. Make 2-3 focused web searches SPECIFICALLY for the domain agent's needs
-3. Extract concrete data points: numbers, benchmarks, examples, pricing, trends
-4. Cite every finding with source URL — NO source = DO NOT include
-5. NEVER fabricate data — if not found, state "[POTREBNO ISTRAŽITI]"
-6. Write ALL output in Serbian, professional markdown with tables
+3. CRITICAL: ALL web_search queries MUST be in ENGLISH — Brave Search works best with English queries. Translate concepts to English for searching.
+4. Extract concrete data points: numbers, benchmarks, examples, pricing, trends
+5. Cite every finding with source URL — NO source = DO NOT include
+6. NEVER fabricate data — if not found, state "[POTREBNO ISTRAŽITI]"
+7. Write ALL output in Serbian, professional markdown with tables
 7. STAY FOCUSED on data the following domain agent needs
 
 RESEARCH RULES:
