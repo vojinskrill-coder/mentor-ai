@@ -603,90 +603,13 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
       }
 
       // ── Knowledge Update: Send findings to domain masters + main ──
-      // After consolidation, update domain master agents so they accumulate knowledge.
+      // Fire-and-forget: runs in background so it doesn't block the next wave.
       // Uses default sessions (no session-id) for persistent memory.
       // Stagger delay prevents lock contention when parallel tasks complete simultaneously.
-      try {
-        const finalNote = await this.prisma.note.findUnique({
-          where: { id: taskId },
-          select: { userReport: true, title: true, conceptId: true },
-        });
-
-        if (finalNote?.userReport && finalNote.userReport.length > 200) {
-          // Reuse completedJobs from consolidation above (already fetched at line ~388)
-          // If consolidation was skipped, fetch fresh
-          const jobsForKnowledge = completedJobs ?? await this.prisma.agentJob.findMany({
-            where: { noteId: taskId, tenantId, status: 'COMPLETED' },
-            select: { agentType: true, agentOutput: true, order: true },
-            orderBy: { order: 'asc' },
-          });
-          const agentTypes = [...new Set(jobsForKnowledge.map((j) => j.agentType))];
-
-          const knowledgeSummary = finalNote.userReport.substring(0, 5000);
-          const conceptName = finalNote.title || 'Unknown';
-          const companyName = cachedTenantData?.name || 'Unknown Company';
-
-          // Stagger: random 0-10s delay to spread out parallel task completions
-          await new Promise((r) => setTimeout(r, Math.random() * 10_000));
-
-          // Update domain masters (sequential, with retry on lock)
-          for (const agentTypeStr of agentTypes) {
-            try {
-              const agentId = agentTypeStr.replace(/_/g, '-');
-              await this.executeWithLockRetry(
-                () => this.openClawClient.executeAgent(
-                  `KNOWLEDGE UPDATE za ${companyName} - Koncept: ${conceptName}. Zapamti ove nalaze za buduce istrazivanje i analizu. Ovo su FINALNI, KONSOLIDOVANI rezultati:\n\n${knowledgeSummary}`,
-                  { agentId, timeoutSeconds: 180 }
-                ),
-                `knowledge-update-${agentId}`,
-              );
-              this.logger.log({
-                message: `Headless: knowledge update sent to ${agentTypeStr} master`,
-                taskId,
-                conceptName,
-              });
-            } catch (kuErr) {
-              this.logger.warn({
-                message: `Headless: knowledge update to ${agentTypeStr} failed (non-blocking)`,
-                taskId,
-                error: kuErr instanceof Error ? kuErr.message : 'Unknown',
-              });
-            }
-          }
-
-          // Update main agent (business brain)
-          try {
-            const assignment = await this.prisma.stageConceptAssignment.findFirst({
-              where: { noteId: taskId, tenantId },
-              select: { personaType: true },
-            });
-            await this.executeWithLockRetry(
-              () => this.openClawClient.executeAgent(
-                `KNOWLEDGE UPDATE za ${companyName}: Koncept "${conceptName}" (${assignment?.personaType ?? 'UNKNOWN'} perspektiva) zavrsen. Zapamti i organizuj ove nalaze:\n${knowledgeSummary.substring(0, 3000)}`,
-                { agentId: 'main', timeoutSeconds: 120 }
-              ),
-              'knowledge-update-main',
-            );
-            this.logger.log({
-              message: 'Headless: knowledge update sent to main (business brain)',
-              taskId,
-              conceptName,
-            });
-          } catch (mainErr) {
-            this.logger.warn({
-              message: 'Headless: main knowledge update failed (non-blocking)',
-              taskId,
-              error: mainErr instanceof Error ? mainErr.message : 'Unknown',
-            });
-          }
-        }
-      } catch (knowledgeErr) {
-        this.logger.warn({
-          message: 'Headless: knowledge updates failed (non-blocking)',
-          taskId,
-          error: knowledgeErr instanceof Error ? knowledgeErr.message : 'Unknown',
-        });
-      }
+      // Knowledge updates: fire-and-forget in background (don't block next wave)
+      this.sendKnowledgeUpdatesAsync(taskId, tenantId, cachedTenantData, completedJobs).catch((err) => {
+        this.logger.warn({ message: 'Knowledge updates failed (non-blocking)', taskId, error: err instanceof Error ? err.message : 'Unknown' });
+      });
 
       // Maturity update (non-blocking)
       try {
@@ -930,6 +853,73 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
         jobId,
         error: cleanupErr instanceof Error ? cleanupErr.message : 'Unknown',
       });
+    }
+  }
+
+  /**
+   * Send knowledge updates to domain masters + main agent in background.
+   * Fire-and-forget — does not block the pipeline.
+   */
+  private async sendKnowledgeUpdatesAsync(
+    taskId: string,
+    tenantId: string,
+    cachedTenantData: { name: string; industry: string | null; description: string | null } | null,
+    completedJobs: Array<{ agentType: string; agentOutput: string | null; order: number }> | null,
+  ): Promise<void> {
+    const finalNote = await this.prisma.note.findUnique({
+      where: { id: taskId },
+      select: { userReport: true, title: true },
+    });
+
+    if (!finalNote?.userReport || finalNote.userReport.length < 200) return;
+
+    const jobsForKnowledge = completedJobs ?? await this.prisma.agentJob.findMany({
+      where: { noteId: taskId, tenantId, status: 'COMPLETED' },
+      select: { agentType: true, agentOutput: true, order: true },
+      orderBy: { order: 'asc' },
+    });
+    const agentTypes = [...new Set(jobsForKnowledge.map((j) => j.agentType))];
+
+    const knowledgeSummary = finalNote.userReport.substring(0, 5000);
+    const conceptName = finalNote.title || 'Unknown';
+    const companyName = cachedTenantData?.name || 'Unknown Company';
+
+    // Stagger to avoid lock contention
+    await new Promise((r) => setTimeout(r, Math.random() * 5_000));
+
+    // Update domain masters (sequential, with retry on lock)
+    for (const agentTypeStr of agentTypes) {
+      try {
+        const agentId = agentTypeStr.replace(/_/g, '-');
+        await this.executeWithLockRetry(
+          () => this.openClawClient.executeAgent(
+            `KNOWLEDGE UPDATE za ${companyName} - Koncept: ${conceptName}. Zapamti ove nalaze:\n\n${knowledgeSummary}`,
+            { agentId, timeoutSeconds: 180 }
+          ),
+          `knowledge-update-${agentId}`,
+        );
+        this.logger.log({ message: `Knowledge update: ${agentTypeStr} master`, taskId, conceptName });
+      } catch (kuErr) {
+        this.logger.warn({ message: `Knowledge update failed: ${agentTypeStr}`, taskId, error: kuErr instanceof Error ? kuErr.message : 'Unknown' });
+      }
+    }
+
+    // Update main agent
+    try {
+      const assignment = await this.prisma.stageConceptAssignment.findFirst({
+        where: { noteId: taskId, tenantId },
+        select: { personaType: true },
+      });
+      await this.executeWithLockRetry(
+        () => this.openClawClient.executeAgent(
+          `KNOWLEDGE UPDATE za ${companyName}: Koncept "${conceptName}" (${assignment?.personaType ?? 'UNKNOWN'}) zavrsen. Zapamti:\n${knowledgeSummary.substring(0, 3000)}`,
+          { agentId: 'main', timeoutSeconds: 120 }
+        ),
+        'knowledge-update-main',
+      );
+      this.logger.log({ message: 'Knowledge update: main (business brain)', taskId, conceptName });
+    } catch (mainErr) {
+      this.logger.warn({ message: 'Knowledge update failed: main', taskId, error: mainErr instanceof Error ? mainErr.message : 'Unknown' });
     }
   }
 

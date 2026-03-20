@@ -1049,14 +1049,14 @@ export class MaturityEngineService {
           message: `Auto-continue: ${stillPending} assignments still pending, re-triggering`,
           tenantId, stage,
         });
-        // Release lock first, then re-trigger after short delay
+        // Release lock first, then re-trigger immediately (1s delay for DB sync)
         this.runningExecutions.delete(tenantId);
         this.executionProgress.delete(tenantId);
         setTimeout(() => {
           this.runStageExecution(tenantId, stage, userId).catch((err) => {
             this.logger.error({ message: 'Auto-continue failed', error: err instanceof Error ? err.message : 'Unknown' });
           });
-        }, 5_000);
+        }, 1_000);
         return; // skip the finally block's delete (already done)
       }
     } finally {
