@@ -9,14 +9,89 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
  * or fire-and-forget promises scattered across services.
  *
  * Event categories:
- * - maturity.*  : Stage execution lifecycle
- * - concept.*   : Concept/task lifecycle
- * - agent.*     : Agent job execution lifecycle
- * - knowledge.* : Knowledge update lifecycle
- * - system.*    : System health events
+ * - note.*         : Note CRUD lifecycle
+ * - conversation.* : Conversation and message lifecycle
+ * - onboarding.*   : Onboarding completion
+ * - workflow.*     : Workflow execution lifecycle
+ * - maturity.*     : Stage execution lifecycle
+ * - concept.*      : Concept/task lifecycle
+ * - agent.*        : Agent job execution lifecycle
+ * - knowledge.*    : Knowledge update lifecycle
+ * - system.*       : System health events
  */
 
 // ─── Event Types ───
+
+export interface NoteCreatedEvent {
+  tenantId: string;
+  noteId: string;
+  userId: string;
+  noteType: string;
+  source: string;
+  conceptId?: string;
+  conversationId?: string;
+}
+
+export interface NoteUpdatedEvent {
+  tenantId: string;
+  noteId: string;
+  userId?: string;
+  title?: string;
+  content?: string;
+}
+
+export interface NoteStatusChangedEvent {
+  tenantId: string;
+  noteId: string;
+  userId?: string;
+  previousStatus: string | null;
+  newStatus: string;
+}
+
+export interface ConversationCreatedEvent {
+  tenantId: string;
+  conversationId: string;
+  userId: string;
+  personaType?: string;
+  conceptId?: string;
+}
+
+export interface ConversationMessageAddedEvent {
+  tenantId: string;
+  conversationId: string;
+  messageId: string;
+  role: string;
+  userId: string;
+}
+
+export interface OnboardingCompletedEvent {
+  tenantId: string;
+  userId: string;
+  taskId: string;
+  noteId: string;
+  timeSavedMinutes: number;
+  welcomeConversationId?: string;
+}
+
+export interface WorkflowStepCompletedEvent {
+  tenantId: string;
+  planId: string;
+  stepId: string;
+  conceptId: string;
+  conceptName: string;
+  userId: string;
+  stepNumber: number;
+  totalSteps: number;
+}
+
+export interface WorkflowCompletedEvent {
+  tenantId: string;
+  planId: string;
+  userId: string;
+  status: 'completed' | 'cancelled';
+  completedSteps: number;
+  totalSteps: number;
+}
 
 export interface ConceptCompletedEvent {
   tenantId: string;
@@ -80,6 +155,22 @@ export interface StageExecutionEvent {
 // ─── Event Names (constants for type safety) ───
 
 export const APP_EVENTS = {
+  // Note lifecycle
+  NOTE_CREATED: 'note.created',
+  NOTE_UPDATED: 'note.updated',
+  NOTE_STATUS_CHANGED: 'note.status-changed',
+
+  // Conversation lifecycle
+  CONVERSATION_CREATED: 'conversation.created',
+  CONVERSATION_MESSAGE_ADDED: 'conversation.message-added',
+
+  // Onboarding
+  ONBOARDING_COMPLETED: 'onboarding.completed',
+
+  // Workflow execution
+  WORKFLOW_STEP_COMPLETED: 'workflow.step-completed',
+  WORKFLOW_COMPLETED: 'workflow.completed',
+
   // Concept lifecycle
   CONCEPT_COMPLETED: 'concept.completed',
   CONCEPT_FAILED: 'concept.failed',

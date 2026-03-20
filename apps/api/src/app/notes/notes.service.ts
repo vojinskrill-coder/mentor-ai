@@ -10,6 +10,7 @@ import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
 import type { NoteItem, TaskHubItem, TaskHubResponse, DomainSummary, TaskHubAgentJob } from '@mentor-ai/shared/types';
 import { AiGatewayService } from '../ai-gateway/ai-gateway.service';
+import { AppEventBus, APP_EVENTS } from '../events/app-event-bus.service';
 
 /**
  * DTO for creating a new note.
@@ -61,7 +62,8 @@ export class NotesService {
 
   constructor(
     private readonly prisma: PlatformPrismaService,
-    private readonly aiGateway: AiGatewayService
+    private readonly aiGateway: AiGatewayService,
+    private readonly eventBus: AppEventBus
   ) {}
 
   /**
@@ -111,6 +113,16 @@ export class NotesService {
       noteId: id,
       userId: dto.userId,
       tenantId: dto.tenantId,
+    });
+
+    this.eventBus.emit(APP_EVENTS.NOTE_CREATED, {
+      tenantId: dto.tenantId,
+      noteId: id,
+      userId: dto.userId,
+      noteType: dto.noteType ?? 'NOTE',
+      source: dto.source,
+      conceptId: dto.conceptId,
+      conversationId: dto.conversationId,
     });
 
     return { id };
@@ -504,10 +516,19 @@ export class NotesService {
       });
       return this.mapToNoteItem(note);
     }
+    const previousStatus = note.status;
     const updated = await this.prisma.note.update({
       where: { id: noteId },
       data: { status },
     });
+
+    this.eventBus.emit(APP_EVENTS.NOTE_STATUS_CHANGED, {
+      tenantId,
+      noteId,
+      previousStatus: previousStatus ?? null,
+      newStatus: status,
+    });
+
     return this.mapToNoteItem(updated);
   }
 
@@ -534,6 +555,14 @@ export class NotesService {
       where: { id: noteId },
       data,
     });
+
+    this.eventBus.emit(APP_EVENTS.NOTE_UPDATED, {
+      tenantId,
+      noteId,
+      title: title !== undefined ? title : undefined,
+      content: content !== undefined ? content : undefined,
+    });
+
     return this.mapToNoteItem(updated);
   }
 

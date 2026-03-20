@@ -8,6 +8,14 @@ import {
   AgentJobStuckEvent,
   StageExecutionEvent,
   ConceptCompletedEvent,
+  NoteCreatedEvent,
+  NoteUpdatedEvent,
+  NoteStatusChangedEvent,
+  ConversationCreatedEvent,
+  ConversationMessageAddedEvent,
+  OnboardingCompletedEvent,
+  WorkflowStepCompletedEvent,
+  WorkflowCompletedEvent,
 } from './app-event-bus.service';
 
 /**
@@ -144,6 +152,108 @@ export class AppEventHandlers {
       stage: event.stage,
       personaType: event.personaType,
       error: event.error,
+    });
+  }
+
+  // ─── Note Lifecycle ───
+
+  @OnEvent(APP_EVENTS.NOTE_CREATED)
+  handleNoteCreated(event: NoteCreatedEvent): void {
+    this.logger.log({
+      message: 'Note created',
+      tenantId: event.tenantId,
+      noteId: event.noteId,
+      noteType: event.noteType,
+      source: event.source,
+      conceptId: event.conceptId,
+    });
+  }
+
+  @OnEvent(APP_EVENTS.NOTE_UPDATED)
+  handleNoteUpdated(event: NoteUpdatedEvent): void {
+    this.logger.log({
+      message: 'Note updated',
+      tenantId: event.tenantId,
+      noteId: event.noteId,
+    });
+  }
+
+  @OnEvent(APP_EVENTS.NOTE_STATUS_CHANGED)
+  handleNoteStatusChanged(event: NoteStatusChangedEvent): void {
+    this.logger.log({
+      message: 'Note status changed',
+      tenantId: event.tenantId,
+      noteId: event.noteId,
+      previousStatus: event.previousStatus,
+      newStatus: event.newStatus,
+    });
+  }
+
+  // ─── Conversation Lifecycle ───
+
+  @OnEvent(APP_EVENTS.CONVERSATION_CREATED)
+  handleConversationCreated(event: ConversationCreatedEvent): void {
+    this.logger.log({
+      message: 'Conversation created',
+      tenantId: event.tenantId,
+      conversationId: event.conversationId,
+      userId: event.userId,
+      personaType: event.personaType,
+      conceptId: event.conceptId,
+    });
+  }
+
+  @OnEvent(APP_EVENTS.CONVERSATION_MESSAGE_ADDED)
+  handleConversationMessageAdded(event: ConversationMessageAddedEvent): void {
+    this.logger.log({
+      message: 'Conversation message added',
+      tenantId: event.tenantId,
+      conversationId: event.conversationId,
+      messageId: event.messageId,
+      role: event.role,
+    });
+  }
+
+  // ─── Onboarding ───
+
+  @OnEvent(APP_EVENTS.ONBOARDING_COMPLETED)
+  handleOnboardingCompleted(event: OnboardingCompletedEvent): void {
+    this.logger.log({
+      message: 'Onboarding completed',
+      tenantId: event.tenantId,
+      userId: event.userId,
+      taskId: event.taskId,
+      noteId: event.noteId,
+      timeSavedMinutes: event.timeSavedMinutes,
+      welcomeConversationId: event.welcomeConversationId,
+    });
+  }
+
+  // ─── Workflow Execution ───
+
+  @OnEvent(APP_EVENTS.WORKFLOW_STEP_COMPLETED)
+  handleWorkflowStepCompleted(event: WorkflowStepCompletedEvent): void {
+    this.logger.log({
+      message: 'Workflow step completed',
+      tenantId: event.tenantId,
+      planId: event.planId,
+      stepId: event.stepId,
+      conceptName: event.conceptName,
+      stepNumber: event.stepNumber,
+      totalSteps: event.totalSteps,
+    });
+  }
+
+  @OnEvent(APP_EVENTS.WORKFLOW_COMPLETED)
+  handleWorkflowCompleted(event: WorkflowCompletedEvent): void {
+    this.logger.log({
+      message: 'Workflow completed',
+      tenantId: event.tenantId,
+      planId: event.planId,
+      userId: event.userId,
+      status: event.status,
+      completedSteps: event.completedSteps,
+      totalSteps: event.totalSteps,
     });
   }
 

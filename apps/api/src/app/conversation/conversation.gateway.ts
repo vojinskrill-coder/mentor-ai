@@ -34,6 +34,7 @@ import { JobPlannerService } from '../agent-execution/job-planner.service';
 import { AgentExecutionEventBus } from '../agent-execution/agent-execution-event-bus.service';
 import { MaturityEngineService } from '../maturity/maturity-engine.service';
 import { WsServerHolder } from '../maturity/ws-server-holder.service';
+import { AppEventBus, APP_EVENTS } from '../events/app-event-bus.service';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { createId } from '@paralleldrive/cuid2';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
@@ -121,7 +122,8 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     private readonly jobPlannerService: JobPlannerService,
     private readonly agentEventBus: AgentExecutionEventBus,
     private readonly maturityEngine: MaturityEngineService,
-    private readonly wsServerHolder: WsServerHolder
+    private readonly wsServerHolder: WsServerHolder,
+    private readonly appEventBus: AppEventBus
   ) {
     this.auth0Domain = this.configService.get<string>('AUTH0_DOMAIN') ?? '';
     this.auth0Audience = this.configService.get<string>('AUTH0_AUDIENCE') ?? '';
@@ -1209,6 +1211,14 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
         citationCount: citations.length,
         conceptsFound: relevantConcepts.length,
         memoriesUsed: memoryContext.attributions.length,
+      });
+
+      this.appEventBus.emit(APP_EVENTS.CONVERSATION_MESSAGE_ADDED, {
+        tenantId: authenticatedClient.tenantId,
+        conversationId,
+        messageId: aiMessage.id,
+        role: 'ASSISTANT',
+        userId: authenticatedClient.userId,
       });
 
       // Fire-and-forget: detect explicit task creation or auto-generate tasks

@@ -23,6 +23,7 @@ import { PromptCheckerService } from './prompt-checker.service';
 import { MaturityEngineService } from '../maturity/maturity-engine.service';
 import { generateSystemPrompt } from '../personas/templates/persona-prompts';
 import { getVisibleCategories } from '../knowledge/config/department-categories';
+import { AppEventBus, APP_EVENTS } from '../events/app-event-bus.service';
 
 const MAX_RECURSION_DEPTH = 10;
 
@@ -120,7 +121,8 @@ export class WorkflowService {
     private readonly conceptRelevanceService: ConceptRelevanceService,
     private readonly promptCheckerService: PromptCheckerService,
     @Inject(forwardRef(() => MaturityEngineService))
-    private readonly maturityEngine: MaturityEngineService
+    private readonly maturityEngine: MaturityEngineService,
+    private readonly eventBus: AppEventBus
   ) {}
 
   // ─── Workflow Generation ──────────────────────────────────────
@@ -794,6 +796,17 @@ Generiši 3-4 koraka. Redosled:
         });
         callbacks.onStepComplete(step.stepId, result.content, result.citations);
 
+        this.eventBus.emit(APP_EVENTS.WORKFLOW_STEP_COMPLETED, {
+          tenantId,
+          planId,
+          stepId: step.stepId,
+          conceptId: step.conceptId,
+          conceptName: step.conceptName,
+          userId,
+          stepNumber: i + 1,
+          totalSteps: plan.steps.length,
+        });
+
         // Create sub-task note linked to parent task (with dedup by parentNoteId + stepNumber, Story 3.4 AC3)
         for (const taskId of plan.taskIds) {
           try {
@@ -901,6 +914,16 @@ Generiši 3-4 koraka. Redosled:
 
     plan.status = 'completed';
     callbacks.onComplete('completed', completedCount, plan.steps.length);
+
+    this.eventBus.emit(APP_EVENTS.WORKFLOW_COMPLETED, {
+      tenantId,
+      planId,
+      userId,
+      status: 'completed',
+      completedSteps: completedCount,
+      totalSteps: plan.steps.length,
+    });
+
     this.scheduledCleanup(planId);
   }
 

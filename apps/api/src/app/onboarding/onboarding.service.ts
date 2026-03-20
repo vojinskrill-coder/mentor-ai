@@ -37,6 +37,7 @@ import {
   generateUserPrompt,
 } from './templates/quick-task-templates';
 import { FOUNDATION_CATEGORIES } from '../knowledge/config/department-categories';
+import { AppEventBus, APP_EVENTS } from '../events/app-event-bus.service';
 
 /**
  * Service for managing the onboarding quick win flow.
@@ -59,6 +60,7 @@ export class OnboardingService {
     private readonly conceptClassifierService: ConceptClassifierService,
     private readonly workflowService: WorkflowService,
     private readonly maturityEngineService: MaturityEngineService,
+    private readonly eventBus: AppEventBus,
   ) {}
 
   /**
@@ -968,6 +970,15 @@ Kreiraj personalizovani Poslovni Mozak sa tačno 10 prioritizovanih zadataka.`;
       timeSavedMinutes,
       noteId: note.id,
       welcomeConversationId,
+    });
+
+    this.eventBus.emit(APP_EVENTS.ONBOARDING_COMPLETED, {
+      tenantId,
+      userId,
+      taskId,
+      noteId: note.id,
+      timeSavedMinutes,
+      welcomeConversationId: welcomeConversationId ?? undefined,
     });
 
     return {

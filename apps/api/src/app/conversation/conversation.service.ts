@@ -18,6 +18,7 @@ import { CurriculumService } from '../knowledge/services/curriculum.service';
 import { CitationService } from '../knowledge/services/citation.service';
 import { NotesService } from '../notes/notes.service';
 import { getVisibleCategories } from '../knowledge/config/department-categories';
+import { AppEventBus, APP_EVENTS } from '../events/app-event-bus.service';
 
 /**
  * Service for managing chat conversations.
@@ -32,7 +33,8 @@ export class ConversationService {
     private readonly conceptService: ConceptService,
     private readonly curriculumService: CurriculumService,
     private readonly citationService: CitationService,
-    private readonly notesService: NotesService
+    private readonly notesService: NotesService,
+    private readonly eventBus: AppEventBus
   ) {}
 
   /**
@@ -83,6 +85,14 @@ export class ConversationService {
       tenantId,
       personaType: personaType ?? 'none',
       conceptId: conceptId ?? 'none',
+    });
+
+    this.eventBus.emit(APP_EVENTS.CONVERSATION_CREATED, {
+      tenantId,
+      conversationId,
+      userId,
+      personaType: personaType ?? undefined,
+      conceptId: conceptId ?? undefined,
     });
 
     return this.mapConversation(conversation, conceptName, conceptCategory);
