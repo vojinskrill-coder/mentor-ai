@@ -79,6 +79,12 @@ describe('AgentExecutionService', () => {
       createNote: jest.fn().mockResolvedValue({ id: 'child-note-001' }),
     };
 
+    const mockAiGateway = {
+      streamCompletionWithContext: jest.fn().mockImplementation(
+        async (_m: any, _o: any, cb: (c: string) => void) => { cb('Domain agent output'); }
+      ),
+    };
+
     const mockAppEventBus = {
       emit: jest.fn(),
       emitAsync: jest.fn(),
@@ -92,6 +98,7 @@ describe('AgentExecutionService', () => {
       mockBudget,
       mockEventBus,
       mockNotesService,
+      mockAiGateway as any,
       mockAppEventBus as any,
     );
   });

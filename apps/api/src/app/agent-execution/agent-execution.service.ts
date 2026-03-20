@@ -20,6 +20,8 @@ import { AgentRegistryService } from './agent-registry.service';
 import { BudgetService } from './budget.service';
 import { AgentExecutionEventBus } from './agent-execution-event-bus.service';
 import { NotesService } from '../notes/notes.service';
+import { AiGatewayService } from '../ai-gateway/ai-gateway.service';
+import { ChatMessage } from '@mentor-ai/shared/types';
 import { AppEventBus, APP_EVENTS } from '../events/app-event-bus.service';
 
 @Injectable()
@@ -38,6 +40,7 @@ export class AgentExecutionService {
     private readonly budgetService: BudgetService,
     private readonly eventBus: AgentExecutionEventBus,
     private readonly notesService: NotesService,
+    private readonly aiGateway: AiGatewayService,
     private readonly appEventBus: AppEventBus,
   ) {}
 
@@ -945,36 +948,73 @@ export class AgentExecutionService {
         data: { formattedPrompt },
       });
 
-      // Step 2: Send to OpenClaw
+      // Step 2: Execute agent
       await this.updateStatus(executionId, 'EXECUTING', { startedAt: new Date() });
       this.emitAgentEvent(tenantId, 'agent:status-change', {
         executionId, jobId, noteId: note.id, agentType, status: 'EXECUTING',
-        label: `${agentLabel}: Agent istražuje...`,
+        label: `${agentLabel}: ${agentType === AgentType.WEB_SEARCH ? 'Istražuje...' : 'Analizira...'}`,
       });
       heartbeat = this.startHeartbeat(executionId, jobId, agentType, tenantId, Date.now());
 
-      // Use unique session-id per job for parallel execution (no file lock contention)
-      const workSessionId = `work-${jobId}-${openClawAgentId}`;
-      const result = await this.openClawClient.executeAgent(formattedPrompt, {
-        agentId: openClawAgentId,
-        sessionId: workSessionId,
-        onText: (text) => {
-          this.emitAgentEvent(tenantId, 'agent:text-chunk', {
-            executionId, jobId, text,
-          });
-        },
-        onTool: (tool, status, query) => {
-          this.emitAgentEvent(tenantId, 'agent:tool-event', {
-            executionId, jobId, tool, status, query,
-          });
-        },
-        onStatus: (phase) => {
-          this.emitAgentEvent(tenantId, 'agent:status-change', {
-            executionId, jobId, noteId: note.id, agentType, status: 'EXECUTING',
-            label: `${agentLabel}: ${phase === 'running' ? 'Agent istražuje...' : phase}`,
-          });
-        },
-      });
+      let result: { success: boolean; output: string; durationMs: number; usage?: { input?: number; output?: number; total?: number }; error?: string };
+
+      if (agentType === AgentType.WEB_SEARCH) {
+        // web_search → OpenClaw (needs Brave Search + web_fetch tools)
+        const workSessionId = `work-${jobId}-${openClawAgentId}`;
+        result = await this.openClawClient.executeAgent(formattedPrompt, {
+          agentId: openClawAgentId,
+          sessionId: workSessionId,
+          onText: (text) => {
+            this.emitAgentEvent(tenantId, 'agent:text-chunk', { executionId, jobId, text });
+          },
+          onTool: (tool, status, query) => {
+            this.emitAgentEvent(tenantId, 'agent:tool-event', { executionId, jobId, tool, status, query });
+          },
+          onStatus: (phase) => {
+            this.emitAgentEvent(tenantId, 'agent:status-change', {
+              executionId, jobId, noteId: note.id, agentType, status: 'EXECUTING',
+              label: `${agentLabel}: ${phase === 'running' ? 'Istražuje...' : phase}`,
+            });
+          },
+        });
+      } else {
+        // Domain agents (financial, marketing, content, sales) → NestJS AiGateway (3-5x faster)
+        const startMs = Date.now();
+        const agentDef = this.registry.getAgent(agentType);
+        const messages: ChatMessage[] = [
+          { role: 'system', content: agentDef.systemPrompt },
+          { role: 'user', content: formattedPrompt },
+        ];
+
+        let output = '';
+        try {
+          await this.aiGateway.streamCompletionWithContext(
+            messages,
+            {
+              tenantId,
+              userId,
+              skipRateLimit: true,
+              skipQuotaCheck: true,
+            },
+            (chunk) => {
+              output += chunk;
+              this.emitAgentEvent(tenantId, 'agent:text-chunk', { executionId, jobId, text: chunk });
+            }
+          );
+          result = {
+            success: true,
+            output,
+            durationMs: Date.now() - startMs,
+          };
+        } catch (llmErr) {
+          result = {
+            success: false,
+            output: '',
+            durationMs: Date.now() - startMs,
+            error: llmErr instanceof Error ? llmErr.message : 'LLM call failed',
+          };
+        }
+      }
 
       clearInterval(heartbeat);
       heartbeat = null;
