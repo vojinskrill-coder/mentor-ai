@@ -1,27 +1,26 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { AiGatewayService } from '../ai-gateway/ai-gateway.service';
 import { AgentRegistryService } from './agent-registry.service';
-import { AgentType } from '@mentor-ai/shared/types';
+import { AgentType, ChatMessage } from '@mentor-ai/shared/types';
 
 @Injectable()
 export class AgentPromptService {
   private readonly logger = new Logger(AgentPromptService.name);
 
   constructor(
+    private readonly aiGateway: AiGatewayService,
     private readonly registry: AgentRegistryService
   ) {}
 
   /**
-   * Builds the final prompt for an OpenClaw agent by combining:
-   * 1. The job planner's instruction (already contextualized)
-   * 2. Task context (title, content, report excerpt)
-   * 3. Pre-check context from main agent (what's already known)
-   * 4. Grounding block (concept focus, format, anti-hallucination)
+   * Generates a contextualized, high-quality prompt for an OpenClaw agent.
+   * Uses LLM to read the report, understand context, and produce a SPECIFIC
+   * instruction tailored to this concept, company, and agent type.
    *
-   * NO LLM call — deterministic template assembly.
-   * The job planner's LLM call already produced a contextualized instruction.
-   * Adding another LLM call to "reformat" it was redundant.
+   * Injects: pre-check context (what's already known), dependency context,
+   * business context (auto-injected by AiGateway), and agent system prompt.
    */
-  formatPrompt(params: {
+  async formatPrompt(params: {
     agentType: AgentType;
     taskTitle: string;
     taskContent: string;
@@ -31,34 +30,54 @@ export class AgentPromptService {
     tenantId: string;
     userId: string;
     onChunk?: (chunk: string) => void;
-  }): string {
-    const { agentType, taskTitle, taskContent, userReport, expectedOutcome, preCheckContext } =
-      params;
+  }): Promise<string> {
+    const { agentType, taskTitle, taskContent, userReport, expectedOutcome, preCheckContext,
+            tenantId, userId } = params;
 
     const agentDef = this.registry.getAgent(agentType);
 
-    // Build the prompt from components — no LLM call needed
-    const parts: string[] = [];
+    const userMessage = `Task: ${taskTitle}
 
-    // 1. Task context
-    parts.push(`ZADATAK: ${taskTitle}`);
-    parts.push(`OPIS: ${taskContent}`);
-    if (expectedOutcome) {
-      parts.push(`OČEKIVANI REZULTAT: ${expectedOutcome}`);
-    }
+Description: ${taskContent}
 
-    // 2. What is already known (from main agent pre-check)
-    if (preCheckContext && preCheckContext.length > 50) {
-      parts.push(`\n--- VEĆ POZNATO (ne istraži ponovo) ---\n${preCheckContext}\n--- KRAJ VEĆ POZNATOG ---`);
-    }
+${expectedOutcome ? `Expected Outcome: ${expectedOutcome}\n` : ''}${preCheckContext ? `\n--- WHAT IS ALREADY KNOWN (from business brain) ---\n${preCheckContext}\n--- END OF KNOWN CONTEXT ---\nDo NOT research topics that are already known. Focus on what is NEW and MISSING.\n` : ''}
+User's Completed Report:
+${userReport.substring(0, 4000)}
 
-    // 3. Current report excerpt for context
-    if (userReport && userReport.length > 100) {
-      parts.push(`\n--- TRENUTNI IZVEŠTAJ (kontekst) ---\n${userReport.substring(0, 4000)}\n--- KRAJ IZVEŠTAJA ---`);
-    }
+Based on this task report, the business context from memories, and what is already known, generate a SPECIFIC, ACTIONABLE execution instruction for the ${agentDef.label} agent.
 
-    // 4. Grounding block — ALWAYS appended
-    parts.push(`
+INSTRUCTION QUALITY REQUIREMENTS:
+- Extract SPECIFIC data points from the report: company names, numbers, percentages, dates
+- Tell the agent EXACTLY what to research/create/calculate — not generic instructions
+- Reference what is ALREADY KNOWN and tell the agent to SKIP those topics
+- Tell the agent what NEW information to discover or produce
+- The instruction must be actionable — the agent should ACT immediately, not plan or analyze
+- Include specific search queries, calculation formulas, or content topics as needed
+- The instruction is for ${agentDef.label} — tailor it to that agent's specialty`;
+
+    const messages: ChatMessage[] = [
+      { role: 'system', content: agentDef.systemPrompt },
+      { role: 'user', content: userMessage },
+    ];
+
+    let result = '';
+    await this.aiGateway.streamCompletionWithContext(
+      messages,
+      {
+        tenantId,
+        userId,
+        skipRateLimit: true,
+        skipQuotaCheck: true,
+      },
+      (chunk) => {
+        result += chunk;
+        params.onChunk?.(chunk);
+      }
+    );
+
+    // Append grounding block (always present, not left to LLM generation)
+    const memoryBlock = `
+
 ---
 KRITIČNO — UZEMLJENJE:
 - Radi ISKLJUČIVO na zadatku opisanom iznad. NE širi se na druge teme.
@@ -69,17 +88,12 @@ KRITIČNO — UZEMLJENJE:
 - Ako je ovo tvoj prvi zadatak — istraži temeljno od početka.
 
 FORMAT IZLAZA: Profesionalan Markdown (## zaglavlja, tabele, **bold** za ključne vrednosti, > za izvore sa URL-ovima). SVE na srpskom jeziku. NE objašnjavaj šta ćeš raditi — odmah piši rezultat.
----`);
+---`;
 
-    const finalPrompt = parts.join('\n\n');
-
-    // Emit chunks for streaming feedback (simulate progress)
-    if (params.onChunk) {
-      params.onChunk(finalPrompt);
-    }
+    const finalPrompt = result.trim() + memoryBlock;
 
     this.logger.log({
-      message: 'Prompt assembled for agent (no LLM call)',
+      message: 'Prompt formatted for agent (LLM contextualized)',
       agentType,
       taskTitle,
       hasPreCheck: !!preCheckContext,

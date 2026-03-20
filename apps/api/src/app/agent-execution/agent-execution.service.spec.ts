@@ -62,7 +62,7 @@ describe('AgentExecutionService', () => {
     };
 
     mockAgentPrompt = {
-      formatPrompt: jest.fn().mockReturnValue('Formatted instruction for agent'),
+      formatPrompt: jest.fn().mockResolvedValue('Formatted instruction for agent'),
     };
 
     mockBudget = {
@@ -293,7 +293,7 @@ describe('AgentExecutionService', () => {
     });
 
     it('should handle pipeline exception (e.g., formatPrompt throws)', async () => {
-      mockAgentPrompt.formatPrompt.mockImplementation(() => { throw new Error('LLM unavailable'); });
+      mockAgentPrompt.formatPrompt.mockRejectedValue(new Error('LLM unavailable'));
 
       await service.triggerAgent(NOTE_ID, AgentType.WEB_SEARCH, USER_ID, TENANT_ID);
       await new Promise((r) => setTimeout(r, 50));

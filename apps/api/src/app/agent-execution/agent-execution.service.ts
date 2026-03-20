@@ -200,7 +200,7 @@ export class AgentExecutionService {
         label: `${agentLabel}: Priprema instrukcija...`,
       });
 
-      const formattedPrompt = this.agentPrompt.formatPrompt({
+      const formattedPrompt = await this.agentPrompt.formatPrompt({
         agentType,
         taskTitle: note.title,
         taskContent: note.content,
@@ -918,7 +918,7 @@ export class AgentExecutionService {
       // Retrieve pre-check context from main agent (stored during headless execution)
       const preCheckContext = (note as any).agentEnrichments?.mainPreCheck ?? null;
 
-      const formattedPrompt = this.agentPrompt.formatPrompt({
+      const formattedPrompt = await this.agentPrompt.formatPrompt({
         agentType,
         taskTitle: note.title,
         taskContent: enrichedInstruction,
