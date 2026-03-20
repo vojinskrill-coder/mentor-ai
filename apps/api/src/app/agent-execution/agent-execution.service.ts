@@ -958,8 +958,12 @@ export class AgentExecutionService {
 
       let result: { success: boolean; output: string; durationMs: number; usage?: { input?: number; output?: number; total?: number }; error?: string };
 
-      if (agentType === AgentType.WEB_SEARCH) {
-        // web_search → OpenClaw (needs Brave Search + web_fetch tools)
+      // Agents that need tools (web_search, content, marketing, sales) → OpenClaw
+      // Agents that are pure analysis (financial) → NestJS AiGateway (faster)
+      const useOpenClaw = agentType !== AgentType.FINANCIAL;
+
+      if (useOpenClaw) {
+        // OpenClaw: has tools (web_search, web_fetch, exec for images/email)
         const workSessionId = `work-${jobId}-${openClawAgentId}`;
         result = await this.openClawClient.executeAgent(formattedPrompt, {
           agentId: openClawAgentId,
@@ -978,7 +982,7 @@ export class AgentExecutionService {
           },
         });
       } else {
-        // Domain agents (financial, marketing, content, sales) → NestJS AiGateway (3-5x faster)
+        // Financial → NestJS AiGateway (pure analysis, no tools needed, 3-5x faster)
         const startMs = Date.now();
         const agentDef = this.registry.getAgent(agentType);
         const messages: ChatMessage[] = [
