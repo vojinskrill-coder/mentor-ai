@@ -46,36 +46,36 @@ export class JobPlannerService {
       .map((a) => `- ${a.type}: ${a.label} — ${a.description}`)
       .join('\n');
 
-    const systemPrompt = `You are a business operations planner. Given a completed task report, create an execution plan of AI agent jobs.
+    const systemPrompt = `You are a business operations planner. Given a completed task report, decide which DOMAIN AGENTS are needed.
 
-Available agent types:
-${agentDescriptions}
+Available DOMAIN agent types (you select from these):
+- financial: costs, ROI, budgets, pricing, cash flow, financial modeling
+- content: written deliverables, brand materials, blog posts, visual content with images
+- marketing: positioning, competition, market strategy, SWOT, segmentation
+- sales: customer outreach, selling strategy, pricing negotiation, trust building
 
-ARCHITECTURE — HOW AGENTS COLLABORATE:
-1. web_search is ALWAYS the first job — it researches ALL aspects and structures output by domain
-2. Domain agents (content, marketing, sales, financial) receive web_search output and do their SPECIALIZED work
-3. Domain agents execute SEQUENTIALLY — each sees output from ALL previous agents
-4. Domain agents do NOT do their own web research — they USE the data from web_search
+ARCHITECTURE — HOW IT WORKS:
+- For EACH domain agent you select, the system will AUTOMATICALLY create a dedicated web_search before it
+- Each web_search will research SPECIFICALLY for that domain agent's needs
+- Domain agents execute SEQUENTIALLY for cross-collaboration (each sees previous agent outputs)
+- You do NOT need to include web_search in your plan — it's added automatically
 
 DECISION FRAMEWORK:
-- web_search is ALWAYS included (order 1, no dependencies)
-- Add domain agents ONLY when the concept needs their expertise:
-  * financial: when concept involves costs, ROI, budgets, pricing, cash flow
-  * content: when concept needs written deliverables, brand materials, visual content
-  * marketing: when concept involves positioning, competition, market strategy
-  * sales: when concept involves customer outreach, selling strategy, pricing negotiation
-- Create 1-4 jobs total. Simple concepts may need ONLY web_search (1 job).
+- Select 1-3 domain agents based on what the concept needs
+- Simple concepts: 1 domain agent (e.g., just financial for cost analysis)
+- Complex concepts: 2-3 domain agents
+- ORDER MATTERS for collaboration: later agents see earlier agents' output
+  Example: financial first → marketing second (marketing uses financial data)
 
 Rules:
-- web_search instruction MUST tell the agent to structure output with domain headers:
-  ## FINANSIJSKI PODACI, ## MARKETING PODACI, ## SADRŽAJ I PRIMERI, ## PRODAJNI PODACI
-- Each domain agent instruction MUST say "Using the research data provided, ..." — NOT "Search for..."
-- Domain agents depend on web_search (and optionally on each other for collaboration)
+- Do NOT include web_search in your response — it's automatic
+- Each domain agent instruction should describe WHAT analysis/content to produce
+- Reference specific data from the task report
 - Write instructions in English (agents produce Serbian output)
-- Respond ONLY with a JSON array, no other text.
+- Respond ONLY with a JSON array of DOMAIN agents, no other text
 
-Output format:
-[{"agentType":"web_search","order":1,"dependsOnOrders":[],"instruction":"Research ALL aspects of [topic]..."},{"agentType":"financial","order":2,"dependsOnOrders":[1],"instruction":"Using the financial data from research, calculate..."}]`;
+Output format (domain agents ONLY, web_search is automatic):
+[{"agentType":"financial","order":1,"instruction":"Calculate ROI and break-even based on..."},{"agentType":"marketing","order":2,"instruction":"Using financial analysis, create positioning strategy..."}]`;
 
     const userMessage = `Task: ${note.title}
 
@@ -129,16 +129,61 @@ Create an execution plan of agent jobs for this task. Return JSON array only.`;
       }
 
       const validTypes = Object.values(AgentType) as string[];
-      const validJobs = parsed
-        .filter((j) => validTypes.includes(j.agentType) && j.instruction?.length > 10)
+      const domainJobs = parsed
+        .filter((j) => validTypes.includes(j.agentType) && j.agentType !== AgentType.WEB_SEARCH && j.instruction?.length > 10)
         .sort((a, b) => a.order - b.order)
-        .slice(0, 4);
+        .slice(0, 3); // max 3 domain agents
 
-      if (validJobs.length === 0) {
+      if (domainJobs.length === 0) {
         return this.createDefaultJobs(noteId, tenantId, userId, note.title, note.userReport);
       }
 
-      return await this.persistJobs(validJobs, noteId, tenantId, userId);
+      // Build search+domain pairs: each domain agent gets a dedicated web_search before it
+      // All web_searches have no dependencies (run in parallel)
+      // Each domain agent depends on: its web_search + previous domain agent (for collaboration)
+      const expandedJobs: Array<{ agentType: string; order: number; dependsOnOrders: number[]; instruction: string }> = [];
+      let orderCounter = 1;
+      const domainOrderMap = new Map<number, number>(); // original order → new order
+
+      for (let i = 0; i < domainJobs.length; i++) {
+        const domain = domainJobs[i]!;
+        const searchOrder = orderCounter++;
+        const domainOrder = orderCounter++;
+
+        // Dedicated web_search for this domain agent
+        const domainLabel = this.registry.getAgent(domain.agentType as AgentType).label;
+        expandedJobs.push({
+          agentType: AgentType.WEB_SEARCH,
+          order: searchOrder,
+          dependsOnOrders: [], // no deps → runs in parallel with other searches
+          instruction: `Research specifically for the ${domainLabel} agent. Focus on ${domain.agentType} aspects of the concept: ${domain.instruction.substring(0, 200)}. Find concrete data, benchmarks, and examples relevant to ${domain.agentType} analysis.`,
+        });
+
+        // Domain agent depends on: its search + previous domain agent (for cross-collaboration)
+        const deps = [searchOrder];
+        if (i > 0) {
+          const prevDomainOrder = domainOrderMap.get(i - 1);
+          if (prevDomainOrder) deps.push(prevDomainOrder);
+        }
+
+        expandedJobs.push({
+          agentType: domain.agentType,
+          order: domainOrder,
+          dependsOnOrders: deps,
+          instruction: domain.instruction,
+        });
+
+        domainOrderMap.set(i, domainOrder);
+      }
+
+      this.logger.log({
+        message: 'Job plan: search+domain pairs created',
+        noteId,
+        domainAgents: domainJobs.map((j) => j.agentType),
+        totalJobs: expandedJobs.length,
+      });
+
+      return await this.persistJobs(expandedJobs, noteId, tenantId, userId);
     } catch (err) {
       this.logger.error({
         message: 'Failed to plan jobs',
@@ -204,7 +249,7 @@ Create an execution plan of agent jobs for this task. Return JSON array only.`;
   }
 
   /**
-   * Fallback: create a simple web_search → content chain.
+   * Fallback: create search→content pair.
    */
   private async createDefaultJobs(
     noteId: string,
@@ -226,7 +271,7 @@ Create an execution plan of agent jobs for this task. Return JSON array only.`;
           agentType: AgentType.WEB_SEARCH,
           order: 1,
           dependsOn: [],
-          instruction: `Research the topic "${taskTitle}" — find market data, competitors, pricing, and trends relevant to the business. Report: ${userReport.substring(0, 500)}`,
+          instruction: `Research specifically for content creation about "${taskTitle}". Find examples, best practices, case studies, and data relevant to creating actionable content. Report context: ${userReport.substring(0, 500)}`,
           status: 'PLANNED',
         },
       }),
@@ -239,7 +284,7 @@ Create an execution plan of agent jobs for this task. Return JSON array only.`;
           agentType: AgentType.CONTENT,
           order: 2,
           dependsOn: [searchId],
-          instruction: `Using the research results from the previous step, create actionable content deliverables for "${taskTitle}". Include blog posts, social media content, or marketing materials as appropriate.`,
+          instruction: `Using the research results, create actionable content deliverables for "${taskTitle}". Include visual content with images where appropriate.`,
           status: 'PLANNED',
         },
       }),

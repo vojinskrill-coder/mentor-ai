@@ -903,16 +903,15 @@ export class AgentExecutionService {
         ? `${jobInstruction}\n\nContext from previous agent results:\n${dependencyContext}`
         : jobInstruction;
 
-      // For web_search: tell it which domain agents follow so it prepares data for them
+      // For web_search: find the specific domain agent that depends on THIS search job
       if (agentType === AgentType.WEB_SEARCH) {
-        const siblingJobs = await this.prisma.agentJob.findMany({
-          where: { noteId: note.id, tenantId, agentType: { not: AgentType.WEB_SEARCH } },
-          select: { agentType: true },
-          orderBy: { order: 'asc' },
+        const dependentJob = await this.prisma.agentJob.findFirst({
+          where: { noteId: note.id, tenantId, dependsOn: { has: jobId } },
+          select: { agentType: true, instruction: true },
         });
-        if (siblingJobs.length > 0) {
-          const agentNames = siblingJobs.map((j) => this.registry.getAgent(j.agentType as AgentType).label).join(', ');
-          enrichedInstruction += `\n\nSLEDEĆI AGENTI KOJI ČEKAJU TVOJE REZULTATE: ${agentNames}. Pripremi podatke za SVE njih — strukturiraj output sa odgovarajućim domenskim sekcijama.`;
+        if (dependentJob) {
+          const domainLabel = this.registry.getAgent(dependentJob.agentType as AgentType).label;
+          enrichedInstruction += `\n\nOVO ISTRAŽIVANJE JE NAMENJENO ZA: ${domainLabel} agenta. Istraži SPECIFIČNO podatke koje ${domainLabel} treba za svoj rad. Zadatak ${domainLabel} agenta: ${dependentJob.instruction?.substring(0, 300) || 'analiza koncepta'}`;
         }
       }
 
