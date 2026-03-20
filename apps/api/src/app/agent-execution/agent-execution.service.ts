@@ -20,6 +20,7 @@ import { AgentRegistryService } from './agent-registry.service';
 import { BudgetService } from './budget.service';
 import { AgentExecutionEventBus } from './agent-execution-event-bus.service';
 import { NotesService } from '../notes/notes.service';
+import { AppEventBus, APP_EVENTS } from '../events/app-event-bus.service';
 
 @Injectable()
 export class AgentExecutionService {
@@ -36,7 +37,8 @@ export class AgentExecutionService {
     private readonly registry: AgentRegistryService,
     private readonly budgetService: BudgetService,
     private readonly eventBus: AgentExecutionEventBus,
-    private readonly notesService: NotesService
+    private readonly notesService: NotesService,
+    private readonly appEventBus: AppEventBus,
   ) {}
 
   private emitAgentEvent(tenantId: string, eventName: string, payload: unknown): void {
@@ -995,6 +997,17 @@ export class AgentExecutionService {
         this.emitAgentEvent(tenantId, 'agent:error', {
           executionId, jobId, agentType, error: errorMsg,
         });
+
+        // Emit agent.job.failed event (backend orchestration, fire-and-forget)
+        this.appEventBus.emit(APP_EVENTS.AGENT_JOB_FAILED, {
+          tenantId,
+          jobId,
+          noteId: note.id,
+          agentType,
+          success: false,
+          error: errorMsg,
+          durationMs: result.durationMs,
+        });
         return;
       }
 
@@ -1058,6 +1071,17 @@ export class AgentExecutionService {
         actualCostEur: actualCost,
       });
 
+      // Emit agent.job.completed event (backend orchestration, fire-and-forget)
+      this.appEventBus.emit(APP_EVENTS.AGENT_JOB_COMPLETED, {
+        tenantId,
+        jobId,
+        noteId: note.id,
+        agentType,
+        success: true,
+        output: result.output?.substring(0, 500),
+        durationMs: result.durationMs,
+      });
+
       if (note.conceptId) {
         this.emitAgentEvent(tenantId, 'agent:concept-activity', {
           agentType, conceptId: note.conceptId, status: 'stopped',
@@ -1108,6 +1132,16 @@ export class AgentExecutionService {
       await this.updateStatus(executionId, 'FAILED', {
         error: errorMessage,
         completedAt: new Date(),
+      });
+
+      // Emit agent.job.failed event (backend orchestration, fire-and-forget)
+      this.appEventBus.emit(APP_EVENTS.AGENT_JOB_FAILED, {
+        tenantId,
+        jobId,
+        noteId: note.id,
+        agentType,
+        success: false,
+        error: errorMessage,
       });
     }
   }

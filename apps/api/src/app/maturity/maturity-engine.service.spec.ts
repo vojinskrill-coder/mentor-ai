@@ -56,6 +56,11 @@ describe('MaturityEngineService', () => {
   const TENANT_ID = 'tnt_test_001';
   const USER_ID = 'usr_test_001';
 
+  const mockAppEventBus = {
+    emit: jest.fn(),
+    emitAsync: jest.fn(),
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
     const mockCrossPersonaIntelligence = { clearCache: jest.fn() };
@@ -66,6 +71,7 @@ describe('MaturityEngineService', () => {
       mockWsHolder as any,
       mockHeadlessExecutor as any,
       mockCrossPersonaIntelligence as any,
+      mockAppEventBus as any,
       mockConfigService as any,
     );
   });

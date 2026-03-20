@@ -79,6 +79,11 @@ describe('AgentExecutionService', () => {
       createNote: jest.fn().mockResolvedValue({ id: 'child-note-001' }),
     };
 
+    const mockAppEventBus = {
+      emit: jest.fn(),
+      emitAsync: jest.fn(),
+    };
+
     service = new AgentExecutionService(
       mockPrisma,
       mockOpenClaw,
@@ -86,7 +91,8 @@ describe('AgentExecutionService', () => {
       registry,
       mockBudget,
       mockEventBus,
-      mockNotesService
+      mockNotesService,
+      mockAppEventBus as any,
     );
   });
 

@@ -15,7 +15,7 @@ import { WsServerHolder } from './ws-server-holder.service';
 import { HeadlessExecutorService } from './headless-executor.service';
 import { CrossPersonaIntelligenceService } from './cross-persona-intelligence.service';
 import { OnEvent } from '@nestjs/event-emitter';
-import { AppEventBus, APP_EVENTS, StageExecutionEvent } from '../events/app-event-bus.service';
+import { AppEventBus, APP_EVENTS, StageExecutionEvent, WaveCompletedEvent } from '../events/app-event-bus.service';
 import { Department } from '@prisma/client';
 import { createId } from '@paralleldrive/cuid2';
 import {
@@ -860,6 +860,14 @@ export class MaturityEngineService {
         timestamp: new Date().toISOString(),
       });
 
+      // Emit stage execution started event (backend orchestration)
+      this.appEventBus.emit(APP_EVENTS.STAGE_EXECUTION_STARTED, {
+        tenantId,
+        stage,
+        userId,
+        status: 'started' as const,
+      });
+
       // Load all assignments with their notes and prerequisite info
       const assignments = await this.prisma.stageConceptAssignment.findMany({
         where: { tenantId, stage, noteId: { not: null } },
@@ -915,6 +923,7 @@ export class MaturityEngineService {
 
       // Also track failed concepts so dependents can detect unresolvable deps
       const failedConcepts = new Set<string>();
+      let waveNumber = 0;
 
       // Topological execution: process tasks whose prerequisites are all complete
       const remaining = new Map(pendingAssignments.map((a) => [a.conceptId, a]));
@@ -1033,10 +1042,33 @@ export class MaturityEngineService {
             stage, total, executed, failed, current: null,
           });
         }
+
+        // Emit wave.completed event (fire-and-forget, non-blocking)
+        waveNumber++;
+        this.appEventBus.emit(APP_EVENTS.WAVE_COMPLETED, {
+          tenantId,
+          stage,
+          userId,
+          waveNumber,
+          completed: executed,
+          failed,
+          remaining: remaining.size,
+        });
       }
 
       this.wsHolder.emitToTenant(tenantId, 'maturity:execution-complete', {
         stage, total, executed, failed, timestamp: new Date().toISOString(),
+      });
+
+      // Emit stage execution completed event (backend orchestration)
+      this.appEventBus.emit(APP_EVENTS.STAGE_EXECUTION_COMPLETED, {
+        tenantId,
+        stage,
+        userId,
+        status: 'completed' as const,
+        total,
+        executed,
+        failed,
       });
 
       this.logger.log({ message: 'Stage auto-execution complete', tenantId, stage, total, executed, failed });

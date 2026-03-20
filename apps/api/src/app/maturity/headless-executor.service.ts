@@ -63,12 +63,9 @@ export class HeadlessExecutorService {
    * automatically pick up the reset job on its next poll cycle.
    * Max 2 automatic retries per job, then permanently fails.
    */
-  private stuckRetryCount = new Map<string, number>();
-
   private startStuckJobWatchdog(): void {
     const STUCK_THRESHOLD_MS = 20 * 60_000; // 20 minutes (agents with multiple web_search calls need 10-15 min)
     const CHECK_INTERVAL_MS = 30_000; // 30 seconds
-    const MAX_AUTO_RETRIES = 2;
 
     setInterval(async () => {
       try {
@@ -80,7 +77,7 @@ export class HeadlessExecutorService {
             status: { in: ['EXECUTING', 'FORMATTING', 'PENDING'] },
             startedAt: { lt: cutoff },
           },
-          select: { id: true, agentType: true, startedAt: true },
+          select: { id: true, agentType: true, startedAt: true, tenantId: true },
         });
 
         if (stuckExecs.length === 0) return;
@@ -97,46 +94,16 @@ export class HeadlessExecutorService {
             select: { id: true, status: true },
           });
 
-          const jobId = linkedJob?.id ?? exec.id;
-          const retries = this.stuckRetryCount.get(jobId) ?? 0;
+          const stuckDurationMs = Date.now() - new Date(exec.startedAt!).getTime();
 
-          // Force-fail the execution to release concurrency slot
-          await this.prisma.agentExecution.update({
-            where: { id: exec.id },
-            data: {
-              status: 'FAILED',
-              error: `Watchdog: stuck >20min (retry ${retries + 1}/${MAX_AUTO_RETRIES})`,
-              completedAt: new Date(),
-            },
+          // Emit stuck event — recovery is handled by AppEventHandlers
+          this.appEventBus.emit(APP_EVENTS.AGENT_JOB_STUCK, {
+            tenantId: exec.tenantId,
+            executionId: exec.id,
+            jobId: linkedJob?.id,
+            agentType: exec.agentType,
+            stuckDurationMs,
           });
-
-          if (linkedJob && ['RUNNING', 'PENDING'].includes(linkedJob.status)) {
-            if (retries < MAX_AUTO_RETRIES) {
-              // Reset job to PLANNED for automatic retry
-              await this.prisma.agentJob.update({
-                where: { id: linkedJob.id },
-                data: { status: 'PLANNED', executionId: null, error: null },
-              });
-              this.stuckRetryCount.set(jobId, retries + 1);
-              this.logger.log({
-                message: `Watchdog: reset job to PLANNED for retry`,
-                jobId: linkedJob.id,
-                attempt: retries + 1,
-                maxRetries: MAX_AUTO_RETRIES,
-              });
-            } else {
-              // Exceeded retries — permanently fail
-              await this.prisma.agentJob.update({
-                where: { id: linkedJob.id },
-                data: { status: 'FAILED', error: `Watchdog: exceeded ${MAX_AUTO_RETRIES} auto-retries` },
-              });
-              this.stuckRetryCount.delete(jobId);
-              this.logger.warn({
-                message: `Watchdog: job permanently failed after ${MAX_AUTO_RETRIES} retries`,
-                jobId: linkedJob.id,
-              });
-            }
-          }
         }
         // Also check for PLANNED jobs whose dependencies are all done but weren't picked up
         const plannedJobs = await this.prisma.agentJob.findMany({
@@ -208,10 +175,11 @@ export class HeadlessExecutorService {
     userId: string;
   }): Promise<{ success: boolean; error?: string }> {
     const { taskId, tenantId, userId } = params;
+    let taskNote: { id: string; conceptId: string | null; [key: string]: any } | null = null;
 
     try {
       // Load task note
-      const taskNote = await this.prisma.note.findUnique({ where: { id: taskId } });
+      taskNote = await this.prisma.note.findUnique({ where: { id: taskId } });
       if (!taskNote) return { success: false, error: 'Task not found' };
 
       // If note already completed (e.g., from prior execution before server restart),
@@ -348,7 +316,7 @@ export class HeadlessExecutorService {
         try {
           const preCheckResult = await this.executeWithLockRetry(
             () => this.openClawClient.executeAgent(
-              `Šta znaš o konceptu "${taskNote.title}" za kompaniju ${cachedTenantData?.name || 'Unknown'}? Koji aspekti su već pokriveni iz prethodnih koncepata? Šta treba NOVO istražiti? Odgovori kratko, u 200-300 reči.`,
+              `Šta znaš o konceptu "${taskNote!.title}" za kompaniju ${cachedTenantData?.name || 'Unknown'}? Koji aspekti su već pokriveni iz prethodnih koncepata? Šta treba NOVO istražiti? Odgovori kratko, u 200-300 reči.`,
               { agentId: 'main', timeoutSeconds: 60 }
             ),
             'pre-check-main',
@@ -655,14 +623,43 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
         });
       }
 
+      // Emit concept.completed event (fire-and-forget, non-blocking)
+      if (taskNote.conceptId) {
+        this.appEventBus.emit(APP_EVENTS.CONCEPT_COMPLETED, {
+          tenantId,
+          conceptId: taskNote.conceptId,
+          noteId: taskId,
+          userId,
+          stage: conceptAssignment?.stage ?? 'UNKNOWN',
+          personaType: conceptAssignment?.personaType ?? 'UNKNOWN',
+          success: true,
+        });
+      }
+
       return { success: true };
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
       this.logger.error({
         message: 'Headless: task execution failed',
         taskId,
-        error: err instanceof Error ? err.message : 'Unknown',
+        error: errorMsg,
       });
-      return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+
+      // Emit concept.failed event (fire-and-forget, non-blocking)
+      if (taskNote?.conceptId) {
+        this.appEventBus.emit(APP_EVENTS.CONCEPT_FAILED, {
+          tenantId,
+          conceptId: taskNote.conceptId,
+          noteId: taskId,
+          userId,
+          stage: 'UNKNOWN',
+          personaType: 'UNKNOWN',
+          success: false,
+          error: errorMsg,
+        });
+      }
+
+      return { success: false, error: errorMsg };
     }
   }
 

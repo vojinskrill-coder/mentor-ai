@@ -7,6 +7,7 @@ import {
   KnowledgeUpdateEvent,
   AgentJobStuckEvent,
   StageExecutionEvent,
+  ConceptCompletedEvent,
 } from './app-event-bus.service';
 
 /**
@@ -103,6 +104,47 @@ export class AppEventHandlers {
       stage: event.stage,
     });
     // The maturity engine listens for this event and re-triggers runStageExecution
+  }
+
+  // ─── Stage Execution Completed ───
+
+  @OnEvent(APP_EVENTS.STAGE_EXECUTION_COMPLETED)
+  handleStageExecutionCompleted(event: StageExecutionEvent): void {
+    this.logger.log({
+      message: 'Stage execution completed',
+      tenantId: event.tenantId,
+      stage: event.stage,
+      total: event.total,
+      executed: event.executed,
+      failed: event.failed,
+    });
+  }
+
+  // ─── Concept Completed / Failed ───
+
+  @OnEvent(APP_EVENTS.CONCEPT_COMPLETED)
+  handleConceptCompleted(event: ConceptCompletedEvent): void {
+    this.logger.log({
+      message: 'Concept completed',
+      tenantId: event.tenantId,
+      conceptId: event.conceptId,
+      noteId: event.noteId,
+      stage: event.stage,
+      personaType: event.personaType,
+    });
+  }
+
+  @OnEvent(APP_EVENTS.CONCEPT_FAILED)
+  handleConceptFailed(event: ConceptCompletedEvent): void {
+    this.logger.warn({
+      message: 'Concept failed',
+      tenantId: event.tenantId,
+      conceptId: event.conceptId,
+      noteId: event.noteId,
+      stage: event.stage,
+      personaType: event.personaType,
+      error: event.error,
+    });
   }
 
   // ─── Helpers ───
