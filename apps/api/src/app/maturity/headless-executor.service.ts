@@ -1,7 +1,6 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
-// NoteSource, NoteType, NoteStatus removed — no longer used after workflow step removal
 import { WorkflowService } from '../workflow/workflow.service';
 import { AiGatewayService } from '../ai-gateway/ai-gateway.service';
 import { JobPlannerService } from '../agent-execution/job-planner.service';
@@ -11,6 +10,7 @@ import { BusinessContextService } from '../knowledge/services/business-context.s
 import { MaturityEngineService } from './maturity-engine.service';
 import { WsServerHolder } from './ws-server-holder.service';
 import { CrossPersonaIntelligenceService } from './cross-persona-intelligence.service';
+import { AppEventBus, APP_EVENTS } from '../events/app-event-bus.service';
 
 /**
  * Headless task executor — runs the full auto-popuni pipeline
@@ -37,6 +37,7 @@ export class HeadlessExecutorService {
     private readonly wsHolder: WsServerHolder,
     private readonly crossPersonaIntelligence: CrossPersonaIntelligenceService,
     private readonly openClawClient: OpenClawClientService,
+    private readonly appEventBus: AppEventBus,
     private readonly configService: ConfigService,
   ) {
     // Align job completion timeout with OpenClaw execution time + retry budget
@@ -606,10 +607,30 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
       // Fire-and-forget: runs in background so it doesn't block the next wave.
       // Uses default sessions (no session-id) for persistent memory.
       // Stagger delay prevents lock contention when parallel tasks complete simultaneously.
-      // Knowledge updates: fire-and-forget in background (don't block next wave)
-      this.sendKnowledgeUpdatesAsync(taskId, tenantId, cachedTenantData, completedJobs).catch((err) => {
-        this.logger.warn({ message: 'Knowledge updates failed (non-blocking)', taskId, error: err instanceof Error ? err.message : 'Unknown' });
-      });
+      // Emit knowledge update event (handled async by AppEventHandlers, non-blocking)
+      try {
+        const finalNote = await this.prisma.note.findUnique({
+          where: { id: taskId },
+          select: { userReport: true, title: true },
+        });
+        if (finalNote?.userReport && finalNote.userReport.length > 200) {
+          const jobTypes = completedJobs
+            ? [...new Set(completedJobs.map((j) => j.agentType))]
+            : [];
+          const assignment = await this.prisma.stageConceptAssignment.findFirst({
+            where: { noteId: taskId, tenantId },
+            select: { personaType: true },
+          });
+          this.appEventBus.emit(APP_EVENTS.KNOWLEDGE_UPDATE_NEEDED, {
+            tenantId,
+            conceptName: finalNote.title || 'Unknown',
+            agentTypes: jobTypes,
+            summary: finalNote.userReport.substring(0, 5000),
+            companyName: cachedTenantData?.name || 'Unknown Company',
+            personaType: assignment?.personaType,
+          });
+        }
+      } catch { /* non-blocking */ }
 
       // Maturity update (non-blocking)
       try {

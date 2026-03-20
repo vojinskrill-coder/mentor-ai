@@ -14,6 +14,8 @@ import { StageClassifierService } from './stage-classifier.service';
 import { WsServerHolder } from './ws-server-holder.service';
 import { HeadlessExecutorService } from './headless-executor.service';
 import { CrossPersonaIntelligenceService } from './cross-persona-intelligence.service';
+import { OnEvent } from '@nestjs/event-emitter';
+import { AppEventBus, APP_EVENTS, StageExecutionEvent } from '../events/app-event-bus.service';
 import { Department } from '@prisma/client';
 import { createId } from '@paralleldrive/cuid2';
 import {
@@ -60,6 +62,7 @@ export class MaturityEngineService {
     @Inject(forwardRef(() => HeadlessExecutorService))
     private readonly headlessExecutor: HeadlessExecutorService,
     private readonly crossPersonaIntelligence: CrossPersonaIntelligenceService,
+    private readonly appEventBus: AppEventBus,
     private readonly configService: ConfigService,
   ) {
     // Run up to 2 tasks in parallel within each wave.
@@ -1049,20 +1052,31 @@ export class MaturityEngineService {
           message: `Auto-continue: ${stillPending} assignments still pending, re-triggering`,
           tenantId, stage,
         });
-        // Release lock first, then re-trigger immediately (1s delay for DB sync)
+        // Release lock and emit continue event (handled by @OnEvent below)
         this.runningExecutions.delete(tenantId);
         this.executionProgress.delete(tenantId);
-        setTimeout(() => {
-          this.runStageExecution(tenantId, stage, userId).catch((err) => {
-            this.logger.error({ message: 'Auto-continue failed', error: err instanceof Error ? err.message : 'Unknown' });
-          });
-        }, 1_000);
+        this.appEventBus.emit(APP_EVENTS.STAGE_EXECUTION_CONTINUE, {
+          tenantId, stage, userId, status: 'continue' as const,
+        });
         return; // skip the finally block's delete (already done)
       }
     } finally {
       this.runningExecutions.delete(tenantId);
       this.executionProgress.delete(tenantId);
     }
+  }
+
+  // ─── Event Handlers ───
+
+  @OnEvent(APP_EVENTS.STAGE_EXECUTION_CONTINUE)
+  handleStageExecutionContinue(event: StageExecutionEvent): void {
+    const { tenantId, stage, userId } = event;
+    // Small delay for DB sync, then re-trigger
+    setTimeout(() => {
+      this.runStageExecution(tenantId, stage as MaturityStage, userId).catch((err) => {
+        this.logger.error({ message: 'Event-driven continue failed', error: err instanceof Error ? err.message : 'Unknown' });
+      });
+    }, 1_000);
   }
 
   // ─── Helpers ───

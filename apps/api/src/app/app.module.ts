@@ -28,6 +28,7 @@ import { AttachmentsModule } from './attachments/attachments.module';
 import { PdfExportModule } from './pdf-export/pdf-export.module';
 import { AgentExecutionModule } from './agent-execution/agent-execution.module';
 import { MaturityModule } from './maturity/maturity.module';
+import { AppEventsModule } from './events/events.module';
 
 // Serve Angular static files in production (combined deploy)
 const staticPath = join(__dirname, '..', '..', 'web', 'browser');
@@ -47,6 +48,7 @@ const serveStaticImports = existsSync(staticPath)
       envFilePath: ['apps/api/.env.local', 'apps/api/.env', '.env.local', '.env'],
     }),
     ScheduleModule.forRoot(),
+    AppEventsModule,
     ...serveStaticImports,
     QdrantModule,
     TenantModule,

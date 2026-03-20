@@ -61,6 +61,11 @@ describe('HeadlessExecutorService', () => {
     isConfigured: jest.fn().mockReturnValue(true),
   };
 
+  const mockAppEventBus = {
+    emit: jest.fn(),
+    emitAsync: jest.fn(),
+  };
+
   const TENANT_ID = 'tnt_test';
   const USER_ID = 'usr_test';
   const TASK_ID = 'note_task_1';
@@ -79,6 +84,7 @@ describe('HeadlessExecutorService', () => {
       mockWsHolder as any,
       mockCrossPersonaIntelligence as any,
       mockOpenClawClient as any,
+      mockAppEventBus as any,
       mockConfigService as any,
     );
   });
