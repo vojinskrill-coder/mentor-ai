@@ -46,6 +46,8 @@ export class MaturityEngineService {
   private readonly logger = new Logger(MaturityEngineService.name);
   /** Tracks running stage executions per tenant to prevent concurrent runs */
   private readonly runningExecutions = new Set<string>();
+  private readonly continuationCount = new Map<string, number>();
+  private readonly MAX_CONTINUATIONS = 10;
   /** Tracks running stage initializations per tenant */
   private readonly initializingTenants = new Set<string>();
   /** Tracks execution progress per tenant for API polling (dashboard page load) */
@@ -1080,17 +1082,28 @@ export class MaturityEngineService {
         where: { tenantId, stage, status: { in: ['PENDING', 'IN_PROGRESS'] }, noteId: { not: null } },
       });
       if (stillPending > 0) {
-        this.logger.log({
-          message: `Auto-continue: ${stillPending} assignments still pending, re-triggering`,
-          tenantId, stage,
-        });
-        // Release lock and emit continue event (handled by @OnEvent below)
-        this.runningExecutions.delete(tenantId);
-        this.executionProgress.delete(tenantId);
-        this.appEventBus.emit(APP_EVENTS.STAGE_EXECUTION_CONTINUE, {
-          tenantId, stage, userId, status: 'continue' as const,
-        });
-        return; // skip the finally block's delete (already done)
+        const count = (this.continuationCount.get(tenantId) ?? 0) + 1;
+        if (count > this.MAX_CONTINUATIONS) {
+          this.logger.warn({
+            message: `Auto-continue: max ${this.MAX_CONTINUATIONS} continuations reached, stopping`,
+            tenantId, stage, stillPending,
+          });
+          this.continuationCount.delete(tenantId);
+        } else {
+          this.continuationCount.set(tenantId, count);
+          this.logger.log({
+            message: `Auto-continue ${count}/${this.MAX_CONTINUATIONS}: ${stillPending} pending`,
+            tenantId, stage,
+          });
+          this.runningExecutions.delete(tenantId);
+          this.executionProgress.delete(tenantId);
+          this.appEventBus.emit(APP_EVENTS.STAGE_EXECUTION_CONTINUE, {
+            tenantId, stage, userId, status: 'continue' as const,
+          });
+          return;
+        }
+      } else {
+        this.continuationCount.delete(tenantId);
       }
     } finally {
       this.runningExecutions.delete(tenantId);

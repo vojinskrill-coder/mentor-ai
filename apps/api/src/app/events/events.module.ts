@@ -13,7 +13,7 @@ import { AgentExecutionModule } from '../agent-execution/agent-execution.module'
       wildcard: true,
       delimiter: '.',
       // Non-blocking by default
-      maxListeners: 20,
+      maxListeners: 50,
     }),
     TenantModule,
     AgentExecutionModule,

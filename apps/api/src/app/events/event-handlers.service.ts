@@ -82,9 +82,9 @@ export class AppEventHandlers {
 
     this.logger.warn({ message: 'Handling stuck job', executionId, jobId, agentType });
 
-    // Force-fail stuck execution
-    await this.prisma.agentExecution.update({
-      where: { id: executionId },
+    // Force-fail stuck execution (idempotent — only if still in active state)
+    await this.prisma.agentExecution.updateMany({
+      where: { id: executionId, status: { in: ['EXECUTING', 'FORMATTING', 'PENDING'] } },
       data: {
         status: 'FAILED',
         error: `Stuck >20min — auto-recovered by event handler`,
@@ -92,27 +92,17 @@ export class AppEventHandlers {
       },
     });
 
-    // Reset job to PLANNED for retry
+    // Reset job to PLANNED for retry (idempotent — only if still RUNNING)
     if (jobId) {
-      await this.prisma.agentJob.update({
-        where: { id: jobId },
+      await this.prisma.agentJob.updateMany({
+        where: { id: jobId, status: 'RUNNING' },
         data: { status: 'PLANNED', executionId: null, error: null },
-      });
+      } as any);
       this.logger.log({ message: 'Stuck job reset to PLANNED', jobId });
     }
   }
 
-  // ─── Stage Execution Continue ───
-
-  @OnEvent(APP_EVENTS.STAGE_EXECUTION_CONTINUE)
-  handleStageExecutionContinue(event: StageExecutionEvent): void {
-    this.logger.log({
-      message: 'Stage execution continue requested',
-      tenantId: event.tenantId,
-      stage: event.stage,
-    });
-    // The maturity engine listens for this event and re-triggers runStageExecution
-  }
+  // Note: STAGE_EXECUTION_CONTINUE is handled by MaturityEngineService @OnEvent (not here)
 
   // ─── Stage Execution Completed ───
 
