@@ -39,6 +39,8 @@ export interface ActiveAgent {
   status: string;
 }
 
+export const OPENCLAW_NODE_ID = '__openclaw__';
+
 export const PERSONA_COLORS: Record<string, string> = {
   CFO: '#10B981',
   CMO: '#F59E0B',
@@ -116,6 +118,27 @@ export class GraphStateService implements OnDestroy {
           }
         }
 
+        // Inject OpenClaw hub node — always present, connected to all concepts
+        const openClawNode: GraphNode = {
+          id: OPENCLAW_NODE_ID,
+          name: 'AI Agent',
+          category: 'AI',
+          status: 'PENDING',
+          personaType: 'OPENCLAW',
+          aiScore: null,
+          noteId: '',
+          connectionCount: nodeMap.size,
+          isNew: !this.loaded,
+        };
+        nodeMap.set(OPENCLAW_NODE_ID, openClawNode);
+
+        // Connect OpenClaw to every concept node (invisible edges for physics layout)
+        for (const [id] of nodeMap) {
+          if (id === OPENCLAW_NODE_ID) continue;
+          const key = `${OPENCLAW_NODE_ID}:${id}:OPENCLAW`;
+          edgeMap.set(key, { source: OPENCLAW_NODE_ID, target: id, type: 'OPENCLAW', isNew: !this.loaded });
+        }
+
         this._nodes.next(nodeMap);
         this._edges.next(edgeMap);
         this._activeAgents.next(res.data.activeAgents);
@@ -163,7 +186,7 @@ export class GraphStateService implements OnDestroy {
         }
         this._activeAgents.next(agents);
         this._graphUpdated.next({ type: 'agent-activity', id: data.conceptId });
-      }) ?? (() => {})
+      }) ?? (() => { /* noop */ })
     );
 
     // Execution progress — update node status
@@ -178,7 +201,7 @@ export class GraphStateService implements OnDestroy {
             this._graphUpdated.next({ type: 'node-update', id: data.current.conceptId });
           }
         }
-      }) ?? (() => {})
+      }) ?? (() => { /* noop */ })
     );
 
     // Execution complete — stop all animations, reload
@@ -193,7 +216,7 @@ export class GraphStateService implements OnDestroy {
         this._activeAgents.next([]);
         // Reload to get final states
         this.loadGraph();
-      }) ?? (() => {})
+      }) ?? (() => { /* noop */ })
     );
   }
 

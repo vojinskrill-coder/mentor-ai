@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { OpenClawClientService } from '../agent-execution/openclaw-client.service';
+import { WsServerHolder } from '../maturity/ws-server-holder.service';
 import {
   APP_EVENTS,
   KnowledgeUpdateEvent,
@@ -34,6 +35,7 @@ export class AppEventHandlers {
   constructor(
     private readonly prisma: PlatformPrismaService,
     private readonly openClawClient: OpenClawClientService,
+    private readonly wsHolder: WsServerHolder,
   ) {}
 
   /**
@@ -42,7 +44,7 @@ export class AppEventHandlers {
    */
   private async enqueueForAgent(agentId: string, task: () => Promise<void>): Promise<void> {
     const current = this.agentQueues.get(agentId) ?? Promise.resolve();
-    const next = current.then(task).catch(() => {}).then(() => {
+    const next = current.then(task).catch(() => { /* noop */ }).then(() => {
       // Clean up if this was the last task
       if (this.agentQueues.get(agentId) === next) {
         this.agentQueues.delete(agentId);
@@ -56,7 +58,7 @@ export class AppEventHandlers {
 
   @OnEvent(APP_EVENTS.KNOWLEDGE_UPDATE_NEEDED, { async: true })
   async handleKnowledgeUpdate(event: KnowledgeUpdateEvent): Promise<void> {
-    const { conceptName, agentTypes, summary, companyName, personaType } = event;
+    const { conceptName, agentTypes, summary, companyName, personaType, tenantId } = event;
 
     // Queue updates per agent — parallel across agents, sequential within each agent
     const promises: Promise<void>[] = [];
@@ -68,7 +70,7 @@ export class AppEventHandlers {
           try {
             await this.openClawClient.executeAgent(
               `KNOWLEDGE UPDATE za ${companyName} - Koncept: ${conceptName}. Zapamti ove nalaze:\n\n${summary}`,
-              { agentId, timeoutSeconds: 180 }
+              { agentId, tenantProfile: tenantId, timeoutSeconds: 180 }
             );
             this.logger.log({ message: `Knowledge update: ${agentTypeStr} master`, conceptName });
           } catch (err) {
@@ -84,7 +86,7 @@ export class AppEventHandlers {
         try {
           await this.openClawClient.executeAgent(
             `KNOWLEDGE UPDATE za ${companyName}: Koncept "${conceptName}" (${personaType ?? 'UNKNOWN'}) zavrsen. Zapamti:\n${summary.substring(0, 3000)}`,
-            { agentId: 'main', timeoutSeconds: 120 }
+            { agentId: 'main', tenantProfile: tenantId, timeoutSeconds: 120 }
           );
           this.logger.log({ message: 'Knowledge update: main', conceptName });
         } catch (err) {
@@ -100,7 +102,7 @@ export class AppEventHandlers {
 
   @OnEvent(APP_EVENTS.AGENT_JOB_STUCK, { async: true })
   async handleStuckJob(event: AgentJobStuckEvent): Promise<void> {
-    const { tenantId, executionId, jobId, agentType } = event;
+    const { tenantId: _tenantId, executionId, jobId, agentType } = event;
 
     this.logger.warn({ message: 'Handling stuck job', executionId, jobId, agentType });
 
@@ -141,6 +143,28 @@ export class AppEventHandlers {
   }
 
   // ─── Concept Completed / Failed ───
+
+  @OnEvent(APP_EVENTS.AGENT_JOB_COMPLETED)
+  async handleAgentJobCompleted(event: { tenantId: string; noteId: string; agentType: string }): Promise<void> {
+    // Notify frontend to refresh task panel when agent job completes
+    try {
+      const note = await this.prisma.note.findUnique({
+        where: { id: event.noteId },
+        select: { conversationId: true },
+      });
+      if (note?.conversationId) {
+        this.wsHolder.emitToTenant(event.tenantId, 'chat:notes-updated', {
+          conversationId: note.conversationId,
+          count: 1,
+        });
+      }
+      // Always emit generic task update for task hub (Zadaci page)
+      this.wsHolder.emitToTenant(event.tenantId, 'task:updated', {
+        noteId: event.noteId,
+        agentType: event.agentType,
+      });
+    } catch { /* non-blocking */ }
+  }
 
   @OnEvent(APP_EVENTS.CONCEPT_COMPLETED)
   handleConceptCompleted(event: ConceptCompletedEvent): void {

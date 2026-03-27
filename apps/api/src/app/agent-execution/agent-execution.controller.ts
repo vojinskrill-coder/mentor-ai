@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Param,
+  Body,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -120,6 +121,26 @@ export class AgentExecutionController {
   @HttpCode(HttpStatus.ACCEPTED)
   async retryAllPending(@CurrentUser() user: CurrentUserPayload) {
     const result = await this.agentExecutionService.retryAllPendingJobs(user.userId, user.tenantId);
+    return { data: result };
+  }
+
+  /**
+   * POST /api/v1/agent-execution/jobs/:jobId/feedback
+   * Send user feedback on a completed agent job. The agent learns from the feedback.
+   */
+  @Post('jobs/:jobId/feedback')
+  @HttpCode(HttpStatus.OK)
+  async submitJobFeedback(
+    @Param('jobId') jobId: string,
+    @Body() body: { feedback: string },
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    if (!body.feedback?.trim()) {
+      throw new BadRequestException('Feedback text is required');
+    }
+    const result = await this.agentExecutionService.submitJobFeedback(
+      jobId, body.feedback.trim(), user.userId, user.tenantId,
+    );
     return { data: result };
   }
 

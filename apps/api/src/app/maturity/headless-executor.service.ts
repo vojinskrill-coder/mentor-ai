@@ -203,7 +203,7 @@ export class HeadlessExecutorService {
       });
 
       // Pre-load tenant + brain context once for all steps
-      const [cachedTenantData, brainCtx] = await Promise.all([
+      const [cachedTenantData, _brainCtx] = await Promise.all([
         this.prisma.tenant.findUnique({
           where: { id: tenantId },
           select: { name: true, industry: true, description: true },
@@ -317,7 +317,7 @@ export class HeadlessExecutorService {
           const preCheckResult = await this.executeWithLockRetry(
             () => this.openClawClient.executeAgent(
               `Šta znaš o konceptu "${taskNote!.title}" za kompaniju ${cachedTenantData?.name || 'Unknown'}? Koji aspekti su već pokriveni iz prethodnih koncepata? Šta treba NOVO istražiti? Odgovori kratko, u 200-300 reči.`,
-              { agentId: 'main', timeoutSeconds: 60 }
+              { agentId: 'main', tenantProfile: tenantId, timeoutSeconds: 60 }
             ),
             'pre-check-main',
           );
@@ -477,7 +477,7 @@ OVO JE NACRT — biće obogaćen istraživanjem agenata:
             try {
               let summary = '';
               await this.aiGateway.streamCompletionWithContext(
-                [{ role: 'user', content: `Sumiraj KLJUČNE NALAZE iz ovog istraživanja u 800-1200 reči. Zadrži sve konkretne podatke, brojke, izvore (URL-ove) i preporuke. NE gubiiteralnu ni jednu konkretnu činjenicu.\n\n${output}` }],
+                [{ role: 'user', content: `Sumiraj KLJUCNE NALAZE iz ovog istrazivanja u 800-1200 reci. Zadrzi sve konkretne podatke, brojke, izvore (URL-ove) i preporuke. KRITICNO: Zadrzi SVE slike u formatu ![opis](url) — ne brisaj ih i ne menjaj URL-ove. NE gubi nijednu konkretnu cinjenicu.\n\n${output}` }],
                 { tenantId, userId, conversationId: convId, businessContext: bizContext, useFallback: true },
                 (chunk: string) => { summary += chunk; },
               );
@@ -509,15 +509,43 @@ ${agentFindings.length > 0 ? `2. REZULTATI ISTRAŽIVANJA AGENATA:\n${agentFindin
 
 ZADATAK — DVE STVARI:
 
-A) NAPRAVI FINALNI DOKUMENT koji:
-- Integriše SVE nalaze iz nacrta i agentskog istraživanja
-- Daje prednost KONKRETNIM podacima sa izvorima nad generičkim analizama
-- Strukturiraj: ## zaglavlja, tabele, **bold** za ključne vrednosti
-- Uključi sekciju "Izvori" sa URL-ovima iz istraživanja
-- NE ponavljaj iste informacije — konsoliduj ih
-- Proporcionalna dužina: jednostavni koncepti 300-500 reči, strateški 800-1500, kompleksni 1500+
-- Dodaj sekciju "Sledeći koraci" sa konkretnim akcijama
-- NIKADA ne izmišljaj podatke — ako nešto nije istraženo, napiši "[POTREBNO ISTRAŽITI]"
+A) NAPRAVI IZUZETAN FINALNI DOKUMENT (4000-5000 reci) koji:
+
+STRUKTURA I FORMATIRANJE:
+- Koristi jasnu hijerarhiju: # naslov, ## sekcije, ### podsekcije
+- Svaka sekcija mora imati tabele sa konkretnim podacima, brojevima, metrikama
+- Koristi **bold** za kljucne vrednosti, brojke i zakljucke
+- Koristi > blockquote za kljucne uvide i preporuke
+- Koristi bullet liste za akcione stavke
+- Koristi horizontalne linije (---) za razdvajanje glavnih sekcija
+
+SADRZAJ I KVALITET:
+- Integriši SVE nalaze iz nacrta i SVIH agentskih istrazivanja — ne preskaci nijedan nalaz
+- Daj prednost KONKRETNIM podacima sa izvorima nad generickim analizama
+- Svaki podatak, benchmark ili statistika MORA imati izvor: ([Naziv](URL))
+- Ukljuci detaljne tabele sa uporednim analizama, metrikama, benchmarkovima
+- Za svaku preporuku daj KONKRETAN akcioni plan sa odgovornom osobom/timom i rokom
+- Ukljuci sekciju "Finansijski Uticaj" sa konkretnim projekcijama
+- Ukljuci sekciju "Rizici i Mitigacija" sa tabelom rizika
+- Ukljuci sekciju "KPI-jevi i Merenje Uspeha" sa konkretnim ciljnim vrednostima
+- Ukljuci sekciju "Sledeci Koraci" sa vremenskim okvirom (nedelja/mesec)
+- Ukljuci sekciju "Izvori" na kraju sa svim koriscenim URL-ovima
+
+SLIKE:
+- OBAVEZNO SACUVAJ SVE slike (![opis](url)) iz agentskih nalaza
+- Kopiraj ih TACNO kako su — ne menjaj URL-ove
+- Postavi ih na odgovarajuca mesta u dokumentu gde su kontekstualno relevantne
+
+PRAVILA:
+- Pisi na SRPSKOM jeziku
+- NIKADA ne izmisljaj podatke — ako podatak nije dostupan, napravi razumnu procenu i navedi pretpostavku
+- NIKADA ne pisi "[POTREBNO ISTRAZITI]" ili "[POTREBNO DODATNO ISTRAZITI]" — svi podaci su vec istrazeni
+- NE ponavljaj iste informacije iz razlicitih agenata — sintetizuj ih u jedinstven zakljucak
+- Dokument mora biti PROFESIONALAN, spreman za prezentaciju C-level menadzerima
+- 4000-5000 reci — budi temeljit, detaljan i sveobuhvatan
+- NIKADA ne pisi programski kod (JavaScript, Python, itd.) — samo tekst, tabele i markdown
+- Za slike koristi ISKLJUCIVO markdown format: ![opis slike](url) — NIKADA ne pisi fal-generate komande ili kod
+- NIKADA ne pisi FAL_IMAGE_SIZE, fal-generate, require("fal-ai") ili bilo kakav kod za generisanje slika
 
 B) NA KRAJU DOKUMENTA OCENI po 5 kriterijuma (svaki 1-10):
 ---
@@ -550,6 +578,20 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
         }
 
         if (consolidated.length > 300) {
+          // Restore images lost during consolidation (supports http URLs, data: URLs, and any other URL scheme)
+          const imgRegex = /!\[[^\]]*\]\([^)]+\)/g;
+          const originalImages = agentFindings.match(imgRegex) ?? [];
+          const consolidatedImages = consolidated.match(imgRegex) ?? [];
+          if (originalImages.length > consolidatedImages.length) {
+            const missingImages = originalImages.filter(
+              (img) => !consolidatedImages.some((ci) => ci === img),
+            );
+            if (missingImages.length > 0) {
+              consolidated += '\n\n---\n## Vizuali\n' + missingImages.join('\n\n');
+              this.logger.warn({ message: 'Headless: restored lost images', taskId, restored: missingImages.length });
+            }
+          }
+
           await this.prisma.note.update({
             where: { id: taskId },
             data: {
@@ -565,6 +607,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
             agentJobCount: completedJobs.length,
             consolidatedLength: consolidated.length,
             aiScore: score,
+            images: consolidatedImages.length,
           });
         }
       } catch (consolidationErr) {
@@ -753,58 +796,99 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
           continue;
         }
 
-        try {
-          // Retry with backoff if concurrency limit is hit (MAX_CONCURRENT_PER_TENANT = 5)
-          // Multiple headless tasks run in parallel, competing for limited agent slots
-          const MAX_CONCURRENCY_RETRIES = 60; // 60 × 5s = 5 min max wait for a slot
-          let started = false;
-          for (let attempt = 0; attempt < MAX_CONCURRENCY_RETRIES; attempt++) {
-            try {
-              await this.agentExecutionService.executeJob(job.id, userId, tenantId);
-              started = true;
-              break;
-            } catch (concErr) {
-              const msg = concErr instanceof Error ? concErr.message : '';
-              if (msg.includes('concurrent') || msg.includes('Maximum')) {
-                if (attempt % 10 === 0) {
-                  this.logger.log({
-                    message: 'Headless: waiting for agent slot',
-                    jobId: job.id, attempt, maxAttempts: MAX_CONCURRENCY_RETRIES,
-                  });
+        const MAX_JOB_RETRIES = 1; // 1 extra attempt on transient failure
+        let jobSucceeded = false;
+
+        for (let jobAttempt = 0; jobAttempt <= MAX_JOB_RETRIES; jobAttempt++) {
+          try {
+            // Retry with backoff if concurrency limit is hit (MAX_CONCURRENT_PER_TENANT = 5)
+            const MAX_CONCURRENCY_RETRIES = 60; // 60 × 5s = 5 min max wait for a slot
+            let started = false;
+            for (let attempt = 0; attempt < MAX_CONCURRENCY_RETRIES; attempt++) {
+              try {
+                await this.agentExecutionService.executeJob(job.id, userId, tenantId);
+                started = true;
+                break;
+              } catch (concErr) {
+                const msg = concErr instanceof Error ? concErr.message : '';
+                if (msg.includes('concurrent') || msg.includes('Maximum')) {
+                  if (attempt % 10 === 0) {
+                    this.logger.log({
+                      message: 'Headless: waiting for agent slot',
+                      jobId: job.id, attempt, maxAttempts: MAX_CONCURRENCY_RETRIES,
+                    });
+                  }
+                  await new Promise((r) => setTimeout(r, 5_000));
+                  continue;
                 }
-                await new Promise((r) => setTimeout(r, 5_000));
-                continue;
+                throw concErr; // non-concurrency error — propagate
               }
-              throw concErr; // non-concurrency error — propagate
             }
+
+            if (!started) {
+              throw new Error('Timed out waiting for agent concurrency slot');
+            }
+
+            // Verify the job was actually started before polling
+            const jobRecord = await this.prisma.agentJob.findFirst({
+              where: { id: job.id, tenantId },
+              select: { status: true },
+            });
+
+            if (jobRecord && jobRecord.status !== 'PLANNED') {
+              await this.waitForJobCompletion(job.id, tenantId);
+            }
+
+            // Check final job status — auto-retry on transient failure
+            const finalJob = await this.prisma.agentJob.findFirst({
+              where: { id: job.id, tenantId },
+              select: { status: true, error: true },
+            });
+
+            if (finalJob?.status === 'FAILED' && jobAttempt < MAX_JOB_RETRIES &&
+                this.openClawClient.isRetryableError(finalJob.error)) {
+              this.logger.warn({
+                message: `Headless: transient job failure, retrying (${jobAttempt + 1}/${MAX_JOB_RETRIES})`,
+                jobId: job.id, error: finalJob.error?.substring(0, 100),
+              });
+              // Reset job to PLANNED for retry
+              await this.prisma.agentJob.update({
+                where: { id: job.id },
+                data: { status: 'PLANNED', executionId: null, error: null },
+              });
+              await new Promise((r) => setTimeout(r, 10_000)); // 10s cooldown
+              continue; // retry the job
+            }
+
+            jobSucceeded = finalJob?.status === 'COMPLETED';
+            break; // exit retry loop (either success or non-retryable failure)
+          } catch (err) {
+            if (jobAttempt < MAX_JOB_RETRIES && this.openClawClient.isRetryableError(
+              err instanceof Error ? err.message : String(err)
+            )) {
+              this.logger.warn({
+                message: `Headless: job execution error, retrying (${jobAttempt + 1}/${MAX_JOB_RETRIES})`,
+                jobId: job.id, error: err instanceof Error ? err.message : 'Unknown',
+              });
+              await new Promise((r) => setTimeout(r, 10_000));
+              continue;
+            }
+            this.logger.error({
+              message: 'Headless: agent job execution failed',
+              jobId: job.id,
+              error: err instanceof Error ? err.message : 'Unknown',
+            });
+            break; // non-retryable error
           }
+        }
 
-          if (!started) {
-            throw new Error('Timed out waiting for agent concurrency slot');
-          }
-
-          // Verify the job was actually started before polling
-          const jobRecord = await this.prisma.agentJob.findFirst({
-            where: { id: job.id, tenantId },
-            select: { status: true },
-          });
-
-          if (jobRecord && jobRecord.status !== 'PLANNED') {
-            await this.waitForJobCompletion(job.id, tenantId);
-          }
-
-          finished.add(job.id);
+        finished.add(job.id);
+        if (jobSucceeded) {
           this.logger.log({
             message: 'Headless: agent job completed',
             jobId: job.id,
           });
-        } catch (err) {
-          this.logger.error({
-            message: 'Headless: agent job execution failed',
-            jobId: job.id,
-            error: err instanceof Error ? err.message : 'Unknown',
-          });
-          finished.add(job.id);
+        } else {
           failed.add(job.id);
         }
       }

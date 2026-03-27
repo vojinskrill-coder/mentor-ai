@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 // Read version from package.json
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const packageJson = require('../../../../../package.json');
 
 /**

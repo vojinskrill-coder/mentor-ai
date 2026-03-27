@@ -3,7 +3,7 @@ import {
   signal,
   computed,
   inject,
-  ChangeDetectionStrategy,
+  ChangeDetectionStrategy, OnInit,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -618,7 +618,7 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
     }
   `],
 })
-export class MemoryListComponent {
+export class MemoryListComponent implements OnInit {
   private readonly http = inject(HttpClient);
 
   // State

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
@@ -10,6 +10,7 @@ import { ConversationService } from './conversation.service';
 import { AiGatewayService } from '../ai-gateway/ai-gateway.service';
 import { BusinessContextService } from '../knowledge/services/business-context.service';
 import { AgentExecutionEventBus } from '../agent-execution/agent-execution-event-bus.service';
+import { HeadlessExecutorService } from '../maturity/headless-executor.service';
 
 @Injectable()
 export class ConceptPlanService {
@@ -22,7 +23,9 @@ export class ConceptPlanService {
     private readonly conversationService: ConversationService,
     private readonly aiGatewayService: AiGatewayService,
     private readonly businessContextService: BusinessContextService,
-    private readonly eventBus: AgentExecutionEventBus
+    private readonly eventBus: AgentExecutionEventBus,
+    @Inject(forwardRef(() => HeadlessExecutorService))
+    private readonly headlessExecutor: HeadlessExecutorService,
   ) {}
 
   /**
@@ -136,93 +139,52 @@ export class ConceptPlanService {
       stepCount: steps.length,
     });
 
-    // 7. Execute steps sequentially
-    const completedSummaries: Array<{ title: string; conceptName: string; summary: string }> = [];
+    // 7. Execute via HeadlessExecutor — same pipeline as maturity flow
+    // This triggers: synthesis → job planning → Gemini search → Brave → DeepSeek agents
+    // with cross-agent collaboration, web search enrichment, and consolidated output.
+    try {
+      const result = await this.headlessExecutor.executeTask({
+        taskId: parentNote.id,
+        tenantId,
+        userId,
+      });
 
-    for (const [i, step] of steps.entries()) {
-      const childNoteId = childNoteIds[i]!;
-
-      const planStep: ExecutionPlanStep = {
-        stepId: `auto_${createId()}`,
-        conceptId,
-        conceptName,
-        workflowStepNumber: step.stepNumber,
-        title: step.title,
-        description: step.description,
-        estimatedMinutes: step.estimatedMinutes,
-        departmentTag: step.departmentTag,
-        status: 'in_progress',
-      };
-
-      try {
-        const result = await this.workflowService.executeStepAutonomous(
-          planStep,
-          conversationId,
-          userId,
-          tenantId,
-          () => {
-            // onChunk callback required by interface — content comes from result.content
-          },
-          completedSummaries
-        );
-
-        // Update child task with generated content
-        await this.prisma.note.update({
-          where: { id: childNoteId },
-          data: {
-            content: result.content,
-            status: NoteStatus.READY_FOR_REVIEW,
-          },
-        });
-
-        completedSummaries.push({
-          title: step.title,
-          conceptName,
-          summary: result.content.substring(0, 500),
-        });
-
-        // Notify frontend that task was updated
-        this.emitNotesUpdated(tenantId, conversationId);
-
+      if (result.success) {
         this.logger.log({
-          message: 'Plan step executed',
-          stepNumber: step.stepNumber,
-          title: step.title,
-          contentLength: result.content.length,
-          citations: result.citations.length,
+          message: 'Chat plan executed via headless pipeline',
+          conceptId,
+          conceptName,
+          parentNoteId: parentNote.id,
         });
-      } catch (err) {
-        this.logger.error({
-          message: 'Plan step execution failed',
-          stepNumber: step.stepNumber,
-          title: step.title,
-          error: err instanceof Error ? err.message : 'Unknown',
+      } else {
+        this.logger.warn({
+          message: 'Chat plan execution failed',
+          conceptId,
+          error: result.error,
         });
-        // Continue with remaining steps — don't let one failure block others
       }
+    } catch (err) {
+      this.logger.error({
+        message: 'Chat plan execution error',
+        conceptId,
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
     }
-
-    // 8. Mark parent task as READY_FOR_REVIEW
-    await this.prisma.note.update({
-      where: { id: parentNote.id },
-      data: { status: NoteStatus.READY_FOR_REVIEW },
-    });
 
     this.emitNotesUpdated(tenantId, conversationId);
 
-    // 9. Send completion message in chat
+    // 8. Send completion message in chat
     await this.sendChatMessage(
       tenantId,
       conversationId,
-      `Plan za **${conceptName}** je završen. Izvršeno ${completedSummaries.length}/${steps.length} koraka. Rezultati su dostupni u panelu zadataka.`
+      `Plan za **${conceptName}** je zavrsen. Rezultati su dostupni u panelu zadataka.`
     );
 
     this.logger.log({
       message: 'Plan execution complete',
       conceptId,
       conceptName,
-      completedSteps: completedSummaries.length,
-      totalSteps: steps.length,
+      stepCount: steps.length,
     });
   }
 

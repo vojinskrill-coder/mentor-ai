@@ -38,6 +38,10 @@ import {
 } from './templates/quick-task-templates';
 import { FOUNDATION_CATEGORIES } from '../knowledge/config/department-categories';
 import { AppEventBus, APP_EVENTS } from '../events/app-event-bus.service';
+import { WebCrawlerService } from '../openclaw-tenant/web-crawler.service';
+import { BusinessProfileService } from '../openclaw-tenant/business-profile.service';
+import { SoulGeneratorService } from '../openclaw-tenant/soul-generator.service';
+import { OpenClawTenantService } from '../openclaw-tenant/openclaw-tenant.service';
 
 /**
  * Service for managing the onboarding quick win flow.
@@ -61,6 +65,10 @@ export class OnboardingService {
     private readonly workflowService: WorkflowService,
     private readonly maturityEngineService: MaturityEngineService,
     private readonly eventBus: AppEventBus,
+    private readonly webCrawlerService: WebCrawlerService,
+    private readonly businessProfileService: BusinessProfileService,
+    private readonly soulGeneratorService: SoulGeneratorService,
+    private readonly openClawTenantService: OpenClawTenantService,
   ) {}
 
   /**
@@ -209,6 +217,77 @@ export class OnboardingService {
       message: 'Company details and user record saved',
       tenantId,
       userId,
+    });
+
+    // Fire-and-forget: provision OpenClaw tenant profile in background
+    this.provisionOpenClawTenant(tenantId, companyName, websiteUrl).catch(err => {
+      this.logger.warn({
+        message: 'OpenClaw tenant provisioning failed (non-blocking)',
+        tenantId,
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+    });
+  }
+
+  /**
+   * Provisions a dedicated OpenClaw agent profile for this tenant.
+   * Crawls the website, generates SOUL.MD per agent, deploys to Hetzner.
+   * Runs in background — does not block onboarding flow.
+   */
+  private async provisionOpenClawTenant(
+    tenantId: string,
+    companyName: string,
+    websiteUrl?: string,
+  ): Promise<void> {
+    // Check if already provisioned
+    const exists = await this.openClawTenantService.tenantExists(tenantId);
+    if (exists) {
+      this.logger.log({ message: 'OpenClaw tenant already provisioned', tenantId });
+      return;
+    }
+
+    this.logger.log({ message: 'Starting OpenClaw tenant provisioning', tenantId, websiteUrl });
+    const startTime = Date.now();
+
+    // Step 1: Crawl website (if URL provided)
+    let crawlResult;
+    if (websiteUrl) {
+      crawlResult = await this.webCrawlerService.crawlWebsite(websiteUrl);
+      this.logger.log({ message: 'Website crawled', tenantId, pages: crawlResult.pages.length });
+    }
+
+    // Step 2: Generate business profile
+    const profile = crawlResult
+      ? await this.businessProfileService.analyzeWebsite(crawlResult, companyName)
+      : {
+          companyName,
+          industry: 'Unknown',
+          description: companyName,
+          products: [] as string[],
+          services: [] as string[],
+          targetClients: [] as string[],
+          geography: 'Unknown',
+          brandVoice: 'Professional',
+          competitors: [] as string[],
+          uniqueValue: '',
+          priceRange: '',
+          teamDescription: '',
+          visualStyle: 'Professional',
+          keyMetrics: {},
+          rawSummary: companyName,
+        };
+
+    // Step 3: Generate SOUL.MD files
+    const souls = await this.soulGeneratorService.generateAllSouls(profile);
+
+    // Step 4: Deploy to Hetzner
+    const result = await this.openClawTenantService.provisionTenant(tenantId, profile, souls);
+
+    this.logger.log({
+      message: `OpenClaw tenant provisioning ${result.success ? 'completed' : 'failed'}`,
+      tenantId,
+      durationMs: Date.now() - startTime,
+      error: result.error,
     });
   }
 

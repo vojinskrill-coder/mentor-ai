@@ -14,7 +14,7 @@ export class BudgetService {
     private readonly configService: ConfigService
   ) {
     this.dailyLimitEur = parseFloat(
-      this.configService.get<string>('AGENT_DAILY_BUDGET_EUR') ?? '20'
+      this.configService.get<string>('AGENT_DAILY_BUDGET_EUR') ?? '200'
     );
     this.estimatedCostEur = parseFloat(
       this.configService.get<string>('AGENT_ESTIMATED_COST_EUR') ?? '0.50'

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { ExportDataSection } from '@mentor-ai/shared/types';
 import type { FormatGenerator, ExportMetadata } from './format-generator.interface';
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const PdfPrinter = require('pdfmake');
 
 @Injectable()

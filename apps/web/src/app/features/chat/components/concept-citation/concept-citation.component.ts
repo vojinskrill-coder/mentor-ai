@@ -3,9 +3,11 @@ import {
   input,
   output,
   computed,
+  inject,
   ChangeDetectionStrategy,
   ViewEncapsulation,
 } from '@angular/core';
+import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { CommonModule } from '@angular/common';
 import { marked, type Tokens } from 'marked';
 import DOMPurify from 'dompurify';
@@ -26,7 +28,7 @@ marked.setOptions({
 
 /** DOMPurify config matching the shared markdown-config */
 const PURIFY_CONFIG = {
-  ADD_ATTR: ['target', 'rel', 'class'],
+  ADD_ATTR: ['target', 'rel', 'class', 'src', 'alt', 'width', 'height', 'loading'],
   ALLOWED_TAGS: [
     'h1',
     'h2',
@@ -68,6 +70,8 @@ interface ContentSegment {
   type: 'text' | 'citation';
   /** The content/name */
   content: string;
+  /** Sanitized HTML (bypasses Angular's built-in sanitizer since DOMPurify already sanitized) */
+  safeHtml?: SafeHtml;
   /** Optional concept data for citations */
   citation?: ConceptCitation;
 }
@@ -87,7 +91,7 @@ interface ContentSegment {
     <div class="content-with-citations">
       @for (segment of segments$(); track $index) {
         @if (segment.type === 'text') {
-          <div class="markdown-segment" [innerHTML]="segment.content"></div>
+          <div class="markdown-segment" [innerHTML]="segment.safeHtml ?? segment.content"></div>
         } @else {
           <button
             type="button"
@@ -123,6 +127,15 @@ interface ContentSegment {
 
       .markdown-segment {
         display: contents;
+      }
+
+      .markdown-segment img {
+        max-width: 100%;
+        border-radius: 8px;
+        margin: 12px 0;
+        display: block;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.06);
       }
 
       .citation-badge {
@@ -424,6 +437,8 @@ interface ContentSegment {
   ],
 })
 export class ConceptCitationComponent {
+  private sanitizer = inject(DomSanitizer);
+
   /** Message content with [[Citation]] markers */
   content = input.required<string>();
 
@@ -485,7 +500,7 @@ export class ConceptCitationComponent {
 
     // Pass 3: Split HTML on placeholders, produce segments
     if (placeholders.size === 0) {
-      return [{ type: 'text', content: html }];
+      return [{ type: 'text', content: html, safeHtml: this.sanitizer.bypassSecurityTrustHtml(html) }];
     }
 
     const segments: ContentSegment[] = [];
@@ -500,7 +515,7 @@ export class ConceptCitationComponent {
           citation: placeholderData.citation,
         });
       } else if (part.length > 0) {
-        segments.push({ type: 'text', content: part });
+        segments.push({ type: 'text', content: part, safeHtml: this.sanitizer.bypassSecurityTrustHtml(part) });
       }
     }
 

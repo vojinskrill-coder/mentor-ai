@@ -9,6 +9,7 @@ import { WebSearchModule } from '../web-search/web-search.module';
 import { FileUploadModule } from '../file-upload/file-upload.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { MaturityModule } from '../maturity/maturity.module';
+import { OpenClawTenantModule } from '../openclaw-tenant/openclaw-tenant.module';
 import { OnboardingController } from './onboarding.controller';
 import { OnboardingService } from './onboarding.service';
 import { OnboardingMetricService } from './onboarding-metric.service';
@@ -29,6 +30,7 @@ import { OnboardingMetricService } from './onboarding-metric.service';
     FileUploadModule, // Provides FileUploadService for PDF validation
     WorkflowModule, // Provides WorkflowService for building execution plans
     MaturityModule, // Provides MaturityEngineService for auto-BASIC initialization
+    OpenClawTenantModule, // Provides OpenClaw tenant provisioning services
   ],
   controllers: [OnboardingController],
   providers: [OnboardingService, OnboardingMetricService],

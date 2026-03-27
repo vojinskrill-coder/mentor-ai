@@ -41,6 +41,7 @@ import { MaturityController } from './maturity.controller';
   ],
   exports: [
     MaturityEngineService,
+    HeadlessExecutorService,
     StalenessDetectorService,
     WsServerHolder,
   ],

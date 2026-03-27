@@ -79,15 +79,26 @@ INSTRUCTION QUALITY REQUIREMENTS:
     const memoryBlock = `
 
 ---
-KRITIČNO — UZEMLJENJE:
-- Radi ISKLJUČIVO na zadatku opisanom iznad. NE širi se na druge teme.
-- NIKADA ne izmišljaj podatke, izvore ili statistike. Ako ne možeš pronaći podatak, napiši "[POTREBNO ISTRAŽITI]".
-- Svaki nalaz MORA imati izvor (URL). Bez izvora = ne uključuj u rezultat.
-- NE ponavljaj generičke poslovne savete — samo SPECIFIČNE nalaze za ovu kompaniju i ovaj koncept.
-- Ako imaš prethodno iskustvo i memoriju o ovoj kompaniji — iskoristi to znanje. Nadogradi na postojeće nalaze.
-- Ako je ovo tvoj prvi zadatak — istraži temeljno od početka.
+KRITICNO — UZEMLJENJE:
+- Radi ISKLJUCIVO na zadatku opisanom iznad. NE siri se na druge teme.
+- NIKADA ne izmisljaj podatke, izvore ili statistike. Ako ne mozes pronaci podatak, napisi "[POTREBNO ISTRAZITI]".
+- Svaki nalaz MORA imati izvor (URL). Bez izvora = ne ukljucuj u rezultat.
+- NE ponavljaj genericke poslovne savete — samo SPECIFICNE nalaze za ovu kompaniju i ovaj koncept.
+- Ako imas prethodno iskustvo i memoriju o ovoj kompaniji — iskoristi to znanje. Nadogradi na postojece nalaze.
+- Ako je ovo tvoj prvi zadatak — koristi dostavljene podatke iz web istrazivanja.
 
-FORMAT IZLAZA: Profesionalan Markdown (## zaglavlja, tabele, **bold** za ključne vrednosti, > za izvore sa URL-ovima). SVE na srpskom jeziku. NE objašnjavaj šta ćeš raditi — odmah piši rezultat.
+KRITICNO — FORMAT:
+- NE KORISTI write, edit, bash ili bilo koji file tool. NE PISI fajlove.
+- Samo VRATI TEKST kao svoj odgovor — to je tvoj output.
+- Profesionalan Markdown (## zaglavlja, tabele, **bold** za kljucne vrednosti, > za izvore sa URL-ovima).
+- SVE na srpskom jeziku. NE objesnjavaj sta ces raditi — odmah pisi rezultat.
+
+KRITICNO — SLIKE:
+- Za generisanje slika OBAVEZNO koristi exec tool: FAL_IMAGE_SIZE=<size> fal-generate "<prompt>". Velicine: landscape_16_9 (web), square_hd (social), landscape_4_3 (prezentacije), portrait_4_3 (stories).
+- NIKADA ne izmisljaj URL-ove slika! Pozovi fal-generate i koristi URL koji vrati.
+- Svaka slika mora biti NOVO generisana — NIKADA ne koristi slike iz memorije.
+- Prompt za sliku mora biti na ENGLESKOM, detaljan (30+ reci).
+- VIZUALNI IDENTITET: Luxury aesthetic, dark tones (charcoal, navy, black), gold/bronze accents, marble textures, dramatic lighting, art gallery feel, professional photography style.
 ---`;
 
     const finalPrompt = result.trim() + memoryBlock;

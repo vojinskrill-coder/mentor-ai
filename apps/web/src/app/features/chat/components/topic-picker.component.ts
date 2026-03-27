@@ -183,7 +183,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
               placeholder="Pretraži teme..."
               [value]="searchQuery()"
               (input)="onSearchInput($event)"
-              autofocus
+             
               role="searchbox"
               aria-label="Pretraži teme"
             />

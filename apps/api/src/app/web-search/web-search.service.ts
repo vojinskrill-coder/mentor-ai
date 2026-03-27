@@ -11,9 +11,9 @@ export interface SearchResult {
 
 const SEARCH_TIMEOUT_MS = 8_000;
 const PAGE_FETCH_TIMEOUT_MS = 10_000;
-const TOTAL_WEB_RESEARCH_TIMEOUT_MS = 15_000;
-const MAX_PAGE_CONTENT_CHARS = 3_000;
-const MAX_TOTAL_WEB_CONTEXT_CHARS = 10_000;
+const TOTAL_WEB_RESEARCH_TIMEOUT_MS = 25_000;
+const MAX_PAGE_CONTENT_CHARS = 5_000;
+const MAX_TOTAL_WEB_CONTEXT_CHARS = 20_000;
 
 @Injectable()
 export class WebSearchService {

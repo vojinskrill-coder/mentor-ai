@@ -216,7 +216,7 @@ export class NotesService {
   ): Promise<NoteItem[]> {
     if (noteIds.length === 0) return [];
     const notes = await this.prisma.note.findMany({
-      where: { id: { in: noteIds }, userId, tenantId, parentNoteId: null },
+      where: { id: { in: noteIds }, tenantId, parentNoteId: null },
       include: {
         children: { orderBy: { workflowStepNumber: 'asc' } },
       },

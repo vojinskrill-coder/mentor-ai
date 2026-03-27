@@ -55,10 +55,9 @@ Available DOMAIN agent types (you select from these):
 - sales: customer outreach, selling strategy, pricing negotiation, trust building
 
 ARCHITECTURE — HOW IT WORKS:
-- For EACH domain agent you select, the system will AUTOMATICALLY create a dedicated web_search before it
-- Each web_search will research SPECIFICALLY for that domain agent's needs
+- Each domain agent has its own web_search and web_fetch tools — it does its own research
 - Domain agents execute SEQUENTIALLY for cross-collaboration (each sees previous agent outputs)
-- You do NOT need to include web_search in your plan — it's added automatically
+- No separate web_search agent — each domain agent researches what it needs
 
 DECISION FRAMEWORK:
 - Select 1-3 domain agents based on what the concept needs
@@ -68,14 +67,14 @@ DECISION FRAMEWORK:
   Example: financial first → marketing second (marketing uses financial data)
 
 Rules:
-- Do NOT include web_search in your response — it's automatic
-- Each domain agent instruction should describe WHAT analysis/content to produce
+- Do NOT include web_search in your response — agents search on their own
+- Each domain agent instruction should describe WHAT analysis/content to produce AND what to research
 - Reference specific data from the task report
 - Write instructions in English (agents produce Serbian output)
 - Respond ONLY with a JSON array of DOMAIN agents, no other text
 
-Output format (domain agents ONLY, web_search is automatic):
-[{"agentType":"financial","order":1,"instruction":"Calculate ROI and break-even based on..."},{"agentType":"marketing","order":2,"instruction":"Using financial analysis, create positioning strategy..."}]`;
+Output format:
+[{"agentType":"financial","order":1,"instruction":"Research and calculate ROI and break-even based on..."},{"agentType":"marketing","order":2,"instruction":"Research market data and using financial analysis, create positioning strategy..."}]`;
 
     const userMessage = `Task: ${note.title}
 
@@ -138,52 +137,32 @@ Create an execution plan of agent jobs for this task. Return JSON array only.`;
         return this.createDefaultJobs(noteId, tenantId, userId, note.title, note.userReport);
       }
 
-      // Build search+domain pairs: each domain agent gets a dedicated web_search before it
-      // All web_searches have no dependencies (run in parallel)
-      // Each domain agent depends on: its web_search + previous domain agent (for collaboration)
-      const expandedJobs: Array<{ agentType: string; order: number; dependsOnOrders: number[]; instruction: string }> = [];
-      let orderCounter = 1;
-      const domainOrderMap = new Map<number, number>(); // original order → new order
+      // Domain agents execute sequentially — each sees previous agent outputs for cross-collaboration.
+      // Each agent does its own web search via built-in tools.
+      const sequentialJobs: Array<{ agentType: string; order: number; dependsOnOrders: number[]; instruction: string }> = [];
 
       for (let i = 0; i < domainJobs.length; i++) {
         const domain = domainJobs[i]!;
-        const searchOrder = orderCounter++;
-        const domainOrder = orderCounter++;
+        const order = i + 1;
+        // Each agent depends on previous agent (sequential for collaboration)
+        const deps = i > 0 ? [i] : [];
 
-        // Dedicated web_search for this domain agent
-        const domainLabel = this.registry.getAgent(domain.agentType as AgentType).label;
-        expandedJobs.push({
-          agentType: AgentType.WEB_SEARCH,
-          order: searchOrder,
-          dependsOnOrders: [], // no deps → runs in parallel with other searches
-          instruction: `Research specifically for the ${domainLabel} agent. Focus on ${domain.agentType} aspects of the concept: ${domain.instruction.substring(0, 200)}. Find concrete data, benchmarks, and examples relevant to ${domain.agentType} analysis.`,
-        });
-
-        // Domain agent depends on: its search + previous domain agent (for cross-collaboration)
-        const deps = [searchOrder];
-        if (i > 0) {
-          const prevDomainOrder = domainOrderMap.get(i - 1);
-          if (prevDomainOrder) deps.push(prevDomainOrder);
-        }
-
-        expandedJobs.push({
+        sequentialJobs.push({
           agentType: domain.agentType,
-          order: domainOrder,
+          order,
           dependsOnOrders: deps,
           instruction: domain.instruction,
         });
-
-        domainOrderMap.set(i, domainOrder);
       }
 
       this.logger.log({
-        message: 'Job plan: search+domain pairs created',
+        message: 'Job plan: domain agents created (each does own search)',
         noteId,
         domainAgents: domainJobs.map((j) => j.agentType),
-        totalJobs: expandedJobs.length,
+        totalJobs: sequentialJobs.length,
       });
 
-      return await this.persistJobs(expandedJobs, noteId, tenantId, userId);
+      return await this.persistJobs(sequentialJobs, noteId, tenantId, userId);
     } catch (err) {
       this.logger.error({
         message: 'Failed to plan jobs',
@@ -249,7 +228,7 @@ Create an execution plan of agent jobs for this task. Return JSON array only.`;
   }
 
   /**
-   * Fallback: create search→content pair.
+   * Fallback: create a single content agent job (it does its own search).
    */
   private async createDefaultJobs(
     noteId: string,
@@ -258,37 +237,21 @@ Create an execution plan of agent jobs for this task. Return JSON array only.`;
     taskTitle: string,
     userReport: string
   ): Promise<AgentJobItem[]> {
-    const searchId = `ajob_${createId()}`;
     const contentId = `ajob_${createId()}`;
 
-    await this.prisma.$transaction([
-      this.prisma.agentJob.create({
-        data: {
-          id: searchId,
-          noteId,
-          tenantId,
-          userId,
-          agentType: AgentType.WEB_SEARCH,
-          order: 1,
-          dependsOn: [],
-          instruction: `Research specifically for content creation about "${taskTitle}". Find examples, best practices, case studies, and data relevant to creating actionable content. Report context: ${userReport.substring(0, 500)}`,
-          status: 'PLANNED',
-        },
-      }),
-      this.prisma.agentJob.create({
-        data: {
-          id: contentId,
-          noteId,
-          tenantId,
-          userId,
-          agentType: AgentType.CONTENT,
-          order: 2,
-          dependsOn: [searchId],
-          instruction: `Using the research results, create actionable content deliverables for "${taskTitle}". Include visual content with images where appropriate.`,
-          status: 'PLANNED',
-        },
-      }),
-    ]);
+    await this.prisma.agentJob.create({
+      data: {
+        id: contentId,
+        noteId,
+        tenantId,
+        userId,
+        agentType: AgentType.CONTENT,
+        order: 1,
+        dependsOn: [],
+        instruction: `Research and create actionable content deliverables for "${taskTitle}". Use web_search to find examples, best practices, case studies. Include visual content with images where appropriate. Report context: ${userReport.substring(0, 500)}`,
+        status: 'PLANNED',
+      },
+    });
 
     return this.getJobsForNote(noteId, tenantId);
   }

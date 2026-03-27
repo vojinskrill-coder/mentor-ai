@@ -5,7 +5,7 @@ import {
 import { CommonModule } from '@angular/common';
 import { Subscription } from 'rxjs';
 import * as d3Force from 'd3-force';
-import { GraphStateService, GraphNode, GraphEdge, ActiveAgent, PERSONA_COLORS } from './graph-state.service';
+import { GraphStateService, GraphNode, GraphEdge, ActiveAgent, OPENCLAW_NODE_ID } from './graph-state.service';
 
 interface Transform { x: number; y: number; scale: number; }
 
@@ -21,12 +21,14 @@ const PREMIUM_PERSONA_COLORS: Record<string, { core: string; glow: string; dim: 
   CSO:        { core: '#99F6E4', glow: 'rgba(153,246,228,0.18)', dim: 'rgba(153,246,228,0.05)' },  // soft teal
   SALES:      { core: '#FDBA74', glow: 'rgba(253,186,116,0.18)', dim: 'rgba(253,186,116,0.05)' },  // soft amber
 };
+const OPENCLAW_COLORS = { core: '#60A5FA', glow: 'rgba(96,165,250,0.25)', dim: 'rgba(96,165,250,0.08)' }; // blue
 const DEFAULT_COLORS = { core: '#D1D5DB', glow: 'rgba(209,213,219,0.12)', dim: 'rgba(209,213,219,0.04)' };
 
 const EDGE_OPACITIES: Record<string, number> = {
   PREREQUISITE: 0.35,
   RELATED: 0.18,
   ADVANCED: 0.12,
+  OPENCLAW: 0, // invisible — only used for physics layout; active connections drawn separately
 };
 
 @Component({
@@ -196,8 +198,8 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.simulation.force('link',
       d3Force.forceLink<GraphNode, GraphEdge>(this.edges)
         .id((d) => d.id)
-        .distance(70)
-        .strength(0.25)
+        .distance((e) => (e as any).type === 'OPENCLAW' ? 120 : 70)
+        .strength((e) => (e as any).type === 'OPENCLAW' ? 0.03 : 0.25)
     );
     this.simulation.force('center', d3Force.forceCenter(this.width / 2, this.height / 2).strength(0.08));
     this.simulation.force('x', d3Force.forceX(this.width / 2).strength(0.03));
@@ -208,6 +210,7 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // ─── Node Sizing (proportional to connections) ───
 
   private nodeRadius(node: GraphNode): number {
+    if (node.id === OPENCLAW_NODE_ID) return 14; // Largest node in the graph
     const conn = node.connectionCount ?? 0;
     // Obsidian-style: small dots. Range: 1.5 (isolated) to 5 (hub with 20+ connections)
     const base = 1.5 + Math.log2(1 + conn) * 1;
@@ -240,25 +243,38 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     ctx.translate(this.transform.x, this.transform.y);
     ctx.scale(this.transform.scale, this.transform.scale);
 
-    // Layer 1: Edge glow (behind everything)
-    for (const edge of this.edges) this.drawEdge(ctx, edge);
+    // Layer 1: Edge glow (behind everything) — skip OpenClaw edges (drawn separately)
+    for (const edge of this.edges) {
+      if ((edge as any).type !== 'OPENCLAW') this.drawEdge(ctx, edge);
+    }
 
     // Layer 2: Collaboration particles
-    for (const edge of this.edges) this.drawCollaborationParticles(ctx, edge);
+    for (const edge of this.edges) {
+      if ((edge as any).type !== 'OPENCLAW') this.drawCollaborationParticles(ctx, edge);
+    }
 
-    // Layer 3: Node bloom (soft glow behind nodes)
+    // Layer 3: OpenClaw → active concept connection lines (subtle, only when active)
+    this.drawOpenClawConnections(ctx);
+
+    // Layer 4: Node bloom (soft glow behind nodes)
     for (const node of this.nodes) this.drawNodeBloom(ctx, node);
 
-    // Layer 4: Nodes
-    for (const node of this.nodes) this.drawNode(ctx, node);
+    // Layer 5: Nodes (OpenClaw drawn with special renderer)
+    for (const node of this.nodes) {
+      if (node.id === OPENCLAW_NODE_ID) {
+        this.drawOpenClawNode(ctx, node);
+      } else {
+        this.drawNode(ctx, node);
+      }
+    }
 
-    // Layer 5: Agent dots + particles
+    // Layer 6: Agent dots + particles (on concept nodes)
     for (const agent of this.activeAgents) this.drawAgentDot(ctx, agent);
 
-    // Layer 6: Labels (on top of everything)
+    // Layer 7: Labels (on top of everything)
     for (const node of this.nodes) this.drawLabel(ctx, node);
 
-    // Layer 7: Tooltip
+    // Layer 8: Tooltip
     if (this.hoveredNode) this.drawTooltip(ctx, this.hoveredNode);
 
     ctx.restore();
@@ -322,10 +338,11 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private drawNodeBloom(ctx: CanvasRenderingContext2D, node: GraphNode): void {
     if (node.x == null || node.y == null) return;
+    if (node.id === OPENCLAW_NODE_ID) return; // OpenClaw has its own glow in drawOpenClawNode
 
     const colors = PREMIUM_PERSONA_COLORS[node.personaType] ?? DEFAULT_COLORS;
     const isHovered = this.hoveredNode === node;
-    const isCompleted = node.status === 'COMPLETED';
+    const _isCompleted = node.status === 'COMPLETED';
     const nr = this.nodeRadius(node);
 
     // Outer ambient glow — subtle, proportional
@@ -357,7 +374,7 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (node.x == null || node.y == null) return;
 
     const colors = PREMIUM_PERSONA_COLORS[node.personaType] ?? DEFAULT_COLORS;
-    const isHovered = this.hoveredNode === node;
+    const _isHovered = this.hoveredNode === node;
     // Creation animation
     let scale = 1;
     const createdAt = this.nodeCreationTimes.get(node.id);
@@ -389,10 +406,11 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (node.x == null || node.y == null) return;
 
     const isHovered = this.hoveredNode === node;
-    const showLabel = !this.embedded || isHovered;
+    const isOpenClaw = node.id === OPENCLAW_NODE_ID;
+    const showLabel = isOpenClaw || !this.embedded || isHovered;
     if (!showLabel) return;
 
-    const colors = PREMIUM_PERSONA_COLORS[node.personaType] ?? DEFAULT_COLORS;
+    const _colors = isOpenClaw ? OPENCLAW_COLORS : (PREMIUM_PERSONA_COLORS[node.personaType] ?? DEFAULT_COLORS);
     const label = node.name.length > 24 ? node.name.slice(0, 22) + '…' : node.name;
     const fontSize = this.embedded ? 8 : 9.5;
 
@@ -441,6 +459,198 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
       ctx.beginPath();
       ctx.arc(px, py, particleR, 0, Math.PI * 2);
       ctx.fillStyle = `rgba(${this.hexToRgb(colors.core)},${particleAlpha})`;
+      ctx.fill();
+    }
+  }
+
+  /** Draw the OpenClaw central node — largest, digital brain icon, orbiting job circles */
+  private drawOpenClawNode(ctx: CanvasRenderingContext2D, node: GraphNode): void {
+    if (node.x == null || node.y == null) return;
+
+    const r = this.nodeRadius(node); // 14px — largest
+    const isActive = this.activeAgents.length > 0;
+    const x = node.x;
+    const y = node.y;
+
+    // Outer ambient glow
+    const ambientR = r * 3;
+    const ambGrad = ctx.createRadialGradient(x, y, 0, x, y, ambientR);
+    ambGrad.addColorStop(0, isActive ? 'rgba(96,165,250,0.12)' : 'rgba(96,165,250,0.04)');
+    ambGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.beginPath();
+    ctx.arc(x, y, ambientR, 0, Math.PI * 2);
+    ctx.fillStyle = ambGrad;
+    ctx.fill();
+
+    // Outer hexagonal ring (digital feel)
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (i * Math.PI * 2 / 6) - Math.PI / 6;
+      const hx = x + Math.cos(a) * (r + 3);
+      const hy = y + Math.sin(a) * (r + 3);
+      if (i === 0) { ctx.moveTo(hx, hy); } else { ctx.lineTo(hx, hy); }
+    }
+    ctx.closePath();
+    ctx.strokeStyle = isActive ? 'rgba(96,165,250,0.5)' : 'rgba(96,165,250,0.18)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Core circle — dark with blue edge
+    const coreGrad = ctx.createRadialGradient(x - 2, y - 2, 0, x, y, r);
+    coreGrad.addColorStop(0, '#1E293B');
+    coreGrad.addColorStop(0.85, '#0F172A');
+    coreGrad.addColorStop(1, isActive ? '#1E40AF' : '#1E3A5F');
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = coreGrad;
+    ctx.fill();
+
+    // Digital brain icon — drawn with paths
+    ctx.save();
+    ctx.translate(x, y);
+    const s = r * 0.065; // scale factor
+
+    // Brain outline (left hemisphere)
+    ctx.beginPath();
+    ctx.moveTo(-1 * s, -6 * s);
+    ctx.bezierCurveTo(-5 * s, -6 * s, -7 * s, -3 * s, -7 * s, 0);
+    ctx.bezierCurveTo(-7 * s, 2 * s, -6 * s, 4 * s, -4.5 * s, 5 * s);
+    ctx.bezierCurveTo(-3 * s, 6 * s, -1 * s, 6.5 * s, 0, 6.5 * s);
+    // Right hemisphere
+    ctx.bezierCurveTo(1 * s, 6.5 * s, 3 * s, 6 * s, 4.5 * s, 5 * s);
+    ctx.bezierCurveTo(6 * s, 4 * s, 7 * s, 2 * s, 7 * s, 0);
+    ctx.bezierCurveTo(7 * s, -3 * s, 5 * s, -6 * s, 1 * s, -6 * s);
+    ctx.closePath();
+    ctx.strokeStyle = isActive ? 'rgba(147,197,253,0.9)' : 'rgba(96,165,250,0.6)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Center line
+    ctx.beginPath();
+    ctx.moveTo(0, -5.5 * s);
+    ctx.lineTo(0, 6 * s);
+    ctx.strokeStyle = 'rgba(96,165,250,0.3)';
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+
+    // Neural connection dots (circuit-board feel)
+    const dots: [number, number][] = [
+      [-4 * s, -2 * s], [-3 * s, 2 * s], [-5 * s, 1 * s],
+      [4 * s, -2 * s], [3 * s, 2 * s], [5 * s, 1 * s],
+      [-2 * s, -4 * s], [2 * s, -4 * s],
+      [-2 * s, 4 * s], [2 * s, 4 * s],
+    ];
+    const dotColor = isActive ? 'rgba(147,197,253,0.9)' : 'rgba(96,165,250,0.5)';
+    for (const d of dots) {
+      ctx.beginPath();
+      ctx.arc(d[0], d[1], 0.7, 0, Math.PI * 2);
+      ctx.fillStyle = dotColor;
+      ctx.fill();
+    }
+
+    // Neural links between dots
+    ctx.strokeStyle = isActive ? 'rgba(96,165,250,0.35)' : 'rgba(96,165,250,0.15)';
+    ctx.lineWidth = 0.4;
+    const links: [number, number][] = [[0, 1], [1, 2], [3, 4], [4, 5], [6, 7], [8, 9], [0, 6], [3, 7], [1, 8], [4, 9]];
+    for (const lk of links) {
+      ctx.beginPath();
+      ctx.moveTo(dots[lk[0]]![0], dots[lk[0]]![1]);
+      ctx.lineTo(dots[lk[1]]![0], dots[lk[1]]![1]);
+      ctx.stroke();
+    }
+
+    // Active: animated synaptic pulse through neural links
+    if (isActive) {
+      const pulseIdx = Math.floor((this.animTime / 400) % links.length);
+      const lk = links[pulseIdx]!;
+      const phase = ((this.animTime / 400) % 1);
+      const da = dots[lk[0]]!;
+      const db = dots[lk[1]]!;
+      const px = da[0] + (db[0] - da[0]) * phase;
+      const py = da[1] + (db[1] - da[1]) * phase;
+      ctx.beginPath();
+      ctx.arc(px, py, 1.2, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(147,197,253,0.9)';
+      ctx.fill();
+    }
+
+    ctx.restore();
+
+    // Active pulse ring animation
+    if (isActive) {
+      const phase = (Math.sin(this.animTime / 600) + 1) / 2;
+      const pulseR = r + 5 + phase * 8;
+      ctx.beginPath();
+      ctx.arc(x, y, pulseR, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(96,165,250,${0.1 + phase * 0.12})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // Orbiting job circles — one per active agent job
+    const jobCount = this.activeAgents.length;
+    if (jobCount > 0) {
+      const orbitR = r + 14;
+      for (let i = 0; i < jobCount; i++) {
+        const agent = this.activeAgents[i]!;
+        const angle = (this.animTime / 3000) * Math.PI * 2 + (i * Math.PI * 2 / jobCount);
+        const jx = x + Math.cos(angle) * orbitR;
+        const jy = y + Math.sin(angle) * orbitR;
+
+        // Job dot with persona color
+        const agentColors = PREMIUM_PERSONA_COLORS[agent.personaType] ?? DEFAULT_COLORS;
+        ctx.beginPath();
+        ctx.arc(jx, jy, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = agentColors.core;
+        ctx.fill();
+
+        // Tiny glow
+        const dotGlow = ctx.createRadialGradient(jx, jy, 0, jx, jy, 6);
+        dotGlow.addColorStop(0, `rgba(${this.hexToRgb(agentColors.core)},0.35)`);
+        dotGlow.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.beginPath();
+        ctx.arc(jx, jy, 6, 0, Math.PI * 2);
+        ctx.fillStyle = dotGlow;
+        ctx.fill();
+      }
+    }
+  }
+
+  /** Draw subtle lines from OpenClaw to concepts it's actively working on */
+  private drawOpenClawConnections(ctx: CanvasRenderingContext2D): void {
+    const ocNode = this.nodes.find((n) => n.id === OPENCLAW_NODE_ID);
+    if (!ocNode || ocNode.x == null || ocNode.y == null) return;
+
+    // Get unique concept IDs that have active agents
+    const activeConceptIds = new Set(this.activeAgents.map((a) => a.conceptId));
+
+    for (const conceptId of activeConceptIds) {
+      const concept = this.nodes.find((n) => n.id === conceptId);
+      if (!concept || concept.x == null || concept.y == null) continue;
+
+      // Animated dashed line from OpenClaw to active concept
+      const grad = ctx.createLinearGradient(ocNode.x, ocNode.y, concept.x, concept.y);
+      grad.addColorStop(0, 'rgba(96,165,250,0.35)');
+      grad.addColorStop(1, 'rgba(96,165,250,0.08)');
+
+      ctx.beginPath();
+      ctx.moveTo(ocNode.x, ocNode.y);
+      ctx.lineTo(concept.x, concept.y);
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 0.8;
+      ctx.setLineDash([4, 4]);
+      ctx.lineDashOffset = -(this.animTime / 100);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Particle flowing from OpenClaw to concept
+      const phase = ((this.animTime / 2000) % 1);
+      const px = ocNode.x + (concept.x - ocNode.x) * phase;
+      const py = ocNode.y + (concept.y - ocNode.y) * phase;
+      const alpha = Math.sin(phase * Math.PI) * 0.5;
+      ctx.beginPath();
+      ctx.arc(px, py, 2, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(96,165,250,${alpha})`;
       ctx.fill();
     }
   }
@@ -560,6 +770,7 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     for (let i = this.nodes.length - 1; i >= 0; i--) {
       const n = this.nodes[i]!;
       if (n == null || n.x == null || n.y == null) continue;
+      if (n.id === OPENCLAW_NODE_ID) continue; // OpenClaw is not clickable for navigation
       const r = this.nodeRadius(n) + 3; // extra 3px for easier click target
       const dx = wx - n.x;
       const dy = wy - n.y;

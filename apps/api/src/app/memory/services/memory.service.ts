@@ -165,7 +165,7 @@ export class MemoryService {
     tenantId: string,
     userId: string,
     query: string,
-    limit: number = 10
+    limit = 10
   ): Promise<Memory[]> {
     const prisma = await this.tenantPrisma.getClient(tenantId);
 

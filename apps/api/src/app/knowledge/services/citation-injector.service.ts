@@ -4,7 +4,6 @@ import type {
   ConceptMatch,
   ConceptCitation,
   CitationInjectionResult,
-  ConceptCategory,
 } from '@mentor-ai/shared/types';
 
 /**
@@ -124,7 +123,7 @@ export class CitationInjectorService {
     );
     const nameMatch = namePattern.exec(content);
 
-    if (nameMatch) {
+    if (nameMatch && !this.isInsideTable(content, nameMatch.index)) {
       const endPosition = nameMatch.index + nameMatch[0].length;
 
       // Check if citation already exists at this position
@@ -138,7 +137,7 @@ export class CitationInjectorService {
       }
     }
 
-    // Strategy 2: Find related keywords from concept name
+    // Strategy 2: Find related keywords from concept name (skip tables)
     const keywords = concept.conceptName
       .toLowerCase()
       .split(/[\s-]+/)
@@ -149,13 +148,16 @@ export class CitationInjectorService {
       let match: RegExpExecArray | null;
 
       while ((match = keywordPattern.exec(content)) !== null) {
+        if (this.isInsideTable(content, match.index)) continue;
+
         // Find end of sentence containing this keyword
         const sentenceEnd = this.findSentenceEnd(content, match.index);
 
         if (
           sentenceEnd !== -1 &&
           !usedPositions.has(sentenceEnd) &&
-          !this.hasCitationAt(content, sentenceEnd)
+          !this.hasCitationAt(content, sentenceEnd) &&
+          !this.isInsideTable(content, sentenceEnd)
         ) {
           const citation = ` [[${concept.conceptName}]]`;
           return {
@@ -169,15 +171,17 @@ export class CitationInjectorService {
       }
     }
 
-    // Strategy 3: Find end of first paragraph if no keyword match
+    // Strategy 3: Find end of first non-table paragraph if no keyword match
     const firstParagraphEnd = content.indexOf('\n\n');
-    if (firstParagraphEnd !== -1 && !usedPositions.has(firstParagraphEnd)) {
+    if (firstParagraphEnd !== -1 && !usedPositions.has(firstParagraphEnd) &&
+        !this.isInsideTable(content, firstParagraphEnd)) {
       // Insert at end of first paragraph
       const sentenceEnd = this.findSentenceEnd(content, 0);
       if (
         sentenceEnd !== -1 &&
         sentenceEnd < firstParagraphEnd &&
-        !this.hasCitationAt(content, sentenceEnd)
+        !this.hasCitationAt(content, sentenceEnd) &&
+        !this.isInsideTable(content, sentenceEnd)
       ) {
         const citation = ` [[${concept.conceptName}]]`;
         return {
@@ -216,6 +220,19 @@ export class CitationInjectorService {
     }
 
     return -1;
+  }
+
+  /**
+   * Checks if a position falls inside a markdown table row (line starts with |).
+   * Also catches table separator rows (|---|---|).
+   */
+  private isInsideTable(content: string, position: number): boolean {
+    // Find the start of the line containing this position
+    const lineStart = content.lastIndexOf('\n', position - 1) + 1;
+    const lineContent = content.slice(lineStart, position + 50);
+    const firstLine = lineContent.split('\n')[0] ?? '';
+    // A table row starts with | or is a separator like |---|
+    return firstLine.trimStart().startsWith('|');
   }
 
   /**

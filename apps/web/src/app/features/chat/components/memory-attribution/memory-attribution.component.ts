@@ -3,7 +3,7 @@ import {
   input,
   output,
   signal,
-  ChangeDetectionStrategy,
+  ChangeDetectionStrategy, OnChanges, OnInit,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import type { MemoryAttribution, MemoryType } from '@mentor-ai/shared/types';
@@ -265,7 +265,7 @@ import { MEMORY_TYPE_COLORS, MEMORY_TYPE_LABELS } from '@mentor-ai/shared/types'
     }
   `],
 })
-export class MemoryAttributionComponent {
+export class MemoryAttributionComponent implements OnChanges, OnInit {
   /** List of memory attributions for this response */
   attributions = input<MemoryAttribution[]>([]);
 

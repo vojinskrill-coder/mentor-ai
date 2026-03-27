@@ -24,7 +24,7 @@ jest.mock('node:fs', () => ({
   unlinkSync: jest.fn(),
 }));
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const fsMock = require('node:fs') as {
   existsSync: jest.Mock;
   mkdirSync: jest.Mock;

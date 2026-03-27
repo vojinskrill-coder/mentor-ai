@@ -12,6 +12,7 @@ import {
   AgentExecutionStatus,
   AgentEnrichmentEntry,
   AgentType,
+  ConceptMatch,
 } from '@mentor-ai/shared/types';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
 import { OpenClawClientService } from './openclaw-client.service';
@@ -21,8 +22,11 @@ import { BudgetService } from './budget.service';
 import { AgentExecutionEventBus } from './agent-execution-event-bus.service';
 import { NotesService } from '../notes/notes.service';
 import { AiGatewayService } from '../ai-gateway/ai-gateway.service';
-import { ChatMessage } from '@mentor-ai/shared/types';
 import { AppEventBus, APP_EVENTS } from '../events/app-event-bus.service';
+import { CitationInjectorService } from '../knowledge/services/citation-injector.service';
+import { WebSearchService } from '../web-search/web-search.service';
+import { ConfigService } from '@nestjs/config';
+// WS events go through AppEventBus → event handlers → WsServerHolder
 
 @Injectable()
 export class AgentExecutionService {
@@ -30,7 +34,7 @@ export class AgentExecutionService {
   // With STAGE_MAX_CONCURRENCY=5 and 2-4 agent jobs per task, peak is 10-20.
   // Each job uses a unique session-id, so no OpenClaw lock contention.
   // This limit prevents runaway execution, not lock issues.
-  private readonly MAX_CONCURRENT_PER_TENANT = 15;
+  private readonly MAX_CONCURRENT_PER_TENANT = 50;
 
   constructor(
     private readonly prisma: PlatformPrismaService,
@@ -42,7 +46,14 @@ export class AgentExecutionService {
     private readonly notesService: NotesService,
     private readonly aiGateway: AiGatewayService,
     private readonly appEventBus: AppEventBus,
-  ) {}
+    private readonly citationInjector: CitationInjectorService,
+    private readonly webSearchService: WebSearchService,
+    private readonly configService: ConfigService,
+  ) {
+    this.geminiApiKey = this.configService.get<string>('GEMINI_API_KEY') ?? '';
+  }
+
+  private readonly geminiApiKey: string;
 
   private emitAgentEvent(tenantId: string, eventName: string, payload: unknown): void {
     this.eventBus.emit({ tenantId, eventName, payload });
@@ -242,6 +253,7 @@ export class AgentExecutionService {
       const result = await this.openClawClient.executeAgent(formattedPrompt, {
         agentId: openClawAgentId,
         sessionId: workSessionId,
+        tenantProfile: tenantId,
         onText: (text) => {
           this.emitAgentEvent(tenantId, 'agent:text-chunk', {
             executionId, jobId: null, text,
@@ -418,6 +430,390 @@ export class AgentExecutionService {
           updated_at = NOW()
       WHERE id = ${noteId}
     `;
+  }
+
+  /**
+   * Hybrid search pipeline: Gemini Flash generates search queries from the domain agent's
+   * formatted prompt, then Serper API fetches real data. Returns formatted research block.
+   *
+   * Flow: domain prompt → Gemini extracts queries → Serper searches → formatted results
+   */
+  private async generateSearchAndEnrich(
+    formattedPrompt: string,
+    agentLabel: string,
+    taskTitle: string,
+  ): Promise<string> {
+    if (!this.geminiApiKey || !this.webSearchService.isAvailable()) {
+      this.logger.warn({ message: 'Search enrichment skipped — Gemini or Serper not configured' });
+      return '';
+    }
+
+    try {
+      // Step 1: Gemini Flash extracts 3-5 precise English search queries from domain prompt
+      const queryGenPrompt = `You are a search query generator. Read the domain agent instruction below and generate 3-5 precise English search queries that will find the EXACT data this agent needs.
+
+RULES:
+- Queries MUST be in English (Google works best with English)
+- Each query should target SPECIFIC data: benchmarks, statistics, case studies, pricing, competitor info
+- Include the company industry context (luxury sculptures, bronze/marble, SE Europe)
+- Be precise — "luxury sculpture market size 2024 EUR" not "sculpture market"
+- Output ONLY a JSON array of strings, nothing else
+
+DOMAIN AGENT INSTRUCTION:
+${formattedPrompt.substring(0, 3000)}
+
+Output format: ["query 1", "query 2", "query 3"]`;
+
+      const geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${this.geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: queryGenPrompt }] }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 5000 },
+          }),
+          signal: AbortSignal.timeout(15_000),
+        },
+      );
+
+      if (!geminiResponse.ok) {
+        this.logger.warn({ message: 'Gemini Flash query generation failed', status: geminiResponse.status });
+        return '';
+      }
+
+      const geminiData = await geminiResponse.json() as any;
+      const queryText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      const queryMatch = queryText.match(/\[[\s\S]*\]/);
+      if (!queryMatch) {
+        this.logger.warn({ message: 'No JSON array in Gemini response', preview: queryText.substring(0, 100) });
+        return '';
+      }
+
+      const queries: string[] = JSON.parse(queryMatch[0]);
+      if (!Array.isArray(queries) || queries.length === 0) return '';
+
+      this.logger.log({
+        message: 'Search queries generated by Gemini Flash',
+        agentLabel,
+        taskTitle,
+        queries,
+      });
+
+      // Step 2: Run searches in parallel via Brave Search API (5 results per query)
+      const braveKey = this.configService.get<string>('BRAVE_API_KEY') ?? '';
+      const searchPromises = queries.slice(0, 5).map(async (q) => {
+        try {
+          const encoded = encodeURIComponent(q);
+          const res = await fetch(
+            `https://api.search.brave.com/res/v1/web/search?q=${encoded}&count=5`,
+            { headers: { 'X-Subscription-Token': braveKey, 'Accept': 'application/json' }, signal: AbortSignal.timeout(10_000) },
+          );
+          if (!res.ok) return [];
+          const data = await res.json() as any;
+          return (data.web?.results ?? []).slice(0, 5).map((r: any) => ({
+            title: r.title ?? '', link: r.url ?? '', snippet: r.description ?? '',
+          }));
+        } catch { return []; }
+      });
+      const searchResults = await Promise.all(searchPromises);
+
+      // Step 3: Format results into a research block for the domain agent
+      let researchBlock = '\n\n--- REZULTATI WEB ISTRAZIVANJA ---\n';
+      researchBlock += 'Sledeci podaci su pronadjeni putem web pretrage. KORISTI ove izvore kao PRIMARNI izvor cinjenica.\n';
+      researchBlock += 'OBAVEZNO citiraj izvor: ([Naziv](URL)) posle svake cinjenice.\n';
+      researchBlock += 'NE IGNORISI ove podatke — tvoja analiza MORA biti zasnovana na njima.\n\n';
+
+      let totalChars = 0;
+      const MAX_RESEARCH_CHARS = 8_000;
+
+      for (let i = 0; i < queries.length && i < searchResults.length; i++) {
+        const results = searchResults[i] ?? [];
+        if (results.length === 0) continue;
+
+        researchBlock += `### Pretraga: "${queries[i]}"\n`;
+        for (const r of results as Array<{ title: string; link: string; snippet: string }>) {
+          if (totalChars > MAX_RESEARCH_CHARS) break;
+          researchBlock += `\n**[${r.title}](${r.link})**\n${r.snippet}\n`;
+          totalChars += r.snippet.length;
+        }
+        researchBlock += '\n';
+      }
+
+      researchBlock += '\n--- KRAJ SIROVIH REZULTATA ---\n';
+
+      // Step 4: Summarize entire research block to ~5000 chars via Gemini Flash
+      // One call for ALL results — preserves key data, removes noise
+      if (totalChars > 5000) {
+        try {
+          const summarizePrompt = `Summarize the following web research results into a RICH, COMPREHENSIVE research brief of ~5000 characters.
+
+RULES:
+- PRESERVE all specific numbers, percentages, currency amounts, dates
+- PRESERVE all source URLs — format as ([Title](URL)) inline after each fact
+- PRESERVE competitor names, company examples, case studies with specifics
+- PRESERVE industry benchmarks and comparison data
+- REMOVE generic filler text, navigation content, duplicate information
+- ORGANIZE by topic with clear ## headings
+- Output in Serbian language
+- Include comparison tables where data from multiple sources exists
+
+RAW RESEARCH DATA:
+${researchBlock}`;
+
+          // Gemini 2.5 Flash for summarization — thinking disabled to maximize output tokens
+          const sumResponse = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${this.geminiApiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: summarizePrompt }] }],
+                generationConfig: { temperature: 0.2, maxOutputTokens: 5000, thinkingConfig: { thinkingBudget: 0 } },
+              }),
+              signal: AbortSignal.timeout(30_000),
+            },
+          );
+
+          if (sumResponse.ok) {
+            const sumData = await sumResponse.json() as any;
+            const summary = sumData.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (summary && summary.length > 1000) {
+              researchBlock = '\n\n--- REZULTATI WEB ISTRAZIVANJA (sumirano) ---\n';
+              researchBlock += 'Sledeci podaci su pronadjeni i sumirani iz web pretrage. KORISTI ih kao PRIMARNI izvor.\n';
+              researchBlock += 'OBAVEZNO citiraj izvor: ([Naziv](URL)) posle svake cinjenice.\n\n';
+              researchBlock += summary;
+              researchBlock += '\n\n--- KRAJ WEB ISTRAZIVANJA ---\n';
+
+              this.logger.log({
+                message: 'Research summarized by Gemini',
+                agentLabel, original: totalChars, summarized: summary.length,
+              });
+            }
+          }
+        } catch (sumErr) {
+          this.logger.warn({ message: 'Research summarization failed, using raw results', error: sumErr instanceof Error ? sumErr.message : 'Unknown' });
+        }
+      }
+
+      if (!researchBlock.includes('KRAJ WEB ISTRAZIVANJA')) {
+        researchBlock += '\n--- KRAJ WEB ISTRAZIVANJA ---\n';
+      }
+      researchBlock += '\nKRITICNO: Koristi SAMO podatke iz izvora iznad. Svaku cinjenicu citiraj sa izvorom. NE izmisljaj podatke. NE kazi da "nemas podatke" ako su iznad navedeni.\n';
+
+      this.logger.log({
+        message: 'Search enrichment complete',
+        agentLabel,
+        queryCount: queries.length,
+        totalResultChars: totalChars,
+      });
+
+      return researchBlock;
+    } catch (err) {
+      this.logger.warn({
+        message: 'Search enrichment failed (non-blocking)',
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+      return '';
+    }
+  }
+
+  /**
+   * Scan agent output for ![alt](url) images, check if URLs are real (HTTP 200).
+   * For any fake/404 URLs, call FAL API with the alt text as prompt to generate real images.
+   */
+  private async fixFakeImageUrls(output: string, taskTitle?: string, _taskInstruction?: string, tenantId?: string): Promise<string> {
+    const falKey = this.configService.get<string>('FAL_KEY') ?? '';
+    const geminiKey = this.configService.get<string>('GEMINI_API_KEY') ?? '';
+    if (!falKey && !geminiKey) return output;
+
+    // Pre-clean: Convert FAL code blocks and FAL_IMAGE_SIZE commands into markdown image syntax
+    let cleaned = output;
+
+    // Remove JS code blocks with fal-ai (const fal = require... etc)
+    cleaned = cleaned.replace(/```(?:javascript|js)?\s*\n[\s\S]*?fal[\s\S]*?```/gi, '');
+
+    // Convert "FAL_IMAGE_SIZE=<size> fal-generate "<prompt>"" to ![prompt](https://placeholder.img)
+    cleaned = cleaned.replace(/FAL_IMAGE_SIZE=\S+\s+fal-generate\s+"([^"]+)"/g, '![Generated image: $1](https://placeholder.img/generate)');
+
+    // Convert standalone fal-generate commands
+    cleaned = cleaned.replace(/fal-generate\s+"([^"]+)"/g, '![Generated image: $1](https://placeholder.img/generate)');
+
+    // Remove [POTREBNO ISTRAZITI] markers completely
+    cleaned = cleaned.replace(/\[POTREBNO (?:DODATNO )?ISTRA[ZŽ]ITI\]/gi, '');
+
+    // Match ALL markdown images: ![alt](url) — any URL format including placeholders
+    const imgPattern = /!\[([^\]]*)\]\(([^)]+)\)/g;
+    const matches = [...cleaned.matchAll(imgPattern)];
+    if (matches.length === 0) return cleaned;
+
+    // Check which URLs are fake (not real accessible images)
+    const fakeImages: Array<{ fullMatch: string; altText: string; index: number }> = [];
+    for (const match of matches) {
+      const url = match[2] ?? '';
+      // If URL is not a real http URL or contains placeholder text, it's fake
+      if (!url.startsWith('https://') || url.includes('placeholder')) {
+        fakeImages.push({ fullMatch: match[0], altText: match[1] ?? '', index: match.index ?? 0 });
+        continue;
+      }
+      // Check if real URL returns 200
+      try {
+        const headRes = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+        if (headRes.ok) continue;
+      } catch { /* unreachable */ }
+      fakeImages.push({ fullMatch: match[0], altText: match[1] ?? '', index: match.index ?? 0 });
+    }
+
+    if (fakeImages.length === 0) return output;
+
+    // Load brand context
+    let brandContext = '';
+    if (tenantId) {
+      try {
+        const tenant = await this.prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { name: true, industry: true, description: true },
+        });
+        if (tenant) {
+          brandContext = `Company: ${tenant.name}. Industry: ${tenant.industry}. ${tenant.description ?? ''}`;
+        }
+      } catch { /* non-blocking */ }
+    }
+
+    // ONE Gemini call to analyze the FULL document and generate prompts for ALL fake images
+    let imagePrompts: string[] = [];
+
+    if (geminiKey) {
+      try {
+        const imageList = fakeImages.map((img, i) => `IMAGE_${i + 1}: ${img.altText}`).join('\n');
+        const geminiRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: `You are an expert image prompt engineer. Read this document and generate precise English image generation prompts for each image listed below.
+
+CRITICAL RULES:
+- Read the FULL document to understand context for each image
+- Each prompt must describe EXACTLY what that specific image should show based on the document content around it
+- Be SPECIFIC and VISUAL: describe the scene, objects, composition, lighting, colors, mood, textures, materials
+- Do NOT use generic descriptions — each image serves a specific purpose in the document
+- Add professional photography qualities: camera angle, depth of field, lighting setup, color grading
+- Include style references: photorealistic, editorial, product photography, lifestyle, architectural, etc.
+- Describe the environment, background, foreground elements, and spatial relationships
+- 80-150 words per prompt — RICHER prompts produce BETTER images
+
+${brandContext ? `COMPANY CONTEXT: ${brandContext}\n` : ''}${taskTitle ? `TASK: ${taskTitle}\n` : ''}
+DOCUMENT:
+${cleaned.substring(0, 8000)}
+
+IMAGES TO GENERATE:
+${imageList}
+
+Return ONLY a JSON array of prompt strings, one per image, in the same order:
+["prompt for IMAGE_1", "prompt for IMAGE_2", ...]` }] }],
+              generationConfig: { temperature: 0.4, maxOutputTokens: 5000, thinkingConfig: { thinkingBudget: 0 } },
+            }),
+            signal: AbortSignal.timeout(20000),
+          },
+        );
+
+        if (geminiRes.ok) {
+          const gData = await geminiRes.json() as any;
+          const gText = gData.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+          const jsonMatch = gText.match(/\[[\s\S]*\]/);
+          if (jsonMatch) {
+            imagePrompts = JSON.parse(jsonMatch[0]);
+          }
+        }
+      } catch (err) {
+        this.logger.warn({ message: 'Gemini image prompt generation failed', error: err instanceof Error ? err.message : 'Unknown' });
+      }
+    }
+
+    // Generate real images via FAL API
+    let fixedOutput = cleaned;
+    let fixedCount = 0;
+
+    for (let i = 0; i < fakeImages.length; i++) {
+      const img = fakeImages[i]!;
+      const prompt = imagePrompts[i] && imagePrompts[i]!.length > 20
+        ? imagePrompts[i]!
+        : `${img.altText}, professional photography, high quality, detailed, realistic`;
+
+      try {
+        const falRes = await fetch('https://fal.run/fal-ai/flux/schnell', {
+          method: 'POST',
+          headers: { 'Authorization': `Key ${falKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt, image_size: 'landscape_16_9', num_images: 1 }),
+          signal: AbortSignal.timeout(30000),
+        });
+
+        if (falRes.ok) {
+          const falData = await falRes.json() as any;
+          const realUrl = falData.images?.[0]?.url;
+          if (realUrl) {
+            fixedOutput = fixedOutput.replace(img.fullMatch, `![${img.altText}](${realUrl})`);
+            fixedCount++;
+            this.logger.log({ message: 'Fixed image via FAL fallback', index: i + 1, prompt: prompt.substring(0, 60) });
+          }
+        }
+      } catch (err) {
+        this.logger.warn({ message: 'Image generation failed', index: i + 1, error: err instanceof Error ? err.message : 'Unknown' });
+      }
+    }
+
+    if (fixedCount > 0) {
+      this.logger.log({ message: `Fixed ${fixedCount}/${fakeImages.length} fake images` });
+    }
+    return fixedOutput;
+  }
+
+  /**
+   * Load the parent concept + its related concepts as ConceptMatch[] for citation injection.
+   */
+  private async loadConceptMatchesForNote(conceptId: string): Promise<ConceptMatch[]> {
+    try {
+      const concept = await this.prisma.concept.findUnique({
+        where: { id: conceptId },
+        select: { id: true, name: true, category: true, definition: true },
+      });
+      if (!concept) return [];
+
+      // Load related concepts (both directions)
+      const relationships = await this.prisma.conceptRelationship.findMany({
+        where: {
+          OR: [{ sourceConceptId: conceptId }, { targetConceptId: conceptId }],
+        },
+        include: {
+          sourceConcept: { select: { id: true, name: true, category: true, definition: true } },
+          targetConcept: { select: { id: true, name: true, category: true, definition: true } },
+        },
+        take: 10,
+      });
+
+      const matches: ConceptMatch[] = [
+        { conceptId: concept.id, conceptName: concept.name, category: concept.category as any, definition: concept.definition, score: 1.0 },
+      ];
+
+      for (const rel of relationships) {
+        const related = rel.sourceConceptId === conceptId ? rel.targetConcept : rel.sourceConcept;
+        if (!matches.some((m) => m.conceptId === related.id)) {
+          matches.push({
+            conceptId: related.id,
+            conceptName: related.name,
+            category: related.category as any,
+            definition: related.definition,
+            score: 0.8,
+          });
+        }
+      }
+
+      return matches;
+    } catch {
+      return [];
+    }
   }
 
   private estimateActualCost(usage?: { input?: number; output?: number; total?: number }): number {
@@ -711,7 +1107,7 @@ export class AgentExecutionService {
   }
 
   private async processJobWaves(userId: string, tenantId: string): Promise<void> {
-    const WAVE_SIZE = 5;
+    const WAVE_SIZE = 3;
     const MAX_WAIT_PER_JOB_MS = 15 * 60_000; // 15 min max per job
     const POLL_INTERVAL_MS = 5_000;
 
@@ -836,7 +1232,7 @@ export class AgentExecutionService {
             const agentId = agentTypeStr.replace(/_/g, '-');
             await this.openClawClient.executeAgent(
               `KNOWLEDGE UPDATE za ${companyName} - Koncept: ${note.title}. Zapamti ove nalaze:\n\n${summary}`,
-              { agentId, timeoutSeconds: 180 },
+              { agentId, tenantProfile: tenantId, timeoutSeconds: 180 },
             );
           } catch { /* non-blocking */ }
         }
@@ -845,7 +1241,7 @@ export class AgentExecutionService {
         try {
           await this.openClawClient.executeAgent(
             `KNOWLEDGE UPDATE za ${companyName}: Koncept "${note.title}" zavrsen. Zapamti i organizuj:\n${summary.substring(0, 3000)}`,
-            { agentId: 'main', timeoutSeconds: 120 },
+            { agentId: 'main', tenantProfile: tenantId, timeoutSeconds: 120 },
           );
         } catch { /* non-blocking */ }
 
@@ -904,21 +1300,11 @@ export class AgentExecutionService {
         label: `${agentLabel}: Priprema instrukcija...`,
       });
 
-      let enrichedInstruction = dependencyContext
+      const enrichedInstruction = dependencyContext
         ? `${jobInstruction}\n\nContext from previous agent results:\n${dependencyContext}`
         : jobInstruction;
 
-      // For web_search: find the specific domain agent that depends on THIS search job
-      if (agentType === AgentType.WEB_SEARCH) {
-        const dependentJob = await this.prisma.agentJob.findFirst({
-          where: { noteId: note.id, tenantId, dependsOn: { has: jobId } },
-          select: { agentType: true, instruction: true },
-        });
-        if (dependentJob) {
-          const domainLabel = this.registry.getAgent(dependentJob.agentType as AgentType).label;
-          enrichedInstruction += `\n\nOVO ISTRAŽIVANJE JE NAMENJENO ZA: ${domainLabel} agenta. Istraži SPECIFIČNO podatke koje ${domainLabel} treba za svoj rad. Zadatak ${domainLabel} agenta: ${dependentJob.instruction?.substring(0, 300) || 'analiza koncepta'}`;
-        }
-      }
+      // Note: web_search jobs no longer created separately — each domain agent does its own search
 
       // Retrieve pre-check context from main agent (stored during headless execution)
       const preCheckContext = (note as any).agentEnrichments?.mainPreCheck ?? null;
@@ -939,84 +1325,69 @@ export class AgentExecutionService {
         },
       });
 
+      // Step 1b: Web search enrichment — Gemini Flash generates queries, Serper fetches data
+      // Domain agents get pre-researched data so they focus on analysis, not searching.
+      this.emitAgentEvent(tenantId, 'agent:status-change', {
+        executionId, jobId, noteId: note.id, agentType, status: 'FORMATTING',
+        label: `${agentLabel}: Web istrazivanje...`,
+      });
+
+      const searchResults = await this.generateSearchAndEnrich(formattedPrompt, agentLabel, note.title);
+      // Put search results FIRST so DeepSeek sees data before instruction (16K context limit)
+      const enrichedPrompt = searchResults
+        ? `${searchResults}\n\n--- TVOJ ZADATAK (koristi podatke iznad) ---\n${formattedPrompt}`
+        : formattedPrompt;
+
       this.emitAgentEvent(tenantId, 'agent:formatting-complete', {
-        executionId, jobId, promptLength: formattedPrompt.length,
+        executionId, jobId, promptLength: enrichedPrompt.length,
       });
 
       await this.prisma.agentExecution.update({
         where: { id: executionId },
-        data: { formattedPrompt },
+        data: { formattedPrompt: enrichedPrompt },
       });
 
-      // Step 2: Execute agent
+      // Step 2: Execute domain agent via DeepSeek API directly (bypasses OpenClaw 4K output limit)
       await this.updateStatus(executionId, 'EXECUTING', { startedAt: new Date() });
       this.emitAgentEvent(tenantId, 'agent:status-change', {
         executionId, jobId, noteId: note.id, agentType, status: 'EXECUTING',
-        label: `${agentLabel}: ${agentType === AgentType.WEB_SEARCH ? 'Istražuje...' : 'Analizira...'}`,
+        label: `${agentLabel}: Analizira...`,
       });
       heartbeat = this.startHeartbeat(executionId, jobId, agentType, tenantId, Date.now());
 
       let result: { success: boolean; output: string; durationMs: number; usage?: { input?: number; output?: number; total?: number }; error?: string };
 
-      // Agents that need tools (web_search, content, marketing, sales) → OpenClaw
-      // Agents that are pure analysis (financial) → NestJS AiGateway (faster)
-      const useOpenClaw = agentType !== AgentType.FINANCIAL;
-
-      if (useOpenClaw) {
-        // OpenClaw: has tools (web_search, web_fetch, exec for images/email)
-        const workSessionId = `work-${jobId}-${openClawAgentId}`;
-        result = await this.openClawClient.executeAgent(formattedPrompt, {
-          agentId: openClawAgentId,
-          sessionId: workSessionId,
-          onText: (text) => {
-            this.emitAgentEvent(tenantId, 'agent:text-chunk', { executionId, jobId, text });
-          },
-          onTool: (tool, status, query) => {
-            this.emitAgentEvent(tenantId, 'agent:tool-event', { executionId, jobId, tool, status, query });
-          },
-          onStatus: (phase) => {
-            this.emitAgentEvent(tenantId, 'agent:status-change', {
-              executionId, jobId, noteId: note.id, agentType, status: 'EXECUTING',
-              label: `${agentLabel}: ${phase === 'running' ? 'Istražuje...' : phase}`,
-            });
-          },
-        });
-      } else {
-        // Financial → NestJS AiGateway (pure analysis, no tools needed, 3-5x faster)
+      {
         const startMs = Date.now();
-        const agentDef = this.registry.getAgent(agentType);
-        const messages: ChatMessage[] = [
-          { role: 'system', content: agentDef.systemPrompt },
-          { role: 'user', content: formattedPrompt },
-        ];
-
-        let output = '';
+        let fullOutput = '';
         try {
           await this.aiGateway.streamCompletionWithContext(
-            messages,
-            {
-              tenantId,
-              userId,
-              skipRateLimit: true,
-              skipQuotaCheck: true,
-            },
-            (chunk) => {
-              output += chunk;
+            [{ role: 'user', content: enrichedPrompt }],
+            { tenantId, userId, skipRateLimit: true, skipQuotaCheck: true },
+            (chunk: string) => {
+              fullOutput += chunk;
               this.emitAgentEvent(tenantId, 'agent:text-chunk', { executionId, jobId, text: chunk });
-            }
+            },
           );
-          result = {
-            success: true,
-            output,
-            durationMs: Date.now() - startMs,
-          };
-        } catch (llmErr) {
+          result = { success: true, output: fullOutput, durationMs: Date.now() - startMs };
+        } catch (err) {
           result = {
             success: false,
-            output: '',
+            output: fullOutput,
             durationMs: Date.now() - startMs,
-            error: llmErr instanceof Error ? llmErr.message : 'LLM call failed',
+            error: err instanceof Error ? err.message : 'DeepSeek API call failed',
           };
+        }
+
+        // Send summarized result to OpenClaw for agent memory (fire-and-forget, max 2000 words)
+        if (result.success && result.output.length > 100) {
+          const summaryForMemory = result.output.length > 8000
+            ? result.output.substring(0, 8000) + '\n\n[... ostatak skracen za memoriju]'
+            : result.output;
+          this.openClawClient.executeAgent(
+            `REZULTAT ISTRAZIVANJA za zadatak "${note.title}" (${agentLabel}):\n\n${summaryForMemory}`,
+            { agentId: openClawAgentId, tenantProfile: tenantId, timeoutSeconds: 60 },
+          ).catch(() => { /* non-blocking memory update */ });
         }
       }
 
@@ -1052,6 +1423,19 @@ export class AgentExecutionService {
           error: errorMsg,
           durationMs: result.durationMs,
         });
+        // Notify user about failure in conversation
+        if (note.conversationId) {
+          try {
+            await this.prisma.message.create({
+              data: {
+                id: `msg_${createId()}`,
+                conversationId: note.conversationId,
+                role: 'ASSISTANT',
+                content: `**${agentLabel}** — Greska: ${errorMsg.substring(0, 200)}`,
+              },
+            });
+          } catch { /* non-blocking */ }
+        }
         return;
       }
 
@@ -1069,10 +1453,64 @@ export class AgentExecutionService {
         error: null,
       });
 
+      // Step 3a-fix: Replace fake image URLs with real FAL-generated images
+      let fixedOutput = result.output;
+      try {
+        fixedOutput = await this.fixFakeImageUrls(result.output, note.title, jobInstruction, tenantId);
+      } catch (imgErr) {
+        this.logger.error({ message: 'fixFakeImageUrls FAILED', error: imgErr instanceof Error ? imgErr.message : 'Unknown', stack: imgErr instanceof Error ? imgErr.stack?.substring(0, 300) : '' });
+      }
+
+      // Update job output with fixed images
+      if (fixedOutput !== result.output) {
+        await this.prisma.agentJob.update({
+          where: { id: jobId },
+          data: { agentOutput: fixedOutput },
+        });
+        await this.mergeEnrichment(note.id, agentType, {
+          executionId,
+          status: AgentExecutionStatus.COMPLETED,
+          result: fixedOutput,
+          completedAt: new Date().toISOString(),
+          error: null,
+        });
+      }
+
       // Step 3b: Persist job output as reviewable child note (Sprint 2 Epic 2.3)
       const jobResultNoteId = await this.createResultNote(
-        result.output, agentLabel, note, userId, tenantId, executionId, jobId
+        fixedOutput, agentLabel, note, userId, tenantId, executionId, jobId
       );
+
+      // Step 3c: Add job output as conversation message with concept citations
+      if (note.conversationId && fixedOutput) {
+        try {
+          let messageContent = `**${agentLabel}**\n\n${fixedOutput}`;
+
+          // Inject concept citations so concept names become clickable links
+          if (note.conceptId) {
+            const conceptMatches = await this.loadConceptMatchesForNote(note.conceptId);
+            if (conceptMatches.length > 0) {
+              const citationResult = this.citationInjector.injectCitations(messageContent, conceptMatches);
+              messageContent = citationResult.content;
+            }
+          }
+
+          await this.prisma.message.create({
+            data: {
+              id: `msg_${createId()}`,
+              conversationId: note.conversationId,
+              role: 'ASSISTANT',
+              content: messageContent,
+            },
+          });
+          // Update conversation timestamp so it surfaces in the list
+          await this.prisma.conversation.update({
+            where: { id: note.conversationId },
+            data: { updatedAt: new Date() },
+          });
+          // WS notify handled by AGENT_JOB_COMPLETED event below
+        } catch { /* non-blocking — conversation message is supplementary */ }
+      }
 
       // Step 4: Cost adjustment
       const actualCost = this.estimateActualCost(result.usage);
@@ -1188,6 +1626,88 @@ export class AgentExecutionService {
         error: errorMessage,
       });
     }
+  }
+
+  /**
+   * Send user feedback on a completed agent job to the agent so it can learn.
+   * The feedback is sent to the agent's persistent session (default, not work session)
+   * and also stored as a conversation message.
+   */
+  async submitJobFeedback(
+    jobId: string,
+    feedback: string,
+    userId: string,
+    tenantId: string,
+  ): Promise<{ success: boolean }> {
+    const job = await this.prisma.agentJob.findFirst({
+      where: { id: jobId, tenantId },
+    });
+
+    if (!job) throw new NotFoundException(`Job ${jobId} not found`);
+    if (!job.agentOutput) throw new BadRequestException('Job has no output to give feedback on');
+
+    // Load the parent note for title and conversationId
+    const note = await this.prisma.note.findUnique({
+      where: { id: job.noteId },
+      select: { title: true, conversationId: true },
+    });
+
+    const agentType = job.agentType as AgentType;
+    const agentDef = this.registry.getAgent(agentType);
+    const openClawAgentId = agentDef.openClawAgentId;
+
+    // Send feedback to the agent's persistent session (so it learns for future tasks)
+    if (this.openClawClient.isConfigured()) {
+      try {
+        const feedbackMessage = `FEEDBACK od korisnika za tvoj rad na konceptu "${note?.title ?? 'Unknown'}":
+
+--- TVOJ OUTPUT ---
+${job.agentOutput.substring(0, 2000)}
+--- KRAJ OUTPUTA ---
+
+--- KORISNIKOV FEEDBACK ---
+${feedback}
+--- KRAJ FEEDBACKA ---
+
+Zapamti ovaj feedback i primeni ga u buducem radu. Sta ces uraditi drugacije sledeci put?`;
+
+        await this.openClawClient.executeAgent(feedbackMessage, {
+          agentId: openClawAgentId,
+          tenantProfile: tenantId,
+          timeoutSeconds: 120,
+        });
+
+        this.logger.log({
+          message: 'Job feedback sent to agent',
+          jobId, agentType, feedbackLength: feedback.length,
+        });
+      } catch (err) {
+        this.logger.warn({
+          message: 'Failed to send feedback to agent (non-blocking)',
+          jobId, error: err instanceof Error ? err.message : 'Unknown',
+        });
+      }
+    }
+
+    // Store feedback as conversation message
+    if (note?.conversationId) {
+      try {
+        await this.prisma.message.create({
+          data: {
+            id: `msg_${createId()}`,
+            conversationId: note.conversationId,
+            role: 'USER',
+            content: `Feedback za ${agentDef.label}: ${feedback}`,
+          },
+        });
+        await this.prisma.conversation.update({
+          where: { id: note.conversationId },
+          data: { updatedAt: new Date() },
+        });
+      } catch { /* non-blocking */ }
+    }
+
+    return { success: true };
   }
 
   async getExecution(

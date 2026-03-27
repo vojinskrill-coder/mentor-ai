@@ -940,6 +940,7 @@ export class AiGatewayService {
         model: modelId,
         messages,
         stream: true,
+        max_tokens: 8192,
       }),
       signal,
     });

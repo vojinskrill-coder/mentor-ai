@@ -3,7 +3,7 @@ import {
   input,
   output,
   signal,
-  ChangeDetectionStrategy,
+  ChangeDetectionStrategy, OnChanges,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -361,7 +361,7 @@ export interface MemoryCorrectionResult {
     }
   `],
 })
-export class MemoryCorrectionDialogComponent {
+export class MemoryCorrectionDialogComponent implements OnChanges {
   /** Memory to correct */
   memory = input<Memory | null>(null);
 

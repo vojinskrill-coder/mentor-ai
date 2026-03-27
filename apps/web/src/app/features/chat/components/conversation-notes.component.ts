@@ -1182,6 +1182,14 @@ import { environment } from '../../../../environments/environment';
       .ai-content > :last-child {
         margin-bottom: 0 !important;
       }
+      .ai-content img {
+        max-width: 100%;
+        border-radius: 8px;
+        margin: 12px 0;
+        display: block;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
 
       .ai-content h1 {
         font-size: 1.35em;

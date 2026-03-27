@@ -175,7 +175,7 @@ describe('OpenClawClientService', () => {
 
       const result = await service.executeAgent('test message');
       expect(result).toEqual(mockResult);
-      expect((service as any).executeAgentBlocking).toHaveBeenCalledWith('test message', 'main', 60);
+      expect((service as any).executeAgentBlocking).toHaveBeenCalledWith('test message', 'main', 60, undefined);
     });
   });
 

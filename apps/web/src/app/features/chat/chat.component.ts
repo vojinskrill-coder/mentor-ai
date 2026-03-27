@@ -4692,16 +4692,18 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           next.delete(payload.conversationId);
           return next;
         });
+        // Always reset execution state on error — prevents stuck UI
+        this.isGeneratingPlan$.set(false);
+        this.parallelBatchId$.set(null);
         // Per-conversation UI cleanup only for active conversation
-        if (payload.conversationId !== this.activeConversationId$()) return;
-        this.closePlanOverlay();
-        this.isYoloMode$.set(false);
-        this.yoloProgress$.set(null);
-        this.isGeneratingPlan$.set(false); // Clear plan generation on error
-        this.parallelBatchId$.set(null); // Clear parallel batch on error
-        this.isOnboardingFlow = false;
-        this.onboardingStatus$.set(null);
-        this.showError(payload.message ?? 'Izvršavanje workflow-a neuspešno');
+        if (payload.conversationId === this.activeConversationId$()) {
+          this.closePlanOverlay();
+          this.isYoloMode$.set(false);
+          this.yoloProgress$.set(null);
+          this.isOnboardingFlow = false;
+          this.onboardingStatus$.set(null);
+          this.showError(payload.message ?? 'Izvrsavanje neuspesno');
+        }
       })
     );
 

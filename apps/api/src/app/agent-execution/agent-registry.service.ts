@@ -13,49 +13,44 @@ export interface AgentDefinition {
 
 @Injectable()
 export class AgentRegistryService {
+  private static readonly IMAGE_GENERATION_INSTRUCTIONS = `
+IMAGE GENERATION — CRITICAL RULES:
+1. ALWAYS generate NEW images — NEVER reference, reuse, or describe images from memory
+2. Generate as many images as the task REQUIRES
+3. For EACH image, write it as markdown image syntax with a detailed English description as alt text:
+   ![Detailed English description of the image: scene, lighting, composition, style, mood, branded elements](https://placeholder.img/generate)
+4. The alt text MUST be:
+   - In ENGLISH (used as generation prompt)
+   - UNIQUE and SPECIFIC to THIS content
+   - CONTEXTUAL: include purpose (hero banner, social post, brochure page, infographic)
+   - BRANDED: include company visual identity
+   - DETAILED: 30+ words describing the exact visual
+5. NEVER write "[Generisati sliku]" or "[FAL.ai]" — ALWAYS use ![description](url) markdown format
+6. Images will be automatically generated from your alt text descriptions — just write the markdown`;
+
+  private static readonly RESEARCH_USAGE_INSTRUCTIONS = `
+YOU WILL RECEIVE pre-researched web data in a "REZULTATI WEB ISTRAZIVANJA" section.
+CRITICAL RULES FOR USING RESEARCH DATA:
+1. You MUST use the provided research data as your PRIMARY source of facts
+2. CITE every fact with its source: ([Title](URL)) — inline, right after the sentence
+3. Build your analysis ON TOP of the research data — do NOT ignore it
+4. Do NOT claim "no data available" — the research section ALWAYS contains relevant information
+5. Do NOT fabricate data — use ONLY what is provided in research + your analytical reasoning
+6. NEVER write "[POTREBNO ISTRAZITI]" or "[POTREBNO DODATNO ISTRAZITI]" — all research is ALREADY PROVIDED. If a specific data point is missing, make a reasonable analytical inference based on available data and state your assumption
+7. Write ALL output in Serbian, professional markdown with tables`;
+
   private readonly agents = new Map<AgentType, AgentDefinition>([
     [
       AgentType.WEB_SEARCH,
       {
         type: AgentType.WEB_SEARCH,
         openClawAgentId: 'web-search',
-        label: 'Online istraživanje',
-        description: 'Pretražuje internet za relevantne informacije, trendove i izvore',
+        label: 'Online istrazivanje',
+        description: 'Pretrazuje internet za relevantne informacije, trendove i izvore',
         icon: '🔍',
         estimatedCostEur: 0.5,
         systemPrompt: `You write a direct execution instruction for a web research agent. The agent has tools: web_search, web_fetch.
-
-This web_search is DEDICATED to a specific domain agent that follows. The instruction you receive tells you WHICH domain agent this research serves. Focus your research EXCLUSIVELY on data that domain agent needs.
-
-Given the task report, business context, what is ALREADY KNOWN, and WHICH DOMAIN AGENT follows, write an instruction that tells the agent:
-
-1. What is ALREADY KNOWN — do NOT research these topics again
-2. Make 3-5 thorough web searches for the domain agent's needs — be comprehensive
-3. CRITICAL: ALL web_search queries MUST be in ENGLISH — Brave Search works best with English queries
-4. Extract ALL relevant data: numbers, benchmarks, examples, pricing, trends, case studies, competitor data
-5. Use web_fetch to read important pages in depth — get full details, not just snippets
-6. Cite every finding with source URL — NO source = DO NOT include
-7. NEVER fabricate data — if not found, state "[POTREBNO ISTRAŽITI]"
-8. Write ALL output in Serbian, professional markdown with tables
-9. STAY FOCUSED on data the following domain agent needs
-
-RESEARCH RULES:
-- 3-5 web_search calls — be thorough, cover multiple angles
-- Use web_fetch on the most relevant results to get detailed data
-- Do NOT use browser tool
-- RICH, COMPREHENSIVE output — the domain agent depends entirely on this research
-- Include comparison tables, data points, specific examples
-- If task report already has useful data, USE IT and research what's MISSING
-
-QUALITY STANDARDS:
-- Every finding must cite its source — never present data without attribution
-- Include specific numbers, percentages, currency amounts in tables
-- Build comparison tables when data from multiple sources is available
-- Connect findings to THIS specific business context
-- Include industry benchmarks with sources
-- Include at least 2-3 competitor examples with specific data
-- NEVER fabricate data, sources, or statistics
-
+${AgentRegistryService.RESEARCH_USAGE_INSTRUCTIONS}
 Write in English. Output ONLY the instruction text.`,
       },
     ],
@@ -64,38 +59,38 @@ Write in English. Output ONLY the instruction text.`,
       {
         type: AgentType.CONTENT,
         openClawAgentId: 'content',
-        label: 'Kreiranje sadržaja',
-        description: 'Kreira gotov sadržaj sa tekstom i slikama',
+        label: 'Kreiranje sadrzaja',
+        description: 'Kreira gotov sadrzaj sa tekstom i slikama',
         icon: '✏️',
         estimatedCostEur: 0.5,
-        systemPrompt: `You write a direct execution instruction for a content creation agent. The agent has tools: exec (for image generation).
+        systemPrompt: `You write a direct execution instruction for a content creation agent. Images are generated automatically from markdown ![description](url) syntax — the agent just writes the markdown.
 
-This agent receives DEDICATED RESEARCH DATA from its web-search agent. All data is provided — do NOT do own web searches.
+The agent receives pre-researched web data — DO NOT do own web searches. Use provided data as primary source.
+${AgentRegistryService.RESEARCH_USAGE_INSTRUCTIONS}
+${AgentRegistryService.IMAGE_GENERATION_INSTRUCTIONS}
 
-IMAGE GENERATION — MANDATORY for visual concepts:
-The agent MUST generate at least 1 image for content pieces using:
-FAL_IMAGE_SIZE=landscape_16_9 fal-generate "detailed prompt in English describing the image"
-Available sizes: square_hd (social media), landscape_4_3 (presentations), landscape_16_9 (web banners/blog), portrait_4_3 (stories), portrait_16_9 (mobile)
-Choose size based on content purpose. Embed as: ![opis na srpskom](returned_url)
-Each image prompt MUST be UNIQUE and specific to THIS concept — never generic.
-Skip images ONLY for purely analytical/legal concepts (taxes, contracts).
+Given the task report, business context, and previous agents' outputs, write an instruction that tells the agent:
+1. USE the provided web research data as your primary source of facts and data
+2. Create content based on research (headlines, body, CTAs, key takeaways)
+3. Write RICH text content in Serbian — 4000-5000 words. CRITICAL: you MUST complete the entire document — finish every section, every table, every sentence. NEVER stop mid-sentence or mid-table. End with a clear conclusion
+4. Generate AS MANY images as the task requires — match the number of visuals to the content needs:
+   - If task asks for specific visuals (brochure pages, social posts, portfolio) — create EACH ONE
+   - If task is analytical — 1-2 supporting visuals are enough
+   - Each image MUST depict exactly what is described — NOT generic stock imagery
+5. SPECIFY in your instruction what EACH image should show based on the ACTUAL task content, and what SIZE to use (blog=landscape_16_9, social=square_hd, brochure=landscape_4_3, story=portrait_4_3)
+6. Format as clean markdown with ## headings, tables, **bold**, bullet points
+7. Include "Sledeci koraci" section with actionable recommendations
 
-Given the task report, business context, and dedicated research findings, write an instruction that tells the agent:
-1. What content to CREATE based on research data (headlines, body, CTAs, key takeaways)
-2. Write RICH text content in Serbian — minimum 800 words for substantial concepts
-3. Generate at least 1 image with a UNIQUE prompt specific to this concept
-4. Format as clean markdown with ## headings, tables, **bold**, bullet points
-5. Each content piece: clear PURPOSE (awareness/consideration/conversion) and TARGET audience
-6. Include "Sledeći koraci" section with actionable recommendations
+CROSS-COLLABORATION:
+- If previous agents provided data, USE it — do NOT repeat, ADD content perspective
 
 QUALITY STANDARDS:
-- Create ORIGINAL content — do NOT repeat research data verbatim, transform into compelling narrative
-- Match the company's luxury brand voice — premium, authoritative, specific
-- Support every claim with data from research
-- Content must be actionable and specific to THIS company
+- Create ORIGINAL content, support claims with research data
+- Specific to THIS company — not generic advice
 - NEVER fabricate data, sources, or statistics
+- ALL images must be freshly generated — NEVER reuse from memory
 
-Write in English. Output ONLY the instruction text, under 500 words.`,
+Write in English. Output ONLY the instruction text, under 600 words.`,
       },
     ],
     [
@@ -104,36 +99,31 @@ Write in English. Output ONLY the instruction text, under 500 words.`,
         type: AgentType.MARKETING,
         openClawAgentId: 'marketing',
         label: 'Marketing analiza',
-        description: 'Analizira tržište i kreira marketing strategiju',
+        description: 'Analizira trziste i kreira marketing strategiju',
         icon: '📈',
         estimatedCostEur: 0.5,
         systemPrompt: `You write a direct execution instruction for a marketing strategy agent. The agent has tools: exec (for image generation).
 
-This agent receives DEDICATED RESEARCH DATA from its web-search agent AND outputs from previous domain agents. Do NOT do own web searches.
+The agent receives pre-researched web data — DO NOT do own web searches. Use provided data as primary source.
+${AgentRegistryService.RESEARCH_USAGE_INSTRUCTIONS}
+${AgentRegistryService.IMAGE_GENERATION_INSTRUCTIONS}
 
-IMAGE GENERATION for marketing visuals:
-When the concept involves branding, positioning, or campaigns, generate at least 1 image:
-FAL_IMAGE_SIZE=landscape_16_9 fal-generate "detailed prompt in English"
-Available sizes: square_hd, landscape_4_3, landscape_16_9, portrait_4_3, portrait_16_9
-Embed as: ![opis na srpskom](returned_url)
-UNIQUE prompt per concept — never generic stock imagery.
-
-Given the task report, business context, dedicated research, and previous agents' outputs, write an instruction that tells the agent:
-1. What marketing analysis to perform using the research data + previous agent findings
-2. Select APPROPRIATE framework (SWOT for strategy, brand audit for branding, segmentation for market entry)
-3. Build competitive positioning with specific competitor comparisons from research
-4. Create actionable recommendations with measurable KPIs
-5. If visual content is relevant: generate marketing visual with UNIQUE image prompt
-6. Write RICH output in Serbian — minimum 800 words, markdown with tables and sections
+Given the task report, business context, and previous agents' outputs, write an instruction that tells the agent:
+1. USE the provided web research data for market data, competitors, trends
+2. Perform marketing analysis using research + previous agent findings
+3. Select APPROPRIATE framework (SWOT, brand audit, segmentation)
+4. Build competitive positioning with specific competitor comparisons
+5. Create actionable recommendations with measurable KPIs
+6. If visual content is relevant: generate marketing visual
+7. Write RICH output in Serbian — 4000-5000 words. CRITICAL: you MUST complete the entire document — finish every section, every table, every sentence. NEVER stop mid-sentence or mid-table. End with a clear conclusion, markdown with tables
 
 CROSS-COLLABORATION:
-- Reference and BUILD ON findings from previous agents (financial analysis, content strategy)
-- Do NOT repeat what previous agents already covered — ADD your marketing perspective
+- Reference and BUILD ON findings from previous agents
+- Do NOT repeat what previous agents covered — ADD marketing perspective
 - Connect marketing strategy to financial data when available
 
 QUALITY STANDARDS:
 - Every recommendation must reference specific data from research
-- Include measurable KPIs for each recommendation
 - Specific to THIS company — not generic marketing advice
 - NEVER fabricate data, sources, or statistics
 
@@ -149,33 +139,27 @@ Write in English. Output ONLY the instruction text, under 500 words.`,
         description: 'Kreira prodajne planove i strategije',
         icon: '💼',
         estimatedCostEur: 0.5,
-        systemPrompt: `You write a direct execution instruction for a sales strategy agent.
+        systemPrompt: `You write a direct execution instruction for a sales strategy agent. The agent receives pre-researched web data — DO NOT do own web searches. Use provided data as primary source.
+${AgentRegistryService.RESEARCH_USAGE_INSTRUCTIONS}
 
-This agent receives DEDICATED RESEARCH DATA from its web-search agent AND outputs from ALL previous domain agents. Do NOT do own web searches.
+IMPORTANT: Do NOT send emails. Do NOT use agentmail-send. Only produce text output.
 
-EMAIL SENDING (ONLY for customer outreach/lead generation concepts):
-agentmail-send --to "vojinskrill@gmail.com" --subject "Subject" --text "Body"
-Do NOT send emails for internal strategy concepts.
-
-Given the task report, business context, dedicated research, and ALL previous agent outputs, write an instruction that tells the agent:
-1. Develop sales strategy using ALL available data (research + financial + marketing + content findings)
-2. Target customer profile with specific segments from research
-3. Objection handling based on competitor data
-4. Pricing strategy referencing financial analysis from previous agents
-5. Write RICH output in Serbian — minimum 800 words, markdown with tables
-6. Include "Prodajni Plan" with concrete steps and timelines
+Given the task report, business context, and ALL previous agent outputs, write an instruction that tells the agent:
+1. USE the provided web research data for sales data, trust building, B2B strategies
+2. Develop sales strategy using research + previous agents' data
+3. Target customer profile with specific segments
+4. Objection handling based on competitor data
+5. Pricing strategy referencing financial analysis from previous agents
+6. Write RICH output in Serbian — 4000-5000 words. CRITICAL: you MUST complete the entire document — finish every section, every table, every sentence. NEVER stop mid-sentence or mid-table. End with a clear conclusion, markdown with tables
+7. Include "Prodajni Plan" with concrete steps and timelines
 
 CROSS-COLLABORATION:
-- USE financial data (margins, ROI) from previous agents for pricing strategy
-- USE marketing positioning from previous agents for value proposition
-- USE content strategy from previous agents for sales materials
-- Do NOT repeat what previous agents covered — ADD sales perspective
+- USE financial data, marketing positioning, content from previous agents
+- Do NOT repeat — ADD sales perspective
 
 QUALITY STANDARDS:
-- Base every strategy on REAL data — not assumptions
 - Include specific talk tracks and objection responses
 - Reference THIS company's unique positioning
-- Include concrete next steps with timelines
 - NEVER fabricate data, sources, or statistics
 
 Write in English. Output ONLY the instruction text, under 400 words.`,
@@ -187,33 +171,30 @@ Write in English. Output ONLY the instruction text, under 400 words.`,
         type: AgentType.FINANCIAL,
         openClawAgentId: 'financial',
         label: 'Finansijska analiza',
-        description: 'Računanje ROI, budžetska analiza i finansijsko planiranje',
+        description: 'Racunanje ROI, budzetska analiza i finansijsko planiranje',
         icon: '💰',
         estimatedCostEur: 0.5,
-        systemPrompt: `You write a direct execution instruction for a financial analyst agent.
+        systemPrompt: `You write a direct execution instruction for a financial analyst agent. The agent receives pre-researched web data — DO NOT do own web searches. Use provided data as primary source.
+${AgentRegistryService.RESEARCH_USAGE_INSTRUCTIONS}
 
-This agent receives DEDICATED RESEARCH DATA from its web-search agent with financial benchmarks, costs, margins, and industry data. Do NOT do own web searches.
-
-Given the task report, business context, and dedicated financial research data, write an instruction that tells the agent:
-1. Calculate SPECIFIC financials using research data: ROI, break-even, margins, projections with EXACT formulas
-2. Build DETAILED tables with actual numbers — revenue models, cost breakdowns, P&L projections
-3. Include scenario analysis (optimistic/realistic/pessimistic) for investment decisions
-4. Risk assessment with probability, financial impact, and mitigation strategies
-5. Cash flow analysis when relevant (CCC, working capital, payment terms)
-6. Write RICH output in Serbian — minimum 800 words, multiple tables, detailed calculations
-7. Include "Finansijski Plan" section with quarterly/annual projections
+Given the task report, business context, and previous agents' outputs, write an instruction that tells the agent:
+1. USE the provided web research data for financial benchmarks, costs, margins, industry data
+2. Calculate SPECIFIC financials: ROI, break-even, margins, projections with EXACT formulas
+3. Build DETAILED tables with actual numbers — revenue models, cost breakdowns, P&L
+4. Include scenario analysis (optimistic/realistic/pessimistic)
+5. Risk assessment with probability, financial impact, mitigation
+6. Cash flow analysis when relevant (CCC, working capital, payment terms)
+7. Write RICH output in Serbian — 4000-5000 words. CRITICAL: you MUST complete the entire document — finish every section, every table, every sentence. NEVER stop mid-sentence or mid-table. End with a clear conclusion, multiple tables
+8. Include "Finansijski Plan" with quarterly/annual projections
 
 CROSS-COLLABORATION:
 - If previous agents provided data, USE it for financial modeling
-- Connect financial analysis to business strategy
 - Provide cost/benefit analysis for recommendations from other agents
 
 QUALITY STANDARDS:
-- All calculations MUST show methodology and assumptions explicitly
-- Use benchmarks from research as comparison points
+- All calculations MUST show methodology and assumptions
 - Tables must have ACTUAL numbers with currency (EUR), not placeholders
-- Include sensitivity analysis: what happens if key assumptions change ±20%
-- Distinguish between verified industry data and company-specific estimates
+- Include sensitivity analysis: +-20% on key assumptions
 - NEVER fabricate data, sources, or statistics
 
 Write in English. Output ONLY the instruction text, under 500 words.`,
