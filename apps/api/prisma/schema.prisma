@@ -149,10 +149,16 @@ model Tenant {
 
   deletionRequestedBy User? @relation("DeletionRequestedBy", fields: [deletionRequestedById], references: [id])
 
-  users        User[]
-  invitations  Invitation[]
-  dataExports  DataExport[]
-  executions   Execution[]
+  users           User[]
+  invitations     Invitation[]
+  dataExports     DataExport[]
+  executions      Execution[]
+  concepts        Concept[]        // Tenant-specific discovered concepts
+  brainProposals  BrainProposal[]  // Brain's pending/approved/rejected proposals
+  processWorkflows ProcessWorkflow[] // Process workflow definitions
+  processRuns      ProcessRun[]      // Process execution runs
+  approvedLeads    ApprovedLead[]    // Saved approved leads
+  approvedContent  ApprovedContent[] // Saved approved content
 
   @@map("tenant")
 }
@@ -488,6 +494,14 @@ model Concept {
   source              ConceptSource @default(SEED_DATA) // How the concept was created (Story 2.15)
   version             Int      @default(1)
 
+  // Brain Architecture: tenant-specific concepts + BMC canvas block mapping
+  tenantId            String?  @map("tenant_id") // null = platform concept, set = tenant-only
+  canvasBlock         String?  @map("canvas_block") // KEY_PARTNERS | KEY_ACTIVITIES | KEY_RESOURCES | VALUE_PROPOSITION | CUSTOMER_RELATIONSHIPS | CHANNELS | CUSTOMER_SEGMENTS | REVENUE_STREAMS | COST_STRUCTURE
+  discoveredBy        String?  @map("discovered_by") // "brain-heartbeat" | "user-conversation" | "seed"
+  discoveredAt        DateTime? @map("discovered_at")
+  confidence          Float?   // 0-1 confidence score for auto-discovered concepts
+  needsReview         Boolean  @default(false) @map("needs_review") // flagged if confidence < 0.7
+
   // Curriculum hierarchy fields
   parentId          String?  @map("parent_id")      // Self-referencing for hierarchy
   sortOrder         Int      @default(0) @map("sort_order")  // Display order among siblings (within category)
@@ -511,9 +525,13 @@ model Concept {
   // Cached workflow for agent execution
   workflow ConceptWorkflow?
 
+  // Tenant relation for tenant-specific concepts
+  tenant   Tenant?  @relation(fields: [tenantId], references: [id])
+
   @@index([category])
   @@index([slug])
   @@index([parentId])
+  @@index([tenantId])
   @@map("concepts")
 }
 
@@ -797,6 +815,41 @@ model StageCompletionLog {
   @@map("stage_completion_logs")
 }
 
+// ── Brain Proposals (Architecture Inversion) ──
+// Pre-decision proposals from the autonomous business brain
+// The brain thinks freely and proposes; the owner approves or rejects
+// ID uses prop_ prefix for type identification
+model BrainProposal {
+  id              String   @id @map("id") // Must have prop_ prefix
+  tenantId        String   @map("tenant_id")
+  canvasBlock     String   @map("canvas_block") // Which BMC block this addresses
+  type            String   // concept_discovery | task_execution | risk_alert | opportunity | correction
+  title           String
+  reasoning       String   @db.Text // WHY the brain thinks this matters
+  proposedAction  String   @db.Text @map("proposed_action") // WHAT it wants to do
+  estimatedCost   Float?   @map("estimated_cost") // Rough EUR estimate for execution
+  priority        String   @default("medium") // critical | high | medium | low
+  status          String   @default("pending") // pending | approved | rejected | expired
+  relatedConcepts String[] @map("related_concepts") // Concept IDs
+
+  // Approval tracking
+  approvedBy      String?  @map("approved_by")
+  approvedAt      DateTime? @map("approved_at")
+  rejectedReason  String?  @map("rejected_reason")
+
+  // Execution tracking (links to task created on approval)
+  executionNoteId String?  @map("execution_note_id")
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  expiresAt       DateTime? @map("expires_at") // Proposals can go stale (default 14 days)
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([tenantId, canvasBlock])
+  @@map("brain_proposals")
+}
+
 // Autonomous execution run log
 model AutonomousRun {
   id             String    @id @default(cuid()) @map("id")
@@ -813,5 +866,187 @@ model AutonomousRun {
 
   @@index([tenantId, runType])
   @@map("autonomous_runs")
+}
+
+// ── Process Workflow Engine ──
+// Autonomous business process execution with step-by-step orchestration
+
+enum ProcessStepType {
+  AUTOMATIC
+  APPROVAL
+  MANUAL
+}
+
+enum ProcessRunStatus {
+  IDLE
+  RUNNING
+  WAITING_APPROVAL
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ProcessStepResultStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  APPROVED
+  REJECTED
+}
+
+// Process workflow definition — a reusable multi-step business process
+// ID uses proc_ prefix for type identification
+model ProcessWorkflow {
+  id            String   @id @map("id") // Must have proc_ prefix
+  tenantId      String   @map("tenant_id")
+  name          String
+  description   String?  @db.Text
+  slug          String
+  steps         ProcessStep[]
+  runs          ProcessRun[]
+  isActive      Boolean  @default(true) @map("is_active")
+  cronSchedule  String?  @map("cron_schedule")
+  skillMd       String?  @db.Text @map("skill_md")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@unique([tenantId, slug])
+  @@map("process_workflows")
+}
+
+// Individual step within a process workflow
+// ID uses pstep_ prefix for type identification
+model ProcessStep {
+  id              String          @id @map("id") // Must have pstep_ prefix
+  workflowId      String          @map("workflow_id")
+  order           Int
+  name            String
+  description     String?         @db.Text
+  stepType        ProcessStepType @map("step_type")
+  agentType       String          @map("agent_type")
+  toolSkill       String          @map("tool_skill")
+  inputSchema     Json            @map("input_schema")
+  outputSchema    Json            @map("output_schema")
+  skillMdSection  String?         @db.Text @map("skill_md_section")
+  retryPolicy     Json            @default("{}") @map("retry_policy")
+  verifyRules     Json?           @map("verify_rules")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  results         ProcessStepResult[]
+  workflow        ProcessWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+  @@map("process_steps")
+}
+
+// Execution run of a process workflow
+// ID uses prun_ prefix for type identification
+model ProcessRun {
+  id               String           @id @map("id") // Must have prun_ prefix
+  workflowId       String           @map("workflow_id")
+  tenantId         String           @map("tenant_id")
+  status           ProcessRunStatus @default(IDLE)
+  currentStepOrder Int?             @map("current_step_order")
+  correlationId    String?          @map("correlation_id")
+  input            Json?
+  finalOutput      Json?            @map("final_output")
+  metrics          Json?
+  error            String?
+  startedAt        DateTime?        @map("started_at")
+  completedAt      DateTime?        @map("completed_at")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  stepResults      ProcessStepResult[]
+  workflow         ProcessWorkflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  tenant           Tenant           @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([workflowId])
+  @@map("process_runs")
+}
+
+// Result of executing a single step within a process run
+// ID uses psres_ prefix for type identification
+model ProcessStepResult {
+  id          String                  @id @map("id") // Must have psres_ prefix
+  runId       String                  @map("run_id")
+  stepId      String                  @map("step_id")
+  status      ProcessStepResultStatus @default(PENDING)
+  input       Json?
+  output      Json?
+  rawOutput   String?                 @db.Text @map("raw_output")
+  retries     Int                     @default(0)
+  error       String?
+  approvedBy  String?                 @map("approved_by")
+  approvedAt  DateTime?               @map("approved_at")
+  startedAt   DateTime?               @map("started_at")
+  completedAt DateTime?               @map("completed_at")
+  run         ProcessRun              @relation(fields: [runId], references: [id], onDelete: Cascade)
+  step        ProcessStep             @relation(fields: [stepId], references: [id])
+
+  @@unique([runId, stepId])
+  @@index([runId])
+  @@index([stepId])
+  @@map("process_step_results")
+}
+
+// Approved lead from Lead Discovery process
+model ApprovedLead {
+  id               String   @id @map("id")
+  tenantId         String   @map("tenant_id")
+  runId            String   @map("run_id")
+  name             String
+  company          String
+  role             String?
+  email            String?
+  emailSource      String?  @map("email_source")
+  linkedin         String?
+  phone            String?
+  website          String?
+  location         String?
+  companyDescription String? @db.Text @map("company_description")
+  whyGoodFit       String?  @db.Text @map("why_good_fit")
+  score            Int?
+  scoreBreakdown   Json?    @map("score_breakdown")
+  reasoning        String?  @db.Text
+  message          Json?
+  recentProjects   String[] @map("recent_projects")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([runId])
+  @@map("approved_leads")
+}
+
+// Approved content from Instagram Content process
+model ApprovedContent {
+  id               String   @id @map("id")
+  tenantId         String   @map("tenant_id")
+  runId            String   @map("run_id")
+  topic            String
+  caption          String   @db.Text
+  hookLine         String?  @map("hook_line")
+  hashtags         String[]
+  imageType        String?  @map("image_type")
+  imageUrl         String?  @map("image_url")
+  imagePrompt      String?  @db.Text @map("image_prompt")
+  imageReference   String?  @map("image_reference")
+  callToAction     String?  @map("call_to_action")
+  score            Int?
+  reasoning        String?  @db.Text
+  whyItWorks       String?  @db.Text @map("why_it_works")
+  status           String   @default("approved") // approved, posted, scheduled
+  postedAt         DateTime? @map("posted_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([runId])
+  @@map("approved_content")
 }
 

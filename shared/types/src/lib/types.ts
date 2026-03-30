@@ -1813,6 +1813,31 @@ export interface AgentEnrichmentEntry {
   result: string | null;
   completedAt: string | null;
   error: string | null;
+  // Brain Architecture: rich deliverable data per agent contribution
+  summary?: string;
+  files?: DeliverableFile[];
+  actions?: DeliverableAction[];
+  metrics?: Record<string, number | string>;
+}
+
+/** A file produced by an agent as part of a task */
+export interface DeliverableFile {
+  name: string;
+  displayName: string;
+  path: string; // OpenClaw workspace path
+  mimeType: string;
+  size: number;
+}
+
+/** An external action an agent can perform (publish, send, deploy) */
+export interface DeliverableAction {
+  id: string;
+  type: string; // "publish" | "send" | "deploy" | "schedule" | "sync"
+  target: string; // "ghost-cms" | "convertkit" | "instagram" | "vercel" | "apollo-crm"
+  label: string; // "Objavi na Ghost CMS"
+  status: string; // "none" | "pending" | "approved" | "executing" | "completed" | "failed"
+  scheduledFor?: string;
+  result?: Record<string, unknown>;
 }
 
 // --- Agent Job Pipeline ---
@@ -2044,4 +2069,284 @@ export interface DigestSummaryItem {
   contentPreview: string;
   content: string;
   createdAt: string;
+}
+
+/** ============================================
+ *  Brain Architecture Types
+ *  ============================================ */
+
+/** Business Model Canvas block identifiers */
+export enum CanvasBlock {
+  KEY_PARTNERS = 'KEY_PARTNERS',
+  KEY_ACTIVITIES = 'KEY_ACTIVITIES',
+  KEY_RESOURCES = 'KEY_RESOURCES',
+  VALUE_PROPOSITION = 'VALUE_PROPOSITION',
+  CUSTOMER_RELATIONSHIPS = 'CUSTOMER_RELATIONSHIPS',
+  CHANNELS = 'CHANNELS',
+  CUSTOMER_SEGMENTS = 'CUSTOMER_SEGMENTS',
+  REVENUE_STREAMS = 'REVENUE_STREAMS',
+  COST_STRUCTURE = 'COST_STRUCTURE',
+}
+
+/** Brain proposal types */
+export enum BrainProposalType {
+  CONCEPT_DISCOVERY = 'concept_discovery',
+  TASK_EXECUTION = 'task_execution',
+  RISK_ALERT = 'risk_alert',
+  OPPORTUNITY = 'opportunity',
+  CORRECTION = 'correction',
+}
+
+export enum BrainProposalStatus {
+  PENDING = 'pending',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+  EXPIRED = 'expired',
+}
+
+export enum BrainProposalPriority {
+  CRITICAL = 'critical',
+  HIGH = 'high',
+  MEDIUM = 'medium',
+  LOW = 'low',
+}
+
+/** Brain proposal item for frontend display */
+export interface BrainProposalItem {
+  id: string;
+  canvasBlock: string;
+  type: string;
+  title: string;
+  reasoning: string;
+  proposedAction: string;
+  estimatedCost: number | null;
+  priority: string;
+  status: string;
+  relatedConcepts: string[];
+  executionNoteId: string | null;
+  createdAt: string;
+  expiresAt: string | null;
+}
+
+/** Status of a single BMC canvas block in the brain's scan cycle */
+export interface BrainStateBlock {
+  block: string;
+  lastScan: string | null;
+  conceptCount: number;
+  risks: number;
+  status: string; // "ok" | "attention" | "stale" | "scanning"
+}
+
+/** Full brain state for frontend dashboard */
+export interface BrainState {
+  canvasBlocks: BrainStateBlock[];
+  pendingProposals: number;
+  pendingConcepts: number;
+  budgetRemaining: number;
+  lastHeartbeat: string | null;
+}
+
+/** Bridge API: agent status change event payload */
+export interface BridgeAgentStatusPayload {
+  taskId: string;
+  agent: string;
+  status: 'spawning' | 'running' | 'completed' | 'failed' | 'waiting';
+  message: string;
+  timestamp: string;
+}
+
+/** Bridge API: task progress event payload */
+export interface BridgeTaskProgressPayload {
+  noteId: string;
+  phase: string;
+  percent: number;
+  message: string;
+}
+
+/** Bridge API: task contribution from an agent */
+export interface BridgeTaskContribution {
+  noteId: string;
+  agentType: string;
+  summary: string;
+  output: string;
+  files?: DeliverableFile[];
+  actions?: DeliverableAction[];
+  metrics?: Record<string, number | string>;
+}
+
+/** Bridge API: create concept request */
+export interface BridgeCreateConcept {
+  name: string;
+  category: string;
+  definition: string;
+  canvasBlock?: string;
+  extendedDescription?: string;
+  relationships?: Array<{ targetId: string; type: 'PREREQUISITE' | 'RELATED' | 'ADVANCED' }>;
+  confidence?: number;
+}
+
+/** Bridge API: create proposal request */
+export interface BridgeCreateProposal {
+  canvasBlock: string;
+  type: string;
+  title: string;
+  reasoning: string;
+  proposedAction: string;
+  estimatedCost?: number;
+  priority?: string;
+  relatedConcepts?: string[];
+}
+
+// ── Process Workflow Engine Types ──
+// NOTE: These enums intentionally mirror the Prisma schema enums.
+// Prisma generates its own types from schema.prisma, but frontend cannot import @prisma/client.
+// Keep values in sync with apps/api/prisma/schema.prisma.
+
+/** Process step execution type */
+export enum ProcessStepType {
+  AUTOMATIC = 'AUTOMATIC',
+  APPROVAL = 'APPROVAL',
+  MANUAL = 'MANUAL',
+}
+
+/** Process run execution status */
+export enum ProcessRunStatus {
+  IDLE = 'IDLE',
+  RUNNING = 'RUNNING',
+  WAITING_APPROVAL = 'WAITING_APPROVAL',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  CANCELLED = 'CANCELLED',
+}
+
+/** Process step result status */
+export enum ProcessStepResultStatus {
+  PENDING = 'PENDING',
+  RUNNING = 'RUNNING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+}
+
+/** Process workflow definition */
+export interface ProcessWorkflowResponse {
+  id: string;
+  tenantId: string;
+  name: string;
+  description: string | null;
+  slug: string;
+  isActive: boolean;
+  cronSchedule: string | null;
+  skillMd: string | null;
+  createdAt: string;
+  updatedAt: string;
+  steps?: ProcessStepResponse[];
+}
+
+/** Process step definition */
+export interface ProcessStepResponse {
+  id: string;
+  workflowId: string;
+  order: number;
+  name: string;
+  description: string | null;
+  stepType: ProcessStepType;
+  agentType: string;
+  toolSkill: string;
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  skillMdSection: string | null;
+  retryPolicy: Record<string, unknown>;
+  verifyRules: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Process run response */
+export interface ProcessRunResponse {
+  id: string;
+  workflowId: string;
+  tenantId: string;
+  status: ProcessRunStatus;
+  currentStepOrder: number | null;
+  correlationId: string | null;
+  input: Record<string, unknown> | null;
+  finalOutput: Record<string, unknown> | null;
+  metrics: Record<string, number> | null;
+  error: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  stepResults?: ProcessStepResultResponse[];
+}
+
+/** Process step result response */
+export interface ProcessStepResultResponse {
+  id: string;
+  runId: string;
+  stepId: string;
+  status: ProcessStepResultStatus;
+  input: Record<string, unknown> | null;
+  output: Record<string, unknown> | null;
+  rawOutput: string | null;
+  retries: number;
+  error: string | null;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+/** WebSocket payload: process run started */
+export interface ProcessRunStartedPayload {
+  tenantId: string;
+  runId: string;
+  workflowName: string;
+  totalSteps: number;
+  correlationId?: string;
+}
+
+/** WebSocket payload: process step lifecycle */
+export interface ProcessStepPayload {
+  tenantId: string;
+  runId: string;
+  stepName: string;
+  stepOrder: number;
+  totalSteps: number;
+  agentType: string;
+  status: 'started' | 'output' | 'failed';
+  output?: unknown;
+  error?: string;
+  correlationId?: string;
+}
+
+/** WebSocket payload: process run completed */
+export interface ProcessCompletePayload {
+  tenantId: string;
+  runId: string;
+  workflowName: string;
+  success: boolean;
+  metrics?: Record<string, number>;
+  correlationId?: string;
+}
+
+/** WebSocket payload: process step approval needed */
+export interface ProcessApprovalNeededPayload {
+  tenantId: string;
+  runId: string;
+  stepResultId: string;
+  stepName: string;
+  stepOrder: number;
+  totalSteps: number;
+  output: unknown;
+  correlationId?: string;
+}
+
+/** WebSocket payload: process run cancelled */
+export interface ProcessCancelledPayload {
+  tenantId: string;
+  runId: string;
+  workflowName: string;
+  correlationId?: string;
 }

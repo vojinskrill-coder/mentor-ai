@@ -30,6 +30,8 @@ import { AgentExecutionModule } from './agent-execution/agent-execution.module';
 import { MaturityModule } from './maturity/maturity.module';
 import { AppEventsModule } from './events/events.module';
 import { OpenClawTenantModule } from './openclaw-tenant/openclaw-tenant.module';
+import { BridgeModule } from './bridge/bridge.module';
+import { ProcessModule } from './process/process.module';
 
 // Serve Angular static files in production (combined deploy)
 const staticPath = join(__dirname, '..', '..', 'web', 'browser');
@@ -76,6 +78,8 @@ const serveStaticImports = existsSync(staticPath)
     AgentExecutionModule,
     MaturityModule,
     OpenClawTenantModule,
+    BridgeModule,
+    ProcessModule,
   ],
   controllers: [AppController],
   providers: [AppService],

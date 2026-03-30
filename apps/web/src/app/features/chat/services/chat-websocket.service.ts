@@ -3,6 +3,9 @@ import { io, Socket } from 'socket.io-client';
 import { AuthService } from '../../../core/auth/auth.service';
 import { environment } from '../../../../environments/environment';
 import type {
+  BrainProposalItem,
+  BridgeAgentStatusPayload,
+  BridgeTaskProgressPayload,
   ChatMessageChunk,
   ChatComplete,
   ChatErrorData,
@@ -30,6 +33,11 @@ import type {
   AgentErrorPayload,
   AgentTextChunkPayload,
   AgentToolEventPayload,
+  ProcessRunStartedPayload,
+  ProcessStepPayload,
+  ProcessCompletePayload,
+  ProcessApprovalNeededPayload,
+  ProcessCancelledPayload,
 } from '@mentor-ai/shared/types';
 
 interface MessageReceivedData {
@@ -253,6 +261,28 @@ export class ChatWebsocketService {
   private executionStartedCallbacks: ExecutionStartedCallback[] = [];
   private executionCompleteCallbacks: ExecutionCompleteCallback[] = [];
   private agentConceptActivityCallbacks: Array<(data: { agentType: string; conceptId: string; status: string }) => void> = [];
+
+  // ── Bridge event callbacks (Brain Architecture) ──
+  private proposalNewCallbacks: Array<(data: { tenantId: string; proposal: Partial<BrainProposalItem> }) => void> = [];
+  private proposalApprovedCallbacks: Array<(data: { tenantId: string; proposalId: string; title: string }) => void> = [];
+  private bridgeTaskCreatedCallbacks: Array<(data: { tenantId: string; noteId: string; title: string; conceptId?: string }) => void> = [];
+  private bridgeTaskContributionCallbacks: Array<(data: { tenantId: string; noteId: string; agentType: string; summary: string }) => void> = [];
+  private bridgeTaskProgressCallbacks: Array<(data: BridgeTaskProgressPayload) => void> = [];
+  private bridgeTaskCompleteCallbacks: Array<(data: { tenantId: string; noteId: string; score?: number }) => void> = [];
+  private bridgeAgentStatusCallbacks: Array<(data: BridgeAgentStatusPayload) => void> = [];
+  private bridgeTreeUpdatedCallbacks: Array<(data: { tenantId: string; action: string; conceptId: string; conceptName: string }) => void> = [];
+  private bridgeConversationCreatedCallbacks: Array<(data: { tenantId: string; conversationId: string; conceptId: string; title: string }) => void> = [];
+  private bridgeActionExecutingCallbacks: Array<(data: { tenantId: string; noteId: string; agentType: string; actionId: string }) => void> = [];
+  private bridgeActionCompleteCallbacks: Array<(data: { tenantId: string; noteId: string; agentType: string; actionId: string; status: string }) => void> = [];
+
+  // ── Process Workflow Engine callbacks ──
+  private processRunStartedCallbacks: Array<(data: ProcessRunStartedPayload) => void> = [];
+  private processStepStartedCallbacks: Array<(data: ProcessStepPayload) => void> = [];
+  private processStepOutputCallbacks: Array<(data: ProcessStepPayload) => void> = [];
+  private processStepFailedCallbacks: Array<(data: ProcessStepPayload) => void> = [];
+  private processCompleteCallbacks: Array<(data: ProcessCompletePayload) => void> = [];
+  private processApprovalNeededCallbacks: Array<(data: ProcessApprovalNeededPayload) => void> = [];
+  private processCancelledCallbacks: Array<(data: ProcessCancelledPayload) => void> = [];
 
   /**
    * Connects to the WebSocket server.
@@ -625,6 +655,32 @@ export class ChatWebsocketService {
     this.socket.on('agent:concept-activity', (data: { agentType: string; conceptId: string; status: string }) => {
       this.agentConceptActivityCallbacks.forEach((cb) => cb(data));
     });
+
+    // ── Bridge events (Brain Architecture) ──
+    // All callbacks wrapped in try-catch to prevent one failing callback from breaking the chain
+    const safe = (callbacks: Array<(data: any) => void>, data: any) => {
+      callbacks.forEach((cb) => { try { cb(data); } catch (e) { console.error('Bridge event callback error:', e); } });
+    };
+    this.socket.on('proposal:new', (data: any) => safe(this.proposalNewCallbacks, data));
+    this.socket.on('proposal:approved', (data: any) => safe(this.proposalApprovedCallbacks, data));
+    this.socket.on('task:created', (data: any) => safe(this.bridgeTaskCreatedCallbacks, data));
+    this.socket.on('task:contribution', (data: any) => safe(this.bridgeTaskContributionCallbacks, data));
+    this.socket.on('task:progress', (data: any) => safe(this.bridgeTaskProgressCallbacks, data));
+    this.socket.on('task:complete', (data: any) => safe(this.bridgeTaskCompleteCallbacks, data));
+    this.socket.on('agent:status', (data: any) => safe(this.bridgeAgentStatusCallbacks, data));
+    this.socket.on('tree:updated', (data: any) => safe(this.bridgeTreeUpdatedCallbacks, data));
+    this.socket.on('conversation:created', (data: any) => safe(this.bridgeConversationCreatedCallbacks, data));
+    this.socket.on('action:executing', (data: any) => safe(this.bridgeActionExecutingCallbacks, data));
+    this.socket.on('action:complete', (data: any) => safe(this.bridgeActionCompleteCallbacks, data));
+
+    // Process Workflow Engine events
+    this.socket.on('process:run-started', (data: any) => safe(this.processRunStartedCallbacks, data));
+    this.socket.on('process:step-started', (data: any) => safe(this.processStepStartedCallbacks, data));
+    this.socket.on('process:step-output', (data: any) => safe(this.processStepOutputCallbacks, data));
+    this.socket.on('process:step-failed', (data: any) => safe(this.processStepFailedCallbacks, data));
+    this.socket.on('process:complete', (data: any) => safe(this.processCompleteCallbacks, data));
+    this.socket.on('process:approval-needed', (data: any) => safe(this.processApprovalNeededCallbacks, data));
+    this.socket.on('process:cancelled', (data: any) => safe(this.processCancelledCallbacks, data));
   }
 
   /**
@@ -1305,6 +1361,100 @@ export class ChatWebsocketService {
     };
   }
 
+  // ── Bridge event registration (Brain Architecture) ──
+
+  onProposalNew(callback: (typeof this.proposalNewCallbacks)[number]): () => void {
+    this.proposalNewCallbacks.push(callback);
+    return () => { const i = this.proposalNewCallbacks.indexOf(callback); if (i > -1) this.proposalNewCallbacks.splice(i, 1); };
+  }
+
+  onProposalApproved(callback: (typeof this.proposalApprovedCallbacks)[number]): () => void {
+    this.proposalApprovedCallbacks.push(callback);
+    return () => { const i = this.proposalApprovedCallbacks.indexOf(callback); if (i > -1) this.proposalApprovedCallbacks.splice(i, 1); };
+  }
+
+  onBridgeTaskCreated(callback: (typeof this.bridgeTaskCreatedCallbacks)[number]): () => void {
+    this.bridgeTaskCreatedCallbacks.push(callback);
+    return () => { const i = this.bridgeTaskCreatedCallbacks.indexOf(callback); if (i > -1) this.bridgeTaskCreatedCallbacks.splice(i, 1); };
+  }
+
+  onBridgeTaskContribution(callback: (typeof this.bridgeTaskContributionCallbacks)[number]): () => void {
+    this.bridgeTaskContributionCallbacks.push(callback);
+    return () => { const i = this.bridgeTaskContributionCallbacks.indexOf(callback); if (i > -1) this.bridgeTaskContributionCallbacks.splice(i, 1); };
+  }
+
+  onBridgeTaskProgress(callback: (typeof this.bridgeTaskProgressCallbacks)[number]): () => void {
+    this.bridgeTaskProgressCallbacks.push(callback);
+    return () => { const i = this.bridgeTaskProgressCallbacks.indexOf(callback); if (i > -1) this.bridgeTaskProgressCallbacks.splice(i, 1); };
+  }
+
+  onBridgeTaskComplete(callback: (typeof this.bridgeTaskCompleteCallbacks)[number]): () => void {
+    this.bridgeTaskCompleteCallbacks.push(callback);
+    return () => { const i = this.bridgeTaskCompleteCallbacks.indexOf(callback); if (i > -1) this.bridgeTaskCompleteCallbacks.splice(i, 1); };
+  }
+
+  onBridgeAgentStatus(callback: (typeof this.bridgeAgentStatusCallbacks)[number]): () => void {
+    this.bridgeAgentStatusCallbacks.push(callback);
+    return () => { const i = this.bridgeAgentStatusCallbacks.indexOf(callback); if (i > -1) this.bridgeAgentStatusCallbacks.splice(i, 1); };
+  }
+
+  onBridgeTreeUpdated(callback: (typeof this.bridgeTreeUpdatedCallbacks)[number]): () => void {
+    this.bridgeTreeUpdatedCallbacks.push(callback);
+    return () => { const i = this.bridgeTreeUpdatedCallbacks.indexOf(callback); if (i > -1) this.bridgeTreeUpdatedCallbacks.splice(i, 1); };
+  }
+
+  onBridgeConversationCreated(callback: (typeof this.bridgeConversationCreatedCallbacks)[number]): () => void {
+    this.bridgeConversationCreatedCallbacks.push(callback);
+    return () => { const i = this.bridgeConversationCreatedCallbacks.indexOf(callback); if (i > -1) this.bridgeConversationCreatedCallbacks.splice(i, 1); };
+  }
+
+  onBridgeActionExecuting(callback: (typeof this.bridgeActionExecutingCallbacks)[number]): () => void {
+    this.bridgeActionExecutingCallbacks.push(callback);
+    return () => { const i = this.bridgeActionExecutingCallbacks.indexOf(callback); if (i > -1) this.bridgeActionExecutingCallbacks.splice(i, 1); };
+  }
+
+  onBridgeActionComplete(callback: (typeof this.bridgeActionCompleteCallbacks)[number]): () => void {
+    this.bridgeActionCompleteCallbacks.push(callback);
+    return () => { const i = this.bridgeActionCompleteCallbacks.indexOf(callback); if (i > -1) this.bridgeActionCompleteCallbacks.splice(i, 1); };
+  }
+
+  // ── Process Workflow Engine event registration ──
+
+  onProcessRunStarted(callback: (typeof this.processRunStartedCallbacks)[number]): () => void {
+    this.processRunStartedCallbacks.push(callback);
+    return () => { const i = this.processRunStartedCallbacks.indexOf(callback); if (i > -1) this.processRunStartedCallbacks.splice(i, 1); };
+  }
+
+  onProcessStepStarted(callback: (typeof this.processStepStartedCallbacks)[number]): () => void {
+    this.processStepStartedCallbacks.push(callback);
+    return () => { const i = this.processStepStartedCallbacks.indexOf(callback); if (i > -1) this.processStepStartedCallbacks.splice(i, 1); };
+  }
+
+  onProcessStepOutput(callback: (typeof this.processStepOutputCallbacks)[number]): () => void {
+    this.processStepOutputCallbacks.push(callback);
+    return () => { const i = this.processStepOutputCallbacks.indexOf(callback); if (i > -1) this.processStepOutputCallbacks.splice(i, 1); };
+  }
+
+  onProcessStepFailed(callback: (typeof this.processStepFailedCallbacks)[number]): () => void {
+    this.processStepFailedCallbacks.push(callback);
+    return () => { const i = this.processStepFailedCallbacks.indexOf(callback); if (i > -1) this.processStepFailedCallbacks.splice(i, 1); };
+  }
+
+  onProcessComplete(callback: (typeof this.processCompleteCallbacks)[number]): () => void {
+    this.processCompleteCallbacks.push(callback);
+    return () => { const i = this.processCompleteCallbacks.indexOf(callback); if (i > -1) this.processCompleteCallbacks.splice(i, 1); };
+  }
+
+  onProcessApprovalNeeded(callback: (typeof this.processApprovalNeededCallbacks)[number]): () => void {
+    this.processApprovalNeededCallbacks.push(callback);
+    return () => { const i = this.processApprovalNeededCallbacks.indexOf(callback); if (i > -1) this.processApprovalNeededCallbacks.splice(i, 1); };
+  }
+
+  onProcessCancelled(callback: (typeof this.processCancelledCallbacks)[number]): () => void {
+    this.processCancelledCallbacks.push(callback);
+    return () => { const i = this.processCancelledCallbacks.indexOf(callback); if (i > -1) this.processCancelledCallbacks.splice(i, 1); };
+  }
+
   clearCallbacks(): void {
     // H6: Include messageDeletedCallbacks in cleanup to prevent accumulation on reconnect
     this.messageDeletedCallbacks = [];
@@ -1369,5 +1519,25 @@ export class ChatWebsocketService {
     this.executionStartedCallbacks = [];
     this.executionCompleteCallbacks = [];
     this.agentConceptActivityCallbacks = [];
+    // Bridge callbacks
+    this.proposalNewCallbacks = [];
+    this.proposalApprovedCallbacks = [];
+    this.bridgeTaskCreatedCallbacks = [];
+    this.bridgeTaskContributionCallbacks = [];
+    this.bridgeTaskProgressCallbacks = [];
+    this.bridgeTaskCompleteCallbacks = [];
+    this.bridgeAgentStatusCallbacks = [];
+    this.bridgeTreeUpdatedCallbacks = [];
+    this.bridgeConversationCreatedCallbacks = [];
+    this.bridgeActionExecutingCallbacks = [];
+    this.bridgeActionCompleteCallbacks = [];
+    // Process Workflow Engine
+    this.processRunStartedCallbacks = [];
+    this.processStepStartedCallbacks = [];
+    this.processStepOutputCallbacks = [];
+    this.processStepFailedCallbacks = [];
+    this.processCompleteCallbacks = [];
+    this.processApprovalNeededCallbacks = [];
+    this.processCancelledCallbacks = [];
   }
 }

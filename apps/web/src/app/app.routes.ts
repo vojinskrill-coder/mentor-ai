@@ -75,6 +75,11 @@ export const appRoutes: Route[] = [
           import('./features/tasks/task-hub.component').then((m) => m.TaskHubComponent),
       },
       {
+        path: 'materijali',
+        loadComponent: () =>
+          import('./features/materijali/materijali.component').then((m) => m.MaterijaliComponent),
+      },
+      {
         path: 'team',
         loadComponent: () => import('./team/team.component').then((m) => m.TeamComponent),
         canActivate: [rolesGuard(['TENANT_OWNER', 'ADMIN'])],
@@ -100,6 +105,21 @@ export const appRoutes: Route[] = [
           import('./features/maturity/maturity-dashboard.component').then(
             (m) => m.MaturityDashboardComponent
           ),
+      },
+      {
+        path: 'process-results',
+        loadComponent: () =>
+          import('./features/process-results/process-results.component').then(
+            (m) => m.ProcessResultsComponent
+          ),
+      },
+      {
+        path: 'process-builder',
+        loadComponent: () =>
+          import('./features/process-builder/process-builder.component').then(
+            (m) => m.ProcessBuilderComponent
+          ),
+        canActivate: [rolesGuard(['TENANT_OWNER'])],
       },
       // Platform admin routes
       {
