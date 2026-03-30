@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TenantModule } from '@mentor-ai/shared/tenant-context';
 import { AuthModule } from '../auth/auth.module';
 import { AiGatewayModule } from '../ai-gateway/ai-gateway.module';
@@ -10,6 +10,8 @@ import { FileUploadModule } from '../file-upload/file-upload.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { MaturityModule } from '../maturity/maturity.module';
 import { OpenClawTenantModule } from '../openclaw-tenant/openclaw-tenant.module';
+import { AgentExecutionModule } from '../agent-execution/agent-execution.module';
+import { BridgeModule } from '../bridge/bridge.module';
 import { OnboardingController } from './onboarding.controller';
 import { OnboardingService } from './onboarding.service';
 import { OnboardingMetricService } from './onboarding-metric.service';
@@ -31,6 +33,8 @@ import { OnboardingMetricService } from './onboarding-metric.service';
     WorkflowModule, // Provides WorkflowService for building execution plans
     MaturityModule, // Provides MaturityEngineService for auto-BASIC initialization
     OpenClawTenantModule, // Provides OpenClaw tenant provisioning services
+    AgentExecutionModule, // Provides OpenClawClientService for director briefing
+    forwardRef(() => BridgeModule), // For post-briefing processing (circular with AgentExecution)
   ],
   controllers: [OnboardingController],
   providers: [OnboardingService, OnboardingMetricService],

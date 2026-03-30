@@ -218,6 +218,23 @@ export class GraphStateService implements OnDestroy {
         this.loadGraph();
       }) ?? (() => { /* noop */ })
     );
+
+    // Bridge events — reload graph when tree structure changes
+    this.unsubFns.push(
+      this.wsService.onBridgeTreeUpdated(() => {
+        this.loadGraph();
+      })
+    );
+    this.unsubFns.push(
+      this.wsService.onBridgeTaskComplete(() => {
+        this.loadGraph();
+      })
+    );
+    this.unsubFns.push(
+      this.wsService.onBridgeTaskCreated(() => {
+        this.loadGraph();
+      })
+    );
   }
 
   addNode(node: GraphNode): void {

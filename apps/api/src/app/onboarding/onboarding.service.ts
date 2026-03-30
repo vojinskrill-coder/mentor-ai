@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import {
   TenantStatus as PrismaTenantStatus,
@@ -38,10 +38,12 @@ import {
 } from './templates/quick-task-templates';
 import { FOUNDATION_CATEGORIES } from '../knowledge/config/department-categories';
 import { AppEventBus, APP_EVENTS } from '../events/app-event-bus.service';
+import { BridgeService, BRIDGE_EVENTS } from '../bridge/bridge.service';
 import { WebCrawlerService } from '../openclaw-tenant/web-crawler.service';
 import { BusinessProfileService } from '../openclaw-tenant/business-profile.service';
 import { SoulGeneratorService } from '../openclaw-tenant/soul-generator.service';
 import { OpenClawTenantService } from '../openclaw-tenant/openclaw-tenant.service';
+import { OpenClawClientService } from '../agent-execution/openclaw-client.service';
 
 /**
  * Service for managing the onboarding quick win flow.
@@ -69,6 +71,9 @@ export class OnboardingService {
     private readonly businessProfileService: BusinessProfileService,
     private readonly soulGeneratorService: SoulGeneratorService,
     private readonly openClawTenantService: OpenClawTenantService,
+    private readonly openClawClient: OpenClawClientService,
+    @Inject(forwardRef(() => BridgeService))
+    private readonly bridgeService: BridgeService,
   ) {}
 
   /**
@@ -963,84 +968,117 @@ Kreiraj personalizovani Poslovni Mozak sa tačno 10 prioritizovanih zadataka.`;
       tenantId,
     });
 
-    // Generate initial action plan from business context via embeddings
+    const brainRelayMode = process.env['BRAIN_RELAY_MODE'] === 'true';
+
     let welcomeConversationId: string | null = null;
     let taskIds: string[] = [];
-    try {
-      const planResult = await this.generateInitialPlan(tenantId, userId);
-      welcomeConversationId = planResult.conversationId;
-      taskIds = planResult.taskIds;
-    } catch (err) {
-      this.logger.warn({
-        message: 'Initial plan generation failed (non-blocking)',
-        tenantId,
-        userId,
-        error: err instanceof Error ? err.message : 'Unknown',
-      });
-    }
-
-    // Build execution plan and return planId so frontend can load it
     let planId: string | undefined;
-    if (taskIds.length > 0 && welcomeConversationId) {
+
+    if (brainRelayMode) {
+      // ── AI BRAIN MODE ──
+      // OpenClaw handles all planning, task creation, and execution.
+      // AWAITED — frontend shows loading indicator while brain works.
+      this.logger.log({ message: 'Brain relay mode: awaiting director briefing', tenantId });
+
       try {
-        const plan = await this.workflowService.buildExecutionPlan(
-          taskIds,
-          userId,
-          tenantId,
-          welcomeConversationId
-        );
-        planId = plan.planId;
-        this.logger.log({
-          message: 'Execution plan built for onboarding',
-          planId: plan.planId,
-          taskCount: taskIds.length,
-          tenantId,
-          userId,
-        });
+        const convId = await this.briefOpenClawDirector(tenantId, userId, generatedOutput, taskIds, executionMode);
+        if (convId) welcomeConversationId = convId;
       } catch (err) {
         this.logger.warn({
-          message: 'Plan generation failed (non-blocking)',
+          message: 'OpenClaw director briefing failed',
+          tenantId,
+          error: err instanceof Error ? err.message : 'Unknown',
+        });
+      }
+
+    } else {
+      // ── LEGACY MODE ──
+      // NestJS handles planning, seeding, maturity, and workflow execution.
+
+      // Generate initial action plan from business context via embeddings
+      try {
+        const planResult = await this.generateInitialPlan(tenantId, userId);
+        welcomeConversationId = planResult.conversationId;
+        taskIds = planResult.taskIds;
+      } catch (err) {
+        this.logger.warn({
+          message: 'Initial plan generation failed (non-blocking)',
           tenantId,
           userId,
           error: err instanceof Error ? err.message : 'Unknown',
         });
       }
-    }
 
-    // Story 3.2: Seed Brain pending tasks based on user's department (fire-and-forget)
-    // Loads user's department from DB and seeds concept tasks accordingly
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { department: true, role: true },
-    });
-    this.brainSeedingService
-      .seedPendingTasksForUser(
-        userId,
-        tenantId,
-        (user?.department as string) ?? null,
-        user?.role ?? 'TENANT_OWNER'
-      )
-      .catch((err) => {
-        this.logger.warn({
-          message: 'Brain seeding failed after onboarding (non-blocking)',
+      // Build execution plan and return planId so frontend can load it
+      if (taskIds.length > 0 && welcomeConversationId) {
+        try {
+          const plan = await this.workflowService.buildExecutionPlan(
+            taskIds,
+            userId,
+            tenantId,
+            welcomeConversationId
+          );
+          planId = plan.planId;
+          this.logger.log({
+            message: 'Execution plan built for onboarding',
+            planId: plan.planId,
+            taskCount: taskIds.length,
+            tenantId,
+            userId,
+          });
+        } catch (err) {
+          this.logger.warn({
+            message: 'Plan generation failed (non-blocking)',
+            tenantId,
+            userId,
+            error: err instanceof Error ? err.message : 'Unknown',
+          });
+        }
+      }
+
+      // Story 3.2: Seed Brain pending tasks based on user's department
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { department: true, role: true },
+      });
+      this.brainSeedingService
+        .seedPendingTasksForUser(
           userId,
           tenantId,
-          error: err instanceof Error ? err.message : 'Unknown',
+          (user?.department as string) ?? null,
+          user?.role ?? 'TENANT_OWNER'
+        )
+        .catch((err) => {
+          this.logger.warn({
+            message: 'Brain seeding failed after onboarding (non-blocking)',
+            userId,
+            tenantId,
+            error: err instanceof Error ? err.message : 'Unknown',
+          });
         });
-      });
 
-    // Initialize BASIC maturity stage (fire-and-forget)
-    // Creates assignments + Note TASKs. Execution triggered separately from dashboard.
-    this.maturityEngineService
-      .initializeStage(tenantId, MaturityStage.BASIC, userId)
-      .catch((err) => {
-        this.logger.warn({
-          message: 'Auto-BASIC maturity initialization failed (non-blocking)',
-          tenantId,
-          userId,
-          error: err instanceof Error ? err.message : 'Unknown',
+      // Initialize BASIC maturity stage
+      this.maturityEngineService
+        .initializeStage(tenantId, MaturityStage.BASIC, userId)
+        .catch((err) => {
+          this.logger.warn({
+            message: 'Auto-BASIC maturity initialization failed (non-blocking)',
+            tenantId,
+            userId,
+            error: err instanceof Error ? err.message : 'Unknown',
+          });
         });
-      });
+
+      // Deploy USER.md + AGENTS.md to OpenClaw and brief the director (fire-and-forget)
+      this.briefOpenClawDirector(tenantId, userId, generatedOutput, taskIds, executionMode)
+        .catch((err) => {
+          this.logger.warn({
+            message: 'OpenClaw director briefing failed (non-blocking)',
+            tenantId,
+            error: err instanceof Error ? err.message : 'Unknown',
+          });
+        });
+    } // end legacy mode
 
     this.logger.log({
       message: 'Onboarding completed successfully',
@@ -1071,6 +1109,421 @@ Kreiraj personalizovani Poslovni Mozak sa tačno 10 prioritizovanih zadataka.`;
       planId,
       taskIds: taskIds.length > 0 ? taskIds : undefined,
     };
+  }
+
+  /**
+   * Brief the OpenClaw director agent after onboarding completion.
+   * Writes USER.md + AGENTS.md to Hetzner, then sends the onboarding analysis
+   * and task list so the director can start organizing work.
+   */
+  private async briefOpenClawDirector(
+    tenantId: string,
+    userId: string,
+    generatedOutput: string,
+    taskIds: string[],
+    executionMode?: string,
+  ): Promise<string | null> {
+    // 1. Load tenant profile for USER.md
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true, industry: true, description: true },
+    });
+    if (!tenant) return null;
+
+    // 2. Write USER.md to Hetzner
+    try {
+      await this.openClawTenantService.writeUserMd(tenantId, {
+        companyName: tenant.name,
+        industry: tenant.industry,
+        description: tenant.description ?? undefined,
+        onboardingOutput: generatedOutput.substring(0, 3000),
+        strategy: executionMode === 'YOLO' ? 'AUTONOMNO' : 'MANUALNO',
+        executionMode: executionMode ?? 'MANUAL',
+      });
+      this.logger.log({ message: 'USER.md deployed to OpenClaw', tenantId });
+    } catch (err) {
+      this.logger.warn({
+        message: 'USER.md deployment failed',
+        tenantId,
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+    }
+
+    // 3. Write AGENTS.md to Hetzner
+    try {
+      const bridgeUrl = process.env['OPENCLAW_RELAY_URL']?.replace('/execute', '') ?? 'http://localhost:3000/api';
+      await this.openClawTenantService.writeAgentsMd(tenantId, bridgeUrl);
+      this.logger.log({ message: 'AGENTS.md deployed to OpenClaw', tenantId });
+    } catch (err) {
+      this.logger.warn({
+        message: 'AGENTS.md deployment failed',
+        tenantId,
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+    }
+
+    // 5. Create welcome conversation
+    const conversation = await this.conversationService.createConversation(
+      tenantId, userId, `Poslovni Mozak — ${tenant.name}`,
+    );
+    const welcomeConvId = conversation.id;
+
+    // 5. Build briefing message and save as user message in the conversation
+    const briefing = [
+      `ONBOARDING ZAVRSEN za ${tenant.name} (${tenant.industry}).`,
+      '',
+      `VAZNO — tvoj tenantId za sve Bridge API pozive je: ${tenantId}`,
+      'Koristi TACNO ovaj tenantId u SVAKOM curl pozivu ka mentor-ai-bridge.',
+      '',
+      '=== BIZNIS ANALIZA ===',
+      generatedOutput.substring(0, 2500),
+      '=== KRAJ ANALIZE ===',
+      '',
+      'TVOJ ZADATAK:',
+      '',
+      'KORAK 1 — Pretrazi bazu znanja (obavezno uradi SVE ove pretrage):',
+      `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=prodaja&tenantId=${tenantId}"`,
+      `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=marketing&tenantId=${tenantId}"`,
+      `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=finansije&tenantId=${tenantId}"`,
+      `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=operacije&tenantId=${tenantId}"`,
+      `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=vrednost&tenantId=${tenantId}"`,
+      `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=strategija&tenantId=${tenantId}"`,
+      `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=cena&tenantId=${tenantId}"`,
+      'Iz rezultata odaberi koncepte koji su NAJRELEVANTNIJI za analizu biznisa. Zapamti njihove ID-jeve.',
+      '',
+      'KORAK 2 — Za svaku preporuku kreiraj proposal sa relatedConcepts:',
+      `  curl -s -X POST -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" -H "Content-Type: application/json" "http://100.114.192.85:3000/api/bridge/proposals" -d '{"tenantId":"${tenantId}","canvasBlock":"CANVAS_BLOCK","type":"task_execution","title":"NASLOV","reasoning":"OBRAZLOZENJE","proposedAction":"AKCIJA","estimatedCost":1.5,"priority":"high","relatedConcepts":["CONCEPT_ID"]}'`,
+      '',
+      'PRAVILA ZA NASLOVE I OPISE (OBAVEZNO):',
+      '- title: Konkretan i akcionski. NIKADA ne koristi jednu rec ili kategoriju.',
+      '  LOSE: "Marketing", "Prodaja", "Strategija"',
+      '  DOBRO: "Kreirati cenovnu strategiju za premium pozicioniranje skulptura"',
+      '  DOBRO: "Razviti B2B partnerski program sa arhitektama i dizajnerima"',
+      '  DOBRO: "Implementirati CRM sistem za pracenje prodajnog pipeline-a"',
+      '',
+      '- reasoning: Minimum 4-5 recenica. Objasni CEO-u ZASTO je ovo kriticno. Koristi brojeve.',
+      '  Primer: "Trenutno imate 15 klijenata sa prosecnom vrednoscu od 13K EUR. Povecanje prosecne',
+      '  vrednosti na 25K kroz upsell strategiju bi donelo dodatnih 180K EUR godisnje bez novih',
+      '  klijenata. Bez ovog, rast zavisi iskljucivo od akvizicije koja kosta 5x vise."',
+      '',
+      '- proposedAction: Korak-po-korak plan sa agentima. Minimum 4 koraka.',
+      '  Primer: "1. Research agent istrazuje konkurentske cene (brave-search). 2. Financial agent',
+      '  pravi Excel sa cenovnim modelom (excel-xlsx). 3. Content agent pise prodajni pitch.',
+      '  4. Designer pravi prezentaciju za klijente (generate-presentation). Output: Excel cenovnik,',
+      '  prodajni pitch dokument, prezentacija sa 10 slide-ova."',
+      '',
+      'canvasBlock: KEY_PARTNERS, KEY_ACTIVITIES, KEY_RESOURCES, VALUE_PROPOSITION, CUSTOMER_RELATIONSHIPS, CHANNELS, CUSTOMER_SEGMENTS, REVENUE_STREAMS, COST_STRUCTURE',
+      '',
+      'KREIRAJ MINIMUM 5 predloga. Svaki MORA imati relatedConcepts sa concept ID-jevima iz pretrage.',
+      '',
+      'NA KRAJU OBAVEZNO napisi kratak rezime sta si nasao i sta si kreirao.',
+      'Korisnik ce videti tvoj tekstualni odgovor u chatu. Ako ne napises nista, videce praznu poruku.',
+    ].join('\n');
+
+    await this.conversationService.addMessage(
+      tenantId,
+      welcomeConvId,
+      'USER' as MessageRole,
+      briefing
+    );
+
+    // 6. Send to OpenClaw director and save response
+    if (!this.openClawClient.isConfigured()) {
+      this.logger.warn({ message: 'OpenClaw not configured, skipping director briefing' });
+      return welcomeConvId;
+    }
+
+    try {
+      const result = await this.openClawClient.executeAgent(briefing, {
+        agentId: 'main',
+        sessionId: welcomeConvId,
+        tenantProfile: tenantId,
+        timeoutSeconds: 3600, // 1 hour — matches OpenClaw config timeout
+        // Streaming callbacks — emit WebSocket events in real-time
+        onText: (text) => {
+          // Text chunks from director — could be streamed to chat in future
+          this.logger.debug({ message: 'Brain briefing chunk', tenantId, len: text.length });
+        },
+        onTool: (tool, status, query) => {
+          // Tool events — director is using skills (search_concepts, brave_search, etc.)
+          this.eventBus.emit(BRIDGE_EVENTS.AGENT_STATUS, {
+            tenantId,
+            taskId: welcomeConvId,
+            agent: 'direktor',
+            status: status === 'start' ? 'running' : 'completed',
+            message: status === 'start'
+              ? `Koristi ${tool}${query ? ': ' + query.substring(0, 100) : ''}`
+              : `Završio ${tool}`,
+            timestamp: new Date().toISOString(),
+          });
+          this.logger.log({ message: `Brain tool: ${tool} ${status}`, tenantId, query: query?.substring(0, 50) });
+        },
+        onStatus: (phase) => {
+          this.eventBus.emit(BRIDGE_EVENTS.AGENT_STATUS, {
+            tenantId,
+            taskId: welcomeConvId,
+            agent: 'direktor',
+            status: 'running',
+            message: `Faza: ${phase}`,
+            timestamp: new Date().toISOString(),
+          });
+        },
+      });
+
+      // Save director's response as assistant message in the welcome conversation
+      const directorOutput = result.output || 'Poslovni mozak je analizirao vaš biznis i kreirao predloge. Pogledajte panel Zadaci za detalje.';
+      await this.conversationService.addMessage(
+        tenantId,
+        welcomeConvId,
+        'ASSISTANT' as MessageRole,
+        directorOutput
+      );
+
+      // Process director's response: extract concepts, create proposals, seed tree
+      if (result.output) {
+        await this.processDirectorResponse(tenantId, userId, welcomeConvId, result.output, generatedOutput);
+      }
+
+      this.eventBus.emit(BRIDGE_EVENTS.AGENT_STATUS, {
+        tenantId,
+        taskId: welcomeConvId,
+        agent: 'direktor',
+        status: 'completed',
+        message: 'Briefing završen — preporuke i koncepti kreirani',
+        timestamp: new Date().toISOString(),
+      });
+
+      this.logger.log({
+        message: 'OpenClaw director briefed, response processed, proposals created',
+        tenantId,
+        conversationId: welcomeConvId,
+        success: result.success,
+        outputLength: result.output?.length ?? 0,
+      });
+    } catch (err) {
+      // Save fallback message
+      await this.conversationService.addMessage(
+        tenantId,
+        welcomeConvId,
+        'ASSISTANT' as MessageRole,
+        'Poslovni mozak je primio analizu i razmišlja o preporukama. Predlozi će se pojaviti uskoro u panelu Zadaci.'
+      ).catch(() => {});
+
+      this.logger.error({
+        message: 'Failed to brief OpenClaw director',
+        tenantId,
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+    }
+
+    return welcomeConvId;
+  }
+
+  /**
+   * Process director's response: extract recommendations, match to concepts,
+   * create proposals and tasks visible in the UI.
+   */
+  private async processDirectorResponse(
+    tenantId: string,
+    userId: string,
+    conversationId: string,
+    directorResponse: string,
+    businessAnalysis: string,
+  ): Promise<void> {
+    this.logger.log({ message: 'Processing director response', tenantId, responseLen: directorResponse.length });
+
+    // 1. Extract recommendations from director's numbered list
+    const recommendations = this.extractRecommendations(directorResponse);
+    this.logger.log({ message: `Extracted ${recommendations.length} recommendations`, tenantId });
+
+    if (recommendations.length === 0) {
+      // Fallback: use the business analysis to find concepts
+      const fallbackRecs = this.extractRecommendations(businessAnalysis);
+      recommendations.push(...fallbackRecs.slice(0, 10));
+    }
+
+    // 2. For each recommendation, search knowledge graph and create task + proposal
+    const createdTaskIds: string[] = [];
+    const matchedConceptIds: string[] = [];
+
+    for (const rec of recommendations.slice(0, 15)) {
+      try {
+        // Search for matching concept — try multiple search strategies
+        let conceptId: string | null = null;
+
+        // Strategy 1: Search by title
+        let concepts = await this.bridgeService.searchConcepts(tenantId, rec.title, 3);
+        const firstMatch = concepts[0];
+        if (firstMatch) {
+          conceptId = firstMatch.id;
+        }
+
+        // Strategy 2: Extract key business terms and search each
+        if (!conceptId) {
+          const keywords = this.extractKeyTerms(rec.title + ' ' + rec.description);
+          for (const kw of keywords) {
+            concepts = await this.bridgeService.searchConcepts(tenantId, kw, 2);
+            const kwMatch = concepts[0];
+            if (kwMatch) {
+              conceptId = kwMatch.id;
+              break;
+            }
+          }
+        }
+
+        if (conceptId && !matchedConceptIds.includes(conceptId)) {
+          matchedConceptIds.push(conceptId);
+        }
+
+        // Determine canvas block from recommendation keywords
+        const canvasBlock = this.inferCanvasBlock(rec.title + ' ' + rec.description);
+
+        // Create proposal (visible in Task Hub left panel)
+        await this.bridgeService.createProposal({
+          tenantId,
+          canvasBlock,
+          type: 'task_execution',
+          title: rec.title,
+          reasoning: rec.description,
+          proposedAction: rec.description,
+          estimatedCost: 1.5,
+          priority: rec.priority ?? 'medium',
+          relatedConcepts: conceptId ? [conceptId] : [],
+        });
+
+        // Also create a TASK (visible in Task Hub right panel)
+        const task = await this.bridgeService.createTask({
+          tenantId,
+          title: rec.title,
+          content: rec.description,
+          conceptId: conceptId ?? undefined,
+          expectedOutcome: rec.expectedOutcome,
+        });
+
+        createdTaskIds.push(task.id);
+      } catch (err) {
+        this.logger.warn({
+          message: 'Failed to process recommendation',
+          title: rec.title,
+          error: err instanceof Error ? err.message : 'Unknown',
+        });
+      }
+    }
+
+    // 3. Emit tree update so frontend refreshes the concept tree
+    if (matchedConceptIds.length > 0) {
+      this.eventBus.emit(BRIDGE_EVENTS.TREE_UPDATED, {
+        tenantId,
+        action: 'onboarding_concepts_linked',
+        conceptIds: matchedConceptIds,
+      });
+    }
+
+    this.logger.log({
+      message: 'Director response processed',
+      tenantId,
+      tasksCreated: createdTaskIds.length,
+      conceptsMatched: matchedConceptIds.length,
+      proposalsCreated: recommendations.length,
+    });
+  }
+
+  /**
+   * Extract structured recommendations from AI text.
+   * Handles numbered lists, markdown headings, and bullet points.
+   */
+  private extractRecommendations(text: string): Array<{
+    title: string;
+    description: string;
+    priority?: string;
+    expectedOutcome?: string;
+  }> {
+    const recommendations: Array<{
+      title: string;
+      description: string;
+      priority?: string;
+      expectedOutcome?: string;
+    }> = [];
+
+    let match: RegExpExecArray | null;
+
+    // Pattern 1: "### N. **Title** (Category)\n**Zašto:** ...\n**Akcije:** ..."
+    // This is the director's preferred format
+    const heading = /###?\s*\d*\.?\s*\*\*([^*]+)\*\*[^\n]*\n((?:(?!###?\s)[\s\S])*?)(?=###?\s|\n##\s|$)/g;
+    while ((match = heading.exec(text)) !== null) {
+      const title = (match[1] ?? '').trim();
+      const body = (match[2] ?? '').trim();
+      if (title.length > 5 && !recommendations.some(r => r.title === title)) {
+        // Extract priority from keywords
+        const priority = body.toLowerCase().includes('kritič') || body.toLowerCase().includes('kritičan')
+          ? 'critical' : body.toLowerCase().includes('visok') ? 'high' : 'medium';
+        recommendations.push({ title, description: body.substring(0, 800), priority });
+      }
+    }
+
+    if (recommendations.length >= 3) return recommendations;
+
+    // Pattern 2: Numbered bold items: "1. **Title**: description" or "1. **Title** - description"
+    const numberedBold = /\d+\.\s*\*\*([^*]+)\*\*[:\s-]*([^\n]+(?:\n(?!\d+\.\s*\*\*).*)*)/g;
+    while ((match = numberedBold.exec(text)) !== null) {
+      const title = (match[1] ?? '').trim();
+      const desc = (match[2] ?? '').trim();
+      if (title.length > 5 && !recommendations.some(r => r.title === title)) {
+        recommendations.push({ title, description: desc.substring(0, 800) });
+      }
+    }
+
+    if (recommendations.length >= 3) return recommendations;
+
+    // Pattern 3: Plain numbered: "1. Title\n description"
+    const numbered = /\d+\.\s+([^\n*]+)\n((?:(?!\d+\.).*\n?){1,5})/g;
+    while ((match = numbered.exec(text)) !== null) {
+      const title = (match[1] ?? '').trim();
+      const desc = (match[2] ?? '').trim();
+      if (title.length > 10 && !recommendations.some(r => r.title === title)) {
+        recommendations.push({ title, description: desc.substring(0, 800) });
+      }
+    }
+
+    return recommendations;
+  }
+
+  /**
+   * Infer BMC canvas block from task description keywords.
+   */
+  /**
+   * Extract key business terms from text for concept search.
+   */
+  private extractKeyTerms(text: string): string[] {
+    const terms: string[] = [];
+    const businessTerms = [
+      'prodaj', 'marketing', 'finansij', 'operacij', 'strategij', 'vrednost',
+      'klijent', 'cen', 'prihod', 'trošk', 'budžet', 'brand', 'konkurenc',
+      'lead', 'pipeline', 'ugovor', 'profit', 'investicij', 'digitalizacij',
+      'automatizacij', 'proces', 'tim', 'zaposleni', 'obuk', 'partner',
+      'kanal', 'segment', 'retencij', 'lojalnost', 'cash flow', 'ROI',
+    ];
+    const lower = text.toLowerCase();
+    for (const term of businessTerms) {
+      if (lower.includes(term)) {
+        terms.push(term);
+      }
+    }
+    return terms.slice(0, 5);
+  }
+
+  private inferCanvasBlock(text: string): string {
+    const lower = text.toLowerCase();
+    if (lower.match(/partner|dobavljač|supplier|vendor/)) return 'KEY_PARTNERS';
+    if (lower.match(/prodaj|sales|lead|outreach|klijent.*kontakt/)) return 'CUSTOMER_SEGMENTS';
+    if (lower.match(/marketing|kampanj|brand|advertis|reklam|SEO|content/)) return 'CHANNELS';
+    if (lower.match(/cen[aou]|pricing|pretplat|subscription|revenue|prihod/)) return 'REVENUE_STREAMS';
+    if (lower.match(/trošk|cost|budžet|budget|ušteda/)) return 'COST_STRUCTURE';
+    if (lower.match(/vrednost|value|ponuda|proposition|benefit/)) return 'VALUE_PROPOSITION';
+    if (lower.match(/odnos|relationship|lojalnost|loyalty|retencij|retention/)) return 'CUSTOMER_RELATIONSHIPS';
+    if (lower.match(/operacij|process|efikasnost|automat|workflow/)) return 'KEY_ACTIVITIES';
+    if (lower.match(/resurs|resource|tim|team|talent|zaposleni/)) return 'KEY_RESOURCES';
+    return 'KEY_ACTIVITIES'; // default
   }
 
   /**

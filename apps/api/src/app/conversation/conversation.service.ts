@@ -462,6 +462,13 @@ export class ConversationService {
       }
     }
 
+    // 3b. Also include AI-discovered concepts (tenant-specific)
+    const aiConcepts = await this.conceptService.findTenantConcepts(tenantId);
+    this.logger.log({ message: 'AI-discovered concepts for tree', count: aiConcepts.length, tenantId });
+    for (const c of aiConcepts) {
+      allConceptIds.add(c.id);
+    }
+
     if (allConceptIds.size === 0) {
       return { tree: [], uncategorized: [] };
     }
@@ -477,27 +484,36 @@ export class ConversationService {
     const neededCurriculumIds = new Set<string>();
     const conceptToCurriculum = new Map<string, string>(); // conceptId → curriculumId
 
+    // Track which concepts are AI-discovered (tenant-specific) — they bypass category filtering
+    const aiConceptIdSet = new Set(aiConcepts.map(c => c.id));
+
     for (const [conceptId, info] of conceptMap) {
-      // Filter by visible categories (strip number prefix from DB category for comparison)
-      const normalizedCategory = info.category.replace(/^\d+(\.\d+)*\.?\s+/, '');
-      if (visibleCategories && !visibleCategories.includes(normalizedCategory)) {
-        continue;
+      // AI-discovered concepts bypass category filtering
+      if (!aiConceptIdSet.has(conceptId)) {
+        const normalizedCategory = info.category.replace(/^\d+(\.\d+)*\.?\s+/, '');
+        if (visibleCategories && !visibleCategories.includes(normalizedCategory)) {
+          continue;
+        }
       }
 
       // Resolve curriculum ID — fall back to slug, stripping number prefix if needed
       let curriculumId = info.curriculumId ?? info.slug;
-      if (!this.curriculumService.findNode(curriculumId)) {
+      let foundInCurriculum = !!this.curriculumService.findNode(curriculumId);
+      if (!foundInCurriculum) {
         const stripped = curriculumId.replace(/^\d+-/, '');
         if (this.curriculumService.findNode(stripped)) {
           curriculumId = stripped;
+          foundInCurriculum = true;
         }
       }
-      conceptToCurriculum.set(conceptId, curriculumId);
 
-      // Add this node and all its ancestors to the needed set
-      const chain = this.curriculumService.getAncestorChain(curriculumId);
-      for (const ancestor of chain) {
-        neededCurriculumIds.add(ancestor.id);
+      // Only map to curriculum if the node was actually found
+      if (foundInCurriculum) {
+        conceptToCurriculum.set(conceptId, curriculumId);
+        const chain = this.curriculumService.getAncestorChain(curriculumId);
+        for (const ancestor of chain) {
+          neededCurriculumIds.add(ancestor.id);
+        }
       }
     }
 
@@ -550,6 +566,56 @@ export class ConversationService {
       });
     }
 
+    // 7b. Group unmapped concepts by matching root category
+    const mappedConceptIds = new Set(conceptToCurriculum.keys());
+    // Map English/mixed categories to root curriculum IDs
+    const CATEGORY_TO_ROOT: Record<string, string> = {
+      'marketing': 'marketing', 'Marketing': 'marketing',
+      'prodaja': 'prodaja', 'Prodaja': 'prodaja', 'sales': 'prodaja', 'Sales': 'prodaja',
+      'finansije': 'finansije', 'Finansije': 'finansije', 'finance': 'finansije', 'Finance': 'finansije',
+      'operacije': 'operacije-i-proizvodnja', 'Operacije': 'operacije-i-proizvodnja',
+      'operations': 'operacije-i-proizvodnja', 'Operations': 'operacije-i-proizvodnja',
+      'proizvodnja': 'operacije-i-proizvodnja',
+      'strategija': 'strategija', 'Strategija': 'strategija', 'strategy': 'strategija', 'Strategy': 'strategija',
+      'vrednost': 'vrednost', 'Vrednost': 'vrednost', 'value': 'vrednost', 'Value': 'vrednost',
+      'technology': 'razvoj-i-tehnologija', 'Technology': 'razvoj-i-tehnologija',
+      'razvoj': 'razvoj-i-tehnologija', 'Razvoj': 'razvoj-i-tehnologija',
+      'quality': 'operacije-i-proizvodnja', 'Quality': 'operacije-i-proizvodnja',
+      'customer service': 'prodaja', 'Customer Service': 'prodaja',
+      'poslovni modeli': 'poslovni-modeli', 'Poslovni Modeli': 'poslovni-modeli',
+      'hr': 'ljudski-resursi', 'HR': 'ljudski-resursi', 'Human Resources': 'ljudski-resursi',
+      'legal': 'operacije-i-proizvodnja', 'Legal': 'operacije-i-proizvodnja',
+      'logistics': 'operacije-i-proizvodnja', 'Logistics': 'operacije-i-proizvodnja',
+      'innovation': 'razvoj-i-tehnologija', 'Innovation': 'razvoj-i-tehnologija',
+      'design': 'marketing', 'Design': 'marketing',
+      'Inovacije': 'razvoj-i-tehnologija',
+      'Pravo': 'operacije-i-proizvodnja',
+      'Logistika': 'operacije-i-proizvodnja',
+    };
+    // Group unmapped concepts by their target root
+    const unmappedByRoot = new Map<string, ConceptHierarchyNode[]>();
+    for (const [conceptId, info] of conceptMap) {
+      if (mappedConceptIds.has(conceptId)) continue;
+      const completed = completedMap.get(conceptId);
+      const pending = pendingMap.get(conceptId);
+      const conv = convMap.get(conceptId);
+      const node: ConceptHierarchyNode = {
+        curriculumId: `ai-${conceptId}`,
+        label: info.name,
+        conceptId,
+        children: [],
+        conversationCount: (convsByConceptId.get(conceptId) ?? []).length,
+        conversations: (convsByConceptId.get(conceptId) ?? []) as Conversation[],
+        status: completed ? 'completed' : pending ? 'pending' : undefined,
+        completedByUserId: completed?.userId,
+        pendingNoteId: pending?.noteId,
+        linkedConversationId: conv?.conversationId,
+      };
+      const rootId = CATEGORY_TO_ROOT[info.category] ?? CATEGORY_TO_ROOT[info.category.toLowerCase()] ?? 'ostalo';
+      if (!unmappedByRoot.has(rootId)) unmappedByRoot.set(rootId, []);
+      unmappedByRoot.get(rootId)!.push(node);
+    }
+
     // 8. Wire up parent-child relationships
     const rootNodes: ConceptHierarchyNode[] = [];
 
@@ -561,6 +627,30 @@ export class ConversationService {
       } else {
         const parent = treeNodeMap.get(currNode.parentId)!;
         parent.children.push(treeNode);
+      }
+    }
+
+    // 8b. Attach unmapped AI concepts to matching root nodes (or create new roots)
+    const rootLabels: Record<string, string> = {
+      'marketing': 'Marketing', 'prodaja': 'Prodaja', 'finansije': 'Finansije',
+      'operacije-i-proizvodnja': 'Operacije i Proizvodnja', 'strategija': 'Strategija',
+      'vrednost': 'Vrednost', 'razvoj-i-tehnologija': 'Razvoj i Tehnologija',
+      'poslovni-modeli': 'Poslovni Modeli', 'ostalo': 'Ostalo',
+    };
+    for (const [rootId, concepts] of unmappedByRoot) {
+      // Try to find existing root node
+      const existingRoot = rootNodes.find(r => r.curriculumId === rootId)
+        ?? rootNodes.find(r => String(r.label).toLowerCase().includes(rootId.split('-')[0] as string));
+      if (existingRoot) {
+        existingRoot.children.push(...concepts);
+      } else {
+        rootNodes.push({
+          curriculumId: rootId,
+          label: rootLabels[rootId] ?? rootId,
+          children: concepts,
+          conversationCount: 0,
+          conversations: [],
+        });
       }
     }
 

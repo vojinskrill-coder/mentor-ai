@@ -16,7 +16,7 @@ import { BudgetService } from './budget.service';
 import { AgentExecutionEventBus } from './agent-execution-event-bus.service';
 
 @Module({
-  imports: [ConfigModule, TenantModule, AuthModule, AiGatewayModule, NotesModule, forwardRef(() => KnowledgeModule), WebSearchModule],
+  imports: [ConfigModule, TenantModule, AuthModule, AiGatewayModule, forwardRef(() => NotesModule), forwardRef(() => KnowledgeModule), WebSearchModule],
   controllers: [AgentExecutionController],
   providers: [
     AgentExecutionService,

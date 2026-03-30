@@ -37,6 +37,7 @@ import { HeadlessExecutorService } from '../maturity/headless-executor.service';
 import { MaturityEngineService } from '../maturity/maturity-engine.service';
 import { WsServerHolder } from '../maturity/ws-server-holder.service';
 import { AppEventBus, APP_EVENTS } from '../events/app-event-bus.service';
+import { BRIDGE_EVENTS } from '../bridge/bridge.service';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { createId } from '@paralleldrive/cuid2';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
@@ -165,9 +166,10 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     }
 
     // Find recently active executions (not stale) that can be resumed
+    const brainRelay = this.configService.get<string>('BRAIN_RELAY_MODE', 'false') === 'true';
     const resumable = await this.executionStateService.getAllActiveExecutions();
     for (const exec of resumable) {
-      if (exec.type === 'yolo' || exec.type === 'domain-yolo') {
+      if ((exec.type === 'yolo' || exec.type === 'domain-yolo') && !brainRelay) {
         this.scheduleYoloResume(exec);
       }
       // Workflows with user-confirmation steps cannot auto-resume
@@ -213,6 +215,47 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
         });
       }
     });
+
+    // Subscribe to Bridge events and broadcast to ALL connected clients
+    // (Room-based targeting had socketsInRoom=0 issue; using global emit instead)
+    for (const eventName of Object.values(BRIDGE_EVENTS)) {
+      this.appEventBus.on(eventName, (payload) => {
+        try {
+          if (this.server) {
+            const wsEventName = eventName.replace('bridge.', '').replace(/\./g, ':');
+            // Emit to all connected sockets — frontend filters by tenantId if needed
+            this.server.emit(wsEventName, payload);
+            this.logger.log({
+              message: 'Bridge event broadcast (global)',
+              wsEvent: wsEventName,
+              tenantId: payload['tenantId'],
+            });
+
+            // Also emit agent:concept-activity for graph view when agent status changes
+            if (eventName === BRIDGE_EVENTS.AGENT_STATUS && payload['taskId']) {
+              this.prisma.note.findUnique({
+                where: { id: payload['taskId'] as string },
+                select: { conceptId: true },
+              }).then((note) => {
+                if (note?.conceptId) {
+                  this.server.emit('agent:concept-activity', {
+                    agentType: payload['agent'] ?? 'direktor',
+                    conceptId: note.conceptId,
+                    status: payload['status'] === 'completed' ? 'completed' : 'started',
+                  });
+                }
+              }).catch(() => {});
+            }
+          }
+        } catch (err) {
+          this.logger.error({
+            message: 'Failed to broadcast bridge event',
+            eventName,
+            error: err instanceof Error ? err.message : 'Unknown',
+          });
+        }
+      });
+    }
 
     // Daily event journal cleanup
     setInterval(
@@ -809,6 +852,160 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     }
   }
 
+  /**
+   * Brain Relay Mode: Thin gateway that forwards messages to OpenClaw
+   * without any NestJS-side intelligence (no enrichment, no auto-actions).
+   * OpenClaw handles all thinking via SOUL.md + mentor-ai-bridge skill.
+   *
+   * Toggle: Set BRAIN_RELAY_MODE=true in .env to enable.
+   */
+  private async handleMessageRelay(
+    client: Socket,
+    authenticatedClient: AuthenticatedSocket,
+    conversationId: string,
+    content: string,
+    attachmentIds?: string[],
+    isRegenerate?: boolean
+  ): Promise<void> {
+    // 1. Extract attachment text if provided
+    let attachmentContext = '';
+    if (attachmentIds?.length) {
+      attachmentContext = await this.attachmentsService
+        .getExtractedText(attachmentIds, authenticatedClient.tenantId)
+        .catch(() => '');
+    }
+
+    // 2. Save user message (skip on regeneration)
+    let userMessage: { id: string } | undefined;
+    if (!isRegenerate) {
+      userMessage = await this.conversationService.addMessage(
+        authenticatedClient.tenantId,
+        conversationId,
+        MessageRole.USER,
+        content
+      );
+
+      // Link attachments
+      if (attachmentIds?.length && userMessage) {
+        await Promise.all(
+          attachmentIds.map((attId) =>
+            this.attachmentsService
+              .linkToMessage(attId, userMessage!.id, authenticatedClient.tenantId)
+              .catch(() => {})
+          )
+        );
+      }
+
+      client.emit('chat:message-received', {
+        messageId: userMessage.id,
+        role: 'USER',
+      });
+    }
+
+    // 3. Forward to OpenClaw — no enrichment, no context building
+    const messageToSend = attachmentContext
+      ? `${attachmentContext}\n\n${content}`
+      : content;
+
+    let fullContent = '';
+    let chunkIndex = 0;
+
+    if (this.openClawClient.isConfigured()) {
+      const ocResult = await this.openClawClient.executeAgent(messageToSend, {
+        agentId: 'main',
+        sessionId: conversationId,
+        tenantProfile: authenticatedClient.tenantId,
+        onText: (text) => {
+          fullContent += text;
+          client.emit('chat:message-chunk', { content: text, index: chunkIndex++ });
+        },
+        onTool: (tool, status, query) => {
+          if (status === 'start') {
+            client.emit('chat:research-phase', { phase: 'researching', tool, query });
+          }
+        },
+      });
+
+      if (!ocResult.success) {
+        // Fallback to AiGateway on OpenClaw failure
+        this.logger.warn({ message: 'OpenClaw relay failed, falling back to AiGateway', error: ocResult.error });
+        fullContent = '';
+        chunkIndex = 0;
+
+        const conversation = await this.conversationService.getConversation(
+          authenticatedClient.tenantId, conversationId, authenticatedClient.userId
+        );
+        const messages = conversation.messages.map((m) => ({
+          role: m.role.toLowerCase() as 'user' | 'assistant',
+          content: m.content,
+        }));
+
+        await this.aiGatewayService.streamCompletionWithContext(
+          messages,
+          {
+            tenantId: authenticatedClient.tenantId,
+            userId: authenticatedClient.userId,
+            conversationId,
+          },
+          (chunk: string) => {
+            fullContent += chunk;
+            client.emit('chat:message-chunk', { content: chunk, index: chunkIndex++ });
+          }
+        );
+      }
+    } else {
+      // No OpenClaw — fallback to AiGateway
+      const conversation = await this.conversationService.getConversation(
+        authenticatedClient.tenantId, conversationId, authenticatedClient.userId
+      );
+      const messages = conversation.messages.map((m) => ({
+        role: m.role.toLowerCase() as 'user' | 'assistant',
+        content: m.content,
+      }));
+
+      await this.aiGatewayService.streamCompletionWithContext(
+        messages,
+        {
+          tenantId: authenticatedClient.tenantId,
+          userId: authenticatedClient.userId,
+          conversationId,
+        },
+        (chunk: string) => {
+          fullContent += chunk;
+          client.emit('chat:message-chunk', { content: chunk, index: chunkIndex++ });
+        }
+      );
+    }
+
+    // 4. Save AI message
+    const aiMessage = await this.conversationService.addMessage(
+      authenticatedClient.tenantId,
+      conversationId,
+      MessageRole.ASSISTANT,
+      fullContent
+    );
+
+    // 5. Emit completion (minimal metadata — no confidence, no citations from NestJS)
+    client.emit('chat:complete', {
+      messageId: aiMessage.id,
+      fullContent,
+      metadata: {
+        totalChunks: chunkIndex,
+        confidence: null,
+        citations: [],
+        suggestedActions: undefined,
+      },
+    });
+
+    this.logger.log({
+      message: 'Chat message processed (relay mode)',
+      conversationId,
+      userId: authenticatedClient.userId,
+      aiMessageId: aiMessage.id,
+      contentLength: fullContent.length,
+    });
+  }
+
   @SubscribeMessage('chat:message-send')
   async handleMessage(
     @ConnectedSocket() client: Socket,
@@ -851,6 +1048,29 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
         type: 'message_too_long',
         message: `Message cannot exceed ${MAX_MESSAGE_LENGTH} characters`,
       });
+      return;
+    }
+
+    // ── BRAIN RELAY MODE ──
+    // When enabled, forward directly to OpenClaw without NestJS intelligence.
+    // Toggle: BRAIN_RELAY_MODE=true in .env
+    const relayMode = this.configService.get<string>('BRAIN_RELAY_MODE', 'false') === 'true';
+    if (relayMode) {
+      try {
+        await this.handleMessageRelay(
+          client, authenticatedClient, conversationId, content, attachmentIds, payload._isRegenerate
+        );
+      } catch (error) {
+        this.logger.error({
+          message: 'Relay mode error',
+          conversationId,
+          error: error instanceof Error ? error.message : 'Unknown',
+        });
+        client.emit('chat:error', {
+          type: 'relay_error',
+          message: error instanceof Error ? error.message : 'Failed to process message',
+        });
+      }
       return;
     }
 
@@ -2536,6 +2756,15 @@ Odgovori SAMO sa validnim JSON nizom:
     @MessageBody()
     payload: { taskIds: string[]; conversationId: string; autoPopuni?: boolean }
   ): Promise<void> {
+    // Block old pipeline in brain relay mode
+    if (this.configService.get<string>('BRAIN_RELAY_MODE', 'false') === 'true') {
+      client.emit('workflow:error', {
+        message: 'Brain relay mode aktivan — koristite novi UI za pokretanje zadataka.',
+        conversationId: payload.conversationId,
+      });
+      return;
+    }
+
     const auth = client as AuthenticatedSocket;
     const { userId, tenantId } = auth;
 
@@ -3734,6 +3963,10 @@ Odgovori SAMO sa validnim JSON nizom:
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { conversationId: string }
   ): Promise<void> {
+    if (this.configService.get<string>('BRAIN_RELAY_MODE', 'false') === 'true') {
+      client.emit('workflow:error', { message: 'Brain relay mode aktivan — YOLO isključen.', conversationId: payload.conversationId });
+      return;
+    }
     const authenticatedClient = client as AuthenticatedSocket;
 
     try {
@@ -3964,6 +4197,10 @@ Odgovori SAMO sa validnim JSON nizom:
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { conversationId: string; category: string }
   ): Promise<void> {
+    if (this.configService.get<string>('BRAIN_RELAY_MODE', 'false') === 'true') {
+      client.emit('workflow:error', { message: 'Brain relay mode aktivan — domain YOLO isključen.', conversationId: payload.conversationId });
+      return;
+    }
     const authenticatedClient = client as AuthenticatedSocket;
 
     try {

@@ -1,0 +1,37 @@
+
+
+## KRITICNO PRAVILO: Uvek Vrati Materijal
+
+SVAKI zavrsen zadatak MORA imati minimum 1 deliverable:
+- Ako je rezultat dokument → Excel (.xlsx) ili prezentacija (.pptx)
+- Ako je rezultat plan → Excel sa koracima, rokovima, odgovornima
+- Ako je rezultat analiza → Excel sa podacima i grafikonima
+- Ako je rezultat aplikacija → hostuj je i vrati URL (http://91.98.231.87:PORT)
+- Ako je rezultat vizual → slika (.png, .jpg)
+
+NIKADA ne zavrsavaj task sa samo tekstom. Tekst je objasnjenje UZ deliverable, ne zamena za njega.
+
+Primer LOSE prakse:
+- result: "Napisao sam plan koji ima 5 tacaka..." (SAMO TEKST = NEPRIHVATLJIVO)
+
+Primer DOBRE prakse:
+- result: "Kreirao plan sa 5 koraka" + files: [{name: "plan.xlsx", ...}]
+- result: "Landing page dostupan" + files: [{name: "URL: http://91.98.231.87:8001"}]
+
+## KRITICNO PRAVILO: Koristi Postojece Koncepte
+
+Pre nego sto kreiras NOVI koncept:
+1. PRETRAZUJ postojece: GET /api/bridge/concepts/search?q=KLJUCNA_REC&tenantId=tnt_rljn1gj4cgxoph0hxfohv6l4
+2. Pretrazuj na SRPSKOM I ENGLESKOM (baza ima oboje)
+3. Ako nadjes slican koncept — koristi NJEGA, ne pravi novi
+4. Novi koncept pravi SAMO ako nista slicno ne postoji
+
+Kada kreiras novi koncept, OBAVEZNO postavi category na SRPSKOM:
+- Marketing (ne "Marketing Strategy")
+- Prodaja (ne "Sales")
+- Finansije (ne "Finance")
+- Operacije (ne "Operations")
+- Strategija (ne "Strategy")
+- Vrednost (ne "Value")
+- Razvoj (ne "Technology")
+- Poslovni Modeli (ne "Business Models")

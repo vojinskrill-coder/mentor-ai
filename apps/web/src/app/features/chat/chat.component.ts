@@ -12,6 +12,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
+import { environment } from '../../../environments/environment';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { combineLatest, firstValueFrom, take } from 'rxjs';
@@ -3818,6 +3819,32 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
   async onRunAgents(taskIds: string[]): Promise<void> {
     if (taskIds.length === 0) return;
+
+    // ── BRAIN RELAY MODE: send to OpenClaw directly ──
+    if ((environment as any).brainRelayMode) {
+      this.isGeneratingPlan$.set(true);
+      try {
+        const res = await fetch('/api/v1/notes/execute-via-brain', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ taskIds }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          this.isGeneratingPlan$.set(false);
+          // Tasks sent to brain. Status updates will come via WebSocket.
+        } else {
+          this.isGeneratingPlan$.set(false);
+          this.showError(data.detail || 'Greška pri slanju zadataka mozgu.');
+        }
+      } catch {
+        this.isGeneratingPlan$.set(false);
+        this.showError('Greška pri komunikaciji sa serverom.');
+      }
+      return;
+    }
+
+    // ── LEGACY MODE: old pipeline ──
     // C3: Busy guard — prevent double-click / overlapping executions
     if (this.isParallelExecuting$() || this.isGeneratingPlan$() || this.isExecutingWorkflow$())
       return;
@@ -3828,12 +3855,10 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!conversationId) {
       const task = this.conversationNotes?.notes()?.find((n) => taskIds.includes(n.id));
       if (task?.conversationId) {
-        // Task already belongs to a conversation — navigate to it
         conversationId = task.conversationId;
         await this.loadConversation(conversationId);
         this.router.navigate(['/chat', conversationId]);
       } else {
-        // No conversation exists — create one under the task's concept
         try {
           const conceptId = task?.conceptId ?? undefined;
           const title = task?.title ? `${task.title}` : 'Izvršavanje zadatka';
@@ -3853,9 +3878,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     }
 
-    // C1: Set plan generation loading state before emitting
     this.isGeneratingPlan$.set(true);
-    // H12: Safety timeout — clear generating state if no response in 60s
     if (this.planGenerationTimeout) clearTimeout(this.planGenerationTimeout);
     this.planGenerationTimeout = setTimeout(() => {
       if (this.isGeneratingPlan$() && !this.parallelBatchId$()) {
@@ -3863,7 +3886,6 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         this.showError('Generisanje plana je isteklo. Pokušajte ponovo.');
       }
     }, 60000);
-    // Use parallel popuni — all tasks execute simultaneously
     this.chatWsService.emitParallelPopuni(taskIds, conversationId, this.autoAiPopuni$());
   }
 
@@ -3922,6 +3944,12 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Story 3.2: YOLO mode — autonomous execution without plan review */
   async onRunBrainYolo(): Promise<void> {
+    // In brain relay mode, YOLO is disabled — OpenClaw brain handles autonomous execution
+    if ((environment as any).brainRelayMode) {
+      this.showError('Autonomni režim je pod kontrolom poslovnog mozga. Koristite Zadaci panel.');
+      return;
+    }
+
     const folderName = this.folderName$();
     if (!folderName) return;
 

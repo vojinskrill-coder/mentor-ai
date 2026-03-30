@@ -7,15 +7,21 @@ import {
   Body,
   Param,
   Query,
+  Res,
   UseGuards,
   HttpCode,
   HttpStatus,
+  Inject,
+  forwardRef,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../auth/strategies/jwt.strategy';
 import { NotesService } from './notes.service';
+import { BridgeService } from '../bridge/bridge.service';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
 import { CreateCommentDto, UpdateCommentDto } from './dto/comment.dto';
 import { TaskHubQueryDto } from './dto/task-hub-query.dto';
@@ -23,7 +29,11 @@ import { TaskHubQueryDto } from './dto/task-hub-query.dto';
 @Controller('v1/notes')
 @UseGuards(JwtAuthGuard)
 export class NotesController {
-  constructor(private readonly notesService: NotesService) {}
+  constructor(
+    private readonly notesService: NotesService,
+    @Inject(forwardRef(() => BridgeService))
+    private readonly bridgeService: BridgeService,
+  ) {}
 
   /**
    * Create a new note (manual).
@@ -104,6 +114,110 @@ export class NotesController {
     const notes = await this.notesService.getByConcept(conceptId, user.userId, user.tenantId);
     return { data: notes };
   }
+
+  // ── Brain Proposals + Actions (must be BEFORE parametric :id route) ──
+
+  @Get('proposals')
+  async getProposals(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query('status') status?: string,
+  ) {
+    return this.bridgeService.getProposals(user.tenantId, status);
+  }
+
+  @Patch('proposals/:id/approve')
+  async approveProposal(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') id: string,
+  ) {
+    return this.bridgeService.updateProposal(id, {
+      status: 'approved',
+      approvedBy: user.userId,
+    });
+  }
+
+  @Patch('proposals/:id/reject')
+  async rejectProposal(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.bridgeService.updateProposal(id, {
+      status: 'rejected',
+      rejectedReason: body.reason,
+      approvedBy: user.userId,
+    });
+  }
+
+  /**
+   * Execute tasks via OpenClaw Brain (brain relay mode).
+   * Sends task details to OpenClaw director who decides how to execute them.
+   */
+  @Post('execute-via-brain')
+  async executeViaBrain(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() body: { taskIds: string[] },
+  ) {
+    if (!body.taskIds?.length) {
+      throw new BadRequestException('taskIds array is required');
+    }
+    const result = await this.bridgeService.executeTasksViaBrain(
+      user.tenantId, user.userId, body.taskIds,
+    );
+    return { data: result };
+  }
+
+  @Post('actions/execute')
+  async executeAction(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() body: { noteId: string; agentType: string; actionId: string },
+  ) {
+    await this.bridgeService.executeAction(
+      user.tenantId, body.noteId, body.agentType, body.actionId, user.userId,
+    );
+    return { success: true };
+  }
+
+  @Get('files/scan/:noteId')
+  async scanDeliverables(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('noteId') noteId: string,
+  ) {
+    const files = await this.bridgeService.scanTaskDeliverables(noteId);
+    return { data: files };
+  }
+
+  @Get('files/download')
+  async downloadFile(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query('path') filePath: string,
+    @Res() res: Response,
+  ) {
+    if (!filePath) {
+      throw new BadRequestException('path query parameter is required');
+    }
+    // Allow files from tenant workspace OR shared workspace deliverables
+    const isTenantFile = filePath.includes(`.openclaw-${user.tenantId}`);
+    const isDeliverable = filePath.includes('/deliverables/');
+    if (!isTenantFile && !isDeliverable) {
+      throw new BadRequestException('File does not belong to your tenant');
+    }
+    const fileData = await this.bridgeService.readFileFromWorkspace(user.tenantId, filePath);
+    const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+    const mimeTypes: Record<string, string> = {
+      md: 'text/markdown', txt: 'text/plain', html: 'text/html',
+      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg',
+      svg: 'image/svg+xml', csv: 'text/csv', zip: 'application/zip',
+    };
+    const filename = filePath.split('/').pop() ?? 'download';
+    res.setHeader('Content-Type', mimeTypes[ext] ?? 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(fileData);
+  }
+
+  // ── Parametric routes (MUST come after literal routes) ──
 
   /**
    * Get a single note by ID (with children).
@@ -257,4 +371,5 @@ export class NotesController {
   async deleteNote(@CurrentUser() user: CurrentUserPayload, @Param('id') id: string) {
     await this.notesService.deleteNote(id, user.tenantId);
   }
+
 }

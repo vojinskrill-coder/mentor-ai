@@ -1379,15 +1379,40 @@ Return ONLY a JSON array of prompt strings, one per image, in the same order:
           };
         }
 
-        // Send summarized result to OpenClaw for agent memory (fire-and-forget, max 2000 words)
+        // Send full result to OpenClaw agent with instruction to memorize and learn
         if (result.success && result.output.length > 100) {
-          const summaryForMemory = result.output.length > 8000
-            ? result.output.substring(0, 8000) + '\n\n[... ostatak skracen za memoriju]'
-            : result.output;
+          const conceptName = note.title ?? 'Nepoznat koncept';
+          const fullOutput = result.output; // Send FULL output, not truncated
+
+          // Send to the specific agent that should learn from this
           this.openClawClient.executeAgent(
-            `REZULTAT ISTRAZIVANJA za zadatak "${note.title}" (${agentLabel}):\n\n${summaryForMemory}`,
-            { agentId: openClawAgentId, tenantProfile: tenantId, timeoutSeconds: 60 },
-          ).catch(() => { /* non-blocking memory update */ });
+            [
+              `MEMORISI I UCI: Upravo sam završio analizu koncepta "${conceptName}" za Luxury Statues Adria.`,
+              '',
+              'Ovo su KOMPLETNI nalazi koje MORAŠ zapamtiti i koristiti u svom budućem radu:',
+              '',
+              fullOutput,
+              '',
+              'INSTRUKCIJA: Sačuvaj ključne nalaze u svoju memoriju. Kad budeš radio sličan zadatak,',
+              'koristi ove podatke kao osnovu — ne ponavljaj istraživanje koje je već urađeno.',
+              `Koncept: ${conceptName}`,
+              `Agent: ${agentLabel}`,
+            ].join('\n'),
+            { agentId: openClawAgentId, tenantProfile: tenantId, timeoutSeconds: 120 },
+          ).catch(() => { /* non-blocking */ });
+
+          // Also send to director so he has full picture
+          if (openClawAgentId !== 'main') {
+            this.openClawClient.executeAgent(
+              [
+                `UPDATE OD ${agentLabel.toUpperCase()}: Koncept "${conceptName}" je završen.`,
+                '',
+                'Ključni nalazi (koristi za buduće delegiranje i planiranje):',
+                fullOutput.substring(0, 15000),
+              ].join('\n'),
+              { agentId: 'main', tenantProfile: tenantId, timeoutSeconds: 60 },
+            ).catch(() => { /* non-blocking */ });
+          }
         }
       }
 
@@ -1564,9 +1589,32 @@ Return ONLY a JSON array of prompt strings, one per image, in the same order:
         durationMs: result.durationMs,
       });
 
+      // Emit bridge events so frontend activity panel + OpenClaw see maturity results
+      this.appEventBus.emit('bridge.agent.status', {
+        tenantId,
+        taskId: note.id,
+        agent: agentType,
+        status: 'completed',
+        message: `${agentType} završio: ${note.title?.substring(0, 60)}`,
+        timestamp: new Date().toISOString(),
+      });
+      this.appEventBus.emit('bridge.task.contribution', {
+        tenantId,
+        noteId: note.id,
+        agentType,
+        summary: result.output?.substring(0, 200),
+      });
+
       if (note.conceptId) {
         this.emitAgentEvent(tenantId, 'agent:concept-activity', {
           agentType, conceptId: note.conceptId, status: 'stopped',
+        });
+        // Notify tree/graph that concept was updated
+        this.appEventBus.emit('bridge.tree.updated', {
+          tenantId,
+          action: 'concept-updated',
+          conceptId: note.conceptId,
+          conceptName: note.title,
         });
       }
     } catch (err) {

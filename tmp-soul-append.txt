@@ -1,0 +1,41 @@
+
+
+## KRITICNO PRAVILO: Formati Deliverables
+
+### Sta vlasnik ZELI da vidi:
+- Excel tabele (.xlsx) — za finansije, planove, tracking
+- PowerPoint/prezentacije (.pptx) — za strategije, pitcheve
+- PDF (.pdf) — za izvestaje, ugovore
+- Slike (.png, .jpg, .svg) — za vizuale, logoe, infografike
+- ZIP (.zip) — za pakete sa vise fajlova
+
+### Sta vlasnik NE ZELI:
+- Markdown (.md) fajlove — NIKADA kao deliverable
+- Source kod (.py, .js, .ts, .css, .json) — NIKADA kao deliverable
+- README, SUMMARY, DEPLOY fajlove — NIKADA
+
+### Kada je zadatak aplikacija (landing page, web app, dashboard):
+1. Dev agent napravi kod u workspace
+2. Dev agent KOMPAJLIRA i POKRENE aplikaciju (npm build, python serve, static HTTP server)
+3. Hostuj na serveru — koristi port 8000-9000
+4. Prijavi SAMO URL kao deliverable: "Aplikacija dostupna na: http://91.98.231.87:PORT"
+5. NE salji source fajlove kao deliverables
+
+### Primer — Landing Page:
+1. sessions_spawn dev "Napravi landing page i hostuj ga"
+2. Dev napravi HTML/CSS/JS u workspace
+3. Dev pokrene: npx serve deliverables/note_xxx/ -p 8001
+4. Prijavi: result = "Landing page dostupan na http://91.98.231.87:8001"
+5. NE prijavljuj .html, .css, .js kao fajlove
+
+### Primer — Dashboard:
+1. sessions_spawn financial + dev agente
+2. Financial pripremi podatke, dev napravi dashboard
+3. Dev pokrene dashboard na portu
+4. Prijavi URL, ne source kod
+
+### Pravilo za SVE deliverables:
+- Output MORA biti u formatu koji vlasnik moze ODMAH da koristi
+- Excel se otvara u Excelu, prezentacija u PowerPointu
+- Aplikacija se otvara u browseru preko URL-a
+- NIKADA ne salji sirov kod ili markdown kao krajnji proizvod

@@ -1,0 +1,139 @@
+# ClawTeam TOML Templates for Mentor AI Business Brain
+# Deploy to ~/.clawteam/templates/ on the Hetzner server
+# Usage: clawteam launch <template-name> --team <team-id> --goal "<goal>"
+
+# ═══════════════════════════════════════════
+#  Content Campaign — research + write + design + distribute
+# ═══════════════════════════════════════════
+
+[content-campaign]
+name = "content-campaign"
+description = "Full content campaign: research topic, write article, create visuals, plan distribution"
+
+[[content-campaign.agents]]
+name = "research"
+role = "worker"
+task = "Research the topic thoroughly using web search and data sources"
+
+[[content-campaign.agents]]
+name = "content"
+role = "worker"
+task = "Write SEO-optimized article based on research findings"
+depends_on = ["research"]
+
+[[content-campaign.agents]]
+name = "designer"
+role = "worker"
+task = "Create visual assets for the article and social media"
+depends_on = ["content"]
+
+[[content-campaign.agents]]
+name = "marketing"
+role = "worker"
+task = "Create distribution plan across channels with scheduling"
+depends_on = ["content", "designer"]
+
+# ═══════════════════════════════════════════
+#  Market Analysis — research + financial + strategy
+# ═══════════════════════════════════════════
+
+[market-analysis]
+name = "market-analysis"
+description = "Comprehensive market analysis: research competitors, analyze financials, form strategy"
+
+[[market-analysis.agents]]
+name = "research"
+role = "worker"
+task = "Research market size, competitors, trends, and customer segments"
+
+[[market-analysis.agents]]
+name = "financial"
+role = "worker"
+task = "Analyze financial data, build revenue projections, calculate ROI scenarios"
+depends_on = ["research"]
+
+[[market-analysis.agents]]
+name = "marketing"
+role = "worker"
+task = "Develop positioning strategy and go-to-market recommendations"
+depends_on = ["research", "financial"]
+
+# ═══════════════════════════════════════════
+#  Sales Outreach — research + sales + content
+# ═══════════════════════════════════════════
+
+[sales-outreach]
+name = "sales-outreach"
+description = "Targeted sales outreach: research prospects, build list, create personalized sequences"
+
+[[sales-outreach.agents]]
+name = "research"
+role = "worker"
+task = "Research target companies and key decision makers"
+
+[[sales-outreach.agents]]
+name = "sales"
+role = "worker"
+task = "Build enriched prospect list, create personalized email sequences"
+depends_on = ["research"]
+
+[[sales-outreach.agents]]
+name = "content"
+role = "worker"
+task = "Create value-first content pieces to include in outreach"
+depends_on = ["research"]
+
+# ═══════════════════════════════════════════
+#  Landing Page — research + content + design + dev
+# ═══════════════════════════════════════════
+
+[landing-page]
+name = "landing-page"
+description = "Build landing page: research audience, write copy, design layout, code page"
+
+[[landing-page.agents]]
+name = "research"
+role = "worker"
+task = "Research target audience, competitor pages, and conversion best practices"
+
+[[landing-page.agents]]
+name = "content"
+role = "worker"
+task = "Write compelling copy: headline, subheads, CTAs, testimonial structure"
+depends_on = ["research"]
+
+[[landing-page.agents]]
+name = "designer"
+role = "worker"
+task = "Create wireframe and visual design specifications"
+depends_on = ["content"]
+
+[[landing-page.agents]]
+name = "dev"
+role = "worker"
+task = "Build responsive HTML/CSS/JS landing page from design specs"
+depends_on = ["content", "designer"]
+
+# ═══════════════════════════════════════════
+#  Financial Review — financial + research
+# ═══════════════════════════════════════════
+
+[financial-review]
+name = "financial-review"
+description = "Financial health review: analyze cash flow, costs, revenue, build projections"
+
+[[financial-review.agents]]
+name = "financial"
+role = "worker"
+task = "Analyze current financial data: cash flow, expenses, revenue trends"
+
+[[financial-review.agents]]
+name = "research"
+role = "worker"
+task = "Research industry benchmarks and comparable company financials"
+
+[[financial-review.agents]]
+name = "financial"
+role = "synthesizer"
+task = "Synthesize analysis with benchmarks, create projections and recommendations"
+depends_on = ["financial", "research"]

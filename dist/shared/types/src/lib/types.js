@@ -21,8 +21,20 @@ _export(exports, {
     AgentType: function() {
         return AgentType;
     },
+    BrainProposalPriority: function() {
+        return BrainProposalPriority;
+    },
+    BrainProposalStatus: function() {
+        return BrainProposalStatus;
+    },
+    BrainProposalType: function() {
+        return BrainProposalType;
+    },
     CONFIDENCE_COLORS: function() {
         return CONFIDENCE_COLORS;
+    },
+    CanvasBlock: function() {
+        return CanvasBlock;
     },
     CircuitBreakerState: function() {
         return CircuitBreakerState;
@@ -86,6 +98,15 @@ _export(exports, {
     },
     PersonaType: function() {
         return PersonaType;
+    },
+    ProcessRunStatus: function() {
+        return ProcessRunStatus;
+    },
+    ProcessStepResultStatus: function() {
+        return ProcessStepResultStatus;
+    },
+    ProcessStepType: function() {
+        return ProcessStepType;
     },
     RelationshipType: function() {
         return RelationshipType;
@@ -322,5 +343,63 @@ var StageConceptStatus;
     StageConceptStatus["COMPLETED"] = "COMPLETED";
     StageConceptStatus["STALE"] = "STALE";
 })(StageConceptStatus || (StageConceptStatus = {}));
+var CanvasBlock;
+(function(CanvasBlock) {
+    CanvasBlock["KEY_PARTNERS"] = "KEY_PARTNERS";
+    CanvasBlock["KEY_ACTIVITIES"] = "KEY_ACTIVITIES";
+    CanvasBlock["KEY_RESOURCES"] = "KEY_RESOURCES";
+    CanvasBlock["VALUE_PROPOSITION"] = "VALUE_PROPOSITION";
+    CanvasBlock["CUSTOMER_RELATIONSHIPS"] = "CUSTOMER_RELATIONSHIPS";
+    CanvasBlock["CHANNELS"] = "CHANNELS";
+    CanvasBlock["CUSTOMER_SEGMENTS"] = "CUSTOMER_SEGMENTS";
+    CanvasBlock["REVENUE_STREAMS"] = "REVENUE_STREAMS";
+    CanvasBlock["COST_STRUCTURE"] = "COST_STRUCTURE";
+})(CanvasBlock || (CanvasBlock = {}));
+var BrainProposalType;
+(function(BrainProposalType) {
+    BrainProposalType["CONCEPT_DISCOVERY"] = "concept_discovery";
+    BrainProposalType["TASK_EXECUTION"] = "task_execution";
+    BrainProposalType["RISK_ALERT"] = "risk_alert";
+    BrainProposalType["OPPORTUNITY"] = "opportunity";
+    BrainProposalType["CORRECTION"] = "correction";
+})(BrainProposalType || (BrainProposalType = {}));
+var BrainProposalStatus;
+(function(BrainProposalStatus) {
+    BrainProposalStatus["PENDING"] = "pending";
+    BrainProposalStatus["APPROVED"] = "approved";
+    BrainProposalStatus["REJECTED"] = "rejected";
+    BrainProposalStatus["EXPIRED"] = "expired";
+})(BrainProposalStatus || (BrainProposalStatus = {}));
+var BrainProposalPriority;
+(function(BrainProposalPriority) {
+    BrainProposalPriority["CRITICAL"] = "critical";
+    BrainProposalPriority["HIGH"] = "high";
+    BrainProposalPriority["MEDIUM"] = "medium";
+    BrainProposalPriority["LOW"] = "low";
+})(BrainProposalPriority || (BrainProposalPriority = {}));
+var ProcessStepType;
+(function(ProcessStepType) {
+    ProcessStepType["AUTOMATIC"] = "AUTOMATIC";
+    ProcessStepType["APPROVAL"] = "APPROVAL";
+    ProcessStepType["MANUAL"] = "MANUAL";
+})(ProcessStepType || (ProcessStepType = {}));
+var ProcessRunStatus;
+(function(ProcessRunStatus) {
+    ProcessRunStatus["IDLE"] = "IDLE";
+    ProcessRunStatus["RUNNING"] = "RUNNING";
+    ProcessRunStatus["WAITING_APPROVAL"] = "WAITING_APPROVAL";
+    ProcessRunStatus["COMPLETED"] = "COMPLETED";
+    ProcessRunStatus["FAILED"] = "FAILED";
+    ProcessRunStatus["CANCELLED"] = "CANCELLED";
+})(ProcessRunStatus || (ProcessRunStatus = {}));
+var ProcessStepResultStatus;
+(function(ProcessStepResultStatus) {
+    ProcessStepResultStatus["PENDING"] = "PENDING";
+    ProcessStepResultStatus["RUNNING"] = "RUNNING";
+    ProcessStepResultStatus["COMPLETED"] = "COMPLETED";
+    ProcessStepResultStatus["FAILED"] = "FAILED";
+    ProcessStepResultStatus["APPROVED"] = "APPROVED";
+    ProcessStepResultStatus["REJECTED"] = "REJECTED";
+})(ProcessStepResultStatus || (ProcessStepResultStatus = {}));
 
 //# sourceMappingURL=types.js.map

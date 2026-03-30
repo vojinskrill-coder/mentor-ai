@@ -202,6 +202,16 @@ export class HeadlessExecutorService {
         auto: true,
       });
 
+      // Bridge event: task execution started (activity panel sees it)
+      this.appEventBus.emit('bridge.agent.status', {
+        tenantId,
+        taskId,
+        agent: 'maturity',
+        status: 'running',
+        message: `Izvršavanje: ${taskNote.title?.substring(0, 60)}`,
+        timestamp: new Date().toISOString(),
+      });
+
       // Pre-load tenant + brain context once for all steps
       const [cachedTenantData, _brainCtx] = await Promise.all([
         this.prisma.tenant.findUnique({
@@ -680,6 +690,23 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
           stage: conceptAssignment?.stage ?? 'UNKNOWN',
           personaType: conceptAssignment?.personaType ?? 'UNKNOWN',
           success: true,
+        });
+
+        // Bridge events: task complete + tree update (so frontend activity/tree/graph update)
+        const noteScore = await this.prisma.note.findUnique({
+          where: { id: taskId },
+          select: { aiScore: true },
+        });
+        this.appEventBus.emit('bridge.task.complete', {
+          tenantId,
+          noteId: taskId,
+          score: noteScore?.aiScore ?? null,
+        });
+        this.appEventBus.emit('bridge.tree.updated', {
+          tenantId,
+          action: 'concept-completed',
+          conceptId: taskNote.conceptId,
+          conceptName: taskNote.title,
         });
       }
 

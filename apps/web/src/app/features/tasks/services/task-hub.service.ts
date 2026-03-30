@@ -34,6 +34,12 @@ export class TaskHubService {
     );
   }
 
+  executeAction(noteId: string, agentType: string, actionId: string): Observable<{ success: boolean }> {
+    return this.http.post<{ success: boolean }>('/api/v1/notes/actions/execute', {
+      noteId, agentType, actionId,
+    });
+  }
+
   getTasks(query: TaskHubQuery = {}): Observable<{ data: TaskHubResponse }> {
     let params = new HttpParams();
     if (query.status) params = params.set('status', query.status);

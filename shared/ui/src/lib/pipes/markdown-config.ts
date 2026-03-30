@@ -28,7 +28,7 @@ export const MARKED_OPTIONS = {
 
 /** Strict DOMPurify config — explicit tag whitelist + target/rel on links */
 export const PURIFY_CONFIG = {
-  ADD_ATTR: ['target', 'rel', 'class'],
+  ADD_ATTR: ['target', 'rel', 'class', 'src', 'alt', 'width', 'height', 'loading'],
   ALLOWED_TAGS: [
     'h1',
     'h2',

@@ -39,18 +39,22 @@ const team_module_1 = __webpack_require__(127);
 const llm_config_module_1 = __webpack_require__(75);
 const ai_gateway_module_1 = __webpack_require__(89);
 const conversation_module_1 = __webpack_require__(132);
-const onboarding_module_1 = __webpack_require__(192);
-const personas_module_1 = __webpack_require__(198);
+const onboarding_module_1 = __webpack_require__(206);
+const personas_module_1 = __webpack_require__(212);
 const knowledge_module_1 = __webpack_require__(74);
-const memory_module_1 = __webpack_require__(138);
-const qdrant_module_1 = __webpack_require__(201);
-const web_search_module_1 = __webpack_require__(147);
-const admin_module_1 = __webpack_require__(202);
-const execution_module_1 = __webpack_require__(149);
-const attachments_module_1 = __webpack_require__(175);
-const pdf_export_module_1 = __webpack_require__(206);
-const agent_execution_module_1 = __webpack_require__(152);
-const maturity_module_1 = __webpack_require__(151);
+const memory_module_1 = __webpack_require__(165);
+const qdrant_module_1 = __webpack_require__(215);
+const web_search_module_1 = __webpack_require__(136);
+const admin_module_1 = __webpack_require__(216);
+const execution_module_1 = __webpack_require__(174);
+const attachments_module_1 = __webpack_require__(189);
+const pdf_export_module_1 = __webpack_require__(220);
+const agent_execution_module_1 = __webpack_require__(135);
+const maturity_module_1 = __webpack_require__(176);
+const events_module_1 = __webpack_require__(231);
+const openclaw_tenant_module_1 = __webpack_require__(151);
+const bridge_module_1 = __webpack_require__(134);
+const process_module_1 = __webpack_require__(233);
 // Serve Angular static files in production (combined deploy)
 const staticPath = (0, path_1.join)(__dirname, '..', '..', 'web', 'browser');
 const serveStaticImports = (0, fs_1.existsSync)(staticPath)
@@ -72,6 +76,7 @@ exports.AppModule = AppModule = tslib_1.__decorate([
                 envFilePath: ['apps/api/.env.local', 'apps/api/.env', '.env.local', '.env'],
             }),
             schedule_1.ScheduleModule.forRoot(),
+            events_module_1.AppEventsModule,
             ...serveStaticImports,
             qdrant_module_1.QdrantModule,
             tenant_context_1.TenantModule,
@@ -97,6 +102,9 @@ exports.AppModule = AppModule = tslib_1.__decorate([
             pdf_export_module_1.PdfExportModule,
             agent_execution_module_1.AgentExecutionModule,
             maturity_module_1.MaturityModule,
+            openclaw_tenant_module_1.OpenClawTenantModule,
+            bridge_module_1.BridgeModule,
+            process_module_1.ProcessModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],
@@ -401,6 +409,7 @@ module.exports = require("@prisma/client");
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
+var PlatformPrismaService_1;
 var _a;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.PlatformPrismaService = void 0;
@@ -408,7 +417,20 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const client_1 = __webpack_require__(12);
-let PlatformPrismaService = class PlatformPrismaService extends client_1.PrismaClient {
+const DB_RETRY_INTERVAL_MS = 10_000; // 10 seconds
+const DB_RETRY_MAX_MS = 120_000; // 2 minutes
+const RETRYABLE_ERRORS = [
+    'Can\'t reach database server',
+    'Connection refused',
+    'Connection timed out',
+    'ECONNREFUSED',
+    'ECONNRESET',
+    'ETIMEDOUT',
+    'connection is not allowed',
+    'too many connections',
+    'server closed the connection unexpectedly',
+];
+let PlatformPrismaService = PlatformPrismaService_1 = class PlatformPrismaService extends client_1.PrismaClient {
     constructor(configService) {
         const databaseUrl = configService.get('DATABASE_URL');
         if (!databaseUrl) {
@@ -421,16 +443,53 @@ let PlatformPrismaService = class PlatformPrismaService extends client_1.PrismaC
                 db: { url: databaseUrl },
             },
         });
+        this.logger = new common_1.Logger(PlatformPrismaService_1.name);
     }
     async onModuleInit() {
         await this.$connect();
+        // Add retry middleware for all Prisma operations
+        this.$use(async (params, next) => {
+            const start = Date.now();
+            let attempt = 0;
+            while (true) {
+                try {
+                    return await next(params);
+                }
+                catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    const isRetryable = RETRYABLE_ERRORS.some((e) => msg.includes(e));
+                    const elapsed = Date.now() - start;
+                    if (!isRetryable || elapsed >= DB_RETRY_MAX_MS) {
+                        throw err; // Non-retryable or timeout exceeded
+                    }
+                    attempt++;
+                    this.logger.warn({
+                        message: `DB connection failed, retry ${attempt} in ${DB_RETRY_INTERVAL_MS / 1000}s`,
+                        model: params.model,
+                        action: params.action,
+                        error: msg.substring(0, 100),
+                        elapsedMs: elapsed,
+                    });
+                    // Reconnect and wait
+                    try {
+                        await this.$disconnect();
+                    }
+                    catch { /* ignore */ }
+                    await new Promise((r) => setTimeout(r, DB_RETRY_INTERVAL_MS));
+                    try {
+                        await this.$connect();
+                    }
+                    catch { /* will retry on next iteration */ }
+                }
+            }
+        });
     }
     async onModuleDestroy() {
         await this.$disconnect();
     }
 };
 exports.PlatformPrismaService = PlatformPrismaService;
-exports.PlatformPrismaService = PlatformPrismaService = tslib_1.__decorate([
+exports.PlatformPrismaService = PlatformPrismaService = PlatformPrismaService_1 = tslib_1.__decorate([
     (0, common_1.Injectable)(),
     tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object])
 ], PlatformPrismaService);
@@ -820,7 +879,6 @@ exports.HealthService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 // Read version from package.json
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const packageJson = __webpack_require__(23);
 let HealthService = class HealthService {
     getVersion() {
@@ -840,7 +898,7 @@ exports.HealthService = HealthService = tslib_1.__decorate([
 /* 23 */
 /***/ ((module) => {
 
-module.exports = /*#__PURE__*/JSON.parse('{"name":"@mentor-ai/source","version":"0.0.0","license":"MIT","engines":{"node":">=22.0.0"},"scripts":{"prepare":"husky","lint":"nx run-many -t lint","format":"nx format:write","format:check":"nx format:check","prisma:generate":"cd apps/api && npx prisma generate","prisma:migrate":"cd apps/api && npx prisma migrate dev","prisma:seed":"cd apps/api && npx ts-node prisma/seed.ts","prisma:studio":"cd apps/api && npx prisma studio","db:reset":"cd apps/api && npx prisma migrate reset --force","test":"nx run-many -t test","test:affected":"nx affected -t test","test:coverage":"nx run-many -t test -- --coverage","test:api":"nx test api","test:web":"nx test web","e2e":"npx playwright test","e2e:ui":"npx playwright test --ui"},"lint-staged":{"*.{ts,tsx,js,jsx}":["eslint --fix","prettier --write"],"*.{json,md,html,css,scss}":["prettier --write"]},"private":true,"dependencies":{"@angular/common":"~21.1.0","@angular/compiler":"~21.1.0","@angular/core":"~21.1.0","@angular/forms":"~21.1.0","@angular/platform-browser":"~21.1.0","@angular/router":"~21.1.0","@auth0/auth0-angular":"^2.5.0","@nestjs-modules/mailer":"^2.0.2","@nestjs/bullmq":"^11.0.4","@nestjs/common":"^11.0.0","@nestjs/config":"^4.0.3","@nestjs/core":"^11.0.0","@nestjs/passport":"^11.0.5","@nestjs/platform-express":"^11.0.0","@nestjs/platform-socket.io":"^11.1.13","@nestjs/schedule":"^6.1.1","@nestjs/serve-static":"^5.0.4","@nestjs/terminus":"^11.0.0","@nestjs/throttler":"^6.5.0","@nestjs/websockets":"^11.1.13","@ng-icons/core":"^33.0.0","@ng-icons/lucide":"^33.0.0","@paralleldrive/cuid2":"^3.3.0","@prisma/client":"^5.22.0","@qdrant/js-client-rest":"^1.16.2","@spartan-ng/brain":"^0.0.1-alpha.614","@tailwindcss/postcss":"^4.1.18","@types/marked":"^6.0.0","@types/multer":"^2.0.0","@upstash/ratelimit":"^2.0.8","@upstash/redis":"^1.36.2","archiver":"^7.0.1","axios":"^1.6.0","bcrypt":"^6.0.0","bullmq":"^5.66.5","class-transformer":"^0.5.1","class-validator":"^0.14.3","d3-force":"^3.0.0","d3-selection":"^3.0.0","dompurify":"^3.3.1","isomorphic-dompurify":"^3.0.0","json2md":"^2.0.3","jsonwebtoken":"^9.0.3","jwks-rsa":"^3.2.2","mammoth":"^1.11.0","marked":"^17.0.3","multer":"^2.0.2","nodemailer":"^8.0.0","passport":"^0.7.0","passport-jwt":"^4.0.1","pdf-parse":"^2.4.5","pdfmake":"^0.3.2","prisma":"^5.22.0","puppeteer":"^24.37.5","reflect-metadata":"^0.1.13","rxjs":"^7.8.0","socket.io":"^4.8.3","socket.io-client":"^4.8.3","tailwindcss":"^4.1.18","undici":"^7.22.0","xlsx":"^0.18.5"},"devDependencies":{"@analogjs/vite-plugin-angular":"~2.1.2","@analogjs/vitest-angular":"~2.1.2","@angular-devkit/core":"~21.1.0","@angular-devkit/schematics":"~21.1.0","@angular/build":"~21.1.0","@angular/cli":"~21.1.0","@angular/compiler-cli":"~21.1.0","@angular/language-service":"~21.1.0","@axe-core/playwright":"^4.11.1","@eslint/js":"^9.8.0","@nestjs/schematics":"^11.0.0","@nestjs/testing":"^11.0.0","@nx/angular":"^22.4.5","@nx/eslint":"22.4.5","@nx/eslint-plugin":"22.4.5","@nx/jest":"22.4.5","@nx/js":"22.4.5","@nx/nest":"22.4.5","@nx/node":"22.4.5","@nx/storybook":"^22.4.5","@nx/vite":"22.4.5","@nx/vitest":"22.4.5","@nx/web":"22.4.5","@nx/webpack":"22.4.5","@nx/workspace":"22.4.5","@schematics/angular":"~21.1.0","@spartan-ng/cli":"^0.0.1-alpha.614","@storybook/addon-a11y":"^10.2.6","@storybook/addon-essentials":"^8.6.14","@storybook/angular":"^10.2.6","@swc-node/register":"~1.9.1","@swc/cli":"~0.6.0","@swc/core":"~1.5.7","@swc/helpers":"~0.5.11","@swc/jest":"~0.2.38","@types/archiver":"^7.0.0","@types/bcrypt":"^6.0.0","@types/d3-force":"^3.0.10","@types/d3-selection":"^3.0.11","@types/dompurify":"^3.2.0","@types/jest":"^30.0.0","@types/json2md":"^1.5.4","@types/jsonwebtoken":"^9.0.10","@types/node":"^22.0.0","@types/nodemailer":"^7.0.9","@types/passport-jwt":"^4.0.1","@types/pdfmake":"^0.3.0","@typescript-eslint/utils":"^8.40.0","@vitest/coverage-v8":"^4.0.0","@vitest/ui":"^4.0.8","angular-eslint":"^21.0.1","autoprefixer":"^10.4.0","axe-core":"^4.11.1","eslint":"^9.8.0","eslint-config-prettier":"^10.0.0","husky":"^9.1.7","jest":"^30.0.2","jest-environment-node":"^30.0.2","jest-util":"^30.0.2","jsdom":"^27.1.0","jsonc-eslint-parser":"^2.1.0","lint-staged":"^16.2.7","nx":"22.4.5","postcss":"^8.4.5","prettier":"~3.6.2","storybook":"^10.2.6","ts-jest":"^29.4.0","ts-node":"10.9.1","tslib":"^2.3.0","typescript":"~5.9.2","typescript-eslint":"^8.40.0","vite":"^7.0.0","vitest":"^4.0.8","webpack-cli":"^5.1.4"}}');
+module.exports = /*#__PURE__*/JSON.parse('{"name":"@mentor-ai/source","version":"0.0.0","license":"MIT","engines":{"node":">=22.0.0"},"scripts":{"prepare":"husky","lint":"nx run-many -t lint","format":"nx format:write","format:check":"nx format:check","prisma:generate":"cd apps/api && npx prisma generate","prisma:migrate":"cd apps/api && npx prisma migrate dev","prisma:seed":"cd apps/api && npx ts-node prisma/seed.ts","prisma:studio":"cd apps/api && npx prisma studio","db:reset":"cd apps/api && npx prisma migrate reset --force","test":"nx run-many -t test","test:affected":"nx affected -t test","test:coverage":"nx run-many -t test -- --coverage","test:api":"nx test api","test:web":"nx test web","e2e":"npx playwright test","e2e:ui":"npx playwright test --ui"},"lint-staged":{"*.{ts,tsx,js,jsx}":["eslint --fix","prettier --write"],"*.{json,md,html,css,scss}":["prettier --write"]},"private":true,"dependencies":{"@angular/common":"~21.1.0","@angular/compiler":"~21.1.0","@angular/core":"~21.1.0","@angular/forms":"~21.1.0","@angular/platform-browser":"~21.1.0","@angular/router":"~21.1.0","@auth0/auth0-angular":"^2.5.0","@nestjs-modules/mailer":"^2.0.2","@nestjs/bullmq":"^11.0.4","@nestjs/common":"^11.0.0","@nestjs/config":"^4.0.3","@nestjs/core":"^11.0.0","@nestjs/event-emitter":"^3.0.1","@nestjs/passport":"^11.0.5","@nestjs/platform-express":"^11.0.0","@nestjs/platform-socket.io":"^11.1.13","@nestjs/schedule":"^6.1.1","@nestjs/serve-static":"^5.0.4","@nestjs/terminus":"^11.0.0","@nestjs/throttler":"^6.5.0","@nestjs/websockets":"^11.1.13","@ng-icons/core":"^33.0.0","@ng-icons/lucide":"^33.0.0","@paralleldrive/cuid2":"^3.3.0","@prisma/client":"^5.22.0","@qdrant/js-client-rest":"^1.16.2","@spartan-ng/brain":"^0.0.1-alpha.614","@tailwindcss/postcss":"^4.1.18","@types/marked":"^6.0.0","@types/multer":"^2.0.0","@types/ssh2":"^1.15.5","@upstash/ratelimit":"^2.0.8","@upstash/redis":"^1.36.2","ajv":"^8.18.0","ajv-formats":"^3.0.1","archiver":"^7.0.1","axios":"^1.6.0","bcrypt":"^6.0.0","bullmq":"^5.66.5","class-transformer":"^0.5.1","class-validator":"^0.14.3","cron-parser":"^5.5.0","d3-force":"^3.0.0","d3-selection":"^3.0.0","dompurify":"^3.3.1","isomorphic-dompurify":"^3.0.0","json2md":"^2.0.3","jsonwebtoken":"^9.0.3","jwks-rsa":"^3.2.2","mammoth":"^1.11.0","marked":"^17.0.3","multer":"^2.0.2","nodemailer":"^8.0.0","passport":"^0.7.0","passport-jwt":"^4.0.1","pdf-parse":"^2.4.5","pdfmake":"^0.3.2","prisma":"^5.22.0","puppeteer":"^24.37.5","reflect-metadata":"^0.1.13","rxjs":"^7.8.0","sharp":"^0.34.5","socket.io":"^4.8.3","socket.io-client":"^4.8.3","ssh2":"^1.17.0","tailwindcss":"^4.1.18","undici":"^7.22.0","xlsx":"^0.18.5"},"devDependencies":{"@analogjs/vite-plugin-angular":"~2.1.2","@analogjs/vitest-angular":"~2.1.2","@angular-devkit/core":"~21.1.0","@angular-devkit/schematics":"~21.1.0","@angular/build":"~21.1.0","@angular/cli":"~21.1.0","@angular/compiler-cli":"~21.1.0","@angular/language-service":"~21.1.0","@axe-core/playwright":"^4.11.1","@eslint/js":"^9.8.0","@nestjs/schematics":"^11.0.0","@nestjs/testing":"^11.0.0","@nx/angular":"^22.4.5","@nx/eslint":"22.4.5","@nx/eslint-plugin":"22.4.5","@nx/jest":"22.4.5","@nx/js":"22.4.5","@nx/nest":"22.4.5","@nx/node":"22.4.5","@nx/storybook":"^22.4.5","@nx/vite":"22.4.5","@nx/vitest":"22.4.5","@nx/web":"22.4.5","@nx/webpack":"22.4.5","@nx/workspace":"22.4.5","@schematics/angular":"~21.1.0","@spartan-ng/cli":"^0.0.1-alpha.614","@storybook/addon-a11y":"^10.2.6","@storybook/addon-essentials":"^8.6.14","@storybook/angular":"^10.2.6","@swc-node/register":"~1.9.1","@swc/cli":"~0.6.0","@swc/core":"~1.5.7","@swc/helpers":"~0.5.11","@swc/jest":"~0.2.38","@types/archiver":"^7.0.0","@types/bcrypt":"^6.0.0","@types/d3-force":"^3.0.10","@types/d3-selection":"^3.0.11","@types/dompurify":"^3.2.0","@types/jest":"^30.0.0","@types/json2md":"^1.5.4","@types/jsonwebtoken":"^9.0.10","@types/node":"^22.0.0","@types/nodemailer":"^7.0.9","@types/passport-jwt":"^4.0.1","@types/pdfmake":"^0.3.0","@typescript-eslint/utils":"^8.40.0","@vitest/coverage-v8":"^4.0.0","@vitest/ui":"^4.0.8","angular-eslint":"^21.0.1","autoprefixer":"^10.4.0","axe-core":"^4.11.1","eslint":"^9.8.0","eslint-config-prettier":"^10.0.0","husky":"^9.1.7","jest":"^30.0.2","jest-environment-node":"^30.0.2","jest-util":"^30.0.2","jsdom":"^27.1.0","jsonc-eslint-parser":"^2.1.0","lint-staged":"^16.2.7","nx":"22.4.5","postcss":"^8.4.5","prettier":"~3.6.2","storybook":"^10.2.6","ts-jest":"^29.4.0","ts-node":"10.9.1","tslib":"^2.3.0","typescript":"~5.9.2","typescript-eslint":"^8.40.0","vite":"^7.0.0","vitest":"^4.0.8","webpack-cli":"^5.1.4"}}');
 
 /***/ }),
 /* 24 */
@@ -5094,7 +5152,7 @@ tslib_1.__exportStar(__webpack_require__(87), exports);
  * These types are used across both frontend (Angular) and backend (NestJS)
  */
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.StageConceptStatus = exports.MaturityStage = exports.AgentJobStatus = exports.AgentType = exports.AgentExecutionStatus = exports.NoteStatus = exports.NoteType = exports.MEMORY_TYPE_LABELS = exports.MEMORY_TYPE_COLORS = exports.MemorySource = exports.MemoryType = exports.ConceptSource = exports.RelationshipType = exports.ConceptCategory = exports.CONFIDENCE_COLORS = exports.ConfidenceLevel = exports.PERSONA_NAMES = exports.PERSONA_COLORS = exports.PersonaType = exports.CircuitBreakerState = exports.MessageRole = exports.LlmProviderType = exports.TenantStatus = exports.ExportStatus = exports.ExportFormat = exports.INDUSTRIES = exports.Department = exports.InvitationStatus = void 0;
+exports.ProcessStepResultStatus = exports.ProcessRunStatus = exports.ProcessStepType = exports.BrainProposalPriority = exports.BrainProposalStatus = exports.BrainProposalType = exports.CanvasBlock = exports.StageConceptStatus = exports.MaturityStage = exports.AgentJobStatus = exports.AgentType = exports.AgentExecutionStatus = exports.NoteStatus = exports.NoteType = exports.MEMORY_TYPE_LABELS = exports.MEMORY_TYPE_COLORS = exports.MemorySource = exports.MemoryType = exports.ConceptSource = exports.RelationshipType = exports.ConceptCategory = exports.CONFIDENCE_COLORS = exports.ConfidenceLevel = exports.PERSONA_NAMES = exports.PERSONA_COLORS = exports.PersonaType = exports.CircuitBreakerState = exports.MessageRole = exports.LlmProviderType = exports.TenantStatus = exports.ExportStatus = exports.ExportFormat = exports.INDUSTRIES = exports.Department = exports.InvitationStatus = void 0;
 /** Invitation status */
 var InvitationStatus;
 (function (InvitationStatus) {
@@ -5414,6 +5472,76 @@ var StageConceptStatus;
     StageConceptStatus["COMPLETED"] = "COMPLETED";
     StageConceptStatus["STALE"] = "STALE";
 })(StageConceptStatus || (exports.StageConceptStatus = StageConceptStatus = {}));
+/** ============================================
+ *  Brain Architecture Types
+ *  ============================================ */
+/** Business Model Canvas block identifiers */
+var CanvasBlock;
+(function (CanvasBlock) {
+    CanvasBlock["KEY_PARTNERS"] = "KEY_PARTNERS";
+    CanvasBlock["KEY_ACTIVITIES"] = "KEY_ACTIVITIES";
+    CanvasBlock["KEY_RESOURCES"] = "KEY_RESOURCES";
+    CanvasBlock["VALUE_PROPOSITION"] = "VALUE_PROPOSITION";
+    CanvasBlock["CUSTOMER_RELATIONSHIPS"] = "CUSTOMER_RELATIONSHIPS";
+    CanvasBlock["CHANNELS"] = "CHANNELS";
+    CanvasBlock["CUSTOMER_SEGMENTS"] = "CUSTOMER_SEGMENTS";
+    CanvasBlock["REVENUE_STREAMS"] = "REVENUE_STREAMS";
+    CanvasBlock["COST_STRUCTURE"] = "COST_STRUCTURE";
+})(CanvasBlock || (exports.CanvasBlock = CanvasBlock = {}));
+/** Brain proposal types */
+var BrainProposalType;
+(function (BrainProposalType) {
+    BrainProposalType["CONCEPT_DISCOVERY"] = "concept_discovery";
+    BrainProposalType["TASK_EXECUTION"] = "task_execution";
+    BrainProposalType["RISK_ALERT"] = "risk_alert";
+    BrainProposalType["OPPORTUNITY"] = "opportunity";
+    BrainProposalType["CORRECTION"] = "correction";
+})(BrainProposalType || (exports.BrainProposalType = BrainProposalType = {}));
+var BrainProposalStatus;
+(function (BrainProposalStatus) {
+    BrainProposalStatus["PENDING"] = "pending";
+    BrainProposalStatus["APPROVED"] = "approved";
+    BrainProposalStatus["REJECTED"] = "rejected";
+    BrainProposalStatus["EXPIRED"] = "expired";
+})(BrainProposalStatus || (exports.BrainProposalStatus = BrainProposalStatus = {}));
+var BrainProposalPriority;
+(function (BrainProposalPriority) {
+    BrainProposalPriority["CRITICAL"] = "critical";
+    BrainProposalPriority["HIGH"] = "high";
+    BrainProposalPriority["MEDIUM"] = "medium";
+    BrainProposalPriority["LOW"] = "low";
+})(BrainProposalPriority || (exports.BrainProposalPriority = BrainProposalPriority = {}));
+// ── Process Workflow Engine Types ──
+// NOTE: These enums intentionally mirror the Prisma schema enums.
+// Prisma generates its own types from schema.prisma, but frontend cannot import @prisma/client.
+// Keep values in sync with apps/api/prisma/schema.prisma.
+/** Process step execution type */
+var ProcessStepType;
+(function (ProcessStepType) {
+    ProcessStepType["AUTOMATIC"] = "AUTOMATIC";
+    ProcessStepType["APPROVAL"] = "APPROVAL";
+    ProcessStepType["MANUAL"] = "MANUAL";
+})(ProcessStepType || (exports.ProcessStepType = ProcessStepType = {}));
+/** Process run execution status */
+var ProcessRunStatus;
+(function (ProcessRunStatus) {
+    ProcessRunStatus["IDLE"] = "IDLE";
+    ProcessRunStatus["RUNNING"] = "RUNNING";
+    ProcessRunStatus["WAITING_APPROVAL"] = "WAITING_APPROVAL";
+    ProcessRunStatus["COMPLETED"] = "COMPLETED";
+    ProcessRunStatus["FAILED"] = "FAILED";
+    ProcessRunStatus["CANCELLED"] = "CANCELLED";
+})(ProcessRunStatus || (exports.ProcessRunStatus = ProcessRunStatus = {}));
+/** Process step result status */
+var ProcessStepResultStatus;
+(function (ProcessStepResultStatus) {
+    ProcessStepResultStatus["PENDING"] = "PENDING";
+    ProcessStepResultStatus["RUNNING"] = "RUNNING";
+    ProcessStepResultStatus["COMPLETED"] = "COMPLETED";
+    ProcessStepResultStatus["FAILED"] = "FAILED";
+    ProcessStepResultStatus["APPROVED"] = "APPROVED";
+    ProcessStepResultStatus["REJECTED"] = "REJECTED";
+})(ProcessStepResultStatus || (exports.ProcessStepResultStatus = ProcessStepResultStatus = {}));
 
 
 /***/ }),
@@ -6163,6 +6291,7 @@ let AiGatewayService = AiGatewayService_1 = class AiGatewayService {
                 model: modelId,
                 messages,
                 stream: true,
+                max_tokens: 8192,
             }),
             signal,
         });
@@ -9599,6 +9728,12 @@ let ConceptService = ConceptService_1 = class ConceptService {
         });
         return new Map(concepts.map((c) => [c.id, c]));
     }
+    async findTenantConcepts(tenantId) {
+        return this.prisma.concept.findMany({
+            where: { tenantId },
+            select: { id: true },
+        });
+    }
     /**
      * Creates dynamic relationships between a newly discovered concept
      * and existing concepts using AI classification.
@@ -11354,7 +11489,7 @@ let CitationInjectorService = CitationInjectorService_1 = class CitationInjector
         // Strategy 1: Find concept name mentioned in text (case-insensitive)
         const namePattern = new RegExp(this.escapeRegex(concept.conceptName), 'gi');
         const nameMatch = namePattern.exec(content);
-        if (nameMatch) {
+        if (nameMatch && !this.isInsideTable(content, nameMatch.index)) {
             const endPosition = nameMatch.index + nameMatch[0].length;
             // Check if citation already exists at this position
             if (!this.hasCitationAt(content, endPosition)) {
@@ -11365,7 +11500,7 @@ let CitationInjectorService = CitationInjectorService_1 = class CitationInjector
                 };
             }
         }
-        // Strategy 2: Find related keywords from concept name
+        // Strategy 2: Find related keywords from concept name (skip tables)
         const keywords = concept.conceptName
             .toLowerCase()
             .split(/[\s-]+/)
@@ -11374,11 +11509,14 @@ let CitationInjectorService = CitationInjectorService_1 = class CitationInjector
             const keywordPattern = new RegExp(`\\b${this.escapeRegex(keyword)}\\b`, 'gi');
             let match;
             while ((match = keywordPattern.exec(content)) !== null) {
+                if (this.isInsideTable(content, match.index))
+                    continue;
                 // Find end of sentence containing this keyword
                 const sentenceEnd = this.findSentenceEnd(content, match.index);
                 if (sentenceEnd !== -1 &&
                     !usedPositions.has(sentenceEnd) &&
-                    !this.hasCitationAt(content, sentenceEnd)) {
+                    !this.hasCitationAt(content, sentenceEnd) &&
+                    !this.isInsideTable(content, sentenceEnd)) {
                     const citation = ` [[${concept.conceptName}]]`;
                     return {
                         content: content.slice(0, sentenceEnd) +
@@ -11389,14 +11527,16 @@ let CitationInjectorService = CitationInjectorService_1 = class CitationInjector
                 }
             }
         }
-        // Strategy 3: Find end of first paragraph if no keyword match
+        // Strategy 3: Find end of first non-table paragraph if no keyword match
         const firstParagraphEnd = content.indexOf('\n\n');
-        if (firstParagraphEnd !== -1 && !usedPositions.has(firstParagraphEnd)) {
+        if (firstParagraphEnd !== -1 && !usedPositions.has(firstParagraphEnd) &&
+            !this.isInsideTable(content, firstParagraphEnd)) {
             // Insert at end of first paragraph
             const sentenceEnd = this.findSentenceEnd(content, 0);
             if (sentenceEnd !== -1 &&
                 sentenceEnd < firstParagraphEnd &&
-                !this.hasCitationAt(content, sentenceEnd)) {
+                !this.hasCitationAt(content, sentenceEnd) &&
+                !this.isInsideTable(content, sentenceEnd)) {
                 const citation = ` [[${concept.conceptName}]]`;
                 return {
                     content: content.slice(0, sentenceEnd) + citation + content.slice(sentenceEnd),
@@ -11429,6 +11569,18 @@ let CitationInjectorService = CitationInjectorService_1 = class CitationInjector
             position++;
         }
         return -1;
+    }
+    /**
+     * Checks if a position falls inside a markdown table row (line starts with |).
+     * Also catches table separator rows (|---|---|).
+     */
+    isInsideTable(content, position) {
+        // Find the start of the line containing this position
+        const lineStart = content.lastIndexOf('\n', position - 1) + 1;
+        const lineContent = content.slice(lineStart, position + 50);
+        const firstLine = lineContent.split('\n')[0] ?? '';
+        // A table row starts with | or is a separator like |---|
+        return firstLine.trimStart().startsWith('|');
     }
     /**
      * Checks if there's already a citation at the given position.
@@ -14038,17 +14190,17 @@ const auth_module_1 = __webpack_require__(42);
 const ai_gateway_module_1 = __webpack_require__(89);
 const notes_module_1 = __webpack_require__(133);
 const knowledge_module_1 = __webpack_require__(74);
-const memory_module_1 = __webpack_require__(138);
-const workflow_module_1 = __webpack_require__(146);
-const web_search_module_1 = __webpack_require__(147);
-const execution_module_1 = __webpack_require__(149);
-const attachments_module_1 = __webpack_require__(175);
-const agent_execution_module_1 = __webpack_require__(152);
-const maturity_module_1 = __webpack_require__(151);
-const conversation_controller_1 = __webpack_require__(182);
-const conversation_service_1 = __webpack_require__(183);
-const conversation_gateway_1 = __webpack_require__(188);
-const concept_plan_service_1 = __webpack_require__(187);
+const memory_module_1 = __webpack_require__(165);
+const workflow_module_1 = __webpack_require__(173);
+const web_search_module_1 = __webpack_require__(136);
+const execution_module_1 = __webpack_require__(174);
+const attachments_module_1 = __webpack_require__(189);
+const agent_execution_module_1 = __webpack_require__(135);
+const maturity_module_1 = __webpack_require__(176);
+const conversation_controller_1 = __webpack_require__(196);
+const conversation_service_1 = __webpack_require__(197);
+const conversation_gateway_1 = __webpack_require__(202);
+const concept_plan_service_1 = __webpack_require__(201);
 let ConversationModule = class ConversationModule {
 };
 exports.ConversationModule = ConversationModule;
@@ -14088,8 +14240,9 @@ const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(10);
 const auth_module_1 = __webpack_require__(42);
 const ai_gateway_module_1 = __webpack_require__(89);
-const notes_service_1 = __webpack_require__(134);
-const notes_controller_1 = __webpack_require__(135);
+const bridge_module_1 = __webpack_require__(134);
+const notes_service_1 = __webpack_require__(146);
+const notes_controller_1 = __webpack_require__(162);
 /**
  * Module for managing user notes.
  * Provides note creation, storage, and retrieval for AI-generated content.
@@ -14103,6 +14256,7 @@ exports.NotesModule = NotesModule = tslib_1.__decorate([
             tenant_context_1.TenantModule, // Provides PlatformPrismaService
             auth_module_1.AuthModule, // For JwtAuthGuard
             ai_gateway_module_1.AiGatewayModule, // For AI scoring
+            (0, common_1.forwardRef)(() => bridge_module_1.BridgeModule), // For proposal management (forwardRef: circular with AgentExecutionModule)
         ],
         controllers: [notes_controller_1.NotesController],
         providers: [notes_service_1.NotesService],
@@ -14116,8 +14270,2821 @@ exports.NotesModule = NotesModule = tslib_1.__decorate([
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
-var NotesService_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BridgeModule = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const tenant_context_1 = __webpack_require__(10);
+const agent_execution_module_1 = __webpack_require__(135);
+const openclaw_tenant_module_1 = __webpack_require__(151);
+const knowledge_module_1 = __webpack_require__(74);
+const bridge_controller_1 = __webpack_require__(158);
+const bridge_service_1 = __webpack_require__(159);
+const brain_state_service_1 = __webpack_require__(160);
+/**
+ * Bridge Module
+ *
+ * Provides the REST API that OpenClaw calls via the mentor-ai-bridge skill.
+ * This is the connection between OpenClaw (brain) and Mentor AI (state service).
+ *
+ * Architecture:
+ * - BridgeController: REST endpoints (read state, write state)
+ * - BridgeService: State operations + WebSocket event emission via AppEventBus
+ * - BrainStateService: Tracks 9 BMC canvas block scan status per tenant
+ */
+let BridgeModule = class BridgeModule {
+};
+exports.BridgeModule = BridgeModule;
+exports.BridgeModule = BridgeModule = tslib_1.__decorate([
+    (0, common_1.Module)({
+        imports: [
+            config_1.ConfigModule,
+            tenant_context_1.TenantModule,
+            (0, common_1.forwardRef)(() => agent_execution_module_1.AgentExecutionModule), // For OpenClawClientService (notify on approval)
+            openclaw_tenant_module_1.OpenClawTenantModule, // For file proxy via SSH
+            knowledge_module_1.KnowledgeModule, // For semantic concept search via Qdrant
+        ],
+        controllers: [bridge_controller_1.BridgeController],
+        providers: [bridge_service_1.BridgeService, brain_state_service_1.BrainStateService],
+        exports: [bridge_service_1.BridgeService, brain_state_service_1.BrainStateService],
+    })
+], BridgeModule);
+
+
+/***/ }),
+/* 135 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AgentExecutionModule = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const tenant_context_1 = __webpack_require__(10);
+const auth_module_1 = __webpack_require__(42);
+const ai_gateway_module_1 = __webpack_require__(89);
+const notes_module_1 = __webpack_require__(133);
+const knowledge_module_1 = __webpack_require__(74);
+const web_search_module_1 = __webpack_require__(136);
+const agent_execution_service_1 = __webpack_require__(138);
+const agent_execution_controller_1 = __webpack_require__(149);
+const openclaw_client_service_1 = __webpack_require__(139);
+const agent_registry_service_1 = __webpack_require__(142);
+const agent_prompt_service_1 = __webpack_require__(141);
+const job_planner_service_1 = __webpack_require__(150);
+const budget_service_1 = __webpack_require__(143);
+const agent_execution_event_bus_service_1 = __webpack_require__(144);
+let AgentExecutionModule = class AgentExecutionModule {
+};
+exports.AgentExecutionModule = AgentExecutionModule;
+exports.AgentExecutionModule = AgentExecutionModule = tslib_1.__decorate([
+    (0, common_1.Module)({
+        imports: [config_1.ConfigModule, tenant_context_1.TenantModule, auth_module_1.AuthModule, ai_gateway_module_1.AiGatewayModule, (0, common_1.forwardRef)(() => notes_module_1.NotesModule), (0, common_1.forwardRef)(() => knowledge_module_1.KnowledgeModule), web_search_module_1.WebSearchModule],
+        controllers: [agent_execution_controller_1.AgentExecutionController],
+        providers: [
+            agent_execution_service_1.AgentExecutionService,
+            openclaw_client_service_1.OpenClawClientService,
+            agent_registry_service_1.AgentRegistryService,
+            agent_prompt_service_1.AgentPromptService,
+            job_planner_service_1.JobPlannerService,
+            budget_service_1.BudgetService,
+            agent_execution_event_bus_service_1.AgentExecutionEventBus,
+        ],
+        exports: [agent_execution_service_1.AgentExecutionService, job_planner_service_1.JobPlannerService, agent_execution_event_bus_service_1.AgentExecutionEventBus, openclaw_client_service_1.OpenClawClientService],
+    })
+], AgentExecutionModule);
+
+
+/***/ }),
+/* 136 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.WebSearchModule = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const web_search_service_1 = __webpack_require__(137);
+let WebSearchModule = class WebSearchModule {
+};
+exports.WebSearchModule = WebSearchModule;
+exports.WebSearchModule = WebSearchModule = tslib_1.__decorate([
+    (0, common_1.Module)({
+        imports: [config_1.ConfigModule],
+        providers: [web_search_service_1.WebSearchService],
+        exports: [web_search_service_1.WebSearchService],
+    })
+], WebSearchModule);
+
+
+/***/ }),
+/* 137 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var WebSearchService_1;
+var _a;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.WebSearchService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const axios_1 = tslib_1.__importDefault(__webpack_require__(58));
+const SEARCH_TIMEOUT_MS = 8_000;
+const PAGE_FETCH_TIMEOUT_MS = 10_000;
+const TOTAL_WEB_RESEARCH_TIMEOUT_MS = 25_000;
+const MAX_PAGE_CONTENT_CHARS = 5_000;
+const MAX_TOTAL_WEB_CONTEXT_CHARS = 20_000;
+let WebSearchService = WebSearchService_1 = class WebSearchService {
+    constructor(configService) {
+        this.configService = configService;
+        this.logger = new common_1.Logger(WebSearchService_1.name);
+        this.apiKey = this.configService.get('SERPER_API_KEY');
+    }
+    /**
+     * Whether web search is available (API key configured).
+     */
+    isAvailable() {
+        return !!this.apiKey;
+    }
+    /**
+     * Searches the web using Serper.dev Google Search API.
+     * Returns top results with title, link, and snippet.
+     */
+    async search(query, numResults = 5) {
+        if (!this.apiKey) {
+            this.logger.warn('SERPER_API_KEY not configured — web search unavailable');
+            return [];
+        }
+        try {
+            const response = await axios_1.default.post('https://google.serper.dev/search', { q: query, num: numResults }, {
+                headers: {
+                    'X-API-KEY': this.apiKey,
+                    'Content-Type': 'application/json',
+                },
+                timeout: SEARCH_TIMEOUT_MS,
+            });
+            const organic = response.data?.organic ?? [];
+            const results = organic
+                .slice(0, numResults)
+                .map((item) => ({
+                title: item.title ?? '',
+                link: item.link ?? '',
+                snippet: item.snippet ?? '',
+            }));
+            this.logger.log({
+                message: 'Web search completed',
+                query,
+                resultCount: results.length,
+            });
+            return results;
+        }
+        catch (error) {
+            this.logger.warn({
+                message: 'Web search failed',
+                query,
+                error: error instanceof Error ? error.message : 'Unknown',
+            });
+            return [];
+        }
+    }
+    /**
+     * Fetches a webpage and extracts text content.
+     * Returns cleaned text content (max 5000 chars).
+     */
+    async fetchWebpage(url) {
+        try {
+            const response = await axios_1.default.get(url, {
+                timeout: PAGE_FETCH_TIMEOUT_MS,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (compatible; MentorAI/1.0)',
+                    Accept: 'text/html,application/xhtml+xml',
+                },
+                maxRedirects: 5,
+                responseType: 'text',
+            });
+            const html = response.data;
+            // Basic HTML to text extraction
+            const text = this.extractTextFromHtml(html);
+            this.logger.log({
+                message: 'Webpage fetched',
+                url,
+                textLength: text.length,
+            });
+            return text.substring(0, 5000);
+        }
+        catch (error) {
+            this.logger.warn({
+                message: 'Webpage fetch failed',
+                url,
+                error: error instanceof Error ? error.message : 'Unknown',
+            });
+            return '';
+        }
+    }
+    /**
+     * Combined search + deep page extraction with global timeout.
+     * Returns enriched results with optional page content.
+     */
+    async searchAndExtract(query, numResults = 5) {
+        let timeoutId;
+        const globalTimeout = new Promise((resolve) => {
+            timeoutId = setTimeout(() => {
+                this.logger.warn({ message: 'Web research global timeout reached', query });
+                resolve([]);
+            }, TOTAL_WEB_RESEARCH_TIMEOUT_MS);
+        });
+        const work = async () => {
+            try {
+                // Phase 1: Search
+                const searchResults = await this.search(query, numResults);
+                if (searchResults.length === 0)
+                    return [];
+                const now = new Date().toISOString();
+                // Phase 2: Deep fetch top 3 results in parallel
+                const topResults = searchResults.slice(0, 3);
+                const fetchResults = await Promise.allSettled(topResults.map((r) => this.fetchWebpage(r.link)));
+                // Build enriched results with page content
+                const enriched = [];
+                let totalContentChars = 0;
+                for (let i = 0; i < searchResults.length; i++) {
+                    const result = searchResults[i];
+                    let pageContent;
+                    // Only top 3 have deep fetch attempts
+                    if (i < fetchResults.length) {
+                        const fetchResult = fetchResults[i];
+                        if (fetchResult.status === 'fulfilled' && fetchResult.value) {
+                            const truncated = fetchResult.value.substring(0, MAX_PAGE_CONTENT_CHARS);
+                            if (totalContentChars + truncated.length <= MAX_TOTAL_WEB_CONTEXT_CHARS) {
+                                pageContent = truncated;
+                                totalContentChars += truncated.length;
+                            }
+                        }
+                    }
+                    // Also count snippet towards total
+                    const snippetLen = result.snippet.length;
+                    if (!pageContent && totalContentChars + snippetLen > MAX_TOTAL_WEB_CONTEXT_CHARS) {
+                        continue; // Skip to stay within budget
+                    }
+                    if (!pageContent)
+                        totalContentChars += snippetLen;
+                    enriched.push({
+                        title: result.title,
+                        link: result.link,
+                        snippet: result.snippet,
+                        pageContent,
+                        fetchedAt: now,
+                    });
+                }
+                this.logger.log({
+                    message: 'Search and extract completed',
+                    query,
+                    resultCount: enriched.length,
+                    deepFetchCount: fetchResults.filter((r) => r.status === 'fulfilled' && r.value).length,
+                    totalContentChars,
+                });
+                return enriched;
+            }
+            finally {
+                clearTimeout(timeoutId);
+            }
+        };
+        return Promise.race([work(), globalTimeout]);
+    }
+    /**
+     * Formats enriched search results into an Obsidian-style context block
+     * with markdown links [Title](URL) for AI system prompt injection.
+     */
+    formatSourcesAsObsidian(results) {
+        if (!results || results.length === 0)
+            return '';
+        let context = '\n\n--- WEB ISTRAŽIVANJE (aktuelni podaci) ---';
+        for (const result of results) {
+            context += `\n\n**[${result.title}](${result.link})**`;
+            if (result.pageContent) {
+                context += `\n${result.pageContent}`;
+            }
+            else {
+                context += `\n${result.snippet}`;
+            }
+        }
+        context += '\n--- KRAJ WEB ISTRAŽIVANJA ---';
+        context +=
+            '\n\nKADA KORISTIŠ informacije iz web istraživanja, OBAVEZNO citiraj izvor INLINE odmah posle rečenice koja koristi tu informaciju.';
+        context += '\nFormat citiranja: ([Naziv izvora](URL)) — stavi odmah posle relevantne rečenice.';
+        context +=
+            '\nPrimer: "Tržište digitalnog marketinga raste 15% godišnje ([Digital Marketing Report 2026](https://example.com/report))."';
+        context += '\nAko ne koristiš informaciju iz izvora, NE citiraj ga.';
+        return context;
+    }
+    /**
+     * Basic HTML to text extraction without external dependencies.
+     */
+    extractTextFromHtml(html) {
+        // Remove script and style tags with their content
+        let text = html.replace(/<script[\s\S]*?<\/script>/gi, '');
+        text = text.replace(/<style[\s\S]*?<\/style>/gi, '');
+        text = text.replace(/<nav[\s\S]*?<\/nav>/gi, '');
+        text = text.replace(/<footer[\s\S]*?<\/footer>/gi, '');
+        text = text.replace(/<header[\s\S]*?<\/header>/gi, '');
+        // Remove all HTML tags
+        text = text.replace(/<[^>]+>/g, ' ');
+        // Decode common HTML entities
+        text = text.replace(/&nbsp;/g, ' ');
+        text = text.replace(/&amp;/g, '&');
+        text = text.replace(/&lt;/g, '<');
+        text = text.replace(/&gt;/g, '>');
+        text = text.replace(/&quot;/g, '"');
+        text = text.replace(/&#39;/g, "'");
+        // Collapse whitespace
+        text = text.replace(/\s+/g, ' ').trim();
+        return text;
+    }
+};
+exports.WebSearchService = WebSearchService;
+exports.WebSearchService = WebSearchService = WebSearchService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object])
+], WebSearchService);
+
+
+/***/ }),
+/* 138 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var AgentExecutionService_1;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AgentExecutionService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const tenant_context_1 = __webpack_require__(10);
+const cuid2_1 = __webpack_require__(33);
+const types_1 = __webpack_require__(86);
+const prisma_1 = __webpack_require__(36);
+const openclaw_client_service_1 = __webpack_require__(139);
+const agent_prompt_service_1 = __webpack_require__(141);
+const agent_registry_service_1 = __webpack_require__(142);
+const budget_service_1 = __webpack_require__(143);
+const agent_execution_event_bus_service_1 = __webpack_require__(144);
+const notes_service_1 = __webpack_require__(146);
+const ai_gateway_service_1 = __webpack_require__(90);
+const app_event_bus_service_1 = __webpack_require__(147);
+const citation_injector_service_1 = __webpack_require__(115);
+const web_search_service_1 = __webpack_require__(137);
+const config_1 = __webpack_require__(5);
+// WS events go through AppEventBus → event handlers → WsServerHolder
+let AgentExecutionService = AgentExecutionService_1 = class AgentExecutionService {
+    constructor(prisma, openClawClient, agentPrompt, registry, budgetService, eventBus, notesService, aiGateway, appEventBus, citationInjector, webSearchService, configService) {
+        this.prisma = prisma;
+        this.openClawClient = openClawClient;
+        this.agentPrompt = agentPrompt;
+        this.registry = registry;
+        this.budgetService = budgetService;
+        this.eventBus = eventBus;
+        this.notesService = notesService;
+        this.aiGateway = aiGateway;
+        this.appEventBus = appEventBus;
+        this.citationInjector = citationInjector;
+        this.webSearchService = webSearchService;
+        this.configService = configService;
+        this.logger = new common_1.Logger(AgentExecutionService_1.name);
+        // With STAGE_MAX_CONCURRENCY=5 and 2-4 agent jobs per task, peak is 10-20.
+        // Each job uses a unique session-id, so no OpenClaw lock contention.
+        // This limit prevents runaway execution, not lock issues.
+        this.MAX_CONCURRENT_PER_TENANT = 50;
+        this.VALID_STATUSES = new Set(Object.values(types_1.AgentExecutionStatus));
+        this.geminiApiKey = this.configService.get('GEMINI_API_KEY') ?? '';
+    }
+    emitAgentEvent(tenantId, eventName, payload) {
+        this.eventBus.emit({ tenantId, eventName, payload });
+    }
+    startHeartbeat(executionId, jobId, agentType, tenantId, startTime) {
+        return setInterval(() => {
+            this.emitAgentEvent(tenantId, 'agent:executing-heartbeat', {
+                executionId,
+                jobId,
+                elapsedMs: Date.now() - startTime,
+                agentType,
+            });
+        }, 5000);
+    }
+    async triggerAgent(noteId, agentType, userId, tenantId) {
+        // Validate agent type
+        const agentDef = this.registry.getAgent(agentType);
+        // Verify note
+        const note = await this.prisma.note.findFirst({
+            where: { id: noteId, tenantId },
+        });
+        if (!note) {
+            throw new common_1.NotFoundException(`Note ${noteId} not found`);
+        }
+        if (!note.userReport) {
+            throw new common_1.BadRequestException('Task has no completed report');
+        }
+        // Check OpenClaw config
+        if (!this.openClawClient.isConfigured()) {
+            throw new common_1.BadRequestException('Agent execution is not configured');
+        }
+        // Check for existing active execution on this note+agentType
+        const existingActive = await this.prisma.agentExecution.findFirst({
+            where: {
+                noteId,
+                tenantId,
+                agentType,
+                status: { in: ['PENDING', 'FORMATTING', 'EXECUTING'] },
+            },
+        });
+        if (existingActive) {
+            throw new common_1.BadRequestException(`${agentDef.label} is already in progress for this task`);
+        }
+        // Check budget
+        const canSpend = await this.budgetService.canSpend(tenantId);
+        if (!canSpend) {
+            throw new common_1.ForbiddenException('Daily budget exceeded');
+        }
+        // Check concurrency via DB count (safe across multiple instances)
+        const activeCount = await this.prisma.agentExecution.count({
+            where: {
+                tenantId,
+                status: { in: ['PENDING', 'FORMATTING', 'EXECUTING'] },
+            },
+        });
+        if (activeCount >= this.MAX_CONCURRENT_PER_TENANT) {
+            throw new common_1.BadRequestException(`Maximum ${this.MAX_CONCURRENT_PER_TENANT} concurrent agent executions`);
+        }
+        // Create execution record + reserve budget
+        const executionId = `agx_${(0, cuid2_1.createId)()}`;
+        const estimatedCost = agentDef.estimatedCostEur;
+        await this.prisma.agentExecution.create({
+            data: {
+                id: executionId,
+                tenantId,
+                userId,
+                noteId,
+                status: 'PENDING',
+                agentType,
+                estimatedCostEur: estimatedCost,
+            },
+        });
+        await this.budgetService.recordSpend(tenantId, estimatedCost);
+        this.logger.log({
+            message: 'Agent triggered',
+            executionId,
+            noteId,
+            agentType,
+            userId,
+            tenantId,
+            reservedCostEur: estimatedCost,
+        });
+        // Fire-and-forget async pipeline
+        this.executeAgentPipeline(executionId, agentType, note, userId, tenantId, estimatedCost).catch((err) => {
+            this.logger.error({
+                message: 'Agent pipeline failed unexpectedly',
+                executionId,
+                agentType,
+                error: err.message,
+            });
+        });
+        return { executionId };
+    }
+    async executeAgentPipeline(executionId, agentType, note, userId, tenantId, reservedCostEur) {
+        const openClawAgentId = this.registry.getOpenClawAgentId(agentType);
+        const agentLabel = this.registry.getAgent(agentType).label;
+        let heartbeat = null;
+        let chunkIndex = 0;
+        try {
+            // Emit concept activity for graph visualization
+            if (note.conceptId) {
+                this.emitAgentEvent(tenantId, 'agent:concept-activity', {
+                    agentType, conceptId: note.conceptId, status: 'started',
+                });
+            }
+            // Step 1: Format task into agent-specific instruction
+            await this.updateStatus(executionId, 'FORMATTING');
+            this.emitAgentEvent(tenantId, 'agent:status-change', {
+                executionId, jobId: null, noteId: note.id, agentType, status: 'FORMATTING',
+                label: `${agentLabel}: Priprema instrukcija...`,
+            });
+            const formattedPrompt = await this.agentPrompt.formatPrompt({
+                agentType,
+                taskTitle: note.title,
+                taskContent: note.content,
+                userReport: note.userReport,
+                expectedOutcome: note.expectedOutcome,
+                tenantId,
+                userId,
+                onChunk: (chunk) => {
+                    this.emitAgentEvent(tenantId, 'agent:formatting-chunk', {
+                        executionId, jobId: null, chunk, index: chunkIndex++,
+                    });
+                },
+            });
+            this.emitAgentEvent(tenantId, 'agent:formatting-complete', {
+                executionId, jobId: null, promptLength: formattedPrompt.length,
+            });
+            await this.prisma.agentExecution.update({
+                where: { id: executionId },
+                data: { formattedPrompt },
+            });
+            // Step 2: Send to OpenClaw with the correct agent
+            await this.updateStatus(executionId, 'EXECUTING', { startedAt: new Date() });
+            this.emitAgentEvent(tenantId, 'agent:status-change', {
+                executionId, jobId: null, noteId: note.id, agentType, status: 'EXECUTING',
+                label: `${agentLabel}: Agent istražuje...`,
+            });
+            heartbeat = this.startHeartbeat(executionId, null, agentType, tenantId, Date.now());
+            // Use unique session-id for parallel execution safety
+            const workSessionId = `work-${executionId}-${openClawAgentId}`;
+            const result = await this.openClawClient.executeAgent(formattedPrompt, {
+                agentId: openClawAgentId,
+                sessionId: workSessionId,
+                tenantProfile: tenantId,
+                onText: (text) => {
+                    this.emitAgentEvent(tenantId, 'agent:text-chunk', {
+                        executionId, jobId: null, text,
+                    });
+                },
+                onTool: (tool, status, query) => {
+                    this.emitAgentEvent(tenantId, 'agent:tool-event', {
+                        executionId, jobId: null, tool, status, query,
+                    });
+                },
+                onStatus: (phase) => {
+                    this.emitAgentEvent(tenantId, 'agent:status-change', {
+                        executionId, jobId: null, noteId: note.id, agentType, status: 'EXECUTING',
+                        label: `${agentLabel}: ${phase === 'running' ? 'Agent istražuje...' : phase}`,
+                    });
+                },
+            });
+            clearInterval(heartbeat);
+            heartbeat = null;
+            if (!result.success) {
+                const errorMsg = result.error ?? 'Agent execution failed';
+                await this.updateStatus(executionId, 'FAILED', {
+                    error: errorMsg,
+                    completedAt: new Date(),
+                    durationMs: result.durationMs,
+                });
+                this.emitAgentEvent(tenantId, 'agent:status-change', {
+                    executionId, jobId: null, noteId: note.id, agentType, status: 'FAILED',
+                    label: `${agentLabel}: Greška`,
+                });
+                this.emitAgentEvent(tenantId, 'agent:error', {
+                    executionId, jobId: null, agentType, error: errorMsg,
+                });
+                return;
+            }
+            // Step 3: Store results in Note.agentEnrichments JSON (atomic merge)
+            await this.mergeEnrichment(note.id, agentType, {
+                executionId,
+                status: types_1.AgentExecutionStatus.COMPLETED,
+                result: result.output,
+                completedAt: new Date().toISOString(),
+                error: null,
+            });
+            // Step 3b: Persist agent output as reviewable child note (Sprint 2 Epic 2.3)
+            const resultNoteId = await this.createResultNote(result.output, agentLabel, note, userId, tenantId, executionId);
+            // Step 4: Calculate cost and adjust budget
+            const actualCost = this.estimateActualCost(result.usage);
+            const costDifference = actualCost - reservedCostEur;
+            if (Math.abs(costDifference) > 0.0001) {
+                await this.budgetService.recordSpend(tenantId, costDifference);
+            }
+            // Step 5: Mark completed + link result note (guard: don't overwrite if manually stopped)
+            const currentExec = await this.prisma.agentExecution.findUnique({ where: { id: executionId }, select: { status: true } });
+            if (currentExec?.status !== 'FAILED') {
+                await this.prisma.agentExecution.update({
+                    where: { id: executionId },
+                    data: {
+                        status: 'COMPLETED',
+                        agentOutput: result.output,
+                        actualCostEur: actualCost,
+                        completedAt: new Date(),
+                        durationMs: result.durationMs,
+                        resultNoteId,
+                    },
+                });
+                this.emitAgentEvent(tenantId, 'agent:status-change', {
+                    executionId, jobId: null, noteId: note.id, agentType, status: 'COMPLETED',
+                    label: `${agentLabel}: Završeno`,
+                });
+            }
+            this.emitAgentEvent(tenantId, 'agent:result', {
+                executionId, jobId: null, agentType,
+                output: result.output, durationMs: result.durationMs,
+            });
+            this.logger.log({
+                message: 'Agent execution completed',
+                executionId,
+                agentType,
+                durationMs: result.durationMs,
+                actualCostEur: actualCost,
+            });
+            // Stop concept activity for graph visualization
+            if (note.conceptId) {
+                this.emitAgentEvent(tenantId, 'agent:concept-activity', {
+                    agentType, conceptId: note.conceptId, status: 'stopped',
+                });
+            }
+        }
+        catch (err) {
+            if (heartbeat)
+                clearInterval(heartbeat);
+            // Stop concept activity on failure too
+            if (note.conceptId) {
+                this.emitAgentEvent(tenantId, 'agent:concept-activity', {
+                    agentType, conceptId: note.conceptId, status: 'stopped',
+                });
+            }
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            this.logger.error({
+                message: 'Agent pipeline error',
+                executionId,
+                agentType,
+                error: errorMessage,
+            });
+            this.emitAgentEvent(tenantId, 'agent:status-change', {
+                executionId, jobId: null, noteId: note.id, agentType, status: 'FAILED',
+                label: `${agentLabel}: Greška`,
+            });
+            this.emitAgentEvent(tenantId, 'agent:error', {
+                executionId, jobId: null, agentType, error: errorMessage,
+            });
+            // Store error in enrichments too (atomic merge — safe under concurrency)
+            try {
+                await this.mergeEnrichment(note.id, agentType, {
+                    executionId,
+                    status: types_1.AgentExecutionStatus.FAILED,
+                    result: null,
+                    completedAt: new Date().toISOString(),
+                    error: errorMessage,
+                });
+            }
+            catch {
+                /* best-effort */
+            }
+            await this.updateStatus(executionId, 'FAILED', {
+                error: errorMessage,
+                completedAt: new Date(),
+            });
+        }
+    }
+    async updateStatus(executionId, status, extra) {
+        await this.prisma.agentExecution.update({
+            where: { id: executionId },
+            data: { status, ...extra },
+        });
+    }
+    /**
+     * Atomically merges an enrichment entry into Note.agentEnrichments JSON
+     * using PostgreSQL jsonb || operator. Prevents race conditions when
+     * multiple agents write to the same note concurrently.
+     *
+     * NOTE: Uses raw SQL intentionally to get atomic JSONB merge semantics.
+     * This bypasses Prisma middleware (logging, hooks, @updatedAt).
+     * We manually set updated_at to compensate.
+     */
+    async mergeEnrichment(noteId, agentType, entry) {
+        const patch = JSON.stringify({ [agentType]: entry });
+        await this.prisma.$executeRaw `
+      UPDATE notes
+      SET agent_enrichments = COALESCE(agent_enrichments, '{}'::jsonb) || ${patch}::jsonb,
+          updated_at = NOW()
+      WHERE id = ${noteId}
+    `;
+    }
+    /**
+     * Hybrid search pipeline: Gemini Flash generates search queries from the domain agent's
+     * formatted prompt, then Serper API fetches real data. Returns formatted research block.
+     *
+     * Flow: domain prompt → Gemini extracts queries → Serper searches → formatted results
+     */
+    async generateSearchAndEnrich(formattedPrompt, agentLabel, taskTitle) {
+        if (!this.geminiApiKey || !this.webSearchService.isAvailable()) {
+            this.logger.warn({ message: 'Search enrichment skipped — Gemini or Serper not configured' });
+            return '';
+        }
+        try {
+            // Step 1: Gemini Flash extracts 3-5 precise English search queries from domain prompt
+            const queryGenPrompt = `You are a search query generator. Read the domain agent instruction below and generate 3-5 precise English search queries that will find the EXACT data this agent needs.
+
+RULES:
+- Queries MUST be in English (Google works best with English)
+- Each query should target SPECIFIC data: benchmarks, statistics, case studies, pricing, competitor info
+- Include the company industry context (luxury sculptures, bronze/marble, SE Europe)
+- Be precise — "luxury sculpture market size 2024 EUR" not "sculpture market"
+- Output ONLY a JSON array of strings, nothing else
+
+DOMAIN AGENT INSTRUCTION:
+${formattedPrompt.substring(0, 3000)}
+
+Output format: ["query 1", "query 2", "query 3"]`;
+            const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${this.geminiApiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: queryGenPrompt }] }],
+                    generationConfig: { temperature: 0.3, maxOutputTokens: 5000 },
+                }),
+                signal: AbortSignal.timeout(15_000),
+            });
+            if (!geminiResponse.ok) {
+                this.logger.warn({ message: 'Gemini Flash query generation failed', status: geminiResponse.status });
+                return '';
+            }
+            const geminiData = await geminiResponse.json();
+            const queryText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+            const queryMatch = queryText.match(/\[[\s\S]*\]/);
+            if (!queryMatch) {
+                this.logger.warn({ message: 'No JSON array in Gemini response', preview: queryText.substring(0, 100) });
+                return '';
+            }
+            const queries = JSON.parse(queryMatch[0]);
+            if (!Array.isArray(queries) || queries.length === 0)
+                return '';
+            this.logger.log({
+                message: 'Search queries generated by Gemini Flash',
+                agentLabel,
+                taskTitle,
+                queries,
+            });
+            // Step 2: Run searches in parallel via Brave Search API (5 results per query)
+            const braveKey = this.configService.get('BRAVE_API_KEY') ?? '';
+            const searchPromises = queries.slice(0, 5).map(async (q) => {
+                try {
+                    const encoded = encodeURIComponent(q);
+                    const res = await fetch(`https://api.search.brave.com/res/v1/web/search?q=${encoded}&count=5`, { headers: { 'X-Subscription-Token': braveKey, 'Accept': 'application/json' }, signal: AbortSignal.timeout(10_000) });
+                    if (!res.ok)
+                        return [];
+                    const data = await res.json();
+                    return (data.web?.results ?? []).slice(0, 5).map((r) => ({
+                        title: r.title ?? '', link: r.url ?? '', snippet: r.description ?? '',
+                    }));
+                }
+                catch {
+                    return [];
+                }
+            });
+            const searchResults = await Promise.all(searchPromises);
+            // Step 3: Format results into a research block for the domain agent
+            let researchBlock = '\n\n--- REZULTATI WEB ISTRAZIVANJA ---\n';
+            researchBlock += 'Sledeci podaci su pronadjeni putem web pretrage. KORISTI ove izvore kao PRIMARNI izvor cinjenica.\n';
+            researchBlock += 'OBAVEZNO citiraj izvor: ([Naziv](URL)) posle svake cinjenice.\n';
+            researchBlock += 'NE IGNORISI ove podatke — tvoja analiza MORA biti zasnovana na njima.\n\n';
+            let totalChars = 0;
+            const MAX_RESEARCH_CHARS = 8_000;
+            for (let i = 0; i < queries.length && i < searchResults.length; i++) {
+                const results = searchResults[i] ?? [];
+                if (results.length === 0)
+                    continue;
+                researchBlock += `### Pretraga: "${queries[i]}"\n`;
+                for (const r of results) {
+                    if (totalChars > MAX_RESEARCH_CHARS)
+                        break;
+                    researchBlock += `\n**[${r.title}](${r.link})**\n${r.snippet}\n`;
+                    totalChars += r.snippet.length;
+                }
+                researchBlock += '\n';
+            }
+            researchBlock += '\n--- KRAJ SIROVIH REZULTATA ---\n';
+            // Step 4: Summarize entire research block to ~5000 chars via Gemini Flash
+            // One call for ALL results — preserves key data, removes noise
+            if (totalChars > 5000) {
+                try {
+                    const summarizePrompt = `Summarize the following web research results into a RICH, COMPREHENSIVE research brief of ~5000 characters.
+
+RULES:
+- PRESERVE all specific numbers, percentages, currency amounts, dates
+- PRESERVE all source URLs — format as ([Title](URL)) inline after each fact
+- PRESERVE competitor names, company examples, case studies with specifics
+- PRESERVE industry benchmarks and comparison data
+- REMOVE generic filler text, navigation content, duplicate information
+- ORGANIZE by topic with clear ## headings
+- Output in Serbian language
+- Include comparison tables where data from multiple sources exists
+
+RAW RESEARCH DATA:
+${researchBlock}`;
+                    // Gemini 2.5 Flash for summarization — thinking disabled to maximize output tokens
+                    const sumResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${this.geminiApiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: summarizePrompt }] }],
+                            generationConfig: { temperature: 0.2, maxOutputTokens: 5000, thinkingConfig: { thinkingBudget: 0 } },
+                        }),
+                        signal: AbortSignal.timeout(30_000),
+                    });
+                    if (sumResponse.ok) {
+                        const sumData = await sumResponse.json();
+                        const summary = sumData.candidates?.[0]?.content?.parts?.[0]?.text;
+                        if (summary && summary.length > 1000) {
+                            researchBlock = '\n\n--- REZULTATI WEB ISTRAZIVANJA (sumirano) ---\n';
+                            researchBlock += 'Sledeci podaci su pronadjeni i sumirani iz web pretrage. KORISTI ih kao PRIMARNI izvor.\n';
+                            researchBlock += 'OBAVEZNO citiraj izvor: ([Naziv](URL)) posle svake cinjenice.\n\n';
+                            researchBlock += summary;
+                            researchBlock += '\n\n--- KRAJ WEB ISTRAZIVANJA ---\n';
+                            this.logger.log({
+                                message: 'Research summarized by Gemini',
+                                agentLabel, original: totalChars, summarized: summary.length,
+                            });
+                        }
+                    }
+                }
+                catch (sumErr) {
+                    this.logger.warn({ message: 'Research summarization failed, using raw results', error: sumErr instanceof Error ? sumErr.message : 'Unknown' });
+                }
+            }
+            if (!researchBlock.includes('KRAJ WEB ISTRAZIVANJA')) {
+                researchBlock += '\n--- KRAJ WEB ISTRAZIVANJA ---\n';
+            }
+            researchBlock += '\nKRITICNO: Koristi SAMO podatke iz izvora iznad. Svaku cinjenicu citiraj sa izvorom. NE izmisljaj podatke. NE kazi da "nemas podatke" ako su iznad navedeni.\n';
+            this.logger.log({
+                message: 'Search enrichment complete',
+                agentLabel,
+                queryCount: queries.length,
+                totalResultChars: totalChars,
+            });
+            return researchBlock;
+        }
+        catch (err) {
+            this.logger.warn({
+                message: 'Search enrichment failed (non-blocking)',
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+            return '';
+        }
+    }
+    /**
+     * Scan agent output for ![alt](url) images, check if URLs are real (HTTP 200).
+     * For any fake/404 URLs, call FAL API with the alt text as prompt to generate real images.
+     */
+    async fixFakeImageUrls(output, taskTitle, _taskInstruction, tenantId) {
+        const falKey = this.configService.get('FAL_KEY') ?? '';
+        const geminiKey = this.configService.get('GEMINI_API_KEY') ?? '';
+        if (!falKey && !geminiKey)
+            return output;
+        // Pre-clean: Convert FAL code blocks and FAL_IMAGE_SIZE commands into markdown image syntax
+        let cleaned = output;
+        // Remove JS code blocks with fal-ai (const fal = require... etc)
+        cleaned = cleaned.replace(/```(?:javascript|js)?\s*\n[\s\S]*?fal[\s\S]*?```/gi, '');
+        // Convert "FAL_IMAGE_SIZE=<size> fal-generate "<prompt>"" to ![prompt](https://placeholder.img)
+        cleaned = cleaned.replace(/FAL_IMAGE_SIZE=\S+\s+fal-generate\s+"([^"]+)"/g, '![Generated image: $1](https://placeholder.img/generate)');
+        // Convert standalone fal-generate commands
+        cleaned = cleaned.replace(/fal-generate\s+"([^"]+)"/g, '![Generated image: $1](https://placeholder.img/generate)');
+        // Remove [POTREBNO ISTRAZITI] markers completely
+        cleaned = cleaned.replace(/\[POTREBNO (?:DODATNO )?ISTRA[ZŽ]ITI\]/gi, '');
+        // Match ALL markdown images: ![alt](url) — any URL format including placeholders
+        const imgPattern = /!\[([^\]]*)\]\(([^)]+)\)/g;
+        const matches = [...cleaned.matchAll(imgPattern)];
+        if (matches.length === 0)
+            return cleaned;
+        // Check which URLs are fake (not real accessible images)
+        const fakeImages = [];
+        for (const match of matches) {
+            const url = match[2] ?? '';
+            // If URL is not a real http URL or contains placeholder text, it's fake
+            if (!url.startsWith('https://') || url.includes('placeholder')) {
+                fakeImages.push({ fullMatch: match[0], altText: match[1] ?? '', index: match.index ?? 0 });
+                continue;
+            }
+            // Check if real URL returns 200
+            try {
+                const headRes = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+                if (headRes.ok)
+                    continue;
+            }
+            catch { /* unreachable */ }
+            fakeImages.push({ fullMatch: match[0], altText: match[1] ?? '', index: match.index ?? 0 });
+        }
+        if (fakeImages.length === 0)
+            return output;
+        // Load brand context
+        let brandContext = '';
+        if (tenantId) {
+            try {
+                const tenant = await this.prisma.tenant.findUnique({
+                    where: { id: tenantId },
+                    select: { name: true, industry: true, description: true },
+                });
+                if (tenant) {
+                    brandContext = `Company: ${tenant.name}. Industry: ${tenant.industry}. ${tenant.description ?? ''}`;
+                }
+            }
+            catch { /* non-blocking */ }
+        }
+        // ONE Gemini call to analyze the FULL document and generate prompts for ALL fake images
+        let imagePrompts = [];
+        if (geminiKey) {
+            try {
+                const imageList = fakeImages.map((img, i) => `IMAGE_${i + 1}: ${img.altText}`).join('\n');
+                const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: `You are an expert image prompt engineer. Read this document and generate precise English image generation prompts for each image listed below.
+
+CRITICAL RULES:
+- Read the FULL document to understand context for each image
+- Each prompt must describe EXACTLY what that specific image should show based on the document content around it
+- Be SPECIFIC and VISUAL: describe the scene, objects, composition, lighting, colors, mood, textures, materials
+- Do NOT use generic descriptions — each image serves a specific purpose in the document
+- Add professional photography qualities: camera angle, depth of field, lighting setup, color grading
+- Include style references: photorealistic, editorial, product photography, lifestyle, architectural, etc.
+- Describe the environment, background, foreground elements, and spatial relationships
+- 80-150 words per prompt — RICHER prompts produce BETTER images
+
+${brandContext ? `COMPANY CONTEXT: ${brandContext}\n` : ''}${taskTitle ? `TASK: ${taskTitle}\n` : ''}
+DOCUMENT:
+${cleaned.substring(0, 8000)}
+
+IMAGES TO GENERATE:
+${imageList}
+
+Return ONLY a JSON array of prompt strings, one per image, in the same order:
+["prompt for IMAGE_1", "prompt for IMAGE_2", ...]` }] }],
+                        generationConfig: { temperature: 0.4, maxOutputTokens: 5000, thinkingConfig: { thinkingBudget: 0 } },
+                    }),
+                    signal: AbortSignal.timeout(20000),
+                });
+                if (geminiRes.ok) {
+                    const gData = await geminiRes.json();
+                    const gText = gData.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+                    const jsonMatch = gText.match(/\[[\s\S]*\]/);
+                    if (jsonMatch) {
+                        imagePrompts = JSON.parse(jsonMatch[0]);
+                    }
+                }
+            }
+            catch (err) {
+                this.logger.warn({ message: 'Gemini image prompt generation failed', error: err instanceof Error ? err.message : 'Unknown' });
+            }
+        }
+        // Generate real images via FAL API
+        let fixedOutput = cleaned;
+        let fixedCount = 0;
+        for (let i = 0; i < fakeImages.length; i++) {
+            const img = fakeImages[i];
+            const prompt = imagePrompts[i] && imagePrompts[i].length > 20
+                ? imagePrompts[i]
+                : `${img.altText}, professional photography, high quality, detailed, realistic`;
+            try {
+                const falRes = await fetch('https://fal.run/fal-ai/flux/schnell', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Key ${falKey}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, image_size: 'landscape_16_9', num_images: 1 }),
+                    signal: AbortSignal.timeout(30000),
+                });
+                if (falRes.ok) {
+                    const falData = await falRes.json();
+                    const realUrl = falData.images?.[0]?.url;
+                    if (realUrl) {
+                        fixedOutput = fixedOutput.replace(img.fullMatch, `![${img.altText}](${realUrl})`);
+                        fixedCount++;
+                        this.logger.log({ message: 'Fixed image via FAL fallback', index: i + 1, prompt: prompt.substring(0, 60) });
+                    }
+                }
+            }
+            catch (err) {
+                this.logger.warn({ message: 'Image generation failed', index: i + 1, error: err instanceof Error ? err.message : 'Unknown' });
+            }
+        }
+        if (fixedCount > 0) {
+            this.logger.log({ message: `Fixed ${fixedCount}/${fakeImages.length} fake images` });
+        }
+        return fixedOutput;
+    }
+    /**
+     * Load the parent concept + its related concepts as ConceptMatch[] for citation injection.
+     */
+    async loadConceptMatchesForNote(conceptId) {
+        try {
+            const concept = await this.prisma.concept.findUnique({
+                where: { id: conceptId },
+                select: { id: true, name: true, category: true, definition: true },
+            });
+            if (!concept)
+                return [];
+            // Load related concepts (both directions)
+            const relationships = await this.prisma.conceptRelationship.findMany({
+                where: {
+                    OR: [{ sourceConceptId: conceptId }, { targetConceptId: conceptId }],
+                },
+                include: {
+                    sourceConcept: { select: { id: true, name: true, category: true, definition: true } },
+                    targetConcept: { select: { id: true, name: true, category: true, definition: true } },
+                },
+                take: 10,
+            });
+            const matches = [
+                { conceptId: concept.id, conceptName: concept.name, category: concept.category, definition: concept.definition, score: 1.0 },
+            ];
+            for (const rel of relationships) {
+                const related = rel.sourceConceptId === conceptId ? rel.targetConcept : rel.sourceConcept;
+                if (!matches.some((m) => m.conceptId === related.id)) {
+                    matches.push({
+                        conceptId: related.id,
+                        conceptName: related.name,
+                        category: related.category,
+                        definition: related.definition,
+                        score: 0.8,
+                    });
+                }
+            }
+            return matches;
+        }
+        catch {
+            return [];
+        }
+    }
+    estimateActualCost(usage) {
+        if (!usage?.total)
+            return this.budgetService.getEstimatedCost();
+        const inputCost = ((usage.input ?? 0) / 1_000_000) * 0.27;
+        const outputCost = ((usage.output ?? 0) / 1_000_000) * 1.1;
+        const fetchCost = 0.03;
+        return Math.round((inputCost + outputCost + fetchCost) * 10000) / 10000;
+    }
+    /** Creates a child note for an agent/job result, returning the new note ID or null on failure. */
+    async createResultNote(output, agentLabel, note, userId, tenantId, executionId, jobId) {
+        if (!output)
+            return null;
+        try {
+            const existingSteps = await this.prisma.note.count({
+                where: { parentNoteId: note.id, tenantId },
+            });
+            const childNote = await this.notesService.createNote({
+                title: `${agentLabel}: ${note.title}`,
+                content: output,
+                source: prisma_1.NoteSource.CONVERSATION,
+                noteType: prisma_1.NoteType.AGENT_RESEARCH,
+                status: prisma_1.NoteStatus.READY_FOR_REVIEW,
+                parentNoteId: note.id,
+                workflowStepNumber: existingSteps + 1,
+                conceptId: note.conceptId ?? undefined,
+                conversationId: note.conversationId ?? undefined,
+                userId,
+                tenantId,
+            });
+            this.logger.debug({
+                message: 'Agent result persisted as child note',
+                executionId,
+                jobId,
+                resultNoteId: childNote.id,
+                parentNoteId: note.id,
+            });
+            return childNote.id;
+        }
+        catch (noteErr) {
+            this.logger.warn({
+                message: 'Failed to create child note for agent result',
+                executionId,
+                jobId,
+                error: noteErr instanceof Error ? noteErr.message : 'Unknown',
+            });
+            return null;
+        }
+    }
+    // --- Agent Job Pipeline ---
+    async executeJob(jobId, userId, tenantId) {
+        // Load and validate job
+        const job = await this.prisma.agentJob.findFirst({
+            where: { id: jobId, tenantId },
+        });
+        if (!job) {
+            throw new common_1.NotFoundException(`Job ${jobId} not found`);
+        }
+        if (job.status !== 'PLANNED') {
+            throw new common_1.BadRequestException(`Job is already ${job.status.toLowerCase()}`);
+        }
+        // Check dependencies are in terminal state (COMPLETED or FAILED)
+        // Block only on actively running deps — FAILED deps are allowed (context will exclude them)
+        if (job.dependsOn.length > 0) {
+            const depJobs = await this.prisma.agentJob.findMany({
+                where: { id: { in: job.dependsOn } },
+            });
+            const nonTerminalDeps = depJobs.filter((d) => !['COMPLETED', 'FAILED'].includes(d.status));
+            if (nonTerminalDeps.length > 0) {
+                throw new common_1.BadRequestException('Dependency jobs still in progress');
+            }
+        }
+        // Load parent note
+        const note = await this.prisma.note.findFirst({
+            where: { id: job.noteId, tenantId },
+        });
+        if (!note) {
+            throw new common_1.NotFoundException(`Note ${job.noteId} not found`);
+        }
+        // Validate agent type, config, budget
+        const agentType = job.agentType;
+        const agentDef = this.registry.getAgent(agentType);
+        if (!this.openClawClient.isConfigured()) {
+            throw new common_1.BadRequestException('Agent execution is not configured');
+        }
+        const canSpend = await this.budgetService.canSpend(tenantId);
+        if (!canSpend) {
+            throw new common_1.ForbiddenException('Daily budget exceeded');
+        }
+        // Check concurrency
+        const activeCount = await this.prisma.agentExecution.count({
+            where: {
+                tenantId,
+                status: { in: ['PENDING', 'FORMATTING', 'EXECUTING'] },
+            },
+        });
+        if (activeCount >= this.MAX_CONCURRENT_PER_TENANT) {
+            throw new common_1.BadRequestException(`Maximum ${this.MAX_CONCURRENT_PER_TENANT} concurrent agent executions`);
+        }
+        // Create execution record + reserve budget
+        const executionId = `agx_${(0, cuid2_1.createId)()}`;
+        const estimatedCost = agentDef.estimatedCostEur;
+        await this.prisma.agentExecution.create({
+            data: {
+                id: executionId,
+                tenantId,
+                userId,
+                noteId: job.noteId,
+                status: 'PENDING',
+                agentType,
+                estimatedCostEur: estimatedCost,
+            },
+        });
+        await this.budgetService.recordSpend(tenantId, estimatedCost);
+        // Update job: RUNNING + link execution
+        await this.prisma.agentJob.update({
+            where: { id: jobId },
+            data: { status: 'RUNNING', executionId },
+        });
+        this.logger.log({
+            message: 'Job execution triggered',
+            jobId,
+            executionId,
+            agentType,
+            noteId: job.noteId,
+        });
+        // Gather dependency context
+        let dependencyContext = '';
+        if (job.dependsOn.length > 0) {
+            const depJobs = await this.prisma.agentJob.findMany({
+                where: { id: { in: job.dependsOn }, status: 'COMPLETED' },
+                orderBy: { order: 'asc' },
+            });
+            for (const dep of depJobs) {
+                if (dep.agentOutput) {
+                    const depLabel = this.registry.getAgent(dep.agentType).label;
+                    dependencyContext += `\n--- Previous Result: ${depLabel} ---\n${dep.agentOutput}\n--- End ---\n`;
+                }
+            }
+            this.logger.log({
+                message: 'Dependency context gathered',
+                jobId,
+                dependencyCount: depJobs.length,
+                contextLength: dependencyContext.length,
+            });
+        }
+        // Fire-and-forget
+        this.executeJobPipeline(executionId, jobId, agentType, note, job.instruction, dependencyContext, userId, tenantId, estimatedCost).catch((err) => {
+            this.logger.error({
+                message: 'Job pipeline failed unexpectedly',
+                jobId,
+                executionId,
+                error: err.message,
+            });
+        });
+        return { jobId, executionId };
+    }
+    /**
+     * Retry a FAILED agent job: reset to PLANNED, then re-execute.
+     */
+    async retryJob(jobId, userId, tenantId) {
+        const job = await this.prisma.agentJob.findFirst({
+            where: { id: jobId, tenantId },
+        });
+        if (!job) {
+            throw new common_1.NotFoundException(`Job ${jobId} not found`);
+        }
+        // Allow re-run from any status (COMPLETED, FAILED, PLANNED)
+        // Reset to PLANNED so executeJob() can pick it up fresh
+        await this.prisma.agentJob.update({
+            where: { id: jobId },
+            data: { status: 'PLANNED', executionId: null, error: null, agentOutput: null },
+        });
+        this.logger.log({ message: 'Re-running job', jobId, status: job.status, tenantId });
+        return this.executeJob(jobId, userId, tenantId);
+    }
+    /**
+     * Force-stop all running executions and jobs for a tenant.
+     */
+    async stopAllExecutions(tenantId) {
+        const execs = await this.prisma.agentExecution.updateMany({
+            where: { tenantId, status: { in: ['EXECUTING', 'FORMATTING', 'PENDING'] } },
+            data: { status: 'FAILED', error: 'Manually stopped by user', completedAt: new Date() },
+        });
+        const jobs = await this.prisma.agentJob.updateMany({
+            where: { tenantId, status: 'RUNNING' },
+            data: { status: 'FAILED', error: 'Manually stopped by user' },
+        });
+        this.logger.log({
+            message: 'All executions stopped by user',
+            tenantId,
+            stoppedExecutions: execs.count,
+            stoppedJobs: jobs.count,
+        });
+        return { stoppedExecutions: execs.count, stoppedJobs: jobs.count };
+    }
+    /**
+     * Retry all PLANNED and FAILED jobs in waves of 5, respecting dependencies.
+     * FAILED jobs are first reset to PLANNED. Then processes waves until all done.
+     */
+    async retryAllPendingJobs(userId, tenantId) {
+        // Reset all FAILED jobs to PLANNED
+        const failedJobs = await this.prisma.agentJob.updateMany({
+            where: { tenantId, status: 'FAILED' },
+            data: { status: 'PLANNED', executionId: null, error: null },
+        });
+        const totalPlanned = await this.prisma.agentJob.count({
+            where: { tenantId, status: 'PLANNED' },
+        });
+        if (totalPlanned === 0) {
+            return { totalJobs: 0, message: 'No pending jobs to retry' };
+        }
+        this.logger.log({
+            message: 'Retry all pending: starting wave execution',
+            tenantId,
+            resetFailed: failedJobs.count,
+            totalPlanned,
+        });
+        // Fire-and-forget: process waves in background
+        this.processJobWaves(userId, tenantId).catch((err) => {
+            this.logger.error({
+                message: 'Retry all pending: wave processing failed',
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+        });
+        return { totalJobs: totalPlanned, message: `Processing ${totalPlanned} jobs in waves of 5` };
+    }
+    async processJobWaves(userId, tenantId) {
+        const WAVE_SIZE = 3;
+        const MAX_WAIT_PER_JOB_MS = 15 * 60_000; // 15 min max per job
+        const POLL_INTERVAL_MS = 5_000;
+        let processedTotal = 0;
+        while (true) {
+            // Find PLANNED jobs whose dependencies are all terminal
+            const allPlanned = await this.prisma.agentJob.findMany({
+                where: { tenantId, status: 'PLANNED' },
+                select: { id: true, agentType: true, dependsOn: true, noteId: true },
+            });
+            if (allPlanned.length === 0) {
+                this.logger.log({ message: `Retry all: complete. Processed ${processedTotal} jobs.`, tenantId });
+                break;
+            }
+            // Filter to ready jobs (all deps COMPLETED or FAILED)
+            const ready = [];
+            for (const job of allPlanned) {
+                if (job.dependsOn.length === 0) {
+                    ready.push(job);
+                    continue;
+                }
+                const deps = await this.prisma.agentJob.findMany({
+                    where: { id: { in: job.dependsOn } },
+                    select: { status: true },
+                });
+                if (deps.every((d) => ['COMPLETED', 'FAILED'].includes(d.status))) {
+                    ready.push(job);
+                }
+            }
+            if (ready.length === 0) {
+                this.logger.warn({
+                    message: `Retry all: ${allPlanned.length} PLANNED but none ready (unmet deps). Stopping.`,
+                    tenantId,
+                });
+                break;
+            }
+            // Take wave of WAVE_SIZE
+            const wave = ready.slice(0, WAVE_SIZE);
+            this.logger.log({
+                message: `Retry all: wave of ${wave.length} jobs (${allPlanned.length} remaining)`,
+                tenantId,
+                jobTypes: wave.map((j) => j.agentType),
+            });
+            // Execute wave in parallel
+            const wavePromises = wave.map(async (job) => {
+                try {
+                    await this.executeJob(job.id, userId, tenantId);
+                    // Poll for completion
+                    const start = Date.now();
+                    while (Date.now() - start < MAX_WAIT_PER_JOB_MS) {
+                        const current = await this.prisma.agentJob.findFirst({
+                            where: { id: job.id },
+                            select: { status: true },
+                        });
+                        if (!current || ['COMPLETED', 'FAILED'].includes(current.status))
+                            break;
+                        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+                    }
+                }
+                catch (err) {
+                    this.logger.warn({
+                        message: `Retry all: job ${job.id} failed to start`,
+                        error: err instanceof Error ? err.message : 'Unknown',
+                    });
+                }
+            });
+            await Promise.all(wavePromises);
+            processedTotal += wave.length;
+            // Send knowledge updates to domain masters + main for completed jobs in this wave
+            await this.sendKnowledgeUpdatesForWave(wave, tenantId);
+            // Short pause between waves
+            await new Promise((r) => setTimeout(r, 2_000));
+        }
+    }
+    /**
+     * After a wave of jobs completes, send knowledge updates to domain master agents
+     * and the main business brain agent. Groups by noteId to send one update per concept.
+     */
+    async sendKnowledgeUpdatesForWave(jobs, tenantId) {
+        // Group completed jobs by noteId
+        const noteIds = [...new Set(jobs.map((j) => j.noteId))];
+        for (const noteId of noteIds) {
+            try {
+                const note = await this.prisma.note.findUnique({
+                    where: { id: noteId },
+                    select: { userReport: true, title: true },
+                });
+                if (!note?.userReport || note.userReport.length < 200)
+                    continue;
+                const tenant = await this.prisma.tenant.findUnique({
+                    where: { id: tenantId },
+                    select: { name: true },
+                });
+                const completedJobs = await this.prisma.agentJob.findMany({
+                    where: { noteId, tenantId, status: 'COMPLETED' },
+                    select: { agentType: true },
+                });
+                const agentTypes = [...new Set(completedJobs.map((j) => j.agentType))];
+                const companyName = tenant?.name || 'Unknown Company';
+                const summary = note.userReport.substring(0, 5000);
+                // Stagger to avoid lock contention
+                await new Promise((r) => setTimeout(r, Math.random() * 5_000));
+                // Update domain masters
+                for (const agentTypeStr of agentTypes) {
+                    try {
+                        const agentId = agentTypeStr.replace(/_/g, '-');
+                        await this.openClawClient.executeAgent(`KNOWLEDGE UPDATE za ${companyName} - Koncept: ${note.title}. Zapamti ove nalaze:\n\n${summary}`, { agentId, tenantProfile: tenantId, timeoutSeconds: 180 });
+                    }
+                    catch { /* non-blocking */ }
+                }
+                // Update main
+                try {
+                    await this.openClawClient.executeAgent(`KNOWLEDGE UPDATE za ${companyName}: Koncept "${note.title}" zavrsen. Zapamti i organizuj:\n${summary.substring(0, 3000)}`, { agentId: 'main', tenantProfile: tenantId, timeoutSeconds: 120 });
+                }
+                catch { /* non-blocking */ }
+                this.logger.log({
+                    message: 'Knowledge updates sent for concept',
+                    noteId,
+                    conceptName: note.title,
+                    agentTypes,
+                });
+            }
+            catch (err) {
+                this.logger.warn({
+                    message: 'Knowledge update failed (non-blocking)',
+                    noteId,
+                    error: err instanceof Error ? err.message : 'Unknown',
+                });
+            }
+        }
+    }
+    async executeJobPipeline(executionId, jobId, agentType, note, jobInstruction, dependencyContext, userId, tenantId, reservedCostEur) {
+        const openClawAgentId = this.registry.getOpenClawAgentId(agentType);
+        const agentLabel = this.registry.getAgent(agentType).label;
+        let heartbeat = null;
+        let chunkIndex = 0;
+        try {
+            // Emit concept activity for graph visualization
+            if (note.conceptId) {
+                this.emitAgentEvent(tenantId, 'agent:concept-activity', {
+                    agentType, conceptId: note.conceptId, status: 'started',
+                });
+            }
+            // Step 1: Build enriched instruction with dependency context
+            await this.updateStatus(executionId, 'FORMATTING');
+            this.emitAgentEvent(tenantId, 'agent:status-change', {
+                executionId, jobId, noteId: note.id, agentType, status: 'FORMATTING',
+                label: `${agentLabel}: Priprema instrukcija...`,
+            });
+            const enrichedInstruction = dependencyContext
+                ? `${jobInstruction}\n\nContext from previous agent results:\n${dependencyContext}`
+                : jobInstruction;
+            // Note: web_search jobs no longer created separately — each domain agent does its own search
+            // Retrieve pre-check context from main agent (stored during headless execution)
+            const preCheckContext = note.agentEnrichments?.mainPreCheck ?? null;
+            const formattedPrompt = await this.agentPrompt.formatPrompt({
+                agentType,
+                taskTitle: note.title,
+                taskContent: enrichedInstruction,
+                userReport: note.userReport,
+                expectedOutcome: note.expectedOutcome,
+                preCheckContext,
+                tenantId,
+                userId,
+                onChunk: (chunk) => {
+                    this.emitAgentEvent(tenantId, 'agent:formatting-chunk', {
+                        executionId, jobId, chunk, index: chunkIndex++,
+                    });
+                },
+            });
+            // Step 1b: Web search enrichment — Gemini Flash generates queries, Serper fetches data
+            // Domain agents get pre-researched data so they focus on analysis, not searching.
+            this.emitAgentEvent(tenantId, 'agent:status-change', {
+                executionId, jobId, noteId: note.id, agentType, status: 'FORMATTING',
+                label: `${agentLabel}: Web istrazivanje...`,
+            });
+            const searchResults = await this.generateSearchAndEnrich(formattedPrompt, agentLabel, note.title);
+            // Put search results FIRST so DeepSeek sees data before instruction (16K context limit)
+            const enrichedPrompt = searchResults
+                ? `${searchResults}\n\n--- TVOJ ZADATAK (koristi podatke iznad) ---\n${formattedPrompt}`
+                : formattedPrompt;
+            this.emitAgentEvent(tenantId, 'agent:formatting-complete', {
+                executionId, jobId, promptLength: enrichedPrompt.length,
+            });
+            await this.prisma.agentExecution.update({
+                where: { id: executionId },
+                data: { formattedPrompt: enrichedPrompt },
+            });
+            // Step 2: Execute domain agent via DeepSeek API directly (bypasses OpenClaw 4K output limit)
+            await this.updateStatus(executionId, 'EXECUTING', { startedAt: new Date() });
+            this.emitAgentEvent(tenantId, 'agent:status-change', {
+                executionId, jobId, noteId: note.id, agentType, status: 'EXECUTING',
+                label: `${agentLabel}: Analizira...`,
+            });
+            heartbeat = this.startHeartbeat(executionId, jobId, agentType, tenantId, Date.now());
+            let result;
+            {
+                const startMs = Date.now();
+                let fullOutput = '';
+                try {
+                    await this.aiGateway.streamCompletionWithContext([{ role: 'user', content: enrichedPrompt }], { tenantId, userId, skipRateLimit: true, skipQuotaCheck: true }, (chunk) => {
+                        fullOutput += chunk;
+                        this.emitAgentEvent(tenantId, 'agent:text-chunk', { executionId, jobId, text: chunk });
+                    });
+                    result = { success: true, output: fullOutput, durationMs: Date.now() - startMs };
+                }
+                catch (err) {
+                    result = {
+                        success: false,
+                        output: fullOutput,
+                        durationMs: Date.now() - startMs,
+                        error: err instanceof Error ? err.message : 'DeepSeek API call failed',
+                    };
+                }
+                // Send full result to OpenClaw agent with instruction to memorize and learn
+                if (result.success && result.output.length > 100) {
+                    const conceptName = note.title ?? 'Nepoznat koncept';
+                    const fullOutput = result.output; // Send FULL output, not truncated
+                    // Send to the specific agent that should learn from this
+                    this.openClawClient.executeAgent([
+                        `MEMORISI I UCI: Upravo sam završio analizu koncepta "${conceptName}" za Luxury Statues Adria.`,
+                        '',
+                        'Ovo su KOMPLETNI nalazi koje MORAŠ zapamtiti i koristiti u svom budućem radu:',
+                        '',
+                        fullOutput,
+                        '',
+                        'INSTRUKCIJA: Sačuvaj ključne nalaze u svoju memoriju. Kad budeš radio sličan zadatak,',
+                        'koristi ove podatke kao osnovu — ne ponavljaj istraživanje koje je već urađeno.',
+                        `Koncept: ${conceptName}`,
+                        `Agent: ${agentLabel}`,
+                    ].join('\n'), { agentId: openClawAgentId, tenantProfile: tenantId, timeoutSeconds: 120 }).catch(() => { });
+                    // Also send to director so he has full picture
+                    if (openClawAgentId !== 'main') {
+                        this.openClawClient.executeAgent([
+                            `UPDATE OD ${agentLabel.toUpperCase()}: Koncept "${conceptName}" je završen.`,
+                            '',
+                            'Ključni nalazi (koristi za buduće delegiranje i planiranje):',
+                            fullOutput.substring(0, 15000),
+                        ].join('\n'), { agentId: 'main', tenantProfile: tenantId, timeoutSeconds: 60 }).catch(() => { });
+                    }
+                }
+            }
+            clearInterval(heartbeat);
+            heartbeat = null;
+            if (!result.success) {
+                const errorMsg = result.error ?? 'Agent execution failed';
+                await this.prisma.agentJob.update({
+                    where: { id: jobId },
+                    data: { status: 'FAILED', error: errorMsg },
+                });
+                await this.updateStatus(executionId, 'FAILED', {
+                    error: errorMsg,
+                    completedAt: new Date(),
+                    durationMs: result.durationMs,
+                });
+                this.emitAgentEvent(tenantId, 'agent:status-change', {
+                    executionId, jobId, noteId: note.id, agentType, status: 'FAILED',
+                    label: `${agentLabel}: Greška`,
+                });
+                this.emitAgentEvent(tenantId, 'agent:error', {
+                    executionId, jobId, agentType, error: errorMsg,
+                });
+                // Emit agent.job.failed event (backend orchestration, fire-and-forget)
+                this.appEventBus.emit(app_event_bus_service_1.APP_EVENTS.AGENT_JOB_FAILED, {
+                    tenantId,
+                    jobId,
+                    noteId: note.id,
+                    agentType,
+                    success: false,
+                    error: errorMsg,
+                    durationMs: result.durationMs,
+                });
+                // Notify user about failure in conversation
+                if (note.conversationId) {
+                    try {
+                        await this.prisma.message.create({
+                            data: {
+                                id: `msg_${(0, cuid2_1.createId)()}`,
+                                conversationId: note.conversationId,
+                                role: 'ASSISTANT',
+                                content: `**${agentLabel}** — Greska: ${errorMsg.substring(0, 200)}`,
+                            },
+                        });
+                    }
+                    catch { /* non-blocking */ }
+                }
+                return;
+            }
+            // Step 3: Store result in both AgentJob and Note enrichments
+            await this.prisma.agentJob.update({
+                where: { id: jobId },
+                data: { status: 'COMPLETED', agentOutput: result.output },
+            });
+            await this.mergeEnrichment(note.id, agentType, {
+                executionId,
+                status: types_1.AgentExecutionStatus.COMPLETED,
+                result: result.output,
+                completedAt: new Date().toISOString(),
+                error: null,
+            });
+            // Step 3a-fix: Replace fake image URLs with real FAL-generated images
+            let fixedOutput = result.output;
+            try {
+                fixedOutput = await this.fixFakeImageUrls(result.output, note.title, jobInstruction, tenantId);
+            }
+            catch (imgErr) {
+                this.logger.error({ message: 'fixFakeImageUrls FAILED', error: imgErr instanceof Error ? imgErr.message : 'Unknown', stack: imgErr instanceof Error ? imgErr.stack?.substring(0, 300) : '' });
+            }
+            // Update job output with fixed images
+            if (fixedOutput !== result.output) {
+                await this.prisma.agentJob.update({
+                    where: { id: jobId },
+                    data: { agentOutput: fixedOutput },
+                });
+                await this.mergeEnrichment(note.id, agentType, {
+                    executionId,
+                    status: types_1.AgentExecutionStatus.COMPLETED,
+                    result: fixedOutput,
+                    completedAt: new Date().toISOString(),
+                    error: null,
+                });
+            }
+            // Step 3b: Persist job output as reviewable child note (Sprint 2 Epic 2.3)
+            const jobResultNoteId = await this.createResultNote(fixedOutput, agentLabel, note, userId, tenantId, executionId, jobId);
+            // Step 3c: Add job output as conversation message with concept citations
+            if (note.conversationId && fixedOutput) {
+                try {
+                    let messageContent = `**${agentLabel}**\n\n${fixedOutput}`;
+                    // Inject concept citations so concept names become clickable links
+                    if (note.conceptId) {
+                        const conceptMatches = await this.loadConceptMatchesForNote(note.conceptId);
+                        if (conceptMatches.length > 0) {
+                            const citationResult = this.citationInjector.injectCitations(messageContent, conceptMatches);
+                            messageContent = citationResult.content;
+                        }
+                    }
+                    await this.prisma.message.create({
+                        data: {
+                            id: `msg_${(0, cuid2_1.createId)()}`,
+                            conversationId: note.conversationId,
+                            role: 'ASSISTANT',
+                            content: messageContent,
+                        },
+                    });
+                    // Update conversation timestamp so it surfaces in the list
+                    await this.prisma.conversation.update({
+                        where: { id: note.conversationId },
+                        data: { updatedAt: new Date() },
+                    });
+                    // WS notify handled by AGENT_JOB_COMPLETED event below
+                }
+                catch { /* non-blocking — conversation message is supplementary */ }
+            }
+            // Step 4: Cost adjustment
+            const actualCost = this.estimateActualCost(result.usage);
+            const costDifference = actualCost - reservedCostEur;
+            if (Math.abs(costDifference) > 0.0001) {
+                await this.budgetService.recordSpend(tenantId, costDifference);
+            }
+            // Step 5: Mark execution completed (guard: don't overwrite if manually stopped)
+            const currentExec2 = await this.prisma.agentExecution.findUnique({ where: { id: executionId }, select: { status: true } });
+            if (currentExec2?.status !== 'FAILED') {
+                await this.prisma.agentExecution.update({
+                    where: { id: executionId },
+                    data: {
+                        status: 'COMPLETED',
+                        agentOutput: result.output,
+                        actualCostEur: actualCost,
+                        completedAt: new Date(),
+                        durationMs: result.durationMs,
+                        resultNoteId: jobResultNoteId,
+                    },
+                });
+                this.emitAgentEvent(tenantId, 'agent:status-change', {
+                    executionId, jobId, noteId: note.id, agentType, status: 'COMPLETED',
+                    label: `${agentLabel}: Završeno`,
+                });
+            }
+            this.emitAgentEvent(tenantId, 'agent:result', {
+                executionId, jobId, agentType,
+                output: result.output, durationMs: result.durationMs,
+            });
+            this.logger.log({
+                message: 'Job execution completed',
+                jobId,
+                executionId,
+                agentType,
+                durationMs: result.durationMs,
+                actualCostEur: actualCost,
+            });
+            // Emit agent.job.completed event (backend orchestration, fire-and-forget)
+            this.appEventBus.emit(app_event_bus_service_1.APP_EVENTS.AGENT_JOB_COMPLETED, {
+                tenantId,
+                jobId,
+                noteId: note.id,
+                agentType,
+                success: true,
+                output: result.output?.substring(0, 500),
+                durationMs: result.durationMs,
+            });
+            // Emit bridge events so frontend activity panel + OpenClaw see maturity results
+            this.appEventBus.emit('bridge.agent.status', {
+                tenantId,
+                taskId: note.id,
+                agent: agentType,
+                status: 'completed',
+                message: `${agentType} završio: ${note.title?.substring(0, 60)}`,
+                timestamp: new Date().toISOString(),
+            });
+            this.appEventBus.emit('bridge.task.contribution', {
+                tenantId,
+                noteId: note.id,
+                agentType,
+                summary: result.output?.substring(0, 200),
+            });
+            if (note.conceptId) {
+                this.emitAgentEvent(tenantId, 'agent:concept-activity', {
+                    agentType, conceptId: note.conceptId, status: 'stopped',
+                });
+                // Notify tree/graph that concept was updated
+                this.appEventBus.emit('bridge.tree.updated', {
+                    tenantId,
+                    action: 'concept-updated',
+                    conceptId: note.conceptId,
+                    conceptName: note.title,
+                });
+            }
+        }
+        catch (err) {
+            if (heartbeat)
+                clearInterval(heartbeat);
+            if (note.conceptId) {
+                this.emitAgentEvent(tenantId, 'agent:concept-activity', {
+                    agentType, conceptId: note.conceptId, status: 'stopped',
+                });
+            }
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            this.logger.error({
+                message: 'Job pipeline error',
+                jobId,
+                executionId,
+                agentType,
+                error: errorMessage,
+            });
+            this.emitAgentEvent(tenantId, 'agent:status-change', {
+                executionId, jobId, noteId: note.id, agentType, status: 'FAILED',
+                label: `${agentLabel}: Greška`,
+            });
+            this.emitAgentEvent(tenantId, 'agent:error', {
+                executionId, jobId, agentType, error: errorMessage,
+            });
+            try {
+                await this.prisma.agentJob.update({
+                    where: { id: jobId },
+                    data: { status: 'FAILED', error: errorMessage },
+                });
+                await this.mergeEnrichment(note.id, agentType, {
+                    executionId,
+                    status: types_1.AgentExecutionStatus.FAILED,
+                    result: null,
+                    completedAt: new Date().toISOString(),
+                    error: errorMessage,
+                });
+            }
+            catch {
+                /* best-effort */
+            }
+            await this.updateStatus(executionId, 'FAILED', {
+                error: errorMessage,
+                completedAt: new Date(),
+            });
+            // Emit agent.job.failed event (backend orchestration, fire-and-forget)
+            this.appEventBus.emit(app_event_bus_service_1.APP_EVENTS.AGENT_JOB_FAILED, {
+                tenantId,
+                jobId,
+                noteId: note.id,
+                agentType,
+                success: false,
+                error: errorMessage,
+            });
+        }
+    }
+    /**
+     * Send user feedback on a completed agent job to the agent so it can learn.
+     * The feedback is sent to the agent's persistent session (default, not work session)
+     * and also stored as a conversation message.
+     */
+    async submitJobFeedback(jobId, feedback, userId, tenantId) {
+        const job = await this.prisma.agentJob.findFirst({
+            where: { id: jobId, tenantId },
+        });
+        if (!job)
+            throw new common_1.NotFoundException(`Job ${jobId} not found`);
+        if (!job.agentOutput)
+            throw new common_1.BadRequestException('Job has no output to give feedback on');
+        // Load the parent note for title and conversationId
+        const note = await this.prisma.note.findUnique({
+            where: { id: job.noteId },
+            select: { title: true, conversationId: true },
+        });
+        const agentType = job.agentType;
+        const agentDef = this.registry.getAgent(agentType);
+        const openClawAgentId = agentDef.openClawAgentId;
+        // Send feedback to the agent's persistent session (so it learns for future tasks)
+        if (this.openClawClient.isConfigured()) {
+            try {
+                const feedbackMessage = `FEEDBACK od korisnika za tvoj rad na konceptu "${note?.title ?? 'Unknown'}":
+
+--- TVOJ OUTPUT ---
+${job.agentOutput.substring(0, 2000)}
+--- KRAJ OUTPUTA ---
+
+--- KORISNIKOV FEEDBACK ---
+${feedback}
+--- KRAJ FEEDBACKA ---
+
+Zapamti ovaj feedback i primeni ga u buducem radu. Sta ces uraditi drugacije sledeci put?`;
+                await this.openClawClient.executeAgent(feedbackMessage, {
+                    agentId: openClawAgentId,
+                    tenantProfile: tenantId,
+                    timeoutSeconds: 120,
+                });
+                this.logger.log({
+                    message: 'Job feedback sent to agent',
+                    jobId, agentType, feedbackLength: feedback.length,
+                });
+            }
+            catch (err) {
+                this.logger.warn({
+                    message: 'Failed to send feedback to agent (non-blocking)',
+                    jobId, error: err instanceof Error ? err.message : 'Unknown',
+                });
+            }
+        }
+        // Store feedback as conversation message
+        if (note?.conversationId) {
+            try {
+                await this.prisma.message.create({
+                    data: {
+                        id: `msg_${(0, cuid2_1.createId)()}`,
+                        conversationId: note.conversationId,
+                        role: 'USER',
+                        content: `Feedback za ${agentDef.label}: ${feedback}`,
+                    },
+                });
+                await this.prisma.conversation.update({
+                    where: { id: note.conversationId },
+                    data: { updatedAt: new Date() },
+                });
+            }
+            catch { /* non-blocking */ }
+        }
+        return { success: true };
+    }
+    async getExecution(executionId, tenantId) {
+        const exec = await this.prisma.agentExecution.findFirst({
+            where: { id: executionId, tenantId },
+        });
+        if (!exec)
+            return null;
+        return this.mapToResponse(exec);
+    }
+    async getExecutionsByNote(noteId, tenantId) {
+        const executions = await this.prisma.agentExecution.findMany({
+            where: { noteId, tenantId },
+            orderBy: { createdAt: 'desc' },
+        });
+        return executions.map((e) => this.mapToResponse(e));
+    }
+    mapToResponse(exec) {
+        let status = exec.status;
+        if (!this.VALID_STATUSES.has(status)) {
+            this.logger.warn({
+                message: 'Unknown execution status in DB',
+                executionId: exec.id,
+                status: exec.status,
+            });
+            status = types_1.AgentExecutionStatus.FAILED;
+        }
+        return {
+            id: exec.id,
+            noteId: exec.noteId,
+            resultNoteId: exec.resultNoteId,
+            status,
+            agentType: exec.agentType,
+            estimatedCostEur: exec.estimatedCostEur ? Number(exec.estimatedCostEur) : null,
+            actualCostEur: exec.actualCostEur ? Number(exec.actualCostEur) : null,
+            error: exec.error,
+            durationMs: exec.durationMs,
+            createdAt: exec.createdAt.toISOString(),
+            completedAt: exec.completedAt?.toISOString() ?? null,
+        };
+    }
+};
+exports.AgentExecutionService = AgentExecutionService;
+exports.AgentExecutionService = AgentExecutionService = AgentExecutionService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof openclaw_client_service_1.OpenClawClientService !== "undefined" && openclaw_client_service_1.OpenClawClientService) === "function" ? _b : Object, typeof (_c = typeof agent_prompt_service_1.AgentPromptService !== "undefined" && agent_prompt_service_1.AgentPromptService) === "function" ? _c : Object, typeof (_d = typeof agent_registry_service_1.AgentRegistryService !== "undefined" && agent_registry_service_1.AgentRegistryService) === "function" ? _d : Object, typeof (_e = typeof budget_service_1.BudgetService !== "undefined" && budget_service_1.BudgetService) === "function" ? _e : Object, typeof (_f = typeof agent_execution_event_bus_service_1.AgentExecutionEventBus !== "undefined" && agent_execution_event_bus_service_1.AgentExecutionEventBus) === "function" ? _f : Object, typeof (_g = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _g : Object, typeof (_h = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _h : Object, typeof (_j = typeof app_event_bus_service_1.AppEventBus !== "undefined" && app_event_bus_service_1.AppEventBus) === "function" ? _j : Object, typeof (_k = typeof citation_injector_service_1.CitationInjectorService !== "undefined" && citation_injector_service_1.CitationInjectorService) === "function" ? _k : Object, typeof (_l = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _l : Object, typeof (_m = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _m : Object])
+], AgentExecutionService);
+
+
+/***/ }),
+/* 139 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var OpenClawClientService_1;
+var _a;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.OpenClawClientService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const undici_1 = __webpack_require__(140);
+let OpenClawClientService = OpenClawClientService_1 = class OpenClawClientService {
+    constructor(configService) {
+        this.configService = configService;
+        this.logger = new common_1.Logger(OpenClawClientService_1.name);
+        // Circuit breaker state
+        this.circuitState = 'CLOSED';
+        this.consecutiveFailures = 0;
+        this.lastFailureTime = 0;
+        this.FAILURE_THRESHOLD = 3;
+        this.RECOVERY_TIMEOUT_MS = 30_000;
+        this.relayUrl = this.configService.get('OPENCLAW_RELAY_URL') ?? '';
+        this.authToken = this.configService.get('OPENCLAW_AUTH_TOKEN') ?? '';
+        this.timeoutSeconds = parseInt(this.configService.get('OPENCLAW_TIMEOUT_SECONDS') ?? '600', 10);
+        this.maxRetries = parseInt(this.configService.get('OPENCLAW_MAX_RETRIES') ?? '2', 10);
+        this.retryDelayMs = parseInt(this.configService.get('OPENCLAW_RETRY_DELAY_MS') ?? '5000', 10);
+        // SSE streaming enabled for real-time chat output
+        this.supportsStreaming = true;
+        // undici Agent with extended timeouts
+        const timeoutMs = (this.timeoutSeconds + 60) * 1000;
+        this.dispatcher = new undici_1.Agent({
+            headersTimeout: timeoutMs,
+            bodyTimeout: timeoutMs,
+            connectTimeout: 30_000,
+            keepAliveTimeout: timeoutMs,
+        });
+    }
+    isConfigured() {
+        return !!this.authToken && !!this.relayUrl;
+    }
+    /** Check if the circuit breaker is currently open (rejecting requests) */
+    isCircuitOpen() {
+        if (this.circuitState === 'CLOSED')
+            return false;
+        if (this.circuitState === 'OPEN') {
+            // Check if recovery timeout has passed → transition to HALF_OPEN
+            if (Date.now() - this.lastFailureTime >= this.RECOVERY_TIMEOUT_MS) {
+                this.circuitState = 'HALF_OPEN';
+                this.logger.log({ message: 'Circuit breaker → HALF_OPEN (recovery window)' });
+                return false;
+            }
+            return true;
+        }
+        // HALF_OPEN: allow one request through
+        return false;
+    }
+    recordSuccess() {
+        if (this.circuitState !== 'CLOSED') {
+            this.logger.log({ message: `Circuit breaker → CLOSED (success after ${this.circuitState})` });
+        }
+        this.circuitState = 'CLOSED';
+        this.consecutiveFailures = 0;
+    }
+    recordFailure() {
+        this.consecutiveFailures++;
+        this.lastFailureTime = Date.now();
+        if (this.consecutiveFailures >= this.FAILURE_THRESHOLD && this.circuitState !== 'OPEN') {
+            this.circuitState = 'OPEN';
+            this.logger.warn({
+                message: `Circuit breaker → OPEN after ${this.consecutiveFailures} consecutive failures. Will recover in ${this.RECOVERY_TIMEOUT_MS / 1000}s`,
+            });
+        }
+        else if (this.circuitState === 'HALF_OPEN') {
+            this.circuitState = 'OPEN';
+            this.logger.warn({ message: 'Circuit breaker → OPEN (HALF_OPEN probe failed)' });
+        }
+    }
+    /** Check if an error message indicates a transient/retryable failure */
+    isRetryableError(error) {
+        if (!error)
+            return false;
+        return OpenClawClientService_1.RETRYABLE_PATTERNS.some((p) => error.includes(p));
+    }
+    getStreamUrl() {
+        // Replace /execute with /stream in the relay URL
+        return this.relayUrl.replace(/\/execute\/?$/, '/stream');
+    }
+    /**
+     * Execute agent with retry + circuit breaker.
+     * Retries up to OPENCLAW_MAX_RETRIES on transient failures with exponential backoff.
+     */
+    async executeAgent(message, options) {
+        for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+            // Circuit breaker check
+            if (this.isCircuitOpen()) {
+                const error = `Circuit breaker OPEN — rejecting request (will recover in ${Math.ceil((this.RECOVERY_TIMEOUT_MS - (Date.now() - this.lastFailureTime)) / 1000)}s)`;
+                this.logger.warn({ message: error, agentId: options?.agentId });
+                if (attempt < this.maxRetries) {
+                    const delay = this.retryDelayMs * Math.pow(2, attempt);
+                    this.logger.log({ message: `Retry ${attempt + 1}/${this.maxRetries} in ${delay}ms (circuit breaker)`, agentId: options?.agentId });
+                    await new Promise((r) => setTimeout(r, delay));
+                    continue;
+                }
+                return { success: false, output: '', durationMs: 0, error };
+            }
+            // On retry attempts, suppress streaming callbacks to prevent duplicate partial text
+            const effectiveOptions = attempt > 0
+                ? { ...options, onText: undefined, onTool: undefined, onStatus: undefined }
+                : options;
+            const result = await this._executeAgentOnce(message, effectiveOptions);
+            if (result.success) {
+                this.recordSuccess();
+                return result;
+            }
+            // Check if error is retryable
+            if (this.isRetryableError(result.error) && attempt < this.maxRetries) {
+                this.recordFailure();
+                const delay = this.retryDelayMs * Math.pow(2, attempt);
+                this.logger.warn({
+                    message: `Retryable failure, attempt ${attempt + 1}/${this.maxRetries}`,
+                    error: result.error?.substring(0, 150),
+                    agentId: options?.agentId,
+                    nextRetryMs: delay,
+                });
+                await new Promise((r) => setTimeout(r, delay));
+                continue;
+            }
+            // Non-retryable failure or exhausted retries
+            if (this.isRetryableError(result.error)) {
+                this.recordFailure();
+            }
+            return result;
+        }
+        // Should not reach here, but safety net
+        return { success: false, output: '', durationMs: 0, error: 'Exhausted all retry attempts' };
+    }
+    /**
+     * Single execution attempt — tries SSE streaming first, falls back to blocking.
+     */
+    async _executeAgentOnce(message, options) {
+        const agentId = options?.agentId ?? 'main';
+        const sessionId = options?.sessionId;
+        const tenantProfile = options?.tenantProfile;
+        const timeout = options?.timeoutSeconds ?? this.timeoutSeconds;
+        const hasCallbacks = !!(options?.onText || options?.onTool || options?.onStatus);
+        // Try SSE streaming first when callbacks are provided
+        if (hasCallbacks && this.supportsStreaming) {
+            try {
+                return await this.executeAgentStreaming(message, agentId, timeout, {
+                    onText: options?.onText,
+                    onTool: options?.onTool,
+                    onStatus: options?.onStatus,
+                }, sessionId, tenantProfile);
+            }
+            catch (err) {
+                const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+                this.logger.warn({
+                    message: 'SSE streaming failed, falling back to blocking request',
+                    error: errorMsg,
+                    agentId,
+                });
+                // Fall through to blocking request
+            }
+        }
+        return this.executeAgentBlocking(message, agentId, timeout, sessionId, tenantProfile);
+    }
+    /**
+     * SSE streaming execution — connects to /stream endpoint,
+     * parses Server-Sent Events, and invokes callbacks in real-time.
+     */
+    async executeAgentStreaming(message, agentId, timeout, callbacks, sessionId, tenantProfile) {
+        const streamUrl = this.getStreamUrl();
+        this.logger.log({
+            message: 'SSE streaming to OpenClaw relay',
+            url: streamUrl,
+            agentId,
+            sessionId: sessionId || 'default',
+            msgLength: message.length,
+        });
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), (timeout + 60) * 1000);
+        try {
+            const requestBody = { message, agentId, timeoutSeconds: timeout };
+            if (sessionId)
+                requestBody.sessionId = sessionId;
+            if (tenantProfile)
+                requestBody.tenantProfile = tenantProfile;
+            const response = await (0, undici_1.fetch)(streamUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.authToken}`,
+                    'Accept': 'text/event-stream',
+                },
+                body: JSON.stringify(requestBody),
+                signal: controller.signal,
+                dispatcher: this.dispatcher,
+            });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('text/event-stream')) {
+                // Server doesn't support streaming — parse as JSON and return
+                const text = await response.text();
+                if (!text) {
+                    throw new Error('Empty response body from stream endpoint');
+                }
+                const data = JSON.parse(text);
+                return data;
+            }
+            // Parse SSE stream — cast needed: undici Response uses stream/web types
+            return await this.parseSSEStream(response, callbacks);
+        }
+        finally {
+            clearTimeout(timer);
+        }
+    }
+    /**
+     * Parse SSE event stream from the relay and invoke callbacks.
+     * Returns the final result when the stream completes.
+     */
+    async parseSSEStream(response, callbacks) {
+        if (!response.body) {
+            return { success: false, output: '', durationMs: 0, error: 'Empty response body' };
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let finalResult = null;
+        const safeCallback = (fn) => {
+            try {
+                fn();
+            }
+            catch (err) {
+                this.logger.warn({
+                    message: 'SSE callback threw',
+                    error: err instanceof Error ? err.message : 'Unknown',
+                });
+            }
+        };
+        const IDLE_TIMEOUT_MS = 120_000; // 2 min idle timeout between chunks
+        try {
+            while (true) {
+                // Race between next chunk and idle timeout
+                const readPromise = reader.read();
+                const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('SSE idle timeout: no data for 120s')), IDLE_TIMEOUT_MS));
+                let result;
+                try {
+                    result = await Promise.race([readPromise, timeoutPromise]);
+                }
+                catch (idleErr) {
+                    this.logger.warn({ message: 'SSE stream idle timeout', error: idleErr.message });
+                    break;
+                }
+                const { done, value } = result;
+                if (done)
+                    break;
+                buffer += decoder.decode(value, { stream: true });
+                // Process complete SSE messages (delimited by double newlines)
+                let boundary;
+                while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+                    const rawMessage = buffer.substring(0, boundary);
+                    buffer = buffer.substring(boundary + 2);
+                    const event = this.parseSSEMessage(rawMessage);
+                    if (!event)
+                        continue;
+                    switch (event.type) {
+                        case 'stdout':
+                            safeCallback(() => callbacks.onText?.(event.data['text']));
+                            break;
+                        case 'tool':
+                            safeCallback(() => callbacks.onTool?.(event.data['tool'], event.data['status'], event.data['query']));
+                            break;
+                        case 'status':
+                            safeCallback(() => callbacks.onStatus?.(event.data['phase']));
+                            break;
+                        case 'result':
+                            finalResult = {
+                                success: event.data['success'],
+                                output: event.data['output'],
+                                durationMs: event.data['durationMs'],
+                                usage: event.data['usage'],
+                                runId: event.data['runId'],
+                                error: event.data['error'],
+                            };
+                            break;
+                        case 'error':
+                            if (!finalResult) {
+                                finalResult = {
+                                    success: false,
+                                    output: '',
+                                    durationMs: 0,
+                                    error: event.data['error'],
+                                };
+                            }
+                            break;
+                    }
+                }
+            }
+        }
+        finally {
+            reader.releaseLock();
+        }
+        if (!finalResult) {
+            return { success: false, output: '', durationMs: 0, error: 'No result received from stream' };
+        }
+        this.logger.log({
+            message: 'SSE streaming completed',
+            success: finalResult.success,
+            outputLength: finalResult.output.length,
+            durationMs: finalResult.durationMs,
+        });
+        return finalResult;
+    }
+    /**
+     * Parse a single SSE message block into an event.
+     * Format: "event: <type>\ndata: <json>"
+     */
+    parseSSEMessage(raw) {
+        let eventType = '';
+        let dataStr = '';
+        for (const line of raw.split('\n')) {
+            if (line.startsWith('event: ')) {
+                eventType = line.substring(7).trim();
+            }
+            else if (line.startsWith('data: ')) {
+                dataStr = line.substring(6);
+            }
+        }
+        if (!eventType || !dataStr)
+            return null;
+        try {
+            const data = JSON.parse(dataStr);
+            return { type: eventType, data };
+        }
+        catch {
+            return null;
+        }
+    }
+    /** Health check: ping the gateway base URL */
+    async checkHealth() {
+        try {
+            const baseUrl = this.relayUrl.replace(/\/execute\/?$/, '/health');
+            const response = await (0, undici_1.fetch)(baseUrl, {
+                method: 'GET',
+                headers: { Authorization: `Bearer ${this.authToken}` },
+                signal: AbortSignal.timeout(5_000),
+                dispatcher: this.dispatcher,
+            });
+            return response.ok;
+        }
+        catch {
+            return false;
+        }
+    }
+    /**
+     * Blocking HTTP POST execution (original approach, used as fallback).
+     */
+    async executeAgentBlocking(message, agentId, timeout, sessionId, tenantProfile) {
+        this.logger.log({
+            message: 'Blocking request to OpenClaw relay',
+            agentId,
+            sessionId: sessionId || 'default',
+            msgLength: message.length,
+            timeoutSeconds: timeout,
+        });
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), (timeout + 60) * 1000);
+        const requestBody = { message, agentId, timeoutSeconds: timeout };
+        if (sessionId)
+            requestBody.sessionId = sessionId;
+        if (tenantProfile)
+            requestBody.tenantProfile = tenantProfile;
+        try {
+            const response = await (0, undici_1.fetch)(this.relayUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${this.authToken}`,
+                },
+                body: JSON.stringify(requestBody),
+                signal: controller.signal,
+                dispatcher: this.dispatcher,
+            });
+            const text = await response.text();
+            if (!text) {
+                this.logger.error({
+                    message: 'OpenClaw relay returned empty body',
+                    status: response.status,
+                    agentId,
+                });
+                return {
+                    success: false,
+                    output: '',
+                    durationMs: 0,
+                    error: `Empty response (HTTP ${response.status})`,
+                };
+            }
+            let data;
+            try {
+                data = JSON.parse(text);
+            }
+            catch {
+                this.logger.error({
+                    message: 'OpenClaw relay returned invalid JSON',
+                    status: response.status,
+                    bodyPreview: text.substring(0, 200),
+                });
+                return {
+                    success: false,
+                    output: '',
+                    durationMs: 0,
+                    error: `Invalid JSON response (HTTP ${response.status})`,
+                };
+            }
+            if (!response.ok) {
+                this.logger.error({
+                    message: 'OpenClaw relay error',
+                    status: response.status,
+                    error: data['error'],
+                });
+                return {
+                    success: false,
+                    output: '',
+                    durationMs: data['durationMs'] ?? 0,
+                    error: data['error'] ?? `HTTP ${response.status}`,
+                };
+            }
+            this.logger.log({
+                message: 'OpenClaw relay success',
+                durationMs: data['durationMs'],
+                outputLength: data['output']?.length ?? 0,
+                runId: data['runId'],
+            });
+            return data;
+        }
+        catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            const cause = err instanceof Error && err.cause ? String(err.cause) : undefined;
+            this.logger.error({
+                message: 'OpenClaw relay call failed',
+                error: errorMessage,
+                cause,
+                agentId,
+                timeoutSeconds: timeout,
+            });
+            return {
+                success: false,
+                output: '',
+                durationMs: 0,
+                error: cause ? `${errorMessage}: ${cause}` : errorMessage,
+            };
+        }
+        finally {
+            clearTimeout(timer);
+        }
+    }
+};
+exports.OpenClawClientService = OpenClawClientService;
+OpenClawClientService.RETRYABLE_PATTERNS = [
+    'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'fetch failed',
+    'Empty response', 'Invalid JSON', 'socket hang up',
+    'HTTP 502', 'HTTP 503', 'HTTP 504',
+    'No result received', 'circuit breaker',
+    'LLM request timed out', 'Unexpected end of JSON',
+];
+exports.OpenClawClientService = OpenClawClientService = OpenClawClientService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object])
+], OpenClawClientService);
+
+
+/***/ }),
+/* 140 */
+/***/ ((module) => {
+
+module.exports = require("undici");
+
+/***/ }),
+/* 141 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var AgentPromptService_1;
 var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AgentPromptService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const ai_gateway_service_1 = __webpack_require__(90);
+const agent_registry_service_1 = __webpack_require__(142);
+let AgentPromptService = AgentPromptService_1 = class AgentPromptService {
+    constructor(aiGateway, registry) {
+        this.aiGateway = aiGateway;
+        this.registry = registry;
+        this.logger = new common_1.Logger(AgentPromptService_1.name);
+    }
+    /**
+     * Generates a contextualized, high-quality prompt for an OpenClaw agent.
+     * Uses LLM to read the report, understand context, and produce a SPECIFIC
+     * instruction tailored to this concept, company, and agent type.
+     *
+     * Injects: pre-check context (what's already known), dependency context,
+     * business context (auto-injected by AiGateway), and agent system prompt.
+     */
+    async formatPrompt(params) {
+        const { agentType, taskTitle, taskContent, userReport, expectedOutcome, preCheckContext, tenantId, userId } = params;
+        const agentDef = this.registry.getAgent(agentType);
+        const userMessage = `Task: ${taskTitle}
+
+Description: ${taskContent}
+
+${expectedOutcome ? `Expected Outcome: ${expectedOutcome}\n` : ''}${preCheckContext ? `\n--- WHAT IS ALREADY KNOWN (from business brain) ---\n${preCheckContext}\n--- END OF KNOWN CONTEXT ---\nDo NOT research topics that are already known. Focus on what is NEW and MISSING.\n` : ''}
+User's Completed Report:
+${userReport.substring(0, 4000)}
+
+Based on this task report, the business context from memories, and what is already known, generate a SPECIFIC, ACTIONABLE execution instruction for the ${agentDef.label} agent.
+
+INSTRUCTION QUALITY REQUIREMENTS:
+- Extract SPECIFIC data points from the report: company names, numbers, percentages, dates
+- Tell the agent EXACTLY what to research/create/calculate — not generic instructions
+- Reference what is ALREADY KNOWN and tell the agent to SKIP those topics
+- Tell the agent what NEW information to discover or produce
+- The instruction must be actionable — the agent should ACT immediately, not plan or analyze
+- Include specific search queries, calculation formulas, or content topics as needed
+- The instruction is for ${agentDef.label} — tailor it to that agent's specialty`;
+        const messages = [
+            { role: 'system', content: agentDef.systemPrompt },
+            { role: 'user', content: userMessage },
+        ];
+        let result = '';
+        await this.aiGateway.streamCompletionWithContext(messages, {
+            tenantId,
+            userId,
+            skipRateLimit: true,
+            skipQuotaCheck: true,
+        }, (chunk) => {
+            result += chunk;
+            params.onChunk?.(chunk);
+        });
+        // Append grounding block (always present, not left to LLM generation)
+        const memoryBlock = `
+
+---
+KRITICNO — UZEMLJENJE:
+- Radi ISKLJUCIVO na zadatku opisanom iznad. NE siri se na druge teme.
+- NIKADA ne izmisljaj podatke, izvore ili statistike. Ako ne mozes pronaci podatak, napisi "[POTREBNO ISTRAZITI]".
+- Svaki nalaz MORA imati izvor (URL). Bez izvora = ne ukljucuj u rezultat.
+- NE ponavljaj genericke poslovne savete — samo SPECIFICNE nalaze za ovu kompaniju i ovaj koncept.
+- Ako imas prethodno iskustvo i memoriju o ovoj kompaniji — iskoristi to znanje. Nadogradi na postojece nalaze.
+- Ako je ovo tvoj prvi zadatak — koristi dostavljene podatke iz web istrazivanja.
+
+KRITICNO — FORMAT:
+- NE KORISTI write, edit, bash ili bilo koji file tool. NE PISI fajlove.
+- Samo VRATI TEKST kao svoj odgovor — to je tvoj output.
+- Profesionalan Markdown (## zaglavlja, tabele, **bold** za kljucne vrednosti, > za izvore sa URL-ovima).
+- SVE na srpskom jeziku. NE objesnjavaj sta ces raditi — odmah pisi rezultat.
+
+KRITICNO — SLIKE:
+- Za generisanje slika OBAVEZNO koristi exec tool: FAL_IMAGE_SIZE=<size> fal-generate "<prompt>". Velicine: landscape_16_9 (web), square_hd (social), landscape_4_3 (prezentacije), portrait_4_3 (stories).
+- NIKADA ne izmisljaj URL-ove slika! Pozovi fal-generate i koristi URL koji vrati.
+- Svaka slika mora biti NOVO generisana — NIKADA ne koristi slike iz memorije.
+- Prompt za sliku mora biti na ENGLESKOM, detaljan (30+ reci).
+- VIZUALNI IDENTITET: Luxury aesthetic, dark tones (charcoal, navy, black), gold/bronze accents, marble textures, dramatic lighting, art gallery feel, professional photography style.
+---`;
+        const finalPrompt = result.trim() + memoryBlock;
+        this.logger.log({
+            message: 'Prompt formatted for agent (LLM contextualized)',
+            agentType,
+            taskTitle,
+            hasPreCheck: !!preCheckContext,
+            instructionLength: finalPrompt.length,
+        });
+        return finalPrompt;
+    }
+};
+exports.AgentPromptService = AgentPromptService;
+exports.AgentPromptService = AgentPromptService = AgentPromptService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _a : Object, typeof (_b = typeof agent_registry_service_1.AgentRegistryService !== "undefined" && agent_registry_service_1.AgentRegistryService) === "function" ? _b : Object])
+], AgentPromptService);
+
+
+/***/ }),
+/* 142 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var AgentRegistryService_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AgentRegistryService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const types_1 = __webpack_require__(86);
+let AgentRegistryService = AgentRegistryService_1 = class AgentRegistryService {
+    constructor() {
+        this.agents = new Map([
+            [
+                types_1.AgentType.WEB_SEARCH,
+                {
+                    type: types_1.AgentType.WEB_SEARCH,
+                    openClawAgentId: 'web-search',
+                    label: 'Online istrazivanje',
+                    description: 'Pretrazuje internet za relevantne informacije, trendove i izvore',
+                    icon: '🔍',
+                    estimatedCostEur: 0.5,
+                    systemPrompt: `You write a direct execution instruction for a web research agent. The agent has tools: web_search, web_fetch.
+${AgentRegistryService_1.RESEARCH_USAGE_INSTRUCTIONS}
+Write in English. Output ONLY the instruction text.`,
+                },
+            ],
+            [
+                types_1.AgentType.CONTENT,
+                {
+                    type: types_1.AgentType.CONTENT,
+                    openClawAgentId: 'content',
+                    label: 'Kreiranje sadrzaja',
+                    description: 'Kreira gotov sadrzaj sa tekstom i slikama',
+                    icon: '✏️',
+                    estimatedCostEur: 0.5,
+                    systemPrompt: `You write a direct execution instruction for a content creation agent. Images are generated automatically from markdown ![description](url) syntax — the agent just writes the markdown.
+
+The agent receives pre-researched web data — DO NOT do own web searches. Use provided data as primary source.
+${AgentRegistryService_1.RESEARCH_USAGE_INSTRUCTIONS}
+${AgentRegistryService_1.IMAGE_GENERATION_INSTRUCTIONS}
+
+Given the task report, business context, and previous agents' outputs, write an instruction that tells the agent:
+1. USE the provided web research data as your primary source of facts and data
+2. Create content based on research (headlines, body, CTAs, key takeaways)
+3. Write RICH text content in Serbian — 4000-5000 words. CRITICAL: you MUST complete the entire document — finish every section, every table, every sentence. NEVER stop mid-sentence or mid-table. End with a clear conclusion
+4. Generate AS MANY images as the task requires — match the number of visuals to the content needs:
+   - If task asks for specific visuals (brochure pages, social posts, portfolio) — create EACH ONE
+   - If task is analytical — 1-2 supporting visuals are enough
+   - Each image MUST depict exactly what is described — NOT generic stock imagery
+5. SPECIFY in your instruction what EACH image should show based on the ACTUAL task content, and what SIZE to use (blog=landscape_16_9, social=square_hd, brochure=landscape_4_3, story=portrait_4_3)
+6. Format as clean markdown with ## headings, tables, **bold**, bullet points
+7. Include "Sledeci koraci" section with actionable recommendations
+
+CROSS-COLLABORATION:
+- If previous agents provided data, USE it — do NOT repeat, ADD content perspective
+
+QUALITY STANDARDS:
+- Create ORIGINAL content, support claims with research data
+- Specific to THIS company — not generic advice
+- NEVER fabricate data, sources, or statistics
+- ALL images must be freshly generated — NEVER reuse from memory
+
+Write in English. Output ONLY the instruction text, under 600 words.`,
+                },
+            ],
+            [
+                types_1.AgentType.MARKETING,
+                {
+                    type: types_1.AgentType.MARKETING,
+                    openClawAgentId: 'marketing',
+                    label: 'Marketing analiza',
+                    description: 'Analizira trziste i kreira marketing strategiju',
+                    icon: '📈',
+                    estimatedCostEur: 0.5,
+                    systemPrompt: `You write a direct execution instruction for a marketing strategy agent. The agent has tools: exec (for image generation).
+
+The agent receives pre-researched web data — DO NOT do own web searches. Use provided data as primary source.
+${AgentRegistryService_1.RESEARCH_USAGE_INSTRUCTIONS}
+${AgentRegistryService_1.IMAGE_GENERATION_INSTRUCTIONS}
+
+Given the task report, business context, and previous agents' outputs, write an instruction that tells the agent:
+1. USE the provided web research data for market data, competitors, trends
+2. Perform marketing analysis using research + previous agent findings
+3. Select APPROPRIATE framework (SWOT, brand audit, segmentation)
+4. Build competitive positioning with specific competitor comparisons
+5. Create actionable recommendations with measurable KPIs
+6. If visual content is relevant: generate marketing visual
+7. Write RICH output in Serbian — 4000-5000 words. CRITICAL: you MUST complete the entire document — finish every section, every table, every sentence. NEVER stop mid-sentence or mid-table. End with a clear conclusion, markdown with tables
+
+CROSS-COLLABORATION:
+- Reference and BUILD ON findings from previous agents
+- Do NOT repeat what previous agents covered — ADD marketing perspective
+- Connect marketing strategy to financial data when available
+
+QUALITY STANDARDS:
+- Every recommendation must reference specific data from research
+- Specific to THIS company — not generic marketing advice
+- NEVER fabricate data, sources, or statistics
+
+Write in English. Output ONLY the instruction text, under 500 words.`,
+                },
+            ],
+            [
+                types_1.AgentType.SALES,
+                {
+                    type: types_1.AgentType.SALES,
+                    openClawAgentId: 'sales',
+                    label: 'Prodajna strategija',
+                    description: 'Kreira prodajne planove i strategije',
+                    icon: '💼',
+                    estimatedCostEur: 0.5,
+                    systemPrompt: `You write a direct execution instruction for a sales strategy agent. The agent receives pre-researched web data — DO NOT do own web searches. Use provided data as primary source.
+${AgentRegistryService_1.RESEARCH_USAGE_INSTRUCTIONS}
+
+IMPORTANT: Do NOT send emails. Do NOT use agentmail-send. Only produce text output.
+
+Given the task report, business context, and ALL previous agent outputs, write an instruction that tells the agent:
+1. USE the provided web research data for sales data, trust building, B2B strategies
+2. Develop sales strategy using research + previous agents' data
+3. Target customer profile with specific segments
+4. Objection handling based on competitor data
+5. Pricing strategy referencing financial analysis from previous agents
+6. Write RICH output in Serbian — 4000-5000 words. CRITICAL: you MUST complete the entire document — finish every section, every table, every sentence. NEVER stop mid-sentence or mid-table. End with a clear conclusion, markdown with tables
+7. Include "Prodajni Plan" with concrete steps and timelines
+
+CROSS-COLLABORATION:
+- USE financial data, marketing positioning, content from previous agents
+- Do NOT repeat — ADD sales perspective
+
+QUALITY STANDARDS:
+- Include specific talk tracks and objection responses
+- Reference THIS company's unique positioning
+- NEVER fabricate data, sources, or statistics
+
+Write in English. Output ONLY the instruction text, under 400 words.`,
+                },
+            ],
+            [
+                types_1.AgentType.FINANCIAL,
+                {
+                    type: types_1.AgentType.FINANCIAL,
+                    openClawAgentId: 'financial',
+                    label: 'Finansijska analiza',
+                    description: 'Racunanje ROI, budzetska analiza i finansijsko planiranje',
+                    icon: '💰',
+                    estimatedCostEur: 0.5,
+                    systemPrompt: `You write a direct execution instruction for a financial analyst agent. The agent receives pre-researched web data — DO NOT do own web searches. Use provided data as primary source.
+${AgentRegistryService_1.RESEARCH_USAGE_INSTRUCTIONS}
+
+Given the task report, business context, and previous agents' outputs, write an instruction that tells the agent:
+1. USE the provided web research data for financial benchmarks, costs, margins, industry data
+2. Calculate SPECIFIC financials: ROI, break-even, margins, projections with EXACT formulas
+3. Build DETAILED tables with actual numbers — revenue models, cost breakdowns, P&L
+4. Include scenario analysis (optimistic/realistic/pessimistic)
+5. Risk assessment with probability, financial impact, mitigation
+6. Cash flow analysis when relevant (CCC, working capital, payment terms)
+7. Write RICH output in Serbian — 4000-5000 words. CRITICAL: you MUST complete the entire document — finish every section, every table, every sentence. NEVER stop mid-sentence or mid-table. End with a clear conclusion, multiple tables
+8. Include "Finansijski Plan" with quarterly/annual projections
+
+CROSS-COLLABORATION:
+- If previous agents provided data, USE it for financial modeling
+- Provide cost/benefit analysis for recommendations from other agents
+
+QUALITY STANDARDS:
+- All calculations MUST show methodology and assumptions
+- Tables must have ACTUAL numbers with currency (EUR), not placeholders
+- Include sensitivity analysis: +-20% on key assumptions
+- NEVER fabricate data, sources, or statistics
+
+Write in English. Output ONLY the instruction text, under 500 words.`,
+                },
+            ],
+        ]);
+    }
+    getAgent(type) {
+        const agent = this.agents.get(type);
+        if (!agent) {
+            throw new Error(`Unknown agent type: ${type}`);
+        }
+        return agent;
+    }
+    getAllAgents() {
+        return Array.from(this.agents.values());
+    }
+    getAgentLabel(type) {
+        return this.getAgent(type).label;
+    }
+    getOpenClawAgentId(type) {
+        return this.getAgent(type).openClawAgentId;
+    }
+    getAllAgentTypeInfos() {
+        return this.getAllAgents().map((a) => ({
+            type: a.type,
+            label: a.label,
+            description: a.description,
+            icon: a.icon,
+            estimatedCostEur: a.estimatedCostEur,
+        }));
+    }
+};
+exports.AgentRegistryService = AgentRegistryService;
+AgentRegistryService.IMAGE_GENERATION_INSTRUCTIONS = `
+IMAGE GENERATION — CRITICAL RULES:
+1. ALWAYS generate NEW images — NEVER reference, reuse, or describe images from memory
+2. Generate as many images as the task REQUIRES
+3. For EACH image, write it as markdown image syntax with a detailed English description as alt text:
+   ![Detailed English description of the image: scene, lighting, composition, style, mood, branded elements](https://placeholder.img/generate)
+4. The alt text MUST be:
+   - In ENGLISH (used as generation prompt)
+   - UNIQUE and SPECIFIC to THIS content
+   - CONTEXTUAL: include purpose (hero banner, social post, brochure page, infographic)
+   - BRANDED: include company visual identity
+   - DETAILED: 30+ words describing the exact visual
+5. NEVER write "[Generisati sliku]" or "[FAL.ai]" — ALWAYS use ![description](url) markdown format
+6. Images will be automatically generated from your alt text descriptions — just write the markdown`;
+AgentRegistryService.RESEARCH_USAGE_INSTRUCTIONS = `
+YOU WILL RECEIVE pre-researched web data in a "REZULTATI WEB ISTRAZIVANJA" section.
+CRITICAL RULES FOR USING RESEARCH DATA:
+1. You MUST use the provided research data as your PRIMARY source of facts
+2. CITE every fact with its source: ([Title](URL)) — inline, right after the sentence
+3. Build your analysis ON TOP of the research data — do NOT ignore it
+4. Do NOT claim "no data available" — the research section ALWAYS contains relevant information
+5. Do NOT fabricate data — use ONLY what is provided in research + your analytical reasoning
+6. NEVER write "[POTREBNO ISTRAZITI]" or "[POTREBNO DODATNO ISTRAZITI]" — all research is ALREADY PROVIDED. If a specific data point is missing, make a reasonable analytical inference based on available data and state your assumption
+7. Write ALL output in Serbian, professional markdown with tables`;
+exports.AgentRegistryService = AgentRegistryService = AgentRegistryService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)()
+], AgentRegistryService);
+
+
+/***/ }),
+/* 143 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var BudgetService_1;
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BudgetService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const tenant_context_1 = __webpack_require__(10);
+const library_1 = __webpack_require__(100);
+let BudgetService = BudgetService_1 = class BudgetService {
+    constructor(prisma, configService) {
+        this.prisma = prisma;
+        this.configService = configService;
+        this.logger = new common_1.Logger(BudgetService_1.name);
+        this.dailyLimitEur = parseFloat(this.configService.get('AGENT_DAILY_BUDGET_EUR') ?? '200');
+        this.estimatedCostEur = parseFloat(this.configService.get('AGENT_ESTIMATED_COST_EUR') ?? '0.50');
+    }
+    getEstimatedCost() {
+        return this.estimatedCostEur;
+    }
+    getDailyLimit() {
+        return this.dailyLimitEur;
+    }
+    async getDailySpent(tenantId) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const budget = await this.prisma.agentDailyBudget.findUnique({
+            where: { tenantId_date: { tenantId, date: today } },
+        });
+        return {
+            spentEur: budget ? Number(budget.spentEur) : 0,
+            limitEur: budget ? Number(budget.limitEur) : this.dailyLimitEur,
+        };
+    }
+    async canSpend(tenantId, amount) {
+        const cost = amount ?? this.estimatedCostEur;
+        const { spentEur, limitEur } = await this.getDailySpent(tenantId);
+        return spentEur + cost <= limitEur;
+    }
+    async recordSpend(tenantId, amountEur) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        await this.prisma.agentDailyBudget.upsert({
+            where: { tenantId_date: { tenantId, date: today } },
+            update: {
+                spentEur: { increment: new library_1.Decimal(amountEur) },
+            },
+            create: {
+                tenantId,
+                date: today,
+                spentEur: new library_1.Decimal(amountEur),
+                limitEur: new library_1.Decimal(this.dailyLimitEur),
+            },
+        });
+        this.logger.log({
+            message: 'Budget spend recorded',
+            tenantId,
+            amountEur,
+        });
+    }
+};
+exports.BudgetService = BudgetService;
+exports.BudgetService = BudgetService = BudgetService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _b : Object])
+], BudgetService);
+
+
+/***/ }),
+/* 144 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var AgentExecutionEventBus_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AgentExecutionEventBus = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const events_1 = __webpack_require__(145);
+let AgentExecutionEventBus = AgentExecutionEventBus_1 = class AgentExecutionEventBus {
+    constructor() {
+        this.logger = new common_1.Logger(AgentExecutionEventBus_1.name);
+        this.emitter = new events_1.EventEmitter();
+        this.listenerCount = 0;
+        this.emitter.setMaxListeners(20);
+    }
+    emit(event) {
+        if (event.eventName !== 'agent:text-chunk' && event.eventName !== 'agent:executing-heartbeat') {
+            this.logger.debug({
+                message: 'EventBus emit',
+                eventName: event.eventName,
+                tenantId: event.tenantId,
+                listeners: this.listenerCount,
+            });
+        }
+        try {
+            this.emitter.emit('agent-event', event);
+        }
+        catch (err) {
+            this.logger.error({
+                message: 'EventBus listener threw',
+                eventName: event.eventName,
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+        }
+    }
+    onEvent(handler) {
+        this.listenerCount++;
+        this.logger.log({ message: 'EventBus listener registered', totalListeners: this.listenerCount });
+        this.emitter.on('agent-event', handler);
+    }
+};
+exports.AgentExecutionEventBus = AgentExecutionEventBus;
+exports.AgentExecutionEventBus = AgentExecutionEventBus = AgentExecutionEventBus_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [])
+], AgentExecutionEventBus);
+
+
+/***/ }),
+/* 145 */
+/***/ ((module) => {
+
+module.exports = require("events");
+
+/***/ }),
+/* 146 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var NotesService_1;
+var _a, _b, _c;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.NotesService = void 0;
 const tslib_1 = __webpack_require__(4);
@@ -14126,14 +17093,16 @@ const cuid2_1 = __webpack_require__(33);
 const tenant_context_1 = __webpack_require__(10);
 const prisma_1 = __webpack_require__(36);
 const ai_gateway_service_1 = __webpack_require__(90);
+const app_event_bus_service_1 = __webpack_require__(147);
 /**
  * Service for managing user notes.
  * Provides CRUD operations for notes created from AI outputs and manual entry.
  */
 let NotesService = NotesService_1 = class NotesService {
-    constructor(prisma, aiGateway) {
+    constructor(prisma, aiGateway, eventBus) {
         this.prisma = prisma;
         this.aiGateway = aiGateway;
+        this.eventBus = eventBus;
         this.logger = new common_1.Logger(NotesService_1.name);
     }
     /**
@@ -14180,6 +17149,15 @@ let NotesService = NotesService_1 = class NotesService {
             noteId: id,
             userId: dto.userId,
             tenantId: dto.tenantId,
+        });
+        this.eventBus.emit(app_event_bus_service_1.APP_EVENTS.NOTE_CREATED, {
+            tenantId: dto.tenantId,
+            noteId: id,
+            userId: dto.userId,
+            noteType: dto.noteType ?? 'NOTE',
+            source: dto.source,
+            conceptId: dto.conceptId,
+            conversationId: dto.conversationId,
         });
         return { id };
     }
@@ -14260,7 +17238,7 @@ let NotesService = NotesService_1 = class NotesService {
         if (noteIds.length === 0)
             return [];
         const notes = await this.prisma.note.findMany({
-            where: { id: { in: noteIds }, userId, tenantId, parentNoteId: null },
+            where: { id: { in: noteIds }, tenantId, parentNoteId: null },
             include: {
                 children: { orderBy: { workflowStepNumber: 'asc' } },
             },
@@ -14510,9 +17488,16 @@ let NotesService = NotesService_1 = class NotesService {
             });
             return this.mapToNoteItem(note);
         }
+        const previousStatus = note.status;
         const updated = await this.prisma.note.update({
             where: { id: noteId },
             data: { status },
+        });
+        this.eventBus.emit(app_event_bus_service_1.APP_EVENTS.NOTE_STATUS_CHANGED, {
+            tenantId,
+            noteId,
+            previousStatus: previousStatus ?? null,
+            newStatus: status,
         });
         return this.mapToNoteItem(updated);
     }
@@ -14534,6 +17519,12 @@ let NotesService = NotesService_1 = class NotesService {
         const updated = await this.prisma.note.update({
             where: { id: noteId },
             data,
+        });
+        this.eventBus.emit(app_event_bus_service_1.APP_EVENTS.NOTE_UPDATED, {
+            tenantId,
+            noteId,
+            title: title !== undefined ? title : undefined,
+            content: content !== undefined ? content : undefined,
         });
         return this.mapToNoteItem(updated);
     }
@@ -15015,29 +18006,3427 @@ Odgovori ISKLJUČIVO u JSON formatu:
 exports.NotesService = NotesService;
 exports.NotesService = NotesService = NotesService_1 = tslib_1.__decorate([
     (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object])
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof app_event_bus_service_1.AppEventBus !== "undefined" && app_event_bus_service_1.AppEventBus) === "function" ? _c : Object])
 ], NotesService);
 
 
 /***/ }),
-/* 135 */
+/* 147 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
-var _a, _b, _c, _d;
+var AppEventBus_1;
+var _a;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AppEventBus = exports.APP_EVENTS = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const event_emitter_1 = __webpack_require__(148);
+// ─── Event Names (constants for type safety) ───
+exports.APP_EVENTS = {
+    // Note lifecycle
+    NOTE_CREATED: 'note.created',
+    NOTE_UPDATED: 'note.updated',
+    NOTE_STATUS_CHANGED: 'note.status-changed',
+    // Conversation lifecycle
+    CONVERSATION_CREATED: 'conversation.created',
+    CONVERSATION_MESSAGE_ADDED: 'conversation.message-added',
+    // Onboarding
+    ONBOARDING_COMPLETED: 'onboarding.completed',
+    // Workflow execution
+    WORKFLOW_STEP_COMPLETED: 'workflow.step-completed',
+    WORKFLOW_COMPLETED: 'workflow.completed',
+    // Concept lifecycle
+    CONCEPT_COMPLETED: 'concept.completed',
+    CONCEPT_FAILED: 'concept.failed',
+    // Wave lifecycle
+    WAVE_COMPLETED: 'wave.completed',
+    WAVE_STALLED: 'wave.stalled',
+    // Agent lifecycle
+    AGENT_JOB_COMPLETED: 'agent.job.completed',
+    AGENT_JOB_FAILED: 'agent.job.failed',
+    AGENT_JOB_STUCK: 'agent.job.stuck',
+    // Knowledge
+    KNOWLEDGE_UPDATE_NEEDED: 'knowledge.update.needed',
+    KNOWLEDGE_UPDATE_COMPLETED: 'knowledge.update.completed',
+    // Stage execution
+    STAGE_EXECUTION_STARTED: 'stage.execution.started',
+    STAGE_EXECUTION_COMPLETED: 'stage.execution.completed',
+    STAGE_EXECUTION_CONTINUE: 'stage.execution.continue',
+    // System
+    SYSTEM_HEALTH_CHECK: 'system.health.check',
+};
+let AppEventBus = AppEventBus_1 = class AppEventBus {
+    constructor(eventEmitter) {
+        this.eventEmitter = eventEmitter;
+        this.logger = new common_1.Logger(AppEventBus_1.name);
+    }
+    /**
+     * Emit an event through the centralized bus.
+     * All events are logged for observability.
+     */
+    emit(event, payload) {
+        this.logger.debug({
+            message: `Event: ${event}`,
+            tenantId: payload['tenantId'],
+            ...this.extractLogFields(payload),
+        });
+        this.eventEmitter.emit(event, payload);
+    }
+    /**
+     * Emit and wait for all handlers to complete.
+     * Use for events where ordering matters.
+     */
+    async emitAsync(event, payload) {
+        this.logger.debug({
+            message: `Event (async): ${event}`,
+            tenantId: payload['tenantId'],
+        });
+        await this.eventEmitter.emitAsync(event, payload);
+    }
+    /**
+     * Subscribe to an event. Returns unsubscribe function for cleanup.
+     */
+    on(event, handler) {
+        this.eventEmitter.on(event, handler);
+        return () => this.eventEmitter.off(event, handler);
+    }
+    extractLogFields(payload) {
+        const fields = {};
+        if (payload['conceptId'])
+            fields['conceptId'] = payload['conceptId'];
+        if (payload['jobId'])
+            fields['jobId'] = payload['jobId'];
+        if (payload['agentType'])
+            fields['agentType'] = payload['agentType'];
+        if (payload['status'])
+            fields['status'] = payload['status'];
+        return fields;
+    }
+};
+exports.AppEventBus = AppEventBus;
+exports.AppEventBus = AppEventBus = AppEventBus_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof event_emitter_1.EventEmitter2 !== "undefined" && event_emitter_1.EventEmitter2) === "function" ? _a : Object])
+], AppEventBus);
+
+
+/***/ }),
+/* 148 */
+/***/ ((module) => {
+
+module.exports = require("@nestjs/event-emitter");
+
+/***/ }),
+/* 149 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var _a, _b, _c;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AgentExecutionController = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const jwt_auth_guard_1 = __webpack_require__(47);
+const current_user_decorator_1 = __webpack_require__(49);
+const agent_execution_service_1 = __webpack_require__(138);
+const job_planner_service_1 = __webpack_require__(150);
+const budget_service_1 = __webpack_require__(143);
+const types_1 = __webpack_require__(86);
+let AgentExecutionController = class AgentExecutionController {
+    constructor(agentExecutionService, jobPlannerService, budgetService) {
+        this.agentExecutionService = agentExecutionService;
+        this.jobPlannerService = jobPlannerService;
+        this.budgetService = budgetService;
+    }
+    async getTodaysBudget(user) {
+        const { spentEur, limitEur } = await this.budgetService.getDailySpent(user.tenantId);
+        return { data: { spentEur, limitEur } };
+    }
+    async triggerAgent(noteId, agentType, user) {
+        const validTypes = Object.values(types_1.AgentType);
+        if (!validTypes.includes(agentType)) {
+            throw new common_1.BadRequestException(`Invalid agent type: ${agentType}`);
+        }
+        const result = await this.agentExecutionService.triggerAgent(noteId, agentType, user.userId, user.tenantId);
+        return { data: result };
+    }
+    async getExecutionsByNote(noteId, user) {
+        const executions = await this.agentExecutionService.getExecutionsByNote(noteId, user.tenantId);
+        return { data: executions };
+    }
+    async getJobsForNote(noteId, user) {
+        const jobs = await this.jobPlannerService.getJobsForNote(noteId, user.tenantId);
+        const budget = await this.budgetService.getDailySpent(user.tenantId);
+        const estimatedCost = this.budgetService.getEstimatedCost();
+        return {
+            data: {
+                noteId,
+                jobs,
+                dailySpentEur: budget.spentEur,
+                dailyLimitEur: budget.limitEur,
+                canProceed: budget.spentEur + estimatedCost <= budget.limitEur,
+            },
+        };
+    }
+    async executeJob(jobId, user) {
+        const result = await this.agentExecutionService.executeJob(jobId, user.userId, user.tenantId);
+        return { data: result };
+    }
+    async retryJob(jobId, user) {
+        const result = await this.agentExecutionService.retryJob(jobId, user.userId, user.tenantId);
+        return { data: result };
+    }
+    /**
+     * POST /api/v1/agent-execution/retry-all-pending
+     * Retry all PLANNED/FAILED jobs in waves of 5, respecting dependencies.
+     * Fire-and-forget — returns immediately, processes in background.
+     */
+    /**
+     * POST /api/v1/agent-execution/stop-all
+     * Force-stop all running agent executions and jobs.
+     */
+    async stopAll(user) {
+        const result = await this.agentExecutionService.stopAllExecutions(user.tenantId);
+        return result;
+    }
+    async retryAllPending(user) {
+        const result = await this.agentExecutionService.retryAllPendingJobs(user.userId, user.tenantId);
+        return { data: result };
+    }
+    /**
+     * POST /api/v1/agent-execution/jobs/:jobId/feedback
+     * Send user feedback on a completed agent job. The agent learns from the feedback.
+     */
+    async submitJobFeedback(jobId, body, user) {
+        if (!body.feedback?.trim()) {
+            throw new common_1.BadRequestException('Feedback text is required');
+        }
+        const result = await this.agentExecutionService.submitJobFeedback(jobId, body.feedback.trim(), user.userId, user.tenantId);
+        return { data: result };
+    }
+    async getExecution(executionId, user) {
+        const execution = await this.agentExecutionService.getExecution(executionId, user.tenantId);
+        if (!execution) {
+            throw new common_1.NotFoundException(`Execution ${executionId} not found`);
+        }
+        return { data: execution };
+    }
+};
+exports.AgentExecutionController = AgentExecutionController;
+tslib_1.__decorate([
+    (0, common_1.Get)('budget/today'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "getTodaysBudget", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('trigger/:noteId/:agentType'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
+    tslib_1.__param(0, (0, common_1.Param)('noteId')),
+    tslib_1.__param(1, (0, common_1.Param)('agentType')),
+    tslib_1.__param(2, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "triggerAgent", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('note/:noteId'),
+    tslib_1.__param(0, (0, common_1.Param)('noteId')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "getExecutionsByNote", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('jobs/:noteId'),
+    tslib_1.__param(0, (0, common_1.Param)('noteId')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "getJobsForNote", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('jobs/:jobId/execute'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
+    tslib_1.__param(0, (0, common_1.Param)('jobId')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "executeJob", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('jobs/:jobId/retry'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
+    tslib_1.__param(0, (0, common_1.Param)('jobId')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "retryJob", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('stop-all'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "stopAll", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('retry-all-pending'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.ACCEPTED),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "retryAllPending", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('jobs/:jobId/feedback'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    tslib_1.__param(0, (0, common_1.Param)('jobId')),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__param(2, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "submitJobFeedback", null);
+tslib_1.__decorate([
+    (0, common_1.Get)(':executionId'),
+    tslib_1.__param(0, (0, common_1.Param)('executionId')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], AgentExecutionController.prototype, "getExecution", null);
+exports.AgentExecutionController = AgentExecutionController = tslib_1.__decorate([
+    (0, common_1.Controller)('v1/agent-execution'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof agent_execution_service_1.AgentExecutionService !== "undefined" && agent_execution_service_1.AgentExecutionService) === "function" ? _a : Object, typeof (_b = typeof job_planner_service_1.JobPlannerService !== "undefined" && job_planner_service_1.JobPlannerService) === "function" ? _b : Object, typeof (_c = typeof budget_service_1.BudgetService !== "undefined" && budget_service_1.BudgetService) === "function" ? _c : Object])
+], AgentExecutionController);
+
+
+/***/ }),
+/* 150 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var JobPlannerService_1;
+var _a, _b, _c;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.JobPlannerService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const tenant_context_1 = __webpack_require__(10);
+const cuid2_1 = __webpack_require__(33);
+const ai_gateway_service_1 = __webpack_require__(90);
+const agent_registry_service_1 = __webpack_require__(142);
+const types_1 = __webpack_require__(86);
+let JobPlannerService = JobPlannerService_1 = class JobPlannerService {
+    constructor(prisma, aiGateway, registry) {
+        this.prisma = prisma;
+        this.aiGateway = aiGateway;
+        this.registry = registry;
+        this.logger = new common_1.Logger(JobPlannerService_1.name);
+    }
+    /**
+     * Analyzes a scored task report and creates ordered, dependent agent jobs.
+     * Uses LLM to determine which agents are relevant and what they should do.
+     * Automatically injects tenant business context via AiGatewayService.
+     */
+    async planJobs(noteId, tenantId, userId) {
+        const note = await this.prisma.note.findFirst({
+            where: { id: noteId, tenantId },
+        });
+        if (!note || !note.userReport) {
+            this.logger.warn({ message: 'Cannot plan jobs — note or report missing', noteId });
+            return [];
+        }
+        // Guard against duplicate planning — return existing jobs if already planned
+        const existingJobs = await this.getJobsForNote(noteId, tenantId);
+        if (existingJobs.length > 0) {
+            this.logger.log({
+                message: 'Jobs already exist for note, skipping planning',
+                noteId,
+                jobCount: existingJobs.length,
+            });
+            return existingJobs;
+        }
+        const agentDescriptions = this.registry
+            .getAllAgents()
+            .map((a) => `- ${a.type}: ${a.label} — ${a.description}`)
+            .join('\n');
+        const systemPrompt = `You are a business operations planner. Given a completed task report, decide which DOMAIN AGENTS are needed.
+
+Available DOMAIN agent types (you select from these):
+- financial: costs, ROI, budgets, pricing, cash flow, financial modeling
+- content: written deliverables, brand materials, blog posts, visual content with images
+- marketing: positioning, competition, market strategy, SWOT, segmentation
+- sales: customer outreach, selling strategy, pricing negotiation, trust building
+
+ARCHITECTURE — HOW IT WORKS:
+- Each domain agent has its own web_search and web_fetch tools — it does its own research
+- Domain agents execute SEQUENTIALLY for cross-collaboration (each sees previous agent outputs)
+- No separate web_search agent — each domain agent researches what it needs
+
+DECISION FRAMEWORK:
+- Select 1-3 domain agents based on what the concept needs
+- Simple concepts: 1 domain agent (e.g., just financial for cost analysis)
+- Complex concepts: 2-3 domain agents
+- ORDER MATTERS for collaboration: later agents see earlier agents' output
+  Example: financial first → marketing second (marketing uses financial data)
+
+Rules:
+- Do NOT include web_search in your response — agents search on their own
+- Each domain agent instruction should describe WHAT analysis/content to produce AND what to research
+- Reference specific data from the task report
+- Write instructions in English (agents produce Serbian output)
+- Respond ONLY with a JSON array of DOMAIN agents, no other text
+
+Output format:
+[{"agentType":"financial","order":1,"instruction":"Research and calculate ROI and break-even based on..."},{"agentType":"marketing","order":2,"instruction":"Research market data and using financial analysis, create positioning strategy..."}]`;
+        const userMessage = `Task: ${note.title}
+
+Description: ${note.content.substring(0, 500)}
+
+${note.expectedOutcome ? `Expected Outcome: ${note.expectedOutcome}\n` : ''}Completed Report:
+${note.userReport.substring(0, 4000)}
+
+Create an execution plan of agent jobs for this task. Return JSON array only.`;
+        const messages = [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage },
+        ];
+        let result = '';
+        try {
+            await this.aiGateway.streamCompletionWithContext(messages, {
+                tenantId,
+                userId,
+                skipRateLimit: true,
+                skipQuotaCheck: true,
+            }, (chunk) => {
+                result += chunk;
+            });
+            const jsonMatch = result.match(/\[[\s\S]*\]/);
+            if (!jsonMatch) {
+                this.logger.warn({
+                    message: 'No JSON array found in job plan response',
+                    result: result.substring(0, 200),
+                });
+                return this.createDefaultJobs(noteId, tenantId, userId, note.title, note.userReport);
+            }
+            const parsed = JSON.parse(jsonMatch[0]);
+            // If LLM returned empty array, use default web_search → content chain
+            if (parsed.length === 0) {
+                this.logger.warn({ message: 'LLM returned empty job plan — using default chain', noteId });
+                return this.createDefaultJobs(noteId, tenantId, userId, note.title, note.userReport);
+            }
+            const validTypes = Object.values(types_1.AgentType);
+            const domainJobs = parsed
+                .filter((j) => validTypes.includes(j.agentType) && j.agentType !== types_1.AgentType.WEB_SEARCH && j.instruction?.length > 10)
+                .sort((a, b) => a.order - b.order)
+                .slice(0, 3); // max 3 domain agents
+            if (domainJobs.length === 0) {
+                return this.createDefaultJobs(noteId, tenantId, userId, note.title, note.userReport);
+            }
+            // Domain agents execute sequentially — each sees previous agent outputs for cross-collaboration.
+            // Each agent does its own web search via built-in tools.
+            const sequentialJobs = [];
+            for (let i = 0; i < domainJobs.length; i++) {
+                const domain = domainJobs[i];
+                const order = i + 1;
+                // Each agent depends on previous agent (sequential for collaboration)
+                const deps = i > 0 ? [i] : [];
+                sequentialJobs.push({
+                    agentType: domain.agentType,
+                    order,
+                    dependsOnOrders: deps,
+                    instruction: domain.instruction,
+                });
+            }
+            this.logger.log({
+                message: 'Job plan: domain agents created (each does own search)',
+                noteId,
+                domainAgents: domainJobs.map((j) => j.agentType),
+                totalJobs: sequentialJobs.length,
+            });
+            return await this.persistJobs(sequentialJobs, noteId, tenantId, userId);
+        }
+        catch (err) {
+            this.logger.error({
+                message: 'Failed to plan jobs',
+                noteId,
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+            return this.createDefaultJobs(noteId, tenantId, userId, note.title, note.userReport);
+        }
+    }
+    /**
+     * Persist parsed LLM job plan into AgentJob rows.
+     * Pre-generates IDs, resolves order-based dependencies to IDs, batch creates.
+     */
+    async persistJobs(jobs, noteId, tenantId, userId) {
+        // Pre-generate IDs and build original-order→ID map BEFORE renormalizing
+        const jobsWithIds = jobs.map((j, idx) => ({
+            ...j,
+            id: `ajob_${(0, cuid2_1.createId)()}`,
+            originalOrder: j.order,
+            order: idx + 1, // Normalize to 1-based sequential
+        }));
+        // Map from ORIGINAL LLM order to ID (so dependsOnOrders references resolve correctly)
+        const orderToId = new Map(jobsWithIds.map((j) => [j.originalOrder, j.id]));
+        // Resolve dependsOnOrders to actual IDs
+        const jobData = jobsWithIds.map((j) => ({
+            id: j.id,
+            noteId,
+            tenantId,
+            userId,
+            agentType: j.agentType,
+            order: j.order,
+            dependsOn: j.dependsOnOrders
+                .map((depOrder) => orderToId.get(depOrder))
+                .filter((id) => !!id),
+            instruction: j.instruction,
+            status: 'PLANNED',
+        }));
+        // Batch create in transaction
+        await this.prisma.$transaction(jobData.map((data) => this.prisma.agentJob.create({ data })));
+        this.logger.log({
+            message: 'Agent jobs planned',
+            noteId,
+            jobCount: jobData.length,
+            types: jobData.map((j) => j.agentType),
+        });
+        return this.getJobsForNote(noteId, tenantId);
+    }
+    /**
+     * Fallback: create a single content agent job (it does its own search).
+     */
+    async createDefaultJobs(noteId, tenantId, userId, taskTitle, userReport) {
+        const contentId = `ajob_${(0, cuid2_1.createId)()}`;
+        await this.prisma.agentJob.create({
+            data: {
+                id: contentId,
+                noteId,
+                tenantId,
+                userId,
+                agentType: types_1.AgentType.CONTENT,
+                order: 1,
+                dependsOn: [],
+                instruction: `Research and create actionable content deliverables for "${taskTitle}". Use web_search to find examples, best practices, case studies. Include visual content with images where appropriate. Report context: ${userReport.substring(0, 500)}`,
+                status: 'PLANNED',
+            },
+        });
+        return this.getJobsForNote(noteId, tenantId);
+    }
+    /**
+     * Returns all jobs for a note, ordered by execution order.
+     */
+    async getJobsForNote(noteId, tenantId) {
+        const jobs = await this.prisma.agentJob.findMany({
+            where: { noteId, tenantId },
+            orderBy: { order: 'asc' },
+        });
+        return jobs.map((j) => ({
+            id: j.id,
+            noteId: j.noteId,
+            agentType: j.agentType,
+            order: j.order,
+            dependsOn: j.dependsOn,
+            instruction: j.instruction,
+            status: j.status,
+            executionId: j.executionId,
+            agentOutput: j.agentOutput,
+            error: j.error,
+            createdAt: j.createdAt.toISOString(),
+            updatedAt: j.updatedAt.toISOString(),
+        }));
+    }
+};
+exports.JobPlannerService = JobPlannerService;
+exports.JobPlannerService = JobPlannerService = JobPlannerService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof agent_registry_service_1.AgentRegistryService !== "undefined" && agent_registry_service_1.AgentRegistryService) === "function" ? _c : Object])
+], JobPlannerService);
+
+
+/***/ }),
+/* 151 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.OpenClawTenantModule = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const tenant_context_1 = __webpack_require__(10);
+const web_crawler_service_1 = __webpack_require__(152);
+const business_profile_service_1 = __webpack_require__(153);
+const soul_generator_service_1 = __webpack_require__(154);
+const openclaw_tenant_service_1 = __webpack_require__(155);
+const openclaw_tenant_controller_1 = __webpack_require__(157);
+let OpenClawTenantModule = class OpenClawTenantModule {
+};
+exports.OpenClawTenantModule = OpenClawTenantModule;
+exports.OpenClawTenantModule = OpenClawTenantModule = tslib_1.__decorate([
+    (0, common_1.Module)({
+        imports: [tenant_context_1.TenantModule],
+        controllers: [openclaw_tenant_controller_1.OpenClawTenantController],
+        providers: [
+            web_crawler_service_1.WebCrawlerService,
+            business_profile_service_1.BusinessProfileService,
+            soul_generator_service_1.SoulGeneratorService,
+            openclaw_tenant_service_1.OpenClawTenantService,
+        ],
+        exports: [
+            web_crawler_service_1.WebCrawlerService,
+            business_profile_service_1.BusinessProfileService,
+            soul_generator_service_1.SoulGeneratorService,
+            openclaw_tenant_service_1.OpenClawTenantService,
+        ],
+    })
+], OpenClawTenantModule);
+
+
+/***/ }),
+/* 152 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var WebCrawlerService_1;
+var _a;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.WebCrawlerService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const axios_1 = tslib_1.__importDefault(__webpack_require__(58));
+const MAX_PAGES = 20;
+const MAX_CHARS_PER_PAGE = 5_000;
+const FETCH_TIMEOUT_MS = 10_000;
+/** URL patterns that indicate page type */
+const PAGE_TYPE_PATTERNS = [
+    { pattern: /\/(about|o-nama|ko-smo|uber-uns)/i, type: 'about', priority: 1 },
+    { pattern: /\/(services|usluge|dienstleistungen)/i, type: 'services', priority: 2 },
+    { pattern: /\/(products|proizvodi|shop|store)/i, type: 'products', priority: 3 },
+    { pattern: /\/(team|tim|ekipa|nas-tim)/i, type: 'team', priority: 4 },
+    { pattern: /\/(pricing|cene|prices|paketi)/i, type: 'pricing', priority: 5 },
+    { pattern: /\/(contact|kontakt)/i, type: 'contact', priority: 6 },
+    { pattern: /\/(blog|news|vesti|novosti)/i, type: 'blog', priority: 7 },
+    { pattern: /\/(portfolio|gallery|galerija|projekti|projects|works)/i, type: 'products', priority: 3 },
+    { pattern: /\/(faq|pitanja)/i, type: 'other', priority: 8 },
+];
+let WebCrawlerService = WebCrawlerService_1 = class WebCrawlerService {
+    constructor(configService) {
+        this.configService = configService;
+        this.logger = new common_1.Logger(WebCrawlerService_1.name);
+        this.braveApiKey = this.configService.get('BRAVE_API_KEY');
+    }
+    /**
+     * Crawl a website: fetch homepage, discover internal links, fetch important pages.
+     * Returns up to MAX_PAGES pages with extracted text content.
+     */
+    async crawlWebsite(websiteUrl) {
+        const baseUrl = this.normalizeUrl(websiteUrl);
+        const domain = new URL(baseUrl).hostname;
+        this.logger.log({ message: 'Starting website crawl', url: baseUrl, domain });
+        // Step 1: Fetch homepage
+        const homepage = await this.fetchPage(baseUrl);
+        if (!homepage) {
+            this.logger.warn({ message: 'Could not fetch homepage', url: baseUrl });
+            return { pages: [], totalChars: 0, domain };
+        }
+        const pages = [{
+                url: baseUrl,
+                title: homepage.title,
+                content: homepage.content,
+                type: 'homepage',
+            }];
+        // Step 2: Extract internal links from homepage HTML
+        const internalLinks = await this.discoverLinks(baseUrl, homepage.html, domain);
+        this.logger.log({ message: 'Discovered internal links', count: internalLinks.length });
+        // Step 3: Prioritize and fetch important pages
+        const prioritized = this.prioritizeLinks(internalLinks);
+        const toFetch = prioritized.slice(0, MAX_PAGES - 1); // -1 for homepage
+        const fetchResults = await Promise.allSettled(toFetch.map(link => this.fetchPage(link.url)));
+        for (let i = 0; i < fetchResults.length; i++) {
+            const result = fetchResults[i];
+            if (result.status === 'fulfilled' && result.value) {
+                pages.push({
+                    url: toFetch[i].url,
+                    title: result.value.title,
+                    content: result.value.content,
+                    type: toFetch[i].type,
+                });
+            }
+        }
+        const totalChars = pages.reduce((sum, p) => sum + p.content.length, 0);
+        this.logger.log({
+            message: 'Website crawl complete',
+            domain,
+            pagesFound: pages.length,
+            totalChars,
+        });
+        return { pages, totalChars, domain };
+    }
+    /** Fetch a page and extract title + text content */
+    async fetchPage(url) {
+        try {
+            const response = await axios_1.default.get(url, {
+                timeout: FETCH_TIMEOUT_MS,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (compatible; MentorAI/1.0; +https://mentor-ai.com)',
+                    'Accept': 'text/html,application/xhtml+xml',
+                },
+                maxRedirects: 5,
+                responseType: 'text',
+            });
+            const html = response.data;
+            const title = this.extractTitle(html);
+            const content = this.extractTextFromHtml(html).substring(0, MAX_CHARS_PER_PAGE);
+            return { title, content, html };
+        }
+        catch (error) {
+            this.logger.warn({
+                message: 'Page fetch failed',
+                url,
+                error: error instanceof Error ? error.message : 'Unknown',
+            });
+            return null;
+        }
+    }
+    /** Extract all internal links from HTML */
+    async discoverLinks(baseUrl, html, domain) {
+        const seen = new Set([baseUrl]);
+        const links = [];
+        // Extract href from anchor tags
+        const hrefRegex = /href=["']([^"'#]+)["']/g;
+        let match;
+        while ((match = hrefRegex.exec(html)) !== null) {
+            try {
+                const href = match[1];
+                const absoluteUrl = new URL(href, baseUrl).href;
+                const urlObj = new URL(absoluteUrl);
+                // Only internal links
+                if (urlObj.hostname !== domain)
+                    continue;
+                // Skip assets, anchors, query strings
+                if (/\.(jpg|jpeg|png|gif|svg|css|js|pdf|zip|mp4|mp3|woff|ico)/i.test(urlObj.pathname))
+                    continue;
+                const normalized = urlObj.origin + urlObj.pathname.replace(/\/$/, '');
+                if (seen.has(normalized))
+                    continue;
+                seen.add(normalized);
+                const type = this.classifyUrl(normalized);
+                const priority = PAGE_TYPE_PATTERNS.find(p => p.type === type.type)?.priority ?? 9;
+                links.push({ url: normalized, ...type, priority });
+            }
+            catch {
+                // Invalid URL, skip
+            }
+        }
+        return links.sort((a, b) => a.priority - b.priority);
+    }
+    /** Classify URL by its path pattern */
+    classifyUrl(url) {
+        for (const { pattern, type } of PAGE_TYPE_PATTERNS) {
+            if (pattern.test(url))
+                return { type };
+        }
+        return { type: 'other' };
+    }
+    /** Prioritize links: about > services > products > team > pricing > blog > other */
+    prioritizeLinks(links) {
+        // Deduplicate by type - keep max 3 per type
+        const byType = new Map();
+        for (const link of links) {
+            const existing = byType.get(link.type) ?? [];
+            if (existing.length < 3) {
+                existing.push(link);
+                byType.set(link.type, existing);
+            }
+        }
+        return Array.from(byType.values()).flat().sort((a, b) => a.priority - b.priority);
+    }
+    normalizeUrl(url) {
+        if (!url.startsWith('http'))
+            url = 'https://' + url;
+        return url.replace(/\/$/, '');
+    }
+    extractTitle(html) {
+        const match = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+        return match?.[1]?.trim() ?? '';
+    }
+    extractTextFromHtml(html) {
+        let text = html.replace(/<script[\s\S]*?<\/script>/gi, '');
+        text = text.replace(/<style[\s\S]*?<\/style>/gi, '');
+        text = text.replace(/<nav[\s\S]*?<\/nav>/gi, '');
+        text = text.replace(/<footer[\s\S]*?<\/footer>/gi, '');
+        text = text.replace(/<[^>]+>/g, ' ');
+        text = text.replace(/&nbsp;/g, ' ');
+        text = text.replace(/&amp;/g, '&');
+        text = text.replace(/&lt;/g, '<');
+        text = text.replace(/&gt;/g, '>');
+        text = text.replace(/&quot;/g, '"');
+        text = text.replace(/&#39;/g, "'");
+        text = text.replace(/\s+/g, ' ').trim();
+        return text;
+    }
+};
+exports.WebCrawlerService = WebCrawlerService;
+exports.WebCrawlerService = WebCrawlerService = WebCrawlerService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object])
+], WebCrawlerService);
+
+
+/***/ }),
+/* 153 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var BusinessProfileService_1;
+var _a;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BusinessProfileService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const axios_1 = tslib_1.__importDefault(__webpack_require__(58));
+let BusinessProfileService = BusinessProfileService_1 = class BusinessProfileService {
+    constructor(configService) {
+        this.configService = configService;
+        this.logger = new common_1.Logger(BusinessProfileService_1.name);
+        this.geminiApiKey = this.configService.get('GEMINI_API_KEY') ?? '';
+    }
+    /**
+     * Analyze crawled website content and produce a structured BusinessProfile.
+     * Uses Gemini 2.5 Flash for fast, cheap analysis.
+     */
+    async analyzeWebsite(crawlResult, companyName) {
+        this.logger.log({ message: 'Analyzing website for business profile', domain: crawlResult.domain, pages: crawlResult.pages.length });
+        // Build context from crawled pages
+        let context = '';
+        for (const page of crawlResult.pages) {
+            context += `\n\n=== ${page.type.toUpperCase()}: ${page.title} (${page.url}) ===\n${page.content}`;
+        }
+        // Truncate to ~40K chars to stay within Gemini input limits
+        if (context.length > 40_000) {
+            context = context.substring(0, 40_000);
+        }
+        const prompt = `You are a business analyst. Analyze the following website content for "${companyName}" and produce a structured JSON business profile.
+
+WEBSITE CONTENT:
+${context}
+
+Return ONLY valid JSON with this exact structure (fill all fields based on what you find, use reasonable inferences where data is missing):
+{
+  "companyName": "${companyName}",
+  "industry": "specific industry/niche",
+  "description": "2-3 sentence business description",
+  "products": ["product1", "product2"],
+  "services": ["service1", "service2"],
+  "targetClients": ["client segment 1", "client segment 2"],
+  "geography": "markets served",
+  "brandVoice": "describe the brand tone: professional/casual/luxury/technical etc",
+  "competitors": ["competitor1", "competitor2"],
+  "uniqueValue": "what makes this company unique",
+  "priceRange": "price range if visible",
+  "teamDescription": "team size and key people if visible",
+  "visualStyle": "describe visual brand: colors, imagery style, mood",
+  "keyMetrics": {"metric1": "value1"},
+  "rawSummary": "500 word comprehensive summary of everything learned about this business - this will be used to train AI agents"
+}`;
+        try {
+            const response = await axios_1.default.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${this.geminiApiKey}`, {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.2, maxOutputTokens: 4000 },
+            }, { timeout: 30_000 });
+            const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+            const usage = response.data?.usageMetadata;
+            this.logger.log({
+                message: 'Business profile generated',
+                inputTokens: usage?.promptTokenCount,
+                outputTokens: usage?.candidatesTokenCount,
+            });
+            // Extract JSON from response (may be wrapped in ```json blocks)
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) {
+                throw new Error('No JSON found in Gemini response');
+            }
+            return JSON.parse(jsonMatch[0]);
+        }
+        catch (error) {
+            this.logger.error({
+                message: 'Business profile analysis failed',
+                error: error instanceof Error ? error.message : 'Unknown',
+            });
+            // Return minimal profile on failure
+            return {
+                companyName,
+                industry: 'Unknown',
+                description: `${companyName} - business profile could not be fully analyzed.`,
+                products: [],
+                services: [],
+                targetClients: [],
+                geography: 'Unknown',
+                brandVoice: 'Professional',
+                competitors: [],
+                uniqueValue: '',
+                priceRange: '',
+                teamDescription: '',
+                visualStyle: 'Professional, clean',
+                keyMetrics: {},
+                rawSummary: `${companyName} website was crawled but detailed analysis failed. ${crawlResult.pages.length} pages found with ${crawlResult.totalChars} chars of content.`,
+            };
+        }
+    }
+};
+exports.BusinessProfileService = BusinessProfileService;
+exports.BusinessProfileService = BusinessProfileService = BusinessProfileService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object])
+], BusinessProfileService);
+
+
+/***/ }),
+/* 154 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var SoulGeneratorService_1;
+var _a;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SoulGeneratorService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const axios_1 = tslib_1.__importDefault(__webpack_require__(58));
+const AGENT_ROLES = {
+    main: {
+        title: 'Glavni poslovni savetnik (CEO perspektiva)',
+        focus: 'Poznaje ceo biznis, donosi strateške odluke, koordinira sve aspekte poslovanja. Razume tržište, klijente, proizvode i finansije.',
+    },
+    financial: {
+        title: 'Finansijski direktor',
+        focus: 'Specijalizovan za finansijsku analizu, ROI kalkulacije, budžetiranje, cash flow, break-even analize i finansijske projekcije.',
+    },
+    marketing: {
+        title: 'Direktor marketinga (CMO)',
+        focus: 'Specijalizovan za brend strategiju, digitalni marketing, content plan, SEO, društvene mreže, pozicioniranje i vizuelni identitet.',
+    },
+    content: {
+        title: 'Kreativni direktor',
+        focus: 'Specijalizovan za kreiranje vizuelnog sadržaja, copy writing, brošure, prezentacije, social media content, i sav kreativni materijal. Koristi FAL za generisanje slika.',
+    },
+    sales: {
+        title: 'Direktor prodaje',
+        focus: 'Specijalizovan za prodajne strategije, CRM, lead generation, objection handling, pricing strategije i relationship building.',
+    },
+};
+let SoulGeneratorService = SoulGeneratorService_1 = class SoulGeneratorService {
+    constructor(configService) {
+        this.configService = configService;
+        this.logger = new common_1.Logger(SoulGeneratorService_1.name);
+        this.geminiApiKey = this.configService.get('GEMINI_API_KEY') ?? '';
+    }
+    /**
+     * Generate SOUL.MD content for all 5 domain agents based on the business profile.
+     * Each SOUL.MD is written in Serbian and customized to the specific business.
+     */
+    async generateAllSouls(profile) {
+        this.logger.log({ message: 'Generating SOUL.MD files', company: profile.companyName });
+        const agentTypes = Object.keys(AGENT_ROLES);
+        const results = await Promise.all(agentTypes.map(agentType => this.generateSoul(agentType, profile)));
+        const souls = {
+            main: results[0],
+            financial: results[1],
+            marketing: results[2],
+            content: results[3],
+            sales: results[4],
+        };
+        this.logger.log({
+            message: 'All SOUL.MD files generated',
+            company: profile.companyName,
+            sizes: Object.fromEntries(agentTypes.map((t, i) => [t, results[i].length])),
+        });
+        return souls;
+    }
+    async generateSoul(agentType, profile) {
+        const role = AGENT_ROLES[agentType];
+        const prompt = `Generate a SOUL.MD file for an AI agent in SERBIAN language.
+
+AGENT ROLE: ${role.title}
+AGENT FOCUS: ${role.focus}
+
+BUSINESS PROFILE:
+- Kompanija: ${profile.companyName}
+- Industrija: ${profile.industry}
+- Opis: ${profile.description}
+- Proizvodi: ${Array.isArray(profile.products) ? profile.products.join(', ') : String(profile.products || 'N/A')}
+- Usluge: ${Array.isArray(profile.services) ? profile.services.join(', ') : String(profile.services || 'N/A')}
+- Ciljni klijenti: ${Array.isArray(profile.targetClients) ? profile.targetClients.join(', ') : String(profile.targetClients || 'N/A')}
+- Geografija: ${profile.geography}
+- Ton brenda: ${profile.brandVoice}
+- Konkurenti: ${Array.isArray(profile.competitors) ? profile.competitors.join(', ') : String(profile.competitors || 'N/A')}
+- Jedinstvena vrednost: ${profile.uniqueValue}
+- Cenovni rang: ${profile.priceRange}
+- Tim: ${profile.teamDescription}
+- Vizuelni stil: ${profile.visualStyle}
+
+KONTEKST:
+${profile.rawSummary}
+
+Write the SOUL.MD with these sections in Serbian:
+1. # Ko sam ja — agent's identity and role within ${profile.companyName}
+2. ## Moja ekspertiza — specific domain knowledge for this business
+3. ## Kako radim — working methodology, approach, tools I use
+4. ## O kompaniji ${profile.companyName} — detailed business context
+5. ## Moji klijenti — target audience understanding
+6. ## Vizuelni identitet — brand guidelines (especially important for content/marketing agents)
+7. ## Pravila — constraints, guidelines:
+   - SVE pretrage moraju biti na ENGLESKOM jeziku
+   - Sav output mora biti na SRPSKOM jeziku
+   - Koristiti markdown formatiranje sa tabelama
+   - NE izmišljati podatke — koristiti samo provjerene izvore
+   - NE pisati fajlove (write/edit tool) — samo vraćati tekst
+   - Svaku činjenicu citirati sa izvorom ako je dostupan
+
+Return ONLY the SOUL.MD content, no wrapping or explanation. Make it specific and actionable — between 500-800 words (2000-3000 characters). Be concise but include all critical business context.`;
+        try {
+            const response = await axios_1.default.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${this.geminiApiKey}`, {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.4, maxOutputTokens: 16000 },
+            }, { timeout: 60_000 });
+            const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+            const usage = response.data?.usageMetadata;
+            this.logger.log({
+                message: `SOUL.MD generated for ${agentType}`,
+                chars: text.length,
+                inputTokens: usage?.promptTokenCount,
+                outputTokens: usage?.candidatesTokenCount,
+            });
+            return text || this.getFallbackSoul(agentType, profile);
+        }
+        catch (error) {
+            this.logger.error({
+                message: `SOUL.MD generation failed for ${agentType}`,
+                error: error instanceof Error ? error.message : 'Unknown',
+            });
+            return this.getFallbackSoul(agentType, profile);
+        }
+    }
+    getFallbackSoul(agentType, profile) {
+        const role = AGENT_ROLES[agentType];
+        return `# ${role.title} — ${profile.companyName}
+
+Ja sam ${role.title} za ${profile.companyName}.
+
+## Moja ekspertiza
+${role.focus}
+
+## O kompaniji
+${profile.description}
+- Industrija: ${profile.industry}
+- Proizvodi: ${Array.isArray(profile.products) ? profile.products.join(', ') : String(profile.products || 'N/A')}
+- Usluge: ${Array.isArray(profile.services) ? profile.services.join(', ') : String(profile.services || 'N/A')}
+
+## Pravila
+- SVE pretrage na ENGLESKOM jeziku
+- Sav output na SRPSKOM jeziku
+- Markdown formatiranje sa tabelama
+- NE izmišljati podatke
+- NE pisati fajlove — samo vraćati tekst
+`;
+    }
+};
+exports.SoulGeneratorService = SoulGeneratorService;
+exports.SoulGeneratorService = SoulGeneratorService = SoulGeneratorService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object])
+], SoulGeneratorService);
+
+
+/***/ }),
+/* 155 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var OpenClawTenantService_1;
+var _a;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.OpenClawTenantService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const ssh2_1 = __webpack_require__(156);
+const fs_1 = __webpack_require__(9);
+const AGENTS = ['main', 'financial', 'marketing', 'content', 'sales', 'research', 'designer', 'dev'];
+let OpenClawTenantService = OpenClawTenantService_1 = class OpenClawTenantService {
+    constructor(configService) {
+        this.configService = configService;
+        this.logger = new common_1.Logger(OpenClawTenantService_1.name);
+        this.hetznerHost = this.configService.get('HETZNER_HOST') ?? '91.98.231.87';
+        this.hetznerUser = this.configService.get('HETZNER_USER') ?? 'root';
+        this.sshKeyPath = this.configService.get('HETZNER_SSH_KEY') ?? '';
+        this.baseProfile = '/root/.openclaw'; // Base config to copy from
+    }
+    /**
+     * Provision a new OpenClaw tenant profile on Hetzner.
+     * Creates isolated directory, copies base config, writes custom SOUL.MD files.
+     */
+    async provisionTenant(tenantId, profile, souls) {
+        const profilePath = `/root/.openclaw-${tenantId}`;
+        this.logger.log({ message: 'Provisioning OpenClaw tenant', tenantId, profilePath });
+        try {
+            // Step 1: Create profile directory structure
+            await this.sshExec(`mkdir -p ${profilePath}`);
+            // Step 2: Copy base config (same LLM, tools, API keys)
+            await this.sshExec(`cp ${this.baseProfile}/openclaw.json ${profilePath}/openclaw.json`);
+            // Step 3: Create agent directories and write SOUL.MD files
+            for (const agent of AGENTS) {
+                const agentDir = `${profilePath}/agents/${agent}/agent`;
+                await this.sshExec(`mkdir -p ${agentDir}`);
+                const soulContent = souls[agent];
+                if (soulContent) {
+                    // Write SOUL.MD via heredoc to handle special characters
+                    await this.sshExec(`cat > ${agentDir}/SOUL.md << 'SOUL_EOF'\n${soulContent}\nSOUL_EOF`);
+                }
+            }
+            // Step 4: Verify with a test command
+            const testResult = await this.sshExec(`ls ${profilePath}/agents/*/agent/SOUL.md 2>/dev/null | wc -l`);
+            const soulCount = parseInt(testResult.trim(), 10);
+            if (soulCount < AGENTS.length) {
+                this.logger.warn({
+                    message: 'Not all SOUL.MD files written',
+                    expected: AGENTS.length,
+                    found: soulCount,
+                    tenantId,
+                });
+            }
+            this.logger.log({
+                message: 'Tenant provisioned successfully',
+                tenantId,
+                profilePath,
+                soulFiles: soulCount,
+            });
+            return { success: true, profilePath };
+        }
+        catch (error) {
+            const errorMsg = error instanceof Error ? error.message : 'Unknown';
+            this.logger.error({ message: 'Tenant provisioning failed', tenantId, error: errorMsg });
+            return { success: false, profilePath, error: errorMsg };
+        }
+    }
+    /**
+     * Update a single agent's SOUL.MD for a tenant.
+     */
+    async updateSoul(tenantId, agentType, soulContent) {
+        const soulPath = `/root/.openclaw-${tenantId}/agents/${agentType}/agent/SOUL.md`;
+        await this.sshExec(`cat > ${soulPath} << 'SOUL_EOF'\n${soulContent}\nSOUL_EOF`);
+        this.logger.log({ message: 'SOUL.MD updated', tenantId, agentType });
+    }
+    /**
+     * Write USER.md with full tenant business profile.
+     * Called after onboarding completion to give OpenClaw full business context.
+     */
+    async writeUserMd(tenantId, profile) {
+        const userMd = `# USER.md — ${profile.companyName}
+
+## Profil Kompanije
+- **Ime**: ${profile.companyName}
+- **Industrija**: ${profile.industry}
+- **Opis**: ${profile.description ?? 'Nije dostupno'}
+- **Website**: ${profile.websiteUrl ?? 'Nije dostupno'}
+- **Trenutno stanje**: ${profile.businessState ?? 'Nije dostupno'}
+
+## Organizacija
+- **Departmani**: ${profile.departments?.join(', ') ?? 'Nije definisano'}
+- **Uloga vlasnika**: ${profile.userRole ?? 'OWNER'}
+- **Strategija**: ${profile.strategy ?? 'Nije definisana'}
+- **Režim rada**: ${profile.executionMode ?? 'MANUAL'}
+
+${profile.crawledProfile ? `## Web Profil\n${profile.crawledProfile}\n` : ''}
+${profile.onboardingOutput ? `## Onboarding Analiza\n${profile.onboardingOutput}\n` : ''}
+${profile.pdfExtract ? `## Brošura (izvod)\n${profile.pdfExtract}\n` : ''}
+`;
+        const userMdPath = `/root/.openclaw-${tenantId}/agents/main/agent/USER.md`;
+        await this.sshExec(`cat > ${userMdPath} << 'USER_EOF'\n${userMd}\nUSER_EOF`);
+        this.logger.log({ message: 'USER.md written', tenantId });
+    }
+    /**
+     * Write AGENTS.md with mentor-ai-bridge usage instructions for the director agent.
+     */
+    async writeAgentsMd(tenantId, bridgeBaseUrl) {
+        const agentsMd = `# AGENTS.md — Mentor AI Bridge Instructions
+
+## Bridge API
+Base URL: ${bridgeBaseUrl}
+Auth: Bearer token in Authorization header
+
+## Available Tools (via mentor-ai-bridge skill)
+
+### Read Operations
+- \`get_brain_state\` → GET /bridge/brain-state?tenantId=${tenantId}
+- \`search_concepts\` → GET /bridge/concepts/search?q=...&tenantId=${tenantId}
+- \`get_concept\` → GET /bridge/concepts/:id
+- \`get_pending\` → GET /bridge/concepts/pending?tenantId=${tenantId}
+- \`get_categories\` → GET /bridge/categories
+- \`get_context\` → GET /bridge/context/${tenantId}
+- \`get_budget\` → GET /bridge/budget/${tenantId}
+- \`get_proposals\` → GET /bridge/proposals?tenantId=${tenantId}
+
+### Write Operations
+- \`create_proposal\` → POST /bridge/proposals
+- \`create_concept\` → POST /bridge/concepts
+- \`create_conversation\` → POST /bridge/conversations
+- \`create_task\` → POST /bridge/tasks
+- \`add_contribution\` → POST /bridge/task-contribution
+- \`update_progress\` → POST /bridge/task-progress
+- \`complete_task\` → POST /bridge/task-complete
+- \`update_agent_status\` → POST /bridge/agent-status
+- \`create_memory\` → POST /bridge/memories
+- \`update_brain_state\` → POST /bridge/brain-state
+
+## Rules
+- Always include tenantId: "${tenantId}" in all requests
+- Check budget before spawning agents
+- Create proposals instead of acting directly (unless user approved)
+- Report agent status changes for real-time UI updates
+- Structure task results with ## headings for PDF export compatibility
+`;
+        const agentsMdPath = `/root/.openclaw-${tenantId}/agents/main/agent/AGENTS.md`;
+        await this.sshExec(`cat > ${agentsMdPath} << 'AGENTS_EOF'\n${agentsMd}\nAGENTS_EOF`);
+        this.logger.log({ message: 'AGENTS.md written', tenantId });
+    }
+    /**
+     * Read a file from the OpenClaw workspace as a Buffer.
+     * Uses base64 encoding over SSH for binary-safe transfer.
+     * Path is strictly validated before execution.
+     */
+    async readFile(filePath) {
+        // Strict path whitelist: tenant workspace OR shared workspace deliverables
+        const isTenantPath = /^\/root\/\.openclaw-[a-z0-9_-]+\/[a-zA-Z0-9_./-]+$/.test(filePath);
+        const isSharedDeliverable = /^\/root\/\.openclaw\/workspace\/deliverables\/[a-zA-Z0-9_./-]+$/.test(filePath);
+        if (!isTenantPath && !isSharedDeliverable) {
+            throw new Error(`Invalid file path: ${filePath}`);
+        }
+        // Use single quotes in SSH to prevent all shell expansion
+        const result = await this.sshExec(`base64 '${filePath.replace(/'/g, "'\\''")}' 2>/dev/null || echo "FILE_NOT_FOUND"`);
+        if (result.trim() === 'FILE_NOT_FOUND') {
+            throw new Error(`File not found: ${filePath}`);
+        }
+        return Buffer.from(result.trim(), 'base64');
+    }
+    /**
+     * List all files in a deliverables directory for a given noteId.
+     * Returns relative paths within that directory.
+     */
+    async listDeliverables(noteId) {
+        if (!/^note_[a-zA-Z0-9_-]+$/.test(noteId)) {
+            throw new Error(`Invalid noteId: ${noteId}`);
+        }
+        const dir = `/root/.openclaw/workspace/deliverables/${noteId}`;
+        const result = await this.sshExec(`find '${dir}' -type f 2>/dev/null || echo "DIR_NOT_FOUND"`);
+        if (result.trim() === 'DIR_NOT_FOUND' || !result.trim())
+            return [];
+        return result.trim().split('\n').filter(Boolean);
+    }
+    /**
+     * Check if a tenant profile exists on Hetzner.
+     */
+    async tenantExists(tenantId) {
+        try {
+            const result = await this.sshExec(`test -d /root/.openclaw-${tenantId} && echo yes || echo no`);
+            return result.trim() === 'yes';
+        }
+        catch {
+            return false;
+        }
+    }
+    /**
+     * Delete a tenant profile (for cleanup).
+     */
+    /**
+     * Write a file to a remote path on Hetzner via SSH.
+     * Creates parent directories if needed.
+     */
+    async writeRemoteFile(remotePath, content) {
+        const dir = remotePath.substring(0, remotePath.lastIndexOf('/'));
+        await this.sshExec(`mkdir -p ${dir}`);
+        await this.sshExec(`cat > ${remotePath} << 'FILE_EOF'\n${content}\nFILE_EOF`);
+        this.logger.log({ message: 'Remote file written', path: remotePath });
+    }
+    async deleteTenant(tenantId) {
+        await this.sshExec(`rm -rf /root/.openclaw-${tenantId}`);
+        this.logger.log({ message: 'Tenant profile deleted', tenantId });
+    }
+    /**
+     * Execute a command on Hetzner via SSH.
+     */
+    sshExec(command) {
+        return new Promise((resolve, reject) => {
+            const conn = new ssh2_1.Client();
+            let output = '';
+            const connectConfig = {
+                host: this.hetznerHost,
+                port: 22,
+                username: this.hetznerUser,
+                readyTimeout: 10_000,
+            };
+            // Use SSH key from env, or fallback to SSH agent
+            if (this.sshKeyPath) {
+                try {
+                    connectConfig['privateKey'] = (0, fs_1.readFileSync)(this.sshKeyPath);
+                }
+                catch {
+                    // Fallback to agent
+                    connectConfig['agent'] = process.env['SSH_AUTH_SOCK'];
+                }
+            }
+            else {
+                connectConfig['agent'] = process.env['SSH_AUTH_SOCK'];
+            }
+            conn.on('ready', () => {
+                conn.exec(command, (err, stream) => {
+                    if (err) {
+                        conn.end();
+                        return reject(err);
+                    }
+                    stream.on('data', (data) => {
+                        output += data.toString();
+                    });
+                    stream.stderr.on('data', (data) => {
+                        // Log stderr but don't fail
+                        const errText = data.toString().trim();
+                        if (errText) {
+                            this.logger.debug({ message: 'SSH stderr', output: errText.substring(0, 200) });
+                        }
+                    });
+                    stream.on('close', (code) => {
+                        conn.end();
+                        if (code !== 0 && code !== null) {
+                            reject(new Error(`SSH command exited with code ${code}: ${output.substring(0, 200)}`));
+                        }
+                        else {
+                            resolve(output);
+                        }
+                    });
+                });
+            });
+            conn.on('error', (err) => {
+                reject(new Error(`SSH connection failed: ${err.message}`));
+            });
+            conn.connect(connectConfig);
+        });
+    }
+};
+exports.OpenClawTenantService = OpenClawTenantService;
+exports.OpenClawTenantService = OpenClawTenantService = OpenClawTenantService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object])
+], OpenClawTenantService);
+
+
+/***/ }),
+/* 156 */
+/***/ ((module) => {
+
+module.exports = require("ssh2");
+
+/***/ }),
+/* 157 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var OpenClawTenantController_1;
+var _a, _b, _c, _d, _e;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.OpenClawTenantController = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const class_validator_1 = __webpack_require__(39);
+const tenant_context_1 = __webpack_require__(10);
+const web_crawler_service_1 = __webpack_require__(152);
+const business_profile_service_1 = __webpack_require__(153);
+const soul_generator_service_1 = __webpack_require__(154);
+const openclaw_tenant_service_1 = __webpack_require__(155);
+class ProvisionTenantDto {
+}
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    tslib_1.__metadata("design:type", String)
+], ProvisionTenantDto.prototype, "tenantId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    tslib_1.__metadata("design:type", String)
+], ProvisionTenantDto.prototype, "websiteUrl", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    tslib_1.__metadata("design:type", String)
+], ProvisionTenantDto.prototype, "companyName", void 0);
+let OpenClawTenantController = OpenClawTenantController_1 = class OpenClawTenantController {
+    constructor(prisma, webCrawler, businessProfile, soulGenerator, openClawTenant) {
+        this.prisma = prisma;
+        this.webCrawler = webCrawler;
+        this.businessProfile = businessProfile;
+        this.soulGenerator = soulGenerator;
+        this.openClawTenant = openClawTenant;
+        this.logger = new common_1.Logger(OpenClawTenantController_1.name);
+    }
+    /**
+     * Full provisioning pipeline: crawl website → analyze → generate SOUL.MD → deploy to Hetzner.
+     * Called during onboarding after tenant provides website URL.
+     */
+    async provisionTenant(dto) {
+        const startTime = Date.now();
+        this.logger.log({ message: 'Starting tenant provisioning', tenantId: dto.tenantId, url: dto.websiteUrl });
+        // Step 1: Crawl website
+        const crawlResult = await this.webCrawler.crawlWebsite(dto.websiteUrl);
+        this.logger.log({ message: 'Crawl complete', pages: crawlResult.pages.length, chars: crawlResult.totalChars });
+        // Step 2: Analyze and create business profile
+        const profile = await this.businessProfile.analyzeWebsite(crawlResult, dto.companyName);
+        this.logger.log({ message: 'Profile created', industry: profile.industry });
+        // Step 3: Generate SOUL.MD for each agent
+        const souls = await this.soulGenerator.generateAllSouls(profile);
+        this.logger.log({ message: 'SOULs generated', agents: Object.keys(souls).length });
+        // Step 4: Deploy to Hetzner
+        const deployResult = await this.openClawTenant.provisionTenant(dto.tenantId, profile, souls);
+        // Step 5: Save profile to tenant metadata in DB
+        try {
+            await this.prisma.tenant.update({
+                where: { id: dto.tenantId },
+                data: {
+                    description: profile.rawSummary.substring(0, 2000),
+                    industry: profile.industry,
+                },
+            });
+        }
+        catch (err) {
+            this.logger.warn({
+                message: 'Could not update tenant metadata',
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+        }
+        const durationMs = Date.now() - startTime;
+        return {
+            success: deployResult.success,
+            tenantId: dto.tenantId,
+            profile: {
+                companyName: profile.companyName,
+                industry: profile.industry,
+                description: profile.description,
+                products: Array.isArray(profile.products) ? profile.products : [],
+                services: Array.isArray(profile.services) ? profile.services : [],
+                targetClients: Array.isArray(profile.targetClients) ? profile.targetClients : [],
+            },
+            crawl: {
+                pages: crawlResult.pages.length,
+                totalChars: crawlResult.totalChars,
+            },
+            deploy: {
+                profilePath: deployResult.profilePath,
+                error: deployResult.error,
+            },
+            durationMs,
+        };
+    }
+    /**
+     * Check if a tenant has been provisioned.
+     */
+    async checkStatus(tenantId) {
+        const exists = await this.openClawTenant.tenantExists(tenantId);
+        return { tenantId, provisioned: exists };
+    }
+};
+exports.OpenClawTenantController = OpenClawTenantController;
+tslib_1.__decorate([
+    (0, common_1.Post)('provision'),
+    tslib_1.__param(0, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [ProvisionTenantDto]),
+    tslib_1.__metadata("design:returntype", Promise)
+], OpenClawTenantController.prototype, "provisionTenant", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('status/:tenantId'),
+    tslib_1.__param(0, (0, common_1.Param)('tenantId')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], OpenClawTenantController.prototype, "checkStatus", null);
+exports.OpenClawTenantController = OpenClawTenantController = OpenClawTenantController_1 = tslib_1.__decorate([
+    (0, common_1.Controller)('v1/openclaw-tenant'),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof web_crawler_service_1.WebCrawlerService !== "undefined" && web_crawler_service_1.WebCrawlerService) === "function" ? _b : Object, typeof (_c = typeof business_profile_service_1.BusinessProfileService !== "undefined" && business_profile_service_1.BusinessProfileService) === "function" ? _c : Object, typeof (_d = typeof soul_generator_service_1.SoulGeneratorService !== "undefined" && soul_generator_service_1.SoulGeneratorService) === "function" ? _d : Object, typeof (_e = typeof openclaw_tenant_service_1.OpenClawTenantService !== "undefined" && openclaw_tenant_service_1.OpenClawTenantService) === "function" ? _e : Object])
+], OpenClawTenantController);
+
+
+/***/ }),
+/* 158 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BridgeController = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const bridge_service_1 = __webpack_require__(159);
+const brain_state_service_1 = __webpack_require__(160);
+const bridge_dto_1 = __webpack_require__(161);
+/**
+ * Bridge API Controller
+ *
+ * REST endpoints that OpenClaw calls via the mentor-ai-bridge skill.
+ * Authenticated via Bearer token (OPENCLAW_AUTH_TOKEN).
+ * Not exposed publicly — only reachable from the OpenClaw server.
+ *
+ * Two categories:
+ * - READ: OpenClaw queries state (concepts, context, budget, proposals)
+ * - WRITE: OpenClaw updates state (tasks, proposals, agent status)
+ *   → Each write emits WebSocket events to the tenant room
+ */
+let BridgeController = class BridgeController {
+    constructor(bridgeService, brainStateService, configService) {
+        this.bridgeService = bridgeService;
+        this.brainStateService = brainStateService;
+        this.configService = configService;
+        this.authToken = this.configService.get('OPENCLAW_AUTH_TOKEN', '');
+        this.defaultTenantId = this.configService.get('OPENCLAW_DEFAULT_TENANT_ID', '');
+    }
+    // ── Auth Guard ──
+    validateAuth(authorization) {
+        if (!this.authToken)
+            return; // No token configured = dev mode bypass
+        const token = authorization?.replace('Bearer ', '');
+        if (token !== this.authToken) {
+            throw new common_1.UnauthorizedException('Invalid bridge auth token');
+        }
+    }
+    /**
+     * Resolve tenantId: always use server-side default if configured.
+     * This prevents OpenClaw from ever sending wrong/stale tenantId.
+     */
+    resolveTenantId(requestedTenantId) {
+        return this.defaultTenantId || requestedTenantId || '';
+    }
+    // ════════════════════════════════════════════
+    //  READ Endpoints
+    // ════════════════════════════════════════════
+    async searchConcepts(auth, query) {
+        this.validateAuth(auth);
+        return this.bridgeService.searchConcepts(this.resolveTenantId(query.tenantId), query.q, query.limit);
+    }
+    // IMPORTANT: /pending must be declared BEFORE /:id to avoid NestJS matching "pending" as an :id param
+    async getPendingConcepts(auth, query) {
+        this.validateAuth(auth);
+        return this.bridgeService.getPendingConcepts(this.resolveTenantId(query.tenantId));
+    }
+    async getConceptDetails(auth, id) {
+        this.validateAuth(auth);
+        return this.bridgeService.getConceptDetails(id);
+    }
+    async getCategories(auth) {
+        this.validateAuth(auth);
+        return this.bridgeService.getCategories();
+    }
+    async getBrainState(auth, query) {
+        this.validateAuth(auth);
+        return this.brainStateService.getState(this.resolveTenantId(query.tenantId));
+    }
+    async getBusinessContext(auth, tenantId) {
+        this.validateAuth(auth);
+        return this.bridgeService.getBusinessContext(this.resolveTenantId(tenantId));
+    }
+    async getBudget(auth, tenantId) {
+        this.validateAuth(auth);
+        return this.bridgeService.getBudget(this.resolveTenantId(tenantId));
+    }
+    async getProposals(auth, query) {
+        this.validateAuth(auth);
+        return this.bridgeService.getProposals(this.resolveTenantId(query.tenantId), query.status);
+    }
+    // ════════════════════════════════════════════
+    //  WRITE Endpoints (each emits WebSocket event)
+    // ════════════════════════════════════════════
+    async createProposal(auth, dto) {
+        this.validateAuth(auth);
+        dto.tenantId = this.resolveTenantId(dto.tenantId);
+        return this.bridgeService.createProposal(dto);
+    }
+    async updateProposal(auth, id, dto) {
+        this.validateAuth(auth);
+        return this.bridgeService.updateProposal(id, dto);
+    }
+    async createConcept(auth, dto) {
+        this.validateAuth(auth);
+        dto.tenantId = this.resolveTenantId(dto.tenantId);
+        return this.bridgeService.createConcept(dto);
+    }
+    async createConversation(auth, dto) {
+        this.validateAuth(auth);
+        dto.tenantId = this.resolveTenantId(dto.tenantId);
+        return this.bridgeService.createConversation(dto);
+    }
+    async createTask(auth, dto) {
+        this.validateAuth(auth);
+        dto.tenantId = this.resolveTenantId(dto.tenantId);
+        return this.bridgeService.createTask(dto);
+    }
+    async addTaskContribution(auth, dto) {
+        this.validateAuth(auth);
+        dto.tenantId = this.resolveTenantId(dto.tenantId);
+        await this.bridgeService.addTaskContribution(dto);
+        return { success: true };
+    }
+    async updateTaskProgress(auth, dto) {
+        this.validateAuth(auth);
+        dto.tenantId = this.resolveTenantId(dto.tenantId);
+        await this.bridgeService.updateTaskProgress(dto);
+        return { success: true };
+    }
+    async completeTask(auth, dto) {
+        this.validateAuth(auth);
+        dto.tenantId = this.resolveTenantId(dto.tenantId);
+        await this.bridgeService.completeTask(dto);
+        return { success: true };
+    }
+    async updateAgentStatus(auth, dto) {
+        this.validateAuth(auth);
+        dto.tenantId = this.resolveTenantId(dto.tenantId);
+        await this.bridgeService.updateAgentStatus(dto);
+        return { success: true };
+    }
+    async createMemory(auth, dto) {
+        this.validateAuth(auth);
+        dto.tenantId = this.resolveTenantId(dto.tenantId);
+        return this.bridgeService.createMemory(dto);
+    }
+    async updateBrainState(auth, dto) {
+        this.validateAuth(auth);
+        dto.tenantId = this.resolveTenantId(dto.tenantId);
+        await this.bridgeService.updateBrainState(dto);
+        return { success: true };
+    }
+    async reportActionResult(auth, dto) {
+        this.validateAuth(auth);
+        await this.bridgeService.updateActionResult(dto.tenantId, dto.noteId, dto.agentType, dto.actionId, dto.status, dto.result);
+        return { success: true };
+    }
+    // ════════════════════════════════════════════
+    //  File Proxy (download from OpenClaw workspace)
+    // ════════════════════════════════════════════
+    /**
+     * Proxy file download from OpenClaw workspace on Hetzner.
+     * Used by frontend to download deliverable files produced by agents.
+     * Auth: accepts both bridge token and user JWT (via notes controller proxy).
+     */
+    async downloadFile(auth, filePath, tenantId, res) {
+        this.validateAuth(auth);
+        if (!filePath || !tenantId) {
+            throw new common_1.BadRequestException('path and tenantId are required');
+        }
+        // Security: prevent path traversal
+        if (filePath.includes('..') || filePath.includes('~') || !filePath.startsWith('/root/.openclaw-')) {
+            throw new common_1.BadRequestException('Invalid file path');
+        }
+        // Verify the path belongs to the requesting tenant
+        if (!filePath.includes(`.openclaw-${tenantId}`)) {
+            throw new common_1.BadRequestException('File path does not belong to this tenant');
+        }
+        const fileData = await this.bridgeService.readFileFromWorkspace(tenantId, filePath);
+        // Determine content type from extension
+        const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+        const mimeTypes = {
+            'md': 'text/markdown',
+            'txt': 'text/plain',
+            'html': 'text/html',
+            'css': 'text/css',
+            'js': 'application/javascript',
+            'json': 'application/json',
+            'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'pdf': 'application/pdf',
+            'png': 'image/png',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'svg': 'image/svg+xml',
+            'csv': 'text/csv',
+            'zip': 'application/zip',
+        };
+        const contentType = mimeTypes[ext] ?? 'application/octet-stream';
+        const filename = filePath.split('/').pop() ?? 'download';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(fileData);
+    }
+};
+exports.BridgeController = BridgeController;
+tslib_1.__decorate([
+    (0, common_1.Get)('concepts/search'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Query)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_d = typeof bridge_dto_1.ConceptSearchQuery !== "undefined" && bridge_dto_1.ConceptSearchQuery) === "function" ? _d : Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "searchConcepts", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('concepts/pending'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Query)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_e = typeof bridge_dto_1.TenantIdQuery !== "undefined" && bridge_dto_1.TenantIdQuery) === "function" ? _e : Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "getPendingConcepts", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('concepts/:id'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Param)('id')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "getConceptDetails", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('categories'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "getCategories", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('brain-state'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Query)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_f = typeof bridge_dto_1.TenantIdQuery !== "undefined" && bridge_dto_1.TenantIdQuery) === "function" ? _f : Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "getBrainState", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('context/:tenantId'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Param)('tenantId')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "getBusinessContext", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('budget/:tenantId'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Param)('tenantId')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "getBudget", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('proposals'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Query)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_g = typeof bridge_dto_1.ProposalListQuery !== "undefined" && bridge_dto_1.ProposalListQuery) === "function" ? _g : Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "getProposals", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('proposals'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_h = typeof bridge_dto_1.CreateProposalDto !== "undefined" && bridge_dto_1.CreateProposalDto) === "function" ? _h : Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "createProposal", null);
+tslib_1.__decorate([
+    (0, common_1.Patch)('proposals/:id'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Param)('id')),
+    tslib_1.__param(2, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, String, typeof (_j = typeof bridge_dto_1.UpdateProposalDto !== "undefined" && bridge_dto_1.UpdateProposalDto) === "function" ? _j : Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "updateProposal", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('concepts'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_k = typeof bridge_dto_1.CreateConceptDto !== "undefined" && bridge_dto_1.CreateConceptDto) === "function" ? _k : Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "createConcept", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('conversations'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_l = typeof bridge_dto_1.CreateConversationDto !== "undefined" && bridge_dto_1.CreateConversationDto) === "function" ? _l : Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "createConversation", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('tasks'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_m = typeof bridge_dto_1.CreateTaskDto !== "undefined" && bridge_dto_1.CreateTaskDto) === "function" ? _m : Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "createTask", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('task-contribution'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_o = typeof bridge_dto_1.TaskContributionDto !== "undefined" && bridge_dto_1.TaskContributionDto) === "function" ? _o : Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "addTaskContribution", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('task-progress'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_p = typeof bridge_dto_1.TaskProgressDto !== "undefined" && bridge_dto_1.TaskProgressDto) === "function" ? _p : Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "updateTaskProgress", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('task-complete'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_q = typeof bridge_dto_1.TaskCompleteDto !== "undefined" && bridge_dto_1.TaskCompleteDto) === "function" ? _q : Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "completeTask", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('agent-status'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_r = typeof bridge_dto_1.AgentStatusDto !== "undefined" && bridge_dto_1.AgentStatusDto) === "function" ? _r : Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "updateAgentStatus", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('memories'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_s = typeof bridge_dto_1.CreateMemoryDto !== "undefined" && bridge_dto_1.CreateMemoryDto) === "function" ? _s : Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "createMemory", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('brain-state'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_t = typeof bridge_dto_1.UpdateBrainStateDto !== "undefined" && bridge_dto_1.UpdateBrainStateDto) === "function" ? _t : Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "updateBrainState", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('action-result'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_u = typeof bridge_dto_1.ActionResultDto !== "undefined" && bridge_dto_1.ActionResultDto) === "function" ? _u : Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "reportActionResult", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('files'),
+    tslib_1.__param(0, (0, common_1.Headers)('authorization')),
+    tslib_1.__param(1, (0, common_1.Query)('path')),
+    tslib_1.__param(2, (0, common_1.Query)('tenantId')),
+    tslib_1.__param(3, (0, common_1.Res)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, String, String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BridgeController.prototype, "downloadFile", null);
+exports.BridgeController = BridgeController = tslib_1.__decorate([
+    (0, common_1.Controller)('bridge'),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof bridge_service_1.BridgeService !== "undefined" && bridge_service_1.BridgeService) === "function" ? _a : Object, typeof (_b = typeof brain_state_service_1.BrainStateService !== "undefined" && brain_state_service_1.BrainStateService) === "function" ? _b : Object, typeof (_c = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _c : Object])
+], BridgeController);
+
+
+/***/ }),
+/* 159 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var BridgeService_1;
+var _a, _b, _c, _d, _e, _f;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BridgeService = exports.BRIDGE_EVENTS = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const cuid2_1 = __webpack_require__(33);
+const tenant_context_1 = __webpack_require__(10);
+const app_event_bus_service_1 = __webpack_require__(147);
+const openclaw_client_service_1 = __webpack_require__(139);
+const openclaw_tenant_service_1 = __webpack_require__(155);
+const brain_state_service_1 = __webpack_require__(160);
+const embedding_service_1 = __webpack_require__(112);
+// Bridge-specific event names (gateway subscribes to these)
+exports.BRIDGE_EVENTS = {
+    PROPOSAL_NEW: 'bridge.proposal.new',
+    PROPOSAL_APPROVED: 'bridge.proposal.approved',
+    TASK_CREATED: 'bridge.task.created',
+    TASK_CONTRIBUTION: 'bridge.task.contribution',
+    TASK_PROGRESS: 'bridge.task.progress',
+    TASK_COMPLETE: 'bridge.task.complete',
+    AGENT_STATUS: 'bridge.agent.status',
+    TREE_UPDATED: 'bridge.tree.updated',
+    CONVERSATION_CREATED: 'bridge.conversation.created',
+    ACTION_EXECUTING: 'bridge.action.executing',
+    ACTION_COMPLETE: 'bridge.action.complete',
+    PROCESS_RUN_STARTED: 'bridge.process.run-started',
+    PROCESS_STEP_STARTED: 'bridge.process.step-started',
+    PROCESS_STEP_OUTPUT: 'bridge.process.step-output',
+    PROCESS_STEP_FAILED: 'bridge.process.step-failed',
+    PROCESS_COMPLETE: 'bridge.process.complete',
+    PROCESS_APPROVAL_NEEDED: 'bridge.process.approval-needed',
+    PROCESS_CANCELLED: 'bridge.process.cancelled',
+};
+let BridgeService = BridgeService_1 = class BridgeService {
+    constructor(prisma, eventBus, brainState, openClawClient, openClawTenant, embeddingService) {
+        this.prisma = prisma;
+        this.eventBus = eventBus;
+        this.brainState = brainState;
+        this.openClawClient = openClawClient;
+        this.openClawTenant = openClawTenant;
+        this.embeddingService = embeddingService;
+        this.logger = new common_1.Logger(BridgeService_1.name);
+    }
+    // ════════════════════════════════════════════
+    //  READ Operations
+    // ════════════════════════════════════════════
+    async searchConcepts(tenantId, query, limit = 10) {
+        const conceptSelect = {
+            id: true, name: true, category: true, definition: true,
+            canvasBlock: true, departmentTags: true,
+            relatedTo: {
+                select: { relationshipType: true, targetConcept: { select: { id: true, name: true, category: true } } },
+                take: 5,
+            },
+            relatedFrom: {
+                select: { relationshipType: true, sourceConcept: { select: { id: true, name: true, category: true } } },
+                take: 5,
+            },
+        };
+        // 1. Semantic search via Qdrant (cross-language, finds Serbian concepts from English queries)
+        const semanticMatches = await this.embeddingService.search(query, limit * 2);
+        let conceptIds = semanticMatches
+            .filter(m => m.score >= 0.3)
+            .map(m => m.conceptId);
+        // 2. Text search fallback
+        const textResults = await this.prisma.concept.findMany({
+            where: {
+                AND: [
+                    { OR: [{ tenantId: null }, { tenantId }] },
+                    { OR: [
+                            { name: { contains: query, mode: 'insensitive' } },
+                            { definition: { contains: query, mode: 'insensitive' } },
+                        ] },
+                ],
+            },
+            select: { id: true },
+            take: limit,
+        });
+        for (const t of textResults) {
+            if (!conceptIds.includes(t.id))
+                conceptIds.push(t.id);
+        }
+        // 3. Deduplicate and limit
+        conceptIds = [...new Set(conceptIds)].slice(0, limit);
+        if (conceptIds.length === 0)
+            return [];
+        // 4. Load full concept data
+        const concepts = await this.prisma.concept.findMany({
+            where: { id: { in: conceptIds } },
+            select: conceptSelect,
+        });
+        // Sort by semantic relevance order
+        const orderMap = new Map(conceptIds.map((id, i) => [id, i]));
+        concepts.sort((a, b) => (orderMap.get(a.id) ?? 999) - (orderMap.get(b.id) ?? 999));
+        this.logger.log({ message: 'Concept search', query, semantic: semanticMatches.length, text: textResults.length, returned: concepts.length });
+        return concepts;
+    }
+    async getConceptDetails(conceptId) {
+        const concept = await this.prisma.concept.findUnique({
+            where: { id: conceptId },
+            include: {
+                relatedTo: {
+                    include: { targetConcept: { select: { id: true, name: true, category: true } } },
+                },
+                relatedFrom: {
+                    include: { sourceConcept: { select: { id: true, name: true, category: true } } },
+                },
+                workflow: true,
+            },
+        });
+        if (!concept)
+            throw new common_1.NotFoundException(`Concept ${conceptId} not found`);
+        return concept;
+    }
+    async getPendingConcepts(tenantId) {
+        return this.prisma.note.findMany({
+            where: {
+                tenantId,
+                noteType: 'TASK',
+                status: 'PENDING',
+                parentNoteId: null,
+                conceptId: { not: null },
+            },
+            select: {
+                id: true,
+                title: true,
+                conceptId: true,
+                createdAt: true,
+            },
+            orderBy: { createdAt: 'asc' },
+            take: 50,
+        });
+    }
+    async getCategories() {
+        const categories = await this.prisma.concept.groupBy({
+            by: ['category'],
+            _count: { _all: true },
+            where: { tenantId: null }, // Platform concepts only
+            orderBy: { category: 'asc' },
+        });
+        return categories.map((c) => ({
+            category: c.category,
+            conceptCount: c._count._all,
+        }));
+    }
+    async getBusinessContext(tenantId) {
+        const [tenant, memories] = await Promise.all([
+            this.prisma.tenant.findUnique({
+                where: { id: tenantId },
+                select: { name: true, industry: true, description: true, maturityStage: true },
+            }),
+            this.prisma.memory.findMany({
+                where: { tenantId },
+                orderBy: { createdAt: 'desc' },
+                take: 100,
+                select: { id: true, type: true, content: true, subject: true },
+            }),
+        ]);
+        return { tenant, memories };
+    }
+    async getBudget(tenantId) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const budget = await this.prisma.agentDailyBudget.findUnique({
+            where: { tenantId_date: { tenantId, date: today } },
+        });
+        const spent = budget?.spentEur?.toNumber() ?? 0;
+        const dailyLimitEur = parseInt(process.env['AGENT_DAILY_BUDGET_EUR'] ?? '200', 10);
+        return { dailyLimitEur, spentEur: spent, remainingEur: Math.max(0, dailyLimitEur - spent) };
+    }
+    async getProposals(tenantId, status) {
+        return this.prisma.brainProposal.findMany({
+            where: {
+                tenantId,
+                ...(status ? { status } : {}),
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 50,
+        });
+    }
+    // ════════════════════════════════════════════
+    //  WRITE Operations: Proposals
+    // ════════════════════════════════════════════
+    async createProposal(dto) {
+        const id = `prop_${(0, cuid2_1.createId)()}`;
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 14); // 14 day expiry
+        const proposal = await this.prisma.brainProposal.create({
+            data: {
+                id,
+                tenantId: dto.tenantId,
+                canvasBlock: dto.canvasBlock,
+                type: dto.type,
+                title: dto.title,
+                reasoning: dto.reasoning,
+                proposedAction: dto.proposedAction,
+                estimatedCost: dto.estimatedCost,
+                priority: dto.priority ?? 'medium',
+                relatedConcepts: dto.relatedConcepts ?? [],
+                expiresAt,
+            },
+        });
+        this.eventBus.emit(exports.BRIDGE_EVENTS.PROPOSAL_NEW, {
+            tenantId: dto.tenantId,
+            proposal: {
+                id: proposal.id,
+                title: proposal.title,
+                type: proposal.type,
+                priority: proposal.priority,
+                canvasBlock: proposal.canvasBlock,
+                estimatedCost: proposal.estimatedCost,
+            },
+        });
+        this.logger.log({ message: 'Brain proposal created', id, title: dto.title, tenantId: dto.tenantId });
+        return proposal;
+    }
+    async updateProposal(id, dto) {
+        const proposal = await this.prisma.brainProposal.findUnique({ where: { id } });
+        if (!proposal)
+            throw new common_1.NotFoundException(`Proposal ${id} not found`);
+        if (proposal.status !== 'pending') {
+            throw new common_1.BadRequestException(`Proposal ${id} is already ${proposal.status}`);
+        }
+        if (dto.status === 'approved') {
+            const noteId = `note_${(0, cuid2_1.createId)()}`;
+            const conceptId = proposal.relatedConcepts?.[0] ?? null;
+            // Atomic: create task + update proposal in one transaction
+            const [, updated] = await this.prisma.$transaction([
+                this.prisma.note.create({
+                    data: {
+                        id: noteId,
+                        title: proposal.title,
+                        content: proposal.proposedAction,
+                        noteType: 'TASK',
+                        status: 'PENDING',
+                        source: 'CONVERSATION',
+                        conceptId,
+                        expectedOutcome: proposal.proposedAction,
+                        tenantId: proposal.tenantId,
+                        userId: dto.approvedBy ?? 'dev-user-001',
+                    },
+                }),
+                this.prisma.brainProposal.update({
+                    where: { id },
+                    data: {
+                        status: 'approved',
+                        approvedBy: dto.approvedBy,
+                        approvedAt: new Date(),
+                        executionNoteId: noteId,
+                    },
+                }),
+            ]);
+            // 3. Emit events
+            this.eventBus.emit(exports.BRIDGE_EVENTS.TASK_CREATED, {
+                tenantId: proposal.tenantId,
+                noteId,
+                title: proposal.title,
+                conceptId,
+            });
+            this.eventBus.emit(exports.BRIDGE_EVENTS.PROPOSAL_APPROVED, {
+                tenantId: proposal.tenantId,
+                proposalId: id,
+                title: proposal.title,
+                noteId,
+            });
+            // 4. Notify OpenClaw to execute (fire-and-forget)
+            if (this.openClawClient.isConfigured()) {
+                const executionMessage = [
+                    `ZADATAK ODOBREN: "${proposal.title}"`,
+                    `NoteId: ${noteId}`,
+                    `TenantId: ${proposal.tenantId}`,
+                    `Canvas Block: ${proposal.canvasBlock}`,
+                    '',
+                    'PLAN:',
+                    proposal.proposedAction,
+                    '',
+                    '=== KAKO DA IZVRSIS ===',
+                    'NIKADA ne opisuj sta bi napravio — NAPRAVI to koristeci alate i agente.',
+                    'Svaki zadatak MORA da ima konkretan output koji si NAPRAVIO koristeci alate, ne opisao.',
+                    'Podigni koliko god sub-agenata treba (sessions_spawn) da zavrse delove zadatka u paraleli.',
+                    'Koristi ClawTeam za kompleksne zadatke sa zavisnostima izmedju agenata.',
+                    '',
+                    'KORISTIS OVE AGENTE (sessions_spawn):',
+                    '- research: brave-search, tavily, browser-automation za istrazivanje',
+                    '- content: seo-content-writer, content-creator, ghost-cms za pisanje sadrzaja',
+                    '- financial: fin-cog, excel-xlsx, financial-analyst za Excel fajlove i analize',
+                    '- marketing: marketing-strategy-pmm, simplified-social-media za strategije',
+                    '- sales: apollo, cold-email, campaign-orchestrator za lead generaciju',
+                    '- designer: generate-presentation za prezentacije, fal-generate za slike',
+                    '- dev: write, exec za kod (landing page, email template, skripte)',
+                    '',
+                    'ZA SVAKI FAJL KOJI NAPRAVIS:',
+                    '1. Sacuvaj ga u workspace: write fajl u deliverables/',
+                    '2. Prijavi ga kroz POST /api/bridge/task-contribution sa files[] poljem:',
+                    `   {"name":"ime.xlsx","displayName":"Opis","path":"/root/.openclaw/workspace/deliverables/${noteId}/ime.xlsx","mimeType":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","size":1000}`,
+                    '',
+                    'TOKOM RADA koristi mentor-ai-bridge:',
+                    'Koristi curl komande iz mentor-ai-bridge SKILL.md za:',
+                    `- POST /api/bridge/agent-status — prijavi koji agent radi (tenantId="${proposal.tenantId}", taskId="${noteId}")`,
+                    `- POST /api/bridge/task-progress — prijavi napredak (noteId="${noteId}", percent 0-100)`,
+                    `- POST /api/bridge/task-contribution — dodaj rezultat agenta sa output-om i fajlovima`,
+                    `- POST /api/bridge/task-complete — zavrsi zadatak (noteId="${noteId}", score 1-100)`,
+                ].join('\n');
+                this.openClawClient.executeAgent(executionMessage, {
+                    agentId: 'main',
+                    sessionId: `exec-${noteId}`,
+                    tenantProfile: proposal.tenantId,
+                    onTool: (tool, status, query) => {
+                        this.eventBus.emit(exports.BRIDGE_EVENTS.AGENT_STATUS, {
+                            tenantId: proposal.tenantId,
+                            taskId: noteId,
+                            agent: tool.includes('search') ? 'research' : 'direktor',
+                            status: status === 'start' ? 'running' : 'completed',
+                            message: status === 'start' ? `${tool}${query ? ': ' + query.substring(0, 80) : ''}` : `Završio: ${tool}`,
+                            timestamp: new Date().toISOString(),
+                        });
+                    },
+                    onStatus: (phase) => {
+                        this.eventBus.emit(exports.BRIDGE_EVENTS.AGENT_STATUS, {
+                            tenantId: proposal.tenantId,
+                            taskId: noteId,
+                            agent: 'direktor',
+                            status: 'running',
+                            message: phase,
+                            timestamp: new Date().toISOString(),
+                        });
+                    },
+                }).catch((err) => {
+                    this.logger.error({
+                        message: 'Failed to notify OpenClaw of approved proposal',
+                        proposalId: id,
+                        error: err instanceof Error ? err.message : 'Unknown',
+                    });
+                });
+                this.logger.log({
+                    message: 'Proposal approved, task created, OpenClaw notified',
+                    proposalId: id,
+                    noteId,
+                    title: proposal.title,
+                });
+            }
+            else {
+                this.logger.warn({
+                    message: 'Proposal approved, task created, but OpenClaw NOT configured — no execution',
+                    proposalId: id,
+                    noteId,
+                });
+            }
+            return updated;
+        }
+        if (dto.status === 'rejected') {
+            const updated = await this.prisma.brainProposal.update({
+                where: { id },
+                data: {
+                    status: 'rejected',
+                    rejectedReason: dto.rejectedReason,
+                },
+            });
+            // Create a memory so the brain learns from rejections
+            const reason = dto.rejectedReason ? ` Razlog: ${dto.rejectedReason}` : '';
+            await this.createMemory({
+                tenantId: proposal.tenantId,
+                type: 'FACTUAL_STATEMENT',
+                content: `Vlasnik je odbio predlog "${proposal.title}" (${proposal.canvasBlock}).${reason} Ne predlazi ponovo osim ako se okolnosti materijalno promene.`,
+            });
+            this.logger.log({
+                message: 'Proposal rejected, rejection memory created',
+                proposalId: id,
+                title: proposal.title,
+                reason: dto.rejectedReason,
+            });
+            return updated;
+        }
+        throw new common_1.BadRequestException(`Invalid status transition: ${dto.status}`);
+    }
+    // ════════════════════════════════════════════
+    //  WRITE Operations: Concepts
+    // ════════════════════════════════════════════
+    async createConcept(dto) {
+        const id = `cpt_${(0, cuid2_1.createId)()}`;
+        const slug = dto.name
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9\s-]/g, '')
+            .replace(/\s+/g, '-')
+            .substring(0, 100);
+        const needsReview = (dto.confidence ?? 0) < 0.7;
+        // Transaction: create concept + relationships atomically
+        const concept = await this.prisma.$transaction(async (tx) => {
+            const created = await tx.concept.create({
+                data: {
+                    id,
+                    name: dto.name,
+                    slug: `${slug}-${id.substring(4, 10)}`,
+                    category: dto.category,
+                    definition: dto.definition,
+                    extendedDescription: dto.extendedDescription,
+                    canvasBlock: dto.canvasBlock,
+                    tenantId: dto.tenantId,
+                    source: 'AI_DISCOVERED',
+                    discoveredBy: 'brain-heartbeat',
+                    discoveredAt: new Date(),
+                    confidence: dto.confidence,
+                    needsReview,
+                },
+            });
+            if (dto.relationships?.length) {
+                await tx.conceptRelationship.createMany({
+                    data: dto.relationships.map((rel) => ({
+                        id: `crel_${(0, cuid2_1.createId)()}`,
+                        sourceConceptId: id,
+                        targetConceptId: rel.targetId,
+                        relationshipType: rel.type,
+                    })),
+                    skipDuplicates: true,
+                });
+            }
+            return created;
+        });
+        this.eventBus.emit(exports.BRIDGE_EVENTS.TREE_UPDATED, {
+            tenantId: dto.tenantId,
+            action: 'concept_created',
+            conceptId: id,
+            conceptName: dto.name,
+            category: dto.category,
+            needsReview,
+        });
+        this.logger.log({
+            message: 'Tenant concept created by brain',
+            id,
+            name: dto.name,
+            tenantId: dto.tenantId,
+            confidence: dto.confidence,
+            needsReview,
+        });
+        return concept;
+    }
+    // ════════════════════════════════════════════
+    //  WRITE Operations: Tasks
+    // ════════════════════════════════════════════
+    async createTask(dto) {
+        const id = `note_${(0, cuid2_1.createId)()}`;
+        const note = await this.prisma.note.create({
+            data: {
+                id,
+                title: dto.title,
+                content: dto.content ?? '',
+                noteType: 'TASK',
+                status: 'PENDING',
+                source: 'CONVERSATION',
+                conceptId: dto.conceptId,
+                expectedOutcome: dto.expectedOutcome,
+                tenantId: dto.tenantId,
+                userId: 'dev-user-001', // Bridge calls use system user; real user tracked via proposal approval
+            },
+        });
+        // Link proposal to task if provided
+        if (dto.proposalId) {
+            await this.prisma.brainProposal.update({
+                where: { id: dto.proposalId },
+                data: { executionNoteId: id },
+            });
+        }
+        this.eventBus.emit(exports.BRIDGE_EVENTS.TASK_CREATED, {
+            tenantId: dto.tenantId,
+            noteId: id,
+            title: dto.title,
+            conceptId: dto.conceptId,
+        });
+        return note;
+    }
+    async addTaskContribution(dto) {
+        // Atomic JSONB merge — same pattern as agent-execution.service.ts
+        const enrichmentEntry = {
+            executionId: `bridge_${(0, cuid2_1.createId)()}`,
+            status: 'COMPLETED',
+            result: dto.output,
+            completedAt: new Date().toISOString(),
+            error: null,
+            summary: dto.summary,
+            files: dto.files ?? [],
+            actions: (dto.actions ?? []).map((a) => ({ ...a, status: a.status ?? 'none' })),
+            metrics: dto.metrics ?? {},
+        };
+        // Use raw SQL for atomic JSONB merge to prevent race conditions
+        await this.prisma.$executeRaw `
+      UPDATE notes
+      SET agent_enrichments = COALESCE(agent_enrichments, '{}'::jsonb) || ${JSON.stringify({ [dto.agentType]: enrichmentEntry })}::jsonb,
+          updated_at = NOW()
+      WHERE id = ${dto.noteId}
+    `;
+        this.eventBus.emit(exports.BRIDGE_EVENTS.TASK_CONTRIBUTION, {
+            tenantId: dto.tenantId,
+            noteId: dto.noteId,
+            agentType: dto.agentType,
+            summary: dto.summary,
+            hasFiles: (dto.files?.length ?? 0) > 0,
+            hasActions: (dto.actions?.length ?? 0) > 0,
+        });
+        this.logger.log({
+            message: 'Agent contribution added to task',
+            noteId: dto.noteId,
+            agentType: dto.agentType,
+            files: dto.files?.length ?? 0,
+        });
+    }
+    async updateTaskProgress(dto) {
+        this.eventBus.emit(exports.BRIDGE_EVENTS.TASK_PROGRESS, {
+            tenantId: dto.tenantId,
+            noteId: dto.noteId,
+            phase: dto.phase,
+            percent: dto.percent,
+            message: dto.message,
+        });
+        // Auto-complete if progress reaches 100% (safety net for when OpenClaw forgets to call task-complete)
+        if (dto.percent >= 100) {
+            this.logger.log({ message: 'Task progress 100% — auto-completing', noteId: dto.noteId });
+            // Delay slightly to allow any final contributions to arrive
+            setTimeout(() => {
+                this.completeTask({ tenantId: dto.tenantId, noteId: dto.noteId, score: 85 }).catch(e => this.logger.warn({ message: 'Auto-complete failed', noteId: dto.noteId, error: e.message }));
+            }, 5000);
+        }
+    }
+    async completeTask(dto) {
+        // Auto-scan deliverables folder for unreported files before completing
+        try {
+            const scannedFiles = await this.scanTaskDeliverables(dto.noteId);
+            if (scannedFiles.length > 0) {
+                // Check which files are already in enrichments
+                const note0 = await this.prisma.note.findUnique({
+                    where: { id: dto.noteId },
+                    select: { agentEnrichments: true },
+                });
+                const existingFiles = new Set();
+                for (const entry of Object.values(note0?.agentEnrichments ?? {})) {
+                    for (const f of (entry.files ?? []))
+                        existingFiles.add(f.path ?? f.name);
+                }
+                const newFiles = scannedFiles.filter(f => !existingFiles.has(f.path) && !f.name.endsWith('.md'));
+                if (newFiles.length > 0) {
+                    this.logger.log({ message: 'Auto-adding unreported deliverables on task complete', noteId: dto.noteId, count: newFiles.length });
+                    await this.addTaskContribution({
+                        tenantId: dto.tenantId,
+                        noteId: dto.noteId,
+                        agentType: 'auto-scan',
+                        summary: `${newFiles.length} fajl(ova) pronađeno na disku`,
+                        files: newFiles.map(f => ({ name: f.name, path: f.path, mimeType: f.mimeType })),
+                    });
+                }
+            }
+        }
+        catch (e) {
+            this.logger.debug({ message: 'Auto-scan deliverables skipped (non-fatal)', error: e.message });
+        }
+        // Read current enrichments and build full content from all agent contributions
+        const note = await this.prisma.note.findUnique({
+            where: { id: dto.noteId },
+            select: { agentEnrichments: true, title: true },
+        });
+        let fullContent = `# ${note?.title ?? 'Zadatak'}\n\n`;
+        const enrichments = note?.agentEnrichments ?? {};
+        for (const [agentType, entry] of Object.entries(enrichments)) {
+            if (entry.result || entry.summary) {
+                fullContent += `## ${this.agentLabel(agentType)}\n\n`;
+                if (entry.summary)
+                    fullContent += `**Rezime:** ${entry.summary}\n\n`;
+                if (entry.result)
+                    fullContent += `${entry.result}\n\n`;
+                if (entry.files?.length) {
+                    fullContent += '**Fajlovi:**\n';
+                    for (const f of entry.files) {
+                        fullContent += `- ${f.displayName || f.name}\n`;
+                    }
+                    fullContent += '\n';
+                }
+            }
+        }
+        await this.prisma.note.update({
+            where: { id: dto.noteId },
+            data: {
+                status: 'COMPLETED',
+                aiScore: dto.score,
+                content: fullContent, // Update content with full aggregated result
+                userReport: fullContent, // Also set userReport for PDF export
+            },
+        });
+        this.eventBus.emit(exports.BRIDGE_EVENTS.TASK_COMPLETE, {
+            tenantId: dto.tenantId,
+            noteId: dto.noteId,
+            score: dto.score,
+        });
+        this.logger.log({ message: 'Task completed via bridge', noteId: dto.noteId, score: dto.score });
+    }
+    // ════════════════════════════════════════════
+    //  Execute Tasks via OpenClaw Brain
+    // ════════════════════════════════════════════
+    /**
+     * Send tasks to OpenClaw director for execution.
+     * The director decides which agents to use and executes autonomously,
+     * reporting progress via bridge API callbacks.
+     */
+    async executeTasksViaBrain(tenantId, userId, taskIds) {
+        // Load task details
+        const tasks = await this.prisma.note.findMany({
+            where: { id: { in: taskIds }, tenantId },
+            select: { id: true, title: true, content: true, conceptId: true, expectedOutcome: true },
+        });
+        if (tasks.length === 0)
+            throw new common_1.NotFoundException('No tasks found');
+        if (!this.openClawClient.isConfigured()) {
+            throw new common_1.BadRequestException('OpenClaw is not configured');
+        }
+        const sessionId = `exec-batch-${Date.now()}`;
+        // Build execution message for the director
+        const taskList = tasks.map((t, i) => [
+            `### Zadatak ${i + 1}: ${t.title}`,
+            `NoteId: ${t.id}`,
+            t.conceptId ? `ConceptId: ${t.conceptId}` : '',
+            t.content ? `Opis: ${t.content.substring(0, 500)}` : '',
+            t.expectedOutcome ? `Očekivani rezultat: ${t.expectedOutcome}` : '',
+        ].filter(Boolean).join('\n')).join('\n\n');
+        const message = [
+            `IZVRŠAVANJE ${tasks.length} ZADATAKA`,
+            '',
+            taskList,
+            '',
+            'Prati proceduru iz SOUL.md: delegiraj agentima, prati status, prijavi deliverables, zatvori task.',
+            'Svaki deliverable mora biti fajl (.xlsx, .pdf, .pptx, .png) ili URL — nikad .md.',
+            `TenantId: ${tenantId}`,
+        ].join('\n');
+        // Emit status events so frontend knows execution started
+        for (const task of tasks) {
+            this.eventBus.emit(exports.BRIDGE_EVENTS.AGENT_STATUS, {
+                tenantId,
+                taskId: task.id,
+                agent: 'direktor',
+                status: 'running',
+                message: `Primljeno za izvršavanje: ${task.title}`,
+                timestamp: new Date().toISOString(),
+            });
+        }
+        // Fire-and-forget with streaming callbacks for real-time UI updates
+        this.openClawClient.executeAgent(message, {
+            agentId: 'main',
+            sessionId,
+            tenantProfile: tenantId,
+            timeoutSeconds: 10800,
+            onText: (text) => {
+                this.logger.debug({ message: 'Brain execution chunk', tenantId, len: text.length });
+            },
+            onTool: (tool, status, query) => {
+                // Emit tool usage as agent status — frontend shows in agent graph
+                this.eventBus.emit(exports.BRIDGE_EVENTS.AGENT_STATUS, {
+                    tenantId,
+                    taskId: tasks[0]?.id ?? sessionId,
+                    agent: tool.includes('search') ? 'research' : tool.includes('exec') ? 'dev' : 'direktor',
+                    status: status === 'start' ? 'running' : 'completed',
+                    message: status === 'start'
+                        ? `${tool}${query ? ': ' + query.substring(0, 100) : ''}`
+                        : `Završio: ${tool}`,
+                    timestamp: new Date().toISOString(),
+                });
+            },
+            onStatus: (phase) => {
+                this.eventBus.emit(exports.BRIDGE_EVENTS.AGENT_STATUS, {
+                    tenantId,
+                    taskId: tasks[0]?.id ?? sessionId,
+                    agent: 'direktor',
+                    status: 'running',
+                    message: phase,
+                    timestamp: new Date().toISOString(),
+                });
+            },
+        }).then(async (result) => {
+            // Emit completion of initial relay
+            this.eventBus.emit(exports.BRIDGE_EVENTS.AGENT_STATUS, {
+                tenantId,
+                taskId: tasks[0]?.id ?? sessionId,
+                agent: 'direktor',
+                status: result.success ? 'completed' : 'failed',
+                message: result.success ? 'Izvršavanje završeno' : (result.error ?? 'Greška'),
+                timestamp: new Date().toISOString(),
+            });
+            // Follow-up: ask director to check status and finalize
+            if (result.success) {
+                const pendingTaskIds = tasks.map(t => t.id);
+                await this.askDirectorToFinalize(tenantId, pendingTaskIds, sessionId);
+            }
+        }).catch((err) => {
+            this.logger.error({
+                message: 'OpenClaw brain execution failed',
+                tenantId,
+                taskCount: tasks.length,
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+        });
+        this.logger.log({
+            message: 'Tasks sent to OpenClaw brain for execution',
+            tenantId,
+            taskCount: tasks.length,
+            sessionId,
+            taskIds: tasks.map(t => t.id),
+        });
+        return { sent: tasks.length, sessionId };
+    }
+    /**
+     * Ask the director to check task status and finalize.
+     * Sends a follow-up message asking OpenClaw to report deliverables and close tasks.
+     */
+    async askDirectorToFinalize(tenantId, taskIds, sessionId) {
+        // Wait a bit for sub-agents to finish writing files
+        await new Promise(r => setTimeout(r, 30_000));
+        // Check which tasks are still pending
+        const pendingTasks = await this.prisma.note.findMany({
+            where: { id: { in: taskIds }, status: 'PENDING' },
+            select: { id: true, title: true },
+        });
+        if (pendingTasks.length === 0)
+            return; // All already completed
+        const taskList = pendingTasks.map(t => `- ${t.id}: ${t.title}`).join('\n');
+        const followUp = [
+            'FINALIZACIJA: Proveri status ovih zadataka i prijavi rezultate.',
+            '',
+            taskList,
+            '',
+            'Za svaki zadatak:',
+            '1. Proveri da li su sub-agenti završili (ls deliverables/{noteId}/)',
+            '2. Za svaki fajl koji postoji, prijavi ga kroz task-contribution',
+            '3. Zatvori zadatak sa task-complete i ocenom',
+            '',
+            'Ako agenti još rade, sačekaj ih i prijavi kad završe.',
+            `TenantId: ${tenantId}`,
+        ].join('\n');
+        this.logger.log({ message: 'Sending finalization follow-up to director', pendingCount: pendingTasks.length });
+        try {
+            await this.openClawClient.executeAgent(followUp, {
+                agentId: 'main',
+                sessionId,
+                tenantProfile: tenantId,
+                timeoutSeconds: 3600,
+                onText: () => { },
+            });
+            // After follow-up, check one more time and auto-complete any remaining
+            const stillPending = await this.prisma.note.findMany({
+                where: { id: { in: taskIds }, status: 'PENDING' },
+                select: { id: true },
+            });
+            for (const task of stillPending) {
+                this.logger.log({ message: 'Auto-completing task after finalization', noteId: task.id });
+                await this.completeTask({ tenantId, noteId: task.id, score: 80 }).catch(() => { });
+            }
+        }
+        catch (err) {
+            // Finalization failed — auto-complete remaining tasks as fallback
+            this.logger.warn({ message: 'Finalization follow-up failed, auto-completing', error: err.message });
+            for (const task of pendingTasks) {
+                await this.completeTask({ tenantId, noteId: task.id, score: 70 }).catch(() => { });
+            }
+        }
+    }
+    // ════════════════════════════════════════════
+    //  WRITE Operations: Deliverable Actions
+    // ════════════════════════════════════════════
+    /**
+     * Execute an approved deliverable action (publish, send, deploy).
+     * Updates the action status in agentEnrichments and notifies OpenClaw.
+     */
+    async executeAction(tenantId, noteId, agentType, actionId, userId) {
+        // Transaction returns action metadata for event emission outside the lock
+        const actionInfo = await this.prisma.$transaction(async (tx) => {
+            const rows = await tx.$queryRaw `
+        SELECT agent_enrichments FROM notes WHERE id = ${noteId} FOR UPDATE
+      `;
+            const row = rows[0];
+            if (!row)
+                throw new common_1.NotFoundException(`Note ${noteId} not found`);
+            const enrichments = row.agent_enrichments ?? {};
+            const agentEntry = enrichments[agentType];
+            if (!agentEntry)
+                throw new common_1.BadRequestException(`No enrichment found for agent ${agentType}`);
+            const actions = agentEntry.actions;
+            const found = actions?.find((a) => a.id === actionId);
+            if (!found)
+                throw new common_1.NotFoundException(`Action ${actionId} not found`);
+            if (found.status === 'completed')
+                throw new common_1.BadRequestException('Action already completed');
+            if (found.status === 'executing')
+                throw new common_1.BadRequestException('Action already executing');
+            found.status = 'executing';
+            await tx.$executeRaw `
+        UPDATE notes
+        SET agent_enrichments = ${JSON.stringify(enrichments)}::jsonb,
+            updated_at = NOW()
+        WHERE id = ${noteId}
+      `;
+            return { type: found.type, target: found.target, label: found.label };
+        });
+        this.eventBus.emit(exports.BRIDGE_EVENTS.ACTION_EXECUTING, {
+            tenantId, noteId, agentType, actionId,
+            actionType: actionInfo.type,
+            actionTarget: actionInfo.target,
+        });
+        if (this.openClawClient.isConfigured()) {
+            const message = [
+                `ACTION APPROVED: Execute "${actionInfo.label}"`,
+                `NoteId: ${noteId}`, `AgentType: ${agentType}`,
+                `ActionId: ${actionId}`, `ActionType: ${actionInfo.type}`,
+                `ActionTarget: ${actionInfo.target}`, `TenantId: ${tenantId}`,
+                '', 'Execute this action using the appropriate skill.',
+                'When done, call action-result to report completion.',
+            ].join('\n');
+            this.openClawClient.executeAgent(message, {
+                agentId: 'main',
+                sessionId: `action-${noteId}-${actionId}`,
+                tenantProfile: tenantId,
+            }).catch((err) => {
+                this.logger.error({
+                    message: 'Failed to notify OpenClaw of action execution',
+                    noteId, actionId,
+                    error: err instanceof Error ? err.message : 'Unknown',
+                });
+            });
+        }
+        this.logger.log({ message: 'Action execution started', noteId, agentType, actionId, label: actionInfo.label });
+    }
+    /**
+     * Update a specific action's status and result within agentEnrichments.
+     * Called by OpenClaw after completing an action (publish, send, etc.)
+     */
+    async updateActionResult(tenantId, noteId, agentType, actionId, status, result) {
+        await this.prisma.$transaction(async (tx) => {
+            const rows = await tx.$queryRaw `
+        SELECT agent_enrichments FROM notes WHERE id = ${noteId} FOR UPDATE
+      `;
+            const row = rows[0];
+            if (!row)
+                return;
+            const enrichments = row.agent_enrichments ?? {};
+            const agentEntry = enrichments[agentType];
+            if (!agentEntry)
+                return;
+            const actions = agentEntry.actions;
+            const action = actions?.find((a) => a.id === actionId);
+            if (!action)
+                return;
+            action.status = status;
+            if (result)
+                action.result = result;
+            await tx.$executeRaw `
+        UPDATE notes
+        SET agent_enrichments = ${JSON.stringify(enrichments)}::jsonb,
+            updated_at = NOW()
+        WHERE id = ${noteId}
+      `;
+        });
+        this.eventBus.emit(exports.BRIDGE_EVENTS.ACTION_COMPLETE, {
+            tenantId,
+            noteId,
+            agentType,
+            actionId,
+            status,
+            result,
+        });
+    }
+    // ════════════════════════════════════════════
+    //  WRITE Operations: Agent Status
+    // ════════════════════════════════════════════
+    async updateAgentStatus(dto) {
+        this.eventBus.emit(exports.BRIDGE_EVENTS.AGENT_STATUS, {
+            tenantId: dto.tenantId,
+            taskId: dto.taskId,
+            agent: dto.agent,
+            status: dto.status,
+            message: dto.message,
+            timestamp: new Date().toISOString(),
+        });
+    }
+    // ════════════════════════════════════════════
+    //  WRITE Operations: Memories
+    // ════════════════════════════════════════════
+    async createMemory(dto) {
+        const id = `mem_${(0, cuid2_1.createId)()}`;
+        return this.prisma.memory.create({
+            data: {
+                id,
+                tenantId: dto.tenantId,
+                userId: 'dev-user-001',
+                type: dto.type,
+                content: dto.content,
+                source: 'AI_EXTRACTED',
+                subject: dto.conceptId ?? null, // Store concept reference in subject field
+            },
+        });
+    }
+    // ════════════════════════════════════════════
+    //  WRITE Operations: Brain State
+    // ════════════════════════════════════════════
+    async updateBrainState(dto) {
+        await this.brainState.updateBlockScan(dto.tenantId, dto.canvasBlock, {
+            risks: dto.risks,
+            status: dto.status,
+        });
+    }
+    // ════════════════════════════════════════════
+    //  WRITE Operations: Conversations
+    // ════════════════════════════════════════════
+    async createConversation(dto) {
+        const id = `sess_${(0, cuid2_1.createId)()}`;
+        const conversation = await this.prisma.conversation.create({
+            data: {
+                id,
+                userId: 'dev-user-001',
+                title: dto.title,
+                conceptId: dto.conceptId,
+            },
+        });
+        // Add initial message if provided
+        if (dto.initialMessage) {
+            await this.prisma.message.create({
+                data: {
+                    id: `msg_${(0, cuid2_1.createId)()}`,
+                    conversationId: id,
+                    role: 'ASSISTANT',
+                    content: dto.initialMessage,
+                },
+            });
+        }
+        this.eventBus.emit(exports.BRIDGE_EVENTS.CONVERSATION_CREATED, {
+            tenantId: dto.tenantId,
+            conversationId: id,
+            conceptId: dto.conceptId,
+            title: dto.title,
+        });
+        return conversation;
+    }
+    // ════════════════════════════════════════════
+    //  File Operations
+    // ════════════════════════════════════════════
+    /**
+     * Read a file from the OpenClaw workspace on Hetzner via SSH.
+     * Used to proxy deliverable file downloads to the frontend.
+     */
+    async readFileFromWorkspace(tenantId, filePath) {
+        if (!this.openClawTenant) {
+            throw new common_1.BadRequestException('OpenClaw tenant service not configured');
+        }
+        try {
+            return await this.openClawTenant.readFile(filePath);
+        }
+        catch (error) {
+            const msg = error instanceof Error ? error.message : 'Unknown';
+            if (msg.includes('not found')) {
+                throw new common_1.NotFoundException(`File not found: ${filePath}`);
+            }
+            throw new common_1.BadRequestException(`Failed to read file: ${msg}`);
+        }
+    }
+    /**
+     * Scan Hetzner deliverables folder for a task and return all files found.
+     * This discovers files that agents created but didn't register via Bridge API.
+     */
+    async scanTaskDeliverables(noteId) {
+        const files = await this.openClawTenant.listDeliverables(noteId);
+        const mimeMap = {
+            md: 'text/markdown', txt: 'text/plain', html: 'text/html',
+            xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg',
+            svg: 'image/svg+xml', csv: 'text/csv', zip: 'application/zip',
+            py: 'text/x-python', js: 'application/javascript', css: 'text/css',
+            json: 'application/json', sh: 'application/x-sh',
+        };
+        return files.map(f => {
+            const name = f.split('/').pop() ?? f;
+            const ext = name.split('.').pop()?.toLowerCase() ?? '';
+            return { name, path: f, mimeType: mimeMap[ext] ?? 'application/octet-stream' };
+        });
+    }
+    agentLabel(agentType) {
+        const labels = {
+            direktor: 'Direktor', research: 'Istraživanje', financial: 'Finansije',
+            content: 'Sadržaj', marketing: 'Marketing', sales: 'Prodaja',
+            designer: 'Dizajn', dev: 'Razvoj', web_search: 'Web Pretraga',
+        };
+        return labels[agentType] ?? agentType;
+    }
+};
+exports.BridgeService = BridgeService;
+exports.BridgeService = BridgeService = BridgeService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => openclaw_client_service_1.OpenClawClientService))),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof app_event_bus_service_1.AppEventBus !== "undefined" && app_event_bus_service_1.AppEventBus) === "function" ? _b : Object, typeof (_c = typeof brain_state_service_1.BrainStateService !== "undefined" && brain_state_service_1.BrainStateService) === "function" ? _c : Object, typeof (_d = typeof openclaw_client_service_1.OpenClawClientService !== "undefined" && openclaw_client_service_1.OpenClawClientService) === "function" ? _d : Object, typeof (_e = typeof openclaw_tenant_service_1.OpenClawTenantService !== "undefined" && openclaw_tenant_service_1.OpenClawTenantService) === "function" ? _e : Object, typeof (_f = typeof embedding_service_1.EmbeddingService !== "undefined" && embedding_service_1.EmbeddingService) === "function" ? _f : Object])
+], BridgeService);
+
+
+/***/ }),
+/* 160 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var BrainStateService_1;
+var _a;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BrainStateService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const tenant_context_1 = __webpack_require__(10);
+const ALL_CANVAS_BLOCKS = [
+    'KEY_PARTNERS',
+    'KEY_ACTIVITIES',
+    'KEY_RESOURCES',
+    'VALUE_PROPOSITION',
+    'CUSTOMER_RELATIONSHIPS',
+    'CHANNELS',
+    'CUSTOMER_SEGMENTS',
+    'REVENUE_STREAMS',
+    'COST_STRUCTURE',
+];
+const STALE_THRESHOLD_HOURS = 48;
+/**
+ * Tracks the brain's scanning state across 9 Business Model Canvas blocks per tenant.
+ * The brain scans one block per heartbeat cycle, targeting the most stale or at-risk block.
+ */
+let BrainStateService = BrainStateService_1 = class BrainStateService {
+    constructor(prisma) {
+        this.prisma = prisma;
+        this.logger = new common_1.Logger(BrainStateService_1.name);
+        // In-memory cache per tenant (persisted on writes, loaded on reads)
+        // Key: tenantId, Value: Map<canvasBlock, BrainStateBlock>
+        this.stateCache = new Map();
+    }
+    /**
+     * Get the full brain state for a tenant.
+     * Returns all 9 canvas blocks with scan status + summary counts.
+     */
+    async getState(tenantId) {
+        const blockMap = await this.ensureLoaded(tenantId);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        // Run all independent DB queries in parallel
+        const [pendingProposals, pendingConcepts, dailyBudget, lastRun] = await Promise.all([
+            this.prisma.brainProposal.count({
+                where: { tenantId, status: 'pending' },
+            }),
+            this.prisma.note.count({
+                where: {
+                    tenantId,
+                    noteType: 'TASK',
+                    status: 'PENDING',
+                    parentNoteId: null,
+                },
+            }),
+            this.prisma.agentDailyBudget.findUnique({
+                where: { tenantId_date: { tenantId, date: today } },
+            }),
+            this.prisma.autonomousRun.findFirst({
+                where: { tenantId },
+                orderBy: { startedAt: 'desc' },
+                select: { startedAt: true },
+            }),
+        ]);
+        const dailyLimitEur = parseInt(process.env['AGENT_DAILY_BUDGET_EUR'] ?? '200', 10);
+        const budgetRemaining = dailyLimitEur - (dailyBudget?.spentEur?.toNumber() ?? 0);
+        const canvasBlocks = ALL_CANVAS_BLOCKS.map((block) => blockMap.get(block) ?? this.defaultBlock(block));
+        return {
+            canvasBlocks,
+            pendingProposals,
+            pendingConcepts,
+            budgetRemaining: Math.max(0, budgetRemaining),
+            lastHeartbeat: lastRun?.startedAt?.toISOString() ?? null,
+        };
+    }
+    /**
+     * Update a canvas block after the brain scans it.
+     */
+    async updateBlockScan(tenantId, canvasBlock, update) {
+        const blockMap = await this.ensureLoaded(tenantId);
+        // Count concepts in this canvas block for this tenant
+        const conceptCount = await this.prisma.concept.count({
+            where: {
+                OR: [{ tenantId: null }, { tenantId }],
+                canvasBlock,
+            },
+        });
+        const existing = blockMap.get(canvasBlock) ?? this.defaultBlock(canvasBlock);
+        const updated = {
+            ...existing,
+            lastScan: new Date().toISOString(),
+            conceptCount,
+            risks: update.risks ?? existing.risks,
+            status: update.status ?? 'ok',
+        };
+        blockMap.set(canvasBlock, updated);
+        this.stateCache.set(tenantId, blockMap);
+        this.logger.debug({
+            message: 'Canvas block scan updated',
+            tenantId,
+            canvasBlock,
+            conceptCount,
+            status: updated.status,
+        });
+    }
+    /**
+     * Find the most stale canvas block for a tenant (used by heartbeat to decide what to scan).
+     */
+    async getMostStaleBlock(tenantId) {
+        const blockMap = await this.ensureLoaded(tenantId);
+        let oldestBlock = ALL_CANVAS_BLOCKS[0];
+        let oldestTime = Infinity;
+        for (const block of ALL_CANVAS_BLOCKS) {
+            const state = blockMap.get(block);
+            if (!state?.lastScan) {
+                return block; // Never scanned = highest priority
+            }
+            const scanTime = new Date(state.lastScan).getTime();
+            if (scanTime < oldestTime) {
+                oldestTime = scanTime;
+                oldestBlock = block;
+            }
+        }
+        return oldestBlock;
+    }
+    /**
+     * Mark staleness — called periodically to check if blocks need attention.
+     */
+    async refreshStaleness(tenantId) {
+        const blockMap = await this.ensureLoaded(tenantId);
+        const now = Date.now();
+        const threshold = STALE_THRESHOLD_HOURS * 60 * 60 * 1000;
+        for (const [block, state] of blockMap.entries()) {
+            if (state.lastScan) {
+                const age = now - new Date(state.lastScan).getTime();
+                if (age > threshold && state.status !== 'scanning') {
+                    blockMap.set(block, { ...state, status: 'stale' });
+                }
+            }
+        }
+        this.stateCache.set(tenantId, blockMap);
+    }
+    // ── Internal Helpers ──
+    async ensureLoaded(tenantId) {
+        if (this.stateCache.has(tenantId)) {
+            return this.stateCache.get(tenantId);
+        }
+        // Initialize with defaults — no DB persistence needed for scan state
+        // (ephemeral, rebuilds on server restart, which is fine for scan tracking)
+        const blockMap = new Map();
+        for (const block of ALL_CANVAS_BLOCKS) {
+            blockMap.set(block, this.defaultBlock(block));
+        }
+        this.stateCache.set(tenantId, blockMap);
+        return blockMap;
+    }
+    defaultBlock(block) {
+        return {
+            block,
+            lastScan: null,
+            conceptCount: 0,
+            risks: 0,
+            status: 'stale', // Never scanned = stale
+        };
+    }
+};
+exports.BrainStateService = BrainStateService;
+exports.BrainStateService = BrainStateService = BrainStateService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object])
+], BrainStateService);
+
+
+/***/ }),
+/* 161 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var _a, _b, _c, _d, _e;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CreateConversationDto = exports.ActionResultDto = exports.UpdateBrainStateDto = exports.CreateMemoryDto = exports.AgentStatusDto = exports.TaskCompleteDto = exports.TaskProgressDto = exports.TaskContributionDto = exports.CreateTaskDto = exports.CreateConceptDto = exports.UpdateProposalDto = exports.CreateProposalDto = exports.ProposalListQuery = exports.TenantIdQuery = exports.ConceptSearchQuery = void 0;
+const tslib_1 = __webpack_require__(4);
+const class_validator_1 = __webpack_require__(39);
+const class_transformer_1 = __webpack_require__(85);
+// ── Read Operations ──
+class ConceptSearchQuery {
+}
+exports.ConceptSearchQuery = ConceptSearchQuery;
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], ConceptSearchQuery.prototype, "q", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], ConceptSearchQuery.prototype, "tenantId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsNumber)(),
+    tslib_1.__metadata("design:type", Number)
+], ConceptSearchQuery.prototype, "limit", void 0);
+class TenantIdQuery {
+}
+exports.TenantIdQuery = TenantIdQuery;
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], TenantIdQuery.prototype, "tenantId", void 0);
+class ProposalListQuery {
+}
+exports.ProposalListQuery = ProposalListQuery;
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], ProposalListQuery.prototype, "tenantId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], ProposalListQuery.prototype, "status", void 0);
+// ── Write Operations: Proposals ──
+class CreateProposalDto {
+}
+exports.CreateProposalDto = CreateProposalDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateProposalDto.prototype, "tenantId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateProposalDto.prototype, "canvasBlock", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateProposalDto.prototype, "type", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(500),
+    tslib_1.__metadata("design:type", String)
+], CreateProposalDto.prototype, "title", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateProposalDto.prototype, "reasoning", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateProposalDto.prototype, "proposedAction", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(0),
+    tslib_1.__metadata("design:type", Number)
+], CreateProposalDto.prototype, "estimatedCost", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateProposalDto.prototype, "priority", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.IsString)({ each: true }),
+    tslib_1.__metadata("design:type", Array)
+], CreateProposalDto.prototype, "relatedConcepts", void 0);
+class UpdateProposalDto {
+}
+exports.UpdateProposalDto = UpdateProposalDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], UpdateProposalDto.prototype, "status", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], UpdateProposalDto.prototype, "approvedBy", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], UpdateProposalDto.prototype, "rejectedReason", void 0);
+// ── Write Operations: Concepts ──
+class CreateConceptDto {
+}
+exports.CreateConceptDto = CreateConceptDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateConceptDto.prototype, "tenantId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateConceptDto.prototype, "name", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateConceptDto.prototype, "category", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateConceptDto.prototype, "definition", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateConceptDto.prototype, "canvasBlock", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateConceptDto.prototype, "extendedDescription", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(0),
+    (0, class_validator_1.Max)(1),
+    tslib_1.__metadata("design:type", Number)
+], CreateConceptDto.prototype, "confidence", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    tslib_1.__metadata("design:type", typeof (_a = typeof Array !== "undefined" && Array) === "function" ? _a : Object)
+], CreateConceptDto.prototype, "relationships", void 0);
+// ── Write Operations: Tasks ──
+class CreateTaskDto {
+}
+exports.CreateTaskDto = CreateTaskDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateTaskDto.prototype, "tenantId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateTaskDto.prototype, "title", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateTaskDto.prototype, "content", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateTaskDto.prototype, "conceptId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateTaskDto.prototype, "expectedOutcome", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateTaskDto.prototype, "proposalId", void 0);
+class TaskContributionDto {
+}
+exports.TaskContributionDto = TaskContributionDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], TaskContributionDto.prototype, "tenantId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], TaskContributionDto.prototype, "noteId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], TaskContributionDto.prototype, "agentType", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], TaskContributionDto.prototype, "summary", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], TaskContributionDto.prototype, "output", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    tslib_1.__metadata("design:type", typeof (_b = typeof Array !== "undefined" && Array) === "function" ? _b : Object)
+], TaskContributionDto.prototype, "files", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    tslib_1.__metadata("design:type", typeof (_c = typeof Array !== "undefined" && Array) === "function" ? _c : Object)
+], TaskContributionDto.prototype, "actions", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    tslib_1.__metadata("design:type", typeof (_d = typeof Record !== "undefined" && Record) === "function" ? _d : Object)
+], TaskContributionDto.prototype, "metrics", void 0);
+class TaskProgressDto {
+}
+exports.TaskProgressDto = TaskProgressDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], TaskProgressDto.prototype, "tenantId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], TaskProgressDto.prototype, "noteId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], TaskProgressDto.prototype, "phase", void 0);
+tslib_1.__decorate([
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(0),
+    (0, class_validator_1.Max)(100),
+    tslib_1.__metadata("design:type", Number)
+], TaskProgressDto.prototype, "percent", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], TaskProgressDto.prototype, "message", void 0);
+class TaskCompleteDto {
+}
+exports.TaskCompleteDto = TaskCompleteDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], TaskCompleteDto.prototype, "tenantId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], TaskCompleteDto.prototype, "noteId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsNumber)(),
+    tslib_1.__metadata("design:type", Number)
+], TaskCompleteDto.prototype, "score", void 0);
+// ── Write Operations: Agent Status ──
+class AgentStatusDto {
+}
+exports.AgentStatusDto = AgentStatusDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], AgentStatusDto.prototype, "tenantId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], AgentStatusDto.prototype, "taskId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], AgentStatusDto.prototype, "agent", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], AgentStatusDto.prototype, "status", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], AgentStatusDto.prototype, "message", void 0);
+// ── Write Operations: Memories ──
+class CreateMemoryDto {
+}
+exports.CreateMemoryDto = CreateMemoryDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateMemoryDto.prototype, "tenantId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateMemoryDto.prototype, "type", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateMemoryDto.prototype, "content", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateMemoryDto.prototype, "conceptId", void 0);
+// ── Write Operations: Brain State ──
+class UpdateBrainStateDto {
+}
+exports.UpdateBrainStateDto = UpdateBrainStateDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], UpdateBrainStateDto.prototype, "tenantId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], UpdateBrainStateDto.prototype, "canvasBlock", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsNumber)(),
+    tslib_1.__metadata("design:type", Number)
+], UpdateBrainStateDto.prototype, "risks", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], UpdateBrainStateDto.prototype, "status", void 0);
+// ── Write Operations: Action Results ──
+class ActionResultDto {
+}
+exports.ActionResultDto = ActionResultDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], ActionResultDto.prototype, "tenantId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], ActionResultDto.prototype, "noteId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], ActionResultDto.prototype, "agentType", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], ActionResultDto.prototype, "actionId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], ActionResultDto.prototype, "status", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    tslib_1.__metadata("design:type", typeof (_e = typeof Record !== "undefined" && Record) === "function" ? _e : Object)
+], ActionResultDto.prototype, "result", void 0);
+// ── Write Operations: Conversations ──
+class CreateConversationDto {
+}
+exports.CreateConversationDto = CreateConversationDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateConversationDto.prototype, "tenantId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateConversationDto.prototype, "conceptId", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateConversationDto.prototype, "title", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateConversationDto.prototype, "initialMessage", void 0);
+
+
+/***/ }),
+/* 162 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var _a, _b, _c, _d, _e;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.NotesController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const jwt_auth_guard_1 = __webpack_require__(47);
 const current_user_decorator_1 = __webpack_require__(49);
-const notes_service_1 = __webpack_require__(134);
+const notes_service_1 = __webpack_require__(146);
+const bridge_service_1 = __webpack_require__(159);
 const prisma_1 = __webpack_require__(36);
-const comment_dto_1 = __webpack_require__(136);
-const task_hub_query_dto_1 = __webpack_require__(137);
+const comment_dto_1 = __webpack_require__(163);
+const task_hub_query_dto_1 = __webpack_require__(164);
 let NotesController = class NotesController {
-    constructor(notesService) {
+    constructor(notesService, bridgeService) {
         this.notesService = notesService;
+        this.bridgeService = bridgeService;
     }
     /**
      * Create a new note (manual).
@@ -15085,6 +21474,67 @@ let NotesController = class NotesController {
         const notes = await this.notesService.getByConcept(conceptId, user.userId, user.tenantId);
         return { data: notes };
     }
+    // ── Brain Proposals + Actions (must be BEFORE parametric :id route) ──
+    async getProposals(user, status) {
+        return this.bridgeService.getProposals(user.tenantId, status);
+    }
+    async approveProposal(user, id) {
+        return this.bridgeService.updateProposal(id, {
+            status: 'approved',
+            approvedBy: user.userId,
+        });
+    }
+    async rejectProposal(user, id, body) {
+        return this.bridgeService.updateProposal(id, {
+            status: 'rejected',
+            rejectedReason: body.reason,
+            approvedBy: user.userId,
+        });
+    }
+    /**
+     * Execute tasks via OpenClaw Brain (brain relay mode).
+     * Sends task details to OpenClaw director who decides how to execute them.
+     */
+    async executeViaBrain(user, body) {
+        if (!body.taskIds?.length) {
+            throw new common_1.BadRequestException('taskIds array is required');
+        }
+        const result = await this.bridgeService.executeTasksViaBrain(user.tenantId, user.userId, body.taskIds);
+        return { data: result };
+    }
+    async executeAction(user, body) {
+        await this.bridgeService.executeAction(user.tenantId, body.noteId, body.agentType, body.actionId, user.userId);
+        return { success: true };
+    }
+    async scanDeliverables(user, noteId) {
+        const files = await this.bridgeService.scanTaskDeliverables(noteId);
+        return { data: files };
+    }
+    async downloadFile(user, filePath, res) {
+        if (!filePath) {
+            throw new common_1.BadRequestException('path query parameter is required');
+        }
+        // Allow files from tenant workspace OR shared workspace deliverables
+        const isTenantFile = filePath.includes(`.openclaw-${user.tenantId}`);
+        const isDeliverable = filePath.includes('/deliverables/');
+        if (!isTenantFile && !isDeliverable) {
+            throw new common_1.BadRequestException('File does not belong to your tenant');
+        }
+        const fileData = await this.bridgeService.readFileFromWorkspace(user.tenantId, filePath);
+        const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+        const mimeTypes = {
+            md: 'text/markdown', txt: 'text/plain', html: 'text/html',
+            xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg',
+            svg: 'image/svg+xml', csv: 'text/csv', zip: 'application/zip',
+        };
+        const filename = filePath.split('/').pop() ?? 'download';
+        res.setHeader('Content-Type', mimeTypes[ext] ?? 'application/octet-stream');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(fileData);
+    }
+    // ── Parametric routes (MUST come after literal routes) ──
     /**
      * Get a single note by ID (with children).
      */
@@ -15182,7 +21632,7 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
     tslib_1.__param(1, (0, common_1.Query)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object, typeof (_b = typeof task_hub_query_dto_1.TaskHubQueryDto !== "undefined" && task_hub_query_dto_1.TaskHubQueryDto) === "function" ? _b : Object]),
+    tslib_1.__metadata("design:paramtypes", [Object, typeof (_c = typeof task_hub_query_dto_1.TaskHubQueryDto !== "undefined" && task_hub_query_dto_1.TaskHubQueryDto) === "function" ? _c : Object]),
     tslib_1.__metadata("design:returntype", Promise)
 ], NotesController.prototype, "getAllTasks", null);
 tslib_1.__decorate([
@@ -15201,6 +21651,64 @@ tslib_1.__decorate([
     tslib_1.__metadata("design:paramtypes", [Object, String]),
     tslib_1.__metadata("design:returntype", Promise)
 ], NotesController.prototype, "getByConcept", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('proposals'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Query)('status')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], NotesController.prototype, "getProposals", null);
+tslib_1.__decorate([
+    (0, common_1.Patch)('proposals/:id/approve'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Param)('id')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], NotesController.prototype, "approveProposal", null);
+tslib_1.__decorate([
+    (0, common_1.Patch)('proposals/:id/reject'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Param)('id')),
+    tslib_1.__param(2, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], NotesController.prototype, "rejectProposal", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('execute-via-brain'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], NotesController.prototype, "executeViaBrain", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('actions/execute'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], NotesController.prototype, "executeAction", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('files/scan/:noteId'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Param)('noteId')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], NotesController.prototype, "scanDeliverables", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('files/download'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Query)('path')),
+    tslib_1.__param(2, (0, common_1.Res)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], NotesController.prototype, "downloadFile", null);
 tslib_1.__decorate([
     (0, common_1.Get)(':id'),
     tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
@@ -15259,7 +21767,7 @@ tslib_1.__decorate([
     tslib_1.__param(1, (0, common_1.Param)('taskId')),
     tslib_1.__param(2, (0, common_1.Body)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object, String, typeof (_c = typeof comment_dto_1.CreateCommentDto !== "undefined" && comment_dto_1.CreateCommentDto) === "function" ? _c : Object]),
+    tslib_1.__metadata("design:paramtypes", [Object, String, typeof (_d = typeof comment_dto_1.CreateCommentDto !== "undefined" && comment_dto_1.CreateCommentDto) === "function" ? _d : Object]),
     tslib_1.__metadata("design:returntype", Promise)
 ], NotesController.prototype, "createComment", null);
 tslib_1.__decorate([
@@ -15278,7 +21786,7 @@ tslib_1.__decorate([
     tslib_1.__param(1, (0, common_1.Param)('commentId')),
     tslib_1.__param(2, (0, common_1.Body)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object, String, typeof (_d = typeof comment_dto_1.UpdateCommentDto !== "undefined" && comment_dto_1.UpdateCommentDto) === "function" ? _d : Object]),
+    tslib_1.__metadata("design:paramtypes", [Object, String, typeof (_e = typeof comment_dto_1.UpdateCommentDto !== "undefined" && comment_dto_1.UpdateCommentDto) === "function" ? _e : Object]),
     tslib_1.__metadata("design:returntype", Promise)
 ], NotesController.prototype, "updateComment", null);
 tslib_1.__decorate([
@@ -15302,12 +21810,13 @@ tslib_1.__decorate([
 exports.NotesController = NotesController = tslib_1.__decorate([
     (0, common_1.Controller)('v1/notes'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _a : Object])
+    tslib_1.__param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => bridge_service_1.BridgeService))),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _a : Object, typeof (_b = typeof bridge_service_1.BridgeService !== "undefined" && bridge_service_1.BridgeService) === "function" ? _b : Object])
 ], NotesController);
 
 
 /***/ }),
-/* 136 */
+/* 163 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -15342,7 +21851,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 137 */
+/* 164 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -15392,7 +21901,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 138 */
+/* 165 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -15403,11 +21912,11 @@ const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const tenant_context_1 = __webpack_require__(10);
 const auth_module_1 = __webpack_require__(42);
-const memory_controller_1 = __webpack_require__(139);
-const memory_service_1 = __webpack_require__(140);
-const memory_extraction_service_1 = __webpack_require__(143);
-const memory_embedding_service_1 = __webpack_require__(144);
-const memory_context_builder_service_1 = __webpack_require__(145);
+const memory_controller_1 = __webpack_require__(166);
+const memory_service_1 = __webpack_require__(167);
+const memory_extraction_service_1 = __webpack_require__(170);
+const memory_embedding_service_1 = __webpack_require__(171);
+const memory_context_builder_service_1 = __webpack_require__(172);
 const llm_config_module_1 = __webpack_require__(75);
 /**
  * Module for persistent memory across conversations.
@@ -15444,7 +21953,7 @@ exports.MemoryModule = MemoryModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 139 */
+/* 166 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -15457,9 +21966,9 @@ const common_1 = __webpack_require__(1);
 const class_validator_1 = __webpack_require__(39);
 const jwt_auth_guard_1 = __webpack_require__(47);
 const current_user_decorator_1 = __webpack_require__(49);
-const memory_service_1 = __webpack_require__(140);
-const create_memory_dto_1 = __webpack_require__(141);
-const update_memory_dto_1 = __webpack_require__(142);
+const memory_service_1 = __webpack_require__(167);
+const create_memory_dto_1 = __webpack_require__(168);
+const update_memory_dto_1 = __webpack_require__(169);
 /**
  * Request body for forgetting all memories.
  * Requires typing "FORGET" to confirm deletion.
@@ -15668,7 +22177,7 @@ exports.MemoryController = MemoryController = MemoryController_1 = tslib_1.__dec
 
 
 /***/ }),
-/* 140 */
+/* 167 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -15994,7 +22503,7 @@ exports.MemoryService = MemoryService = MemoryService_1 = tslib_1.__decorate([
 
 
 /***/ }),
-/* 141 */
+/* 168 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -16042,7 +22551,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 142 */
+/* 169 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -16069,7 +22578,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 143 */
+/* 170 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -16080,8 +22589,8 @@ exports.MemoryExtractionService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
-const memory_service_1 = __webpack_require__(140);
-const memory_embedding_service_1 = __webpack_require__(144);
+const memory_service_1 = __webpack_require__(167);
+const memory_embedding_service_1 = __webpack_require__(171);
 const llm_config_service_1 = __webpack_require__(77);
 const types_1 = __webpack_require__(86);
 /**
@@ -16419,7 +22928,7 @@ exports.MemoryExtractionService = MemoryExtractionService = MemoryExtractionServ
 
 
 /***/ }),
-/* 144 */
+/* 171 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -16429,7 +22938,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.MemoryEmbeddingService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const memory_service_1 = __webpack_require__(140);
+const memory_service_1 = __webpack_require__(167);
 const qdrant_client_service_1 = __webpack_require__(113);
 /** OpenAI API endpoint for embeddings */
 const OPENAI_EMBEDDINGS_URL = 'https://api.openai.com/v1/embeddings';
@@ -16702,7 +23211,7 @@ exports.MemoryEmbeddingService = MemoryEmbeddingService = MemoryEmbeddingService
 
 
 /***/ }),
-/* 145 */
+/* 172 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -16712,7 +23221,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.MemoryContextBuilderService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const memory_embedding_service_1 = __webpack_require__(144);
+const memory_embedding_service_1 = __webpack_require__(171);
 /**
  * Service for building memory context for AI prompts.
  * Formats relevant memories for RAG injection.
@@ -16886,7 +23395,7 @@ exports.MemoryContextBuilderService = MemoryContextBuilderService = MemoryContex
 
 
 /***/ }),
-/* 146 */
+/* 173 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -16898,12 +23407,12 @@ const tenant_context_1 = __webpack_require__(10);
 const knowledge_module_1 = __webpack_require__(74);
 const ai_gateway_module_1 = __webpack_require__(89);
 const notes_module_1 = __webpack_require__(133);
-const web_search_module_1 = __webpack_require__(147);
-const execution_module_1 = __webpack_require__(149);
-const maturity_module_1 = __webpack_require__(151);
-const workflow_service_1 = __webpack_require__(168);
-const yolo_scheduler_service_1 = __webpack_require__(174);
-const prompt_checker_service_1 = __webpack_require__(169);
+const web_search_module_1 = __webpack_require__(136);
+const execution_module_1 = __webpack_require__(174);
+const maturity_module_1 = __webpack_require__(176);
+const workflow_service_1 = __webpack_require__(182);
+const yolo_scheduler_service_1 = __webpack_require__(188);
+const prompt_checker_service_1 = __webpack_require__(183);
 let WorkflowModule = class WorkflowModule {
 };
 exports.WorkflowModule = WorkflowModule;
@@ -16925,261 +23434,7 @@ exports.WorkflowModule = WorkflowModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 147 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.WebSearchModule = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const config_1 = __webpack_require__(5);
-const web_search_service_1 = __webpack_require__(148);
-let WebSearchModule = class WebSearchModule {
-};
-exports.WebSearchModule = WebSearchModule;
-exports.WebSearchModule = WebSearchModule = tslib_1.__decorate([
-    (0, common_1.Module)({
-        imports: [config_1.ConfigModule],
-        providers: [web_search_service_1.WebSearchService],
-        exports: [web_search_service_1.WebSearchService],
-    })
-], WebSearchModule);
-
-
-/***/ }),
-/* 148 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var WebSearchService_1;
-var _a;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.WebSearchService = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const config_1 = __webpack_require__(5);
-const axios_1 = tslib_1.__importDefault(__webpack_require__(58));
-const SEARCH_TIMEOUT_MS = 8_000;
-const PAGE_FETCH_TIMEOUT_MS = 10_000;
-const TOTAL_WEB_RESEARCH_TIMEOUT_MS = 15_000;
-const MAX_PAGE_CONTENT_CHARS = 3_000;
-const MAX_TOTAL_WEB_CONTEXT_CHARS = 10_000;
-let WebSearchService = WebSearchService_1 = class WebSearchService {
-    constructor(configService) {
-        this.configService = configService;
-        this.logger = new common_1.Logger(WebSearchService_1.name);
-        this.apiKey = this.configService.get('SERPER_API_KEY');
-    }
-    /**
-     * Whether web search is available (API key configured).
-     */
-    isAvailable() {
-        return !!this.apiKey;
-    }
-    /**
-     * Searches the web using Serper.dev Google Search API.
-     * Returns top results with title, link, and snippet.
-     */
-    async search(query, numResults = 5) {
-        if (!this.apiKey) {
-            this.logger.warn('SERPER_API_KEY not configured — web search unavailable');
-            return [];
-        }
-        try {
-            const response = await axios_1.default.post('https://google.serper.dev/search', { q: query, num: numResults }, {
-                headers: {
-                    'X-API-KEY': this.apiKey,
-                    'Content-Type': 'application/json',
-                },
-                timeout: SEARCH_TIMEOUT_MS,
-            });
-            const organic = response.data?.organic ?? [];
-            const results = organic
-                .slice(0, numResults)
-                .map((item) => ({
-                title: item.title ?? '',
-                link: item.link ?? '',
-                snippet: item.snippet ?? '',
-            }));
-            this.logger.log({
-                message: 'Web search completed',
-                query,
-                resultCount: results.length,
-            });
-            return results;
-        }
-        catch (error) {
-            this.logger.warn({
-                message: 'Web search failed',
-                query,
-                error: error instanceof Error ? error.message : 'Unknown',
-            });
-            return [];
-        }
-    }
-    /**
-     * Fetches a webpage and extracts text content.
-     * Returns cleaned text content (max 5000 chars).
-     */
-    async fetchWebpage(url) {
-        try {
-            const response = await axios_1.default.get(url, {
-                timeout: PAGE_FETCH_TIMEOUT_MS,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (compatible; MentorAI/1.0)',
-                    Accept: 'text/html,application/xhtml+xml',
-                },
-                maxRedirects: 5,
-                responseType: 'text',
-            });
-            const html = response.data;
-            // Basic HTML to text extraction
-            const text = this.extractTextFromHtml(html);
-            this.logger.log({
-                message: 'Webpage fetched',
-                url,
-                textLength: text.length,
-            });
-            return text.substring(0, 5000);
-        }
-        catch (error) {
-            this.logger.warn({
-                message: 'Webpage fetch failed',
-                url,
-                error: error instanceof Error ? error.message : 'Unknown',
-            });
-            return '';
-        }
-    }
-    /**
-     * Combined search + deep page extraction with global timeout.
-     * Returns enriched results with optional page content.
-     */
-    async searchAndExtract(query, numResults = 5) {
-        let timeoutId;
-        const globalTimeout = new Promise((resolve) => {
-            timeoutId = setTimeout(() => {
-                this.logger.warn({ message: 'Web research global timeout reached', query });
-                resolve([]);
-            }, TOTAL_WEB_RESEARCH_TIMEOUT_MS);
-        });
-        const work = async () => {
-            try {
-                // Phase 1: Search
-                const searchResults = await this.search(query, numResults);
-                if (searchResults.length === 0)
-                    return [];
-                const now = new Date().toISOString();
-                // Phase 2: Deep fetch top 3 results in parallel
-                const topResults = searchResults.slice(0, 3);
-                const fetchResults = await Promise.allSettled(topResults.map((r) => this.fetchWebpage(r.link)));
-                // Build enriched results with page content
-                const enriched = [];
-                let totalContentChars = 0;
-                for (let i = 0; i < searchResults.length; i++) {
-                    const result = searchResults[i];
-                    let pageContent;
-                    // Only top 3 have deep fetch attempts
-                    if (i < fetchResults.length) {
-                        const fetchResult = fetchResults[i];
-                        if (fetchResult.status === 'fulfilled' && fetchResult.value) {
-                            const truncated = fetchResult.value.substring(0, MAX_PAGE_CONTENT_CHARS);
-                            if (totalContentChars + truncated.length <= MAX_TOTAL_WEB_CONTEXT_CHARS) {
-                                pageContent = truncated;
-                                totalContentChars += truncated.length;
-                            }
-                        }
-                    }
-                    // Also count snippet towards total
-                    const snippetLen = result.snippet.length;
-                    if (!pageContent && totalContentChars + snippetLen > MAX_TOTAL_WEB_CONTEXT_CHARS) {
-                        continue; // Skip to stay within budget
-                    }
-                    if (!pageContent)
-                        totalContentChars += snippetLen;
-                    enriched.push({
-                        title: result.title,
-                        link: result.link,
-                        snippet: result.snippet,
-                        pageContent,
-                        fetchedAt: now,
-                    });
-                }
-                this.logger.log({
-                    message: 'Search and extract completed',
-                    query,
-                    resultCount: enriched.length,
-                    deepFetchCount: fetchResults.filter((r) => r.status === 'fulfilled' && r.value).length,
-                    totalContentChars,
-                });
-                return enriched;
-            }
-            finally {
-                clearTimeout(timeoutId);
-            }
-        };
-        return Promise.race([work(), globalTimeout]);
-    }
-    /**
-     * Formats enriched search results into an Obsidian-style context block
-     * with markdown links [Title](URL) for AI system prompt injection.
-     */
-    formatSourcesAsObsidian(results) {
-        if (!results || results.length === 0)
-            return '';
-        let context = '\n\n--- WEB ISTRAŽIVANJE (aktuelni podaci) ---';
-        for (const result of results) {
-            context += `\n\n**[${result.title}](${result.link})**`;
-            if (result.pageContent) {
-                context += `\n${result.pageContent}`;
-            }
-            else {
-                context += `\n${result.snippet}`;
-            }
-        }
-        context += '\n--- KRAJ WEB ISTRAŽIVANJA ---';
-        context +=
-            '\n\nKADA KORISTIŠ informacije iz web istraživanja, OBAVEZNO citiraj izvor INLINE odmah posle rečenice koja koristi tu informaciju.';
-        context += '\nFormat citiranja: ([Naziv izvora](URL)) — stavi odmah posle relevantne rečenice.';
-        context +=
-            '\nPrimer: "Tržište digitalnog marketinga raste 15% godišnje ([Digital Marketing Report 2026](https://example.com/report))."';
-        context += '\nAko ne koristiš informaciju iz izvora, NE citiraj ga.';
-        return context;
-    }
-    /**
-     * Basic HTML to text extraction without external dependencies.
-     */
-    extractTextFromHtml(html) {
-        // Remove script and style tags with their content
-        let text = html.replace(/<script[\s\S]*?<\/script>/gi, '');
-        text = text.replace(/<style[\s\S]*?<\/style>/gi, '');
-        text = text.replace(/<nav[\s\S]*?<\/nav>/gi, '');
-        text = text.replace(/<footer[\s\S]*?<\/footer>/gi, '');
-        text = text.replace(/<header[\s\S]*?<\/header>/gi, '');
-        // Remove all HTML tags
-        text = text.replace(/<[^>]+>/g, ' ');
-        // Decode common HTML entities
-        text = text.replace(/&nbsp;/g, ' ');
-        text = text.replace(/&amp;/g, '&');
-        text = text.replace(/&lt;/g, '<');
-        text = text.replace(/&gt;/g, '>');
-        text = text.replace(/&quot;/g, '"');
-        text = text.replace(/&#39;/g, "'");
-        // Collapse whitespace
-        text = text.replace(/\s+/g, ' ').trim();
-        return text;
-    }
-};
-exports.WebSearchService = WebSearchService;
-exports.WebSearchService = WebSearchService = WebSearchService_1 = tslib_1.__decorate([
-    (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object])
-], WebSearchService);
-
-
-/***/ }),
-/* 149 */
+/* 174 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -17188,7 +23443,7 @@ exports.ExecutionModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(10);
-const execution_state_service_1 = __webpack_require__(150);
+const execution_state_service_1 = __webpack_require__(175);
 let ExecutionModule = class ExecutionModule {
 };
 exports.ExecutionModule = ExecutionModule;
@@ -17202,7 +23457,7 @@ exports.ExecutionModule = ExecutionModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 150 */
+/* 175 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -17400,7 +23655,7 @@ exports.ExecutionStateService = ExecutionStateService = ExecutionStateService_1 
 
 
 /***/ }),
-/* 151 */
+/* 176 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -17411,17 +23666,17 @@ const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(10);
 const auth_module_1 = __webpack_require__(42);
 const ai_gateway_module_1 = __webpack_require__(89);
-const workflow_module_1 = __webpack_require__(146);
-const agent_execution_module_1 = __webpack_require__(152);
+const workflow_module_1 = __webpack_require__(173);
+const agent_execution_module_1 = __webpack_require__(135);
 const knowledge_module_1 = __webpack_require__(74);
-const maturity_engine_service_1 = __webpack_require__(163);
-const stage_classifier_service_1 = __webpack_require__(164);
-const staleness_detector_service_1 = __webpack_require__(171);
-const ws_server_holder_service_1 = __webpack_require__(166);
-const headless_executor_service_1 = __webpack_require__(167);
-const autonomous_scheduler_service_1 = __webpack_require__(172);
-const cross_persona_intelligence_service_1 = __webpack_require__(170);
-const maturity_controller_1 = __webpack_require__(173);
+const maturity_engine_service_1 = __webpack_require__(177);
+const stage_classifier_service_1 = __webpack_require__(178);
+const staleness_detector_service_1 = __webpack_require__(185);
+const ws_server_holder_service_1 = __webpack_require__(180);
+const headless_executor_service_1 = __webpack_require__(181);
+const autonomous_scheduler_service_1 = __webpack_require__(186);
+const cross_persona_intelligence_service_1 = __webpack_require__(184);
+const maturity_controller_1 = __webpack_require__(187);
 /**
  * Business Maturity Engine module.
  * Manages stage progression (BASIC → ADVANCED → AUTONOMOUS),
@@ -17453,6 +23708,7 @@ exports.MaturityModule = MaturityModule = tslib_1.__decorate([
         ],
         exports: [
             maturity_engine_service_1.MaturityEngineService,
+            headless_executor_service_1.HeadlessExecutorService,
             staleness_detector_service_1.StalenessDetectorService,
             ws_server_holder_service_1.WsServerHolder,
         ],
@@ -17461,2195 +23717,12 @@ exports.MaturityModule = MaturityModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 152 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.AgentExecutionModule = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const config_1 = __webpack_require__(5);
-const tenant_context_1 = __webpack_require__(10);
-const auth_module_1 = __webpack_require__(42);
-const ai_gateway_module_1 = __webpack_require__(89);
-const notes_module_1 = __webpack_require__(133);
-const agent_execution_service_1 = __webpack_require__(153);
-const agent_execution_controller_1 = __webpack_require__(161);
-const openclaw_client_service_1 = __webpack_require__(154);
-const agent_registry_service_1 = __webpack_require__(157);
-const agent_prompt_service_1 = __webpack_require__(156);
-const job_planner_service_1 = __webpack_require__(162);
-const budget_service_1 = __webpack_require__(158);
-const agent_execution_event_bus_service_1 = __webpack_require__(159);
-let AgentExecutionModule = class AgentExecutionModule {
-};
-exports.AgentExecutionModule = AgentExecutionModule;
-exports.AgentExecutionModule = AgentExecutionModule = tslib_1.__decorate([
-    (0, common_1.Module)({
-        imports: [config_1.ConfigModule, tenant_context_1.TenantModule, auth_module_1.AuthModule, ai_gateway_module_1.AiGatewayModule, notes_module_1.NotesModule],
-        controllers: [agent_execution_controller_1.AgentExecutionController],
-        providers: [
-            agent_execution_service_1.AgentExecutionService,
-            openclaw_client_service_1.OpenClawClientService,
-            agent_registry_service_1.AgentRegistryService,
-            agent_prompt_service_1.AgentPromptService,
-            job_planner_service_1.JobPlannerService,
-            budget_service_1.BudgetService,
-            agent_execution_event_bus_service_1.AgentExecutionEventBus,
-        ],
-        exports: [agent_execution_service_1.AgentExecutionService, job_planner_service_1.JobPlannerService, agent_execution_event_bus_service_1.AgentExecutionEventBus, openclaw_client_service_1.OpenClawClientService],
-    })
-], AgentExecutionModule);
-
-
-/***/ }),
-/* 153 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var AgentExecutionService_1;
-var _a, _b, _c, _d, _e, _f, _g;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.AgentExecutionService = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const tenant_context_1 = __webpack_require__(10);
-const cuid2_1 = __webpack_require__(33);
-const types_1 = __webpack_require__(86);
-const prisma_1 = __webpack_require__(36);
-const openclaw_client_service_1 = __webpack_require__(154);
-const agent_prompt_service_1 = __webpack_require__(156);
-const agent_registry_service_1 = __webpack_require__(157);
-const budget_service_1 = __webpack_require__(158);
-const agent_execution_event_bus_service_1 = __webpack_require__(159);
-const notes_service_1 = __webpack_require__(134);
-let AgentExecutionService = AgentExecutionService_1 = class AgentExecutionService {
-    constructor(prisma, openClawClient, agentPrompt, registry, budgetService, eventBus, notesService) {
-        this.prisma = prisma;
-        this.openClawClient = openClawClient;
-        this.agentPrompt = agentPrompt;
-        this.registry = registry;
-        this.budgetService = budgetService;
-        this.eventBus = eventBus;
-        this.notesService = notesService;
-        this.logger = new common_1.Logger(AgentExecutionService_1.name);
-        // With STAGE_MAX_CONCURRENCY=5 and 2-4 agent jobs per task, peak is 10-20.
-        // Each job uses a unique session-id, so no OpenClaw lock contention.
-        // This limit prevents runaway execution, not lock issues.
-        this.MAX_CONCURRENT_PER_TENANT = 15;
-        this.VALID_STATUSES = new Set(Object.values(types_1.AgentExecutionStatus));
-    }
-    emitAgentEvent(tenantId, eventName, payload) {
-        this.eventBus.emit({ tenantId, eventName, payload });
-    }
-    startHeartbeat(executionId, jobId, agentType, tenantId, startTime) {
-        return setInterval(() => {
-            this.emitAgentEvent(tenantId, 'agent:executing-heartbeat', {
-                executionId,
-                jobId,
-                elapsedMs: Date.now() - startTime,
-                agentType,
-            });
-        }, 5000);
-    }
-    async triggerAgent(noteId, agentType, userId, tenantId) {
-        // Validate agent type
-        const agentDef = this.registry.getAgent(agentType);
-        // Verify note
-        const note = await this.prisma.note.findFirst({
-            where: { id: noteId, tenantId },
-        });
-        if (!note) {
-            throw new common_1.NotFoundException(`Note ${noteId} not found`);
-        }
-        if (!note.userReport) {
-            throw new common_1.BadRequestException('Task has no completed report');
-        }
-        // Check OpenClaw config
-        if (!this.openClawClient.isConfigured()) {
-            throw new common_1.BadRequestException('Agent execution is not configured');
-        }
-        // Check for existing active execution on this note+agentType
-        const existingActive = await this.prisma.agentExecution.findFirst({
-            where: {
-                noteId,
-                tenantId,
-                agentType,
-                status: { in: ['PENDING', 'FORMATTING', 'EXECUTING'] },
-            },
-        });
-        if (existingActive) {
-            throw new common_1.BadRequestException(`${agentDef.label} is already in progress for this task`);
-        }
-        // Check budget
-        const canSpend = await this.budgetService.canSpend(tenantId);
-        if (!canSpend) {
-            throw new common_1.ForbiddenException('Daily budget exceeded');
-        }
-        // Check concurrency via DB count (safe across multiple instances)
-        const activeCount = await this.prisma.agentExecution.count({
-            where: {
-                tenantId,
-                status: { in: ['PENDING', 'FORMATTING', 'EXECUTING'] },
-            },
-        });
-        if (activeCount >= this.MAX_CONCURRENT_PER_TENANT) {
-            throw new common_1.BadRequestException(`Maximum ${this.MAX_CONCURRENT_PER_TENANT} concurrent agent executions`);
-        }
-        // Create execution record + reserve budget
-        const executionId = `agx_${(0, cuid2_1.createId)()}`;
-        const estimatedCost = agentDef.estimatedCostEur;
-        await this.prisma.agentExecution.create({
-            data: {
-                id: executionId,
-                tenantId,
-                userId,
-                noteId,
-                status: 'PENDING',
-                agentType,
-                estimatedCostEur: estimatedCost,
-            },
-        });
-        await this.budgetService.recordSpend(tenantId, estimatedCost);
-        this.logger.log({
-            message: 'Agent triggered',
-            executionId,
-            noteId,
-            agentType,
-            userId,
-            tenantId,
-            reservedCostEur: estimatedCost,
-        });
-        // Fire-and-forget async pipeline
-        this.executeAgentPipeline(executionId, agentType, note, userId, tenantId, estimatedCost).catch((err) => {
-            this.logger.error({
-                message: 'Agent pipeline failed unexpectedly',
-                executionId,
-                agentType,
-                error: err.message,
-            });
-        });
-        return { executionId };
-    }
-    async executeAgentPipeline(executionId, agentType, note, userId, tenantId, reservedCostEur) {
-        const openClawAgentId = this.registry.getOpenClawAgentId(agentType);
-        const agentLabel = this.registry.getAgent(agentType).label;
-        let heartbeat = null;
-        let chunkIndex = 0;
-        try {
-            // Emit concept activity for graph visualization
-            if (note.conceptId) {
-                this.emitAgentEvent(tenantId, 'agent:concept-activity', {
-                    agentType, conceptId: note.conceptId, status: 'started',
-                });
-            }
-            // Step 1: Format task into agent-specific instruction
-            await this.updateStatus(executionId, 'FORMATTING');
-            this.emitAgentEvent(tenantId, 'agent:status-change', {
-                executionId, jobId: null, noteId: note.id, agentType, status: 'FORMATTING',
-                label: `${agentLabel}: Priprema instrukcija...`,
-            });
-            const formattedPrompt = this.agentPrompt.formatPrompt({
-                agentType,
-                taskTitle: note.title,
-                taskContent: note.content,
-                userReport: note.userReport,
-                expectedOutcome: note.expectedOutcome,
-                tenantId,
-                userId,
-                onChunk: (chunk) => {
-                    this.emitAgentEvent(tenantId, 'agent:formatting-chunk', {
-                        executionId, jobId: null, chunk, index: chunkIndex++,
-                    });
-                },
-            });
-            this.emitAgentEvent(tenantId, 'agent:formatting-complete', {
-                executionId, jobId: null, promptLength: formattedPrompt.length,
-            });
-            await this.prisma.agentExecution.update({
-                where: { id: executionId },
-                data: { formattedPrompt },
-            });
-            // Step 2: Send to OpenClaw with the correct agent
-            await this.updateStatus(executionId, 'EXECUTING', { startedAt: new Date() });
-            this.emitAgentEvent(tenantId, 'agent:status-change', {
-                executionId, jobId: null, noteId: note.id, agentType, status: 'EXECUTING',
-                label: `${agentLabel}: Agent istražuje...`,
-            });
-            heartbeat = this.startHeartbeat(executionId, null, agentType, tenantId, Date.now());
-            // Use unique session-id for parallel execution safety
-            const workSessionId = `work-${executionId}-${openClawAgentId}`;
-            const result = await this.openClawClient.executeAgent(formattedPrompt, {
-                agentId: openClawAgentId,
-                sessionId: workSessionId,
-                onText: (text) => {
-                    this.emitAgentEvent(tenantId, 'agent:text-chunk', {
-                        executionId, jobId: null, text,
-                    });
-                },
-                onTool: (tool, status, query) => {
-                    this.emitAgentEvent(tenantId, 'agent:tool-event', {
-                        executionId, jobId: null, tool, status, query,
-                    });
-                },
-                onStatus: (phase) => {
-                    this.emitAgentEvent(tenantId, 'agent:status-change', {
-                        executionId, jobId: null, noteId: note.id, agentType, status: 'EXECUTING',
-                        label: `${agentLabel}: ${phase === 'running' ? 'Agent istražuje...' : phase}`,
-                    });
-                },
-            });
-            clearInterval(heartbeat);
-            heartbeat = null;
-            if (!result.success) {
-                const errorMsg = result.error ?? 'Agent execution failed';
-                await this.updateStatus(executionId, 'FAILED', {
-                    error: errorMsg,
-                    completedAt: new Date(),
-                    durationMs: result.durationMs,
-                });
-                this.emitAgentEvent(tenantId, 'agent:status-change', {
-                    executionId, jobId: null, noteId: note.id, agentType, status: 'FAILED',
-                    label: `${agentLabel}: Greška`,
-                });
-                this.emitAgentEvent(tenantId, 'agent:error', {
-                    executionId, jobId: null, agentType, error: errorMsg,
-                });
-                return;
-            }
-            // Step 3: Store results in Note.agentEnrichments JSON (atomic merge)
-            await this.mergeEnrichment(note.id, agentType, {
-                executionId,
-                status: types_1.AgentExecutionStatus.COMPLETED,
-                result: result.output,
-                completedAt: new Date().toISOString(),
-                error: null,
-            });
-            // Step 3b: Persist agent output as reviewable child note (Sprint 2 Epic 2.3)
-            const resultNoteId = await this.createResultNote(result.output, agentLabel, note, userId, tenantId, executionId);
-            // Step 4: Calculate cost and adjust budget
-            const actualCost = this.estimateActualCost(result.usage);
-            const costDifference = actualCost - reservedCostEur;
-            if (Math.abs(costDifference) > 0.0001) {
-                await this.budgetService.recordSpend(tenantId, costDifference);
-            }
-            // Step 5: Mark completed + link result note (guard: don't overwrite if manually stopped)
-            const currentExec = await this.prisma.agentExecution.findUnique({ where: { id: executionId }, select: { status: true } });
-            if (currentExec?.status !== 'FAILED') {
-                await this.prisma.agentExecution.update({
-                    where: { id: executionId },
-                    data: {
-                        status: 'COMPLETED',
-                        agentOutput: result.output,
-                        actualCostEur: actualCost,
-                        completedAt: new Date(),
-                        durationMs: result.durationMs,
-                        resultNoteId,
-                    },
-                });
-                this.emitAgentEvent(tenantId, 'agent:status-change', {
-                    executionId, jobId: null, noteId: note.id, agentType, status: 'COMPLETED',
-                    label: `${agentLabel}: Završeno`,
-                });
-            }
-            this.emitAgentEvent(tenantId, 'agent:result', {
-                executionId, jobId: null, agentType,
-                output: result.output, durationMs: result.durationMs,
-            });
-            this.logger.log({
-                message: 'Agent execution completed',
-                executionId,
-                agentType,
-                durationMs: result.durationMs,
-                actualCostEur: actualCost,
-            });
-            // Stop concept activity for graph visualization
-            if (note.conceptId) {
-                this.emitAgentEvent(tenantId, 'agent:concept-activity', {
-                    agentType, conceptId: note.conceptId, status: 'stopped',
-                });
-            }
-        }
-        catch (err) {
-            if (heartbeat)
-                clearInterval(heartbeat);
-            // Stop concept activity on failure too
-            if (note.conceptId) {
-                this.emitAgentEvent(tenantId, 'agent:concept-activity', {
-                    agentType, conceptId: note.conceptId, status: 'stopped',
-                });
-            }
-            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-            this.logger.error({
-                message: 'Agent pipeline error',
-                executionId,
-                agentType,
-                error: errorMessage,
-            });
-            this.emitAgentEvent(tenantId, 'agent:status-change', {
-                executionId, jobId: null, noteId: note.id, agentType, status: 'FAILED',
-                label: `${agentLabel}: Greška`,
-            });
-            this.emitAgentEvent(tenantId, 'agent:error', {
-                executionId, jobId: null, agentType, error: errorMessage,
-            });
-            // Store error in enrichments too (atomic merge — safe under concurrency)
-            try {
-                await this.mergeEnrichment(note.id, agentType, {
-                    executionId,
-                    status: types_1.AgentExecutionStatus.FAILED,
-                    result: null,
-                    completedAt: new Date().toISOString(),
-                    error: errorMessage,
-                });
-            }
-            catch {
-                /* best-effort */
-            }
-            await this.updateStatus(executionId, 'FAILED', {
-                error: errorMessage,
-                completedAt: new Date(),
-            });
-        }
-    }
-    async updateStatus(executionId, status, extra) {
-        await this.prisma.agentExecution.update({
-            where: { id: executionId },
-            data: { status, ...extra },
-        });
-    }
-    /**
-     * Atomically merges an enrichment entry into Note.agentEnrichments JSON
-     * using PostgreSQL jsonb || operator. Prevents race conditions when
-     * multiple agents write to the same note concurrently.
-     *
-     * NOTE: Uses raw SQL intentionally to get atomic JSONB merge semantics.
-     * This bypasses Prisma middleware (logging, hooks, @updatedAt).
-     * We manually set updated_at to compensate.
-     */
-    async mergeEnrichment(noteId, agentType, entry) {
-        const patch = JSON.stringify({ [agentType]: entry });
-        await this.prisma.$executeRaw `
-      UPDATE notes
-      SET agent_enrichments = COALESCE(agent_enrichments, '{}'::jsonb) || ${patch}::jsonb,
-          updated_at = NOW()
-      WHERE id = ${noteId}
-    `;
-    }
-    estimateActualCost(usage) {
-        if (!usage?.total)
-            return this.budgetService.getEstimatedCost();
-        const inputCost = ((usage.input ?? 0) / 1_000_000) * 0.27;
-        const outputCost = ((usage.output ?? 0) / 1_000_000) * 1.1;
-        const fetchCost = 0.03;
-        return Math.round((inputCost + outputCost + fetchCost) * 10000) / 10000;
-    }
-    /** Creates a child note for an agent/job result, returning the new note ID or null on failure. */
-    async createResultNote(output, agentLabel, note, userId, tenantId, executionId, jobId) {
-        if (!output)
-            return null;
-        try {
-            const existingSteps = await this.prisma.note.count({
-                where: { parentNoteId: note.id, tenantId },
-            });
-            const childNote = await this.notesService.createNote({
-                title: `${agentLabel}: ${note.title}`,
-                content: output,
-                source: prisma_1.NoteSource.CONVERSATION,
-                noteType: prisma_1.NoteType.AGENT_RESEARCH,
-                status: prisma_1.NoteStatus.READY_FOR_REVIEW,
-                parentNoteId: note.id,
-                workflowStepNumber: existingSteps + 1,
-                conceptId: note.conceptId ?? undefined,
-                conversationId: note.conversationId ?? undefined,
-                userId,
-                tenantId,
-            });
-            this.logger.debug({
-                message: 'Agent result persisted as child note',
-                executionId,
-                jobId,
-                resultNoteId: childNote.id,
-                parentNoteId: note.id,
-            });
-            return childNote.id;
-        }
-        catch (noteErr) {
-            this.logger.warn({
-                message: 'Failed to create child note for agent result',
-                executionId,
-                jobId,
-                error: noteErr instanceof Error ? noteErr.message : 'Unknown',
-            });
-            return null;
-        }
-    }
-    // --- Agent Job Pipeline ---
-    async executeJob(jobId, userId, tenantId) {
-        // Load and validate job
-        const job = await this.prisma.agentJob.findFirst({
-            where: { id: jobId, tenantId },
-        });
-        if (!job) {
-            throw new common_1.NotFoundException(`Job ${jobId} not found`);
-        }
-        if (job.status !== 'PLANNED') {
-            throw new common_1.BadRequestException(`Job is already ${job.status.toLowerCase()}`);
-        }
-        // Check dependencies are in terminal state (COMPLETED or FAILED)
-        // Block only on actively running deps — FAILED deps are allowed (context will exclude them)
-        if (job.dependsOn.length > 0) {
-            const depJobs = await this.prisma.agentJob.findMany({
-                where: { id: { in: job.dependsOn } },
-            });
-            const nonTerminalDeps = depJobs.filter((d) => !['COMPLETED', 'FAILED'].includes(d.status));
-            if (nonTerminalDeps.length > 0) {
-                throw new common_1.BadRequestException('Dependency jobs still in progress');
-            }
-        }
-        // Load parent note
-        const note = await this.prisma.note.findFirst({
-            where: { id: job.noteId, tenantId },
-        });
-        if (!note) {
-            throw new common_1.NotFoundException(`Note ${job.noteId} not found`);
-        }
-        // Validate agent type, config, budget
-        const agentType = job.agentType;
-        const agentDef = this.registry.getAgent(agentType);
-        if (!this.openClawClient.isConfigured()) {
-            throw new common_1.BadRequestException('Agent execution is not configured');
-        }
-        const canSpend = await this.budgetService.canSpend(tenantId);
-        if (!canSpend) {
-            throw new common_1.ForbiddenException('Daily budget exceeded');
-        }
-        // Check concurrency
-        const activeCount = await this.prisma.agentExecution.count({
-            where: {
-                tenantId,
-                status: { in: ['PENDING', 'FORMATTING', 'EXECUTING'] },
-            },
-        });
-        if (activeCount >= this.MAX_CONCURRENT_PER_TENANT) {
-            throw new common_1.BadRequestException(`Maximum ${this.MAX_CONCURRENT_PER_TENANT} concurrent agent executions`);
-        }
-        // Create execution record + reserve budget
-        const executionId = `agx_${(0, cuid2_1.createId)()}`;
-        const estimatedCost = agentDef.estimatedCostEur;
-        await this.prisma.agentExecution.create({
-            data: {
-                id: executionId,
-                tenantId,
-                userId,
-                noteId: job.noteId,
-                status: 'PENDING',
-                agentType,
-                estimatedCostEur: estimatedCost,
-            },
-        });
-        await this.budgetService.recordSpend(tenantId, estimatedCost);
-        // Update job: RUNNING + link execution
-        await this.prisma.agentJob.update({
-            where: { id: jobId },
-            data: { status: 'RUNNING', executionId },
-        });
-        this.logger.log({
-            message: 'Job execution triggered',
-            jobId,
-            executionId,
-            agentType,
-            noteId: job.noteId,
-        });
-        // Gather dependency context
-        let dependencyContext = '';
-        if (job.dependsOn.length > 0) {
-            const depJobs = await this.prisma.agentJob.findMany({
-                where: { id: { in: job.dependsOn }, status: 'COMPLETED' },
-                orderBy: { order: 'asc' },
-            });
-            for (const dep of depJobs) {
-                if (dep.agentOutput) {
-                    const depLabel = this.registry.getAgent(dep.agentType).label;
-                    dependencyContext += `\n--- Previous Result: ${depLabel} ---\n${dep.agentOutput}\n--- End ---\n`;
-                }
-            }
-            this.logger.log({
-                message: 'Dependency context gathered',
-                jobId,
-                dependencyCount: depJobs.length,
-                contextLength: dependencyContext.length,
-            });
-        }
-        // Fire-and-forget
-        this.executeJobPipeline(executionId, jobId, agentType, note, job.instruction, dependencyContext, userId, tenantId, estimatedCost).catch((err) => {
-            this.logger.error({
-                message: 'Job pipeline failed unexpectedly',
-                jobId,
-                executionId,
-                error: err.message,
-            });
-        });
-        return { jobId, executionId };
-    }
-    /**
-     * Retry a FAILED agent job: reset to PLANNED, then re-execute.
-     */
-    async retryJob(jobId, userId, tenantId) {
-        const job = await this.prisma.agentJob.findFirst({
-            where: { id: jobId, tenantId },
-        });
-        if (!job) {
-            throw new common_1.NotFoundException(`Job ${jobId} not found`);
-        }
-        // Allow re-run from any status (COMPLETED, FAILED, PLANNED)
-        // Reset to PLANNED so executeJob() can pick it up fresh
-        await this.prisma.agentJob.update({
-            where: { id: jobId },
-            data: { status: 'PLANNED', executionId: null, error: null, agentOutput: null },
-        });
-        this.logger.log({ message: 'Re-running job', jobId, status: job.status, tenantId });
-        return this.executeJob(jobId, userId, tenantId);
-    }
-    /**
-     * Force-stop all running executions and jobs for a tenant.
-     */
-    async stopAllExecutions(tenantId) {
-        const execs = await this.prisma.agentExecution.updateMany({
-            where: { tenantId, status: { in: ['EXECUTING', 'FORMATTING', 'PENDING'] } },
-            data: { status: 'FAILED', error: 'Manually stopped by user', completedAt: new Date() },
-        });
-        const jobs = await this.prisma.agentJob.updateMany({
-            where: { tenantId, status: 'RUNNING' },
-            data: { status: 'FAILED', error: 'Manually stopped by user' },
-        });
-        this.logger.log({
-            message: 'All executions stopped by user',
-            tenantId,
-            stoppedExecutions: execs.count,
-            stoppedJobs: jobs.count,
-        });
-        return { stoppedExecutions: execs.count, stoppedJobs: jobs.count };
-    }
-    /**
-     * Retry all PLANNED and FAILED jobs in waves of 5, respecting dependencies.
-     * FAILED jobs are first reset to PLANNED. Then processes waves until all done.
-     */
-    async retryAllPendingJobs(userId, tenantId) {
-        // Reset all FAILED jobs to PLANNED
-        const failedJobs = await this.prisma.agentJob.updateMany({
-            where: { tenantId, status: 'FAILED' },
-            data: { status: 'PLANNED', executionId: null, error: null },
-        });
-        const totalPlanned = await this.prisma.agentJob.count({
-            where: { tenantId, status: 'PLANNED' },
-        });
-        if (totalPlanned === 0) {
-            return { totalJobs: 0, message: 'No pending jobs to retry' };
-        }
-        this.logger.log({
-            message: 'Retry all pending: starting wave execution',
-            tenantId,
-            resetFailed: failedJobs.count,
-            totalPlanned,
-        });
-        // Fire-and-forget: process waves in background
-        this.processJobWaves(userId, tenantId).catch((err) => {
-            this.logger.error({
-                message: 'Retry all pending: wave processing failed',
-                error: err instanceof Error ? err.message : 'Unknown',
-            });
-        });
-        return { totalJobs: totalPlanned, message: `Processing ${totalPlanned} jobs in waves of 5` };
-    }
-    async processJobWaves(userId, tenantId) {
-        const WAVE_SIZE = 5;
-        const MAX_WAIT_PER_JOB_MS = 15 * 60_000; // 15 min max per job
-        const POLL_INTERVAL_MS = 5_000;
-        let processedTotal = 0;
-        while (true) {
-            // Find PLANNED jobs whose dependencies are all terminal
-            const allPlanned = await this.prisma.agentJob.findMany({
-                where: { tenantId, status: 'PLANNED' },
-                select: { id: true, agentType: true, dependsOn: true, noteId: true },
-            });
-            if (allPlanned.length === 0) {
-                this.logger.log({ message: `Retry all: complete. Processed ${processedTotal} jobs.`, tenantId });
-                break;
-            }
-            // Filter to ready jobs (all deps COMPLETED or FAILED)
-            const ready = [];
-            for (const job of allPlanned) {
-                if (job.dependsOn.length === 0) {
-                    ready.push(job);
-                    continue;
-                }
-                const deps = await this.prisma.agentJob.findMany({
-                    where: { id: { in: job.dependsOn } },
-                    select: { status: true },
-                });
-                if (deps.every((d) => ['COMPLETED', 'FAILED'].includes(d.status))) {
-                    ready.push(job);
-                }
-            }
-            if (ready.length === 0) {
-                this.logger.warn({
-                    message: `Retry all: ${allPlanned.length} PLANNED but none ready (unmet deps). Stopping.`,
-                    tenantId,
-                });
-                break;
-            }
-            // Take wave of WAVE_SIZE
-            const wave = ready.slice(0, WAVE_SIZE);
-            this.logger.log({
-                message: `Retry all: wave of ${wave.length} jobs (${allPlanned.length} remaining)`,
-                tenantId,
-                jobTypes: wave.map((j) => j.agentType),
-            });
-            // Execute wave in parallel
-            const wavePromises = wave.map(async (job) => {
-                try {
-                    await this.executeJob(job.id, userId, tenantId);
-                    // Poll for completion
-                    const start = Date.now();
-                    while (Date.now() - start < MAX_WAIT_PER_JOB_MS) {
-                        const current = await this.prisma.agentJob.findFirst({
-                            where: { id: job.id },
-                            select: { status: true },
-                        });
-                        if (!current || ['COMPLETED', 'FAILED'].includes(current.status))
-                            break;
-                        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-                    }
-                }
-                catch (err) {
-                    this.logger.warn({
-                        message: `Retry all: job ${job.id} failed to start`,
-                        error: err instanceof Error ? err.message : 'Unknown',
-                    });
-                }
-            });
-            await Promise.all(wavePromises);
-            processedTotal += wave.length;
-            // Send knowledge updates to domain masters + main for completed jobs in this wave
-            await this.sendKnowledgeUpdatesForWave(wave, tenantId);
-            // Short pause between waves
-            await new Promise((r) => setTimeout(r, 2_000));
-        }
-    }
-    /**
-     * After a wave of jobs completes, send knowledge updates to domain master agents
-     * and the main business brain agent. Groups by noteId to send one update per concept.
-     */
-    async sendKnowledgeUpdatesForWave(jobs, tenantId) {
-        // Group completed jobs by noteId
-        const noteIds = [...new Set(jobs.map((j) => j.noteId))];
-        for (const noteId of noteIds) {
-            try {
-                const note = await this.prisma.note.findUnique({
-                    where: { id: noteId },
-                    select: { userReport: true, title: true },
-                });
-                if (!note?.userReport || note.userReport.length < 200)
-                    continue;
-                const tenant = await this.prisma.tenant.findUnique({
-                    where: { id: tenantId },
-                    select: { name: true },
-                });
-                const completedJobs = await this.prisma.agentJob.findMany({
-                    where: { noteId, tenantId, status: 'COMPLETED' },
-                    select: { agentType: true },
-                });
-                const agentTypes = [...new Set(completedJobs.map((j) => j.agentType))];
-                const companyName = tenant?.name || 'Unknown Company';
-                const summary = note.userReport.substring(0, 5000);
-                // Stagger to avoid lock contention
-                await new Promise((r) => setTimeout(r, Math.random() * 5_000));
-                // Update domain masters
-                for (const agentTypeStr of agentTypes) {
-                    try {
-                        const agentId = agentTypeStr.replace(/_/g, '-');
-                        await this.openClawClient.executeAgent(`KNOWLEDGE UPDATE za ${companyName} - Koncept: ${note.title}. Zapamti ove nalaze:\n\n${summary}`, { agentId, timeoutSeconds: 180 });
-                    }
-                    catch { /* non-blocking */ }
-                }
-                // Update main
-                try {
-                    await this.openClawClient.executeAgent(`KNOWLEDGE UPDATE za ${companyName}: Koncept "${note.title}" zavrsen. Zapamti i organizuj:\n${summary.substring(0, 3000)}`, { agentId: 'main', timeoutSeconds: 120 });
-                }
-                catch { /* non-blocking */ }
-                this.logger.log({
-                    message: 'Knowledge updates sent for concept',
-                    noteId,
-                    conceptName: note.title,
-                    agentTypes,
-                });
-            }
-            catch (err) {
-                this.logger.warn({
-                    message: 'Knowledge update failed (non-blocking)',
-                    noteId,
-                    error: err instanceof Error ? err.message : 'Unknown',
-                });
-            }
-        }
-    }
-    async executeJobPipeline(executionId, jobId, agentType, note, jobInstruction, dependencyContext, userId, tenantId, reservedCostEur) {
-        const openClawAgentId = this.registry.getOpenClawAgentId(agentType);
-        const agentLabel = this.registry.getAgent(agentType).label;
-        let heartbeat = null;
-        let chunkIndex = 0;
-        try {
-            // Emit concept activity for graph visualization
-            if (note.conceptId) {
-                this.emitAgentEvent(tenantId, 'agent:concept-activity', {
-                    agentType, conceptId: note.conceptId, status: 'started',
-                });
-            }
-            // Step 1: Build enriched instruction with dependency context
-            await this.updateStatus(executionId, 'FORMATTING');
-            this.emitAgentEvent(tenantId, 'agent:status-change', {
-                executionId, jobId, noteId: note.id, agentType, status: 'FORMATTING',
-                label: `${agentLabel}: Priprema instrukcija...`,
-            });
-            let enrichedInstruction = dependencyContext
-                ? `${jobInstruction}\n\nContext from previous agent results:\n${dependencyContext}`
-                : jobInstruction;
-            // For web_search: tell it which domain agents follow so it prepares data for them
-            if (agentType === types_1.AgentType.WEB_SEARCH) {
-                const siblingJobs = await this.prisma.agentJob.findMany({
-                    where: { noteId: note.id, tenantId, agentType: { not: types_1.AgentType.WEB_SEARCH } },
-                    select: { agentType: true },
-                    orderBy: { order: 'asc' },
-                });
-                if (siblingJobs.length > 0) {
-                    const agentNames = siblingJobs.map((j) => this.registry.getAgent(j.agentType).label).join(', ');
-                    enrichedInstruction += `\n\nSLEDEĆI AGENTI KOJI ČEKAJU TVOJE REZULTATE: ${agentNames}. Pripremi podatke za SVE njih — strukturiraj output sa odgovarajućim domenskim sekcijama.`;
-                }
-            }
-            // Retrieve pre-check context from main agent (stored during headless execution)
-            const preCheckContext = note.agentEnrichments?.mainPreCheck ?? null;
-            const formattedPrompt = this.agentPrompt.formatPrompt({
-                agentType,
-                taskTitle: note.title,
-                taskContent: enrichedInstruction,
-                userReport: note.userReport,
-                expectedOutcome: note.expectedOutcome,
-                preCheckContext,
-                tenantId,
-                userId,
-                onChunk: (chunk) => {
-                    this.emitAgentEvent(tenantId, 'agent:formatting-chunk', {
-                        executionId, jobId, chunk, index: chunkIndex++,
-                    });
-                },
-            });
-            this.emitAgentEvent(tenantId, 'agent:formatting-complete', {
-                executionId, jobId, promptLength: formattedPrompt.length,
-            });
-            await this.prisma.agentExecution.update({
-                where: { id: executionId },
-                data: { formattedPrompt },
-            });
-            // Step 2: Send to OpenClaw
-            await this.updateStatus(executionId, 'EXECUTING', { startedAt: new Date() });
-            this.emitAgentEvent(tenantId, 'agent:status-change', {
-                executionId, jobId, noteId: note.id, agentType, status: 'EXECUTING',
-                label: `${agentLabel}: Agent istražuje...`,
-            });
-            heartbeat = this.startHeartbeat(executionId, jobId, agentType, tenantId, Date.now());
-            // Use unique session-id per job for parallel execution (no file lock contention)
-            const workSessionId = `work-${jobId}-${openClawAgentId}`;
-            const result = await this.openClawClient.executeAgent(formattedPrompt, {
-                agentId: openClawAgentId,
-                sessionId: workSessionId,
-                onText: (text) => {
-                    this.emitAgentEvent(tenantId, 'agent:text-chunk', {
-                        executionId, jobId, text,
-                    });
-                },
-                onTool: (tool, status, query) => {
-                    this.emitAgentEvent(tenantId, 'agent:tool-event', {
-                        executionId, jobId, tool, status, query,
-                    });
-                },
-                onStatus: (phase) => {
-                    this.emitAgentEvent(tenantId, 'agent:status-change', {
-                        executionId, jobId, noteId: note.id, agentType, status: 'EXECUTING',
-                        label: `${agentLabel}: ${phase === 'running' ? 'Agent istražuje...' : phase}`,
-                    });
-                },
-            });
-            clearInterval(heartbeat);
-            heartbeat = null;
-            if (!result.success) {
-                const errorMsg = result.error ?? 'Agent execution failed';
-                await this.prisma.agentJob.update({
-                    where: { id: jobId },
-                    data: { status: 'FAILED', error: errorMsg },
-                });
-                await this.updateStatus(executionId, 'FAILED', {
-                    error: errorMsg,
-                    completedAt: new Date(),
-                    durationMs: result.durationMs,
-                });
-                this.emitAgentEvent(tenantId, 'agent:status-change', {
-                    executionId, jobId, noteId: note.id, agentType, status: 'FAILED',
-                    label: `${agentLabel}: Greška`,
-                });
-                this.emitAgentEvent(tenantId, 'agent:error', {
-                    executionId, jobId, agentType, error: errorMsg,
-                });
-                return;
-            }
-            // Step 3: Store result in both AgentJob and Note enrichments
-            await this.prisma.agentJob.update({
-                where: { id: jobId },
-                data: { status: 'COMPLETED', agentOutput: result.output },
-            });
-            await this.mergeEnrichment(note.id, agentType, {
-                executionId,
-                status: types_1.AgentExecutionStatus.COMPLETED,
-                result: result.output,
-                completedAt: new Date().toISOString(),
-                error: null,
-            });
-            // Step 3b: Persist job output as reviewable child note (Sprint 2 Epic 2.3)
-            const jobResultNoteId = await this.createResultNote(result.output, agentLabel, note, userId, tenantId, executionId, jobId);
-            // Step 4: Cost adjustment
-            const actualCost = this.estimateActualCost(result.usage);
-            const costDifference = actualCost - reservedCostEur;
-            if (Math.abs(costDifference) > 0.0001) {
-                await this.budgetService.recordSpend(tenantId, costDifference);
-            }
-            // Step 5: Mark execution completed (guard: don't overwrite if manually stopped)
-            const currentExec2 = await this.prisma.agentExecution.findUnique({ where: { id: executionId }, select: { status: true } });
-            if (currentExec2?.status !== 'FAILED') {
-                await this.prisma.agentExecution.update({
-                    where: { id: executionId },
-                    data: {
-                        status: 'COMPLETED',
-                        agentOutput: result.output,
-                        actualCostEur: actualCost,
-                        completedAt: new Date(),
-                        durationMs: result.durationMs,
-                        resultNoteId: jobResultNoteId,
-                    },
-                });
-                this.emitAgentEvent(tenantId, 'agent:status-change', {
-                    executionId, jobId, noteId: note.id, agentType, status: 'COMPLETED',
-                    label: `${agentLabel}: Završeno`,
-                });
-            }
-            this.emitAgentEvent(tenantId, 'agent:result', {
-                executionId, jobId, agentType,
-                output: result.output, durationMs: result.durationMs,
-            });
-            this.logger.log({
-                message: 'Job execution completed',
-                jobId,
-                executionId,
-                agentType,
-                durationMs: result.durationMs,
-                actualCostEur: actualCost,
-            });
-            if (note.conceptId) {
-                this.emitAgentEvent(tenantId, 'agent:concept-activity', {
-                    agentType, conceptId: note.conceptId, status: 'stopped',
-                });
-            }
-        }
-        catch (err) {
-            if (heartbeat)
-                clearInterval(heartbeat);
-            if (note.conceptId) {
-                this.emitAgentEvent(tenantId, 'agent:concept-activity', {
-                    agentType, conceptId: note.conceptId, status: 'stopped',
-                });
-            }
-            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-            this.logger.error({
-                message: 'Job pipeline error',
-                jobId,
-                executionId,
-                agentType,
-                error: errorMessage,
-            });
-            this.emitAgentEvent(tenantId, 'agent:status-change', {
-                executionId, jobId, noteId: note.id, agentType, status: 'FAILED',
-                label: `${agentLabel}: Greška`,
-            });
-            this.emitAgentEvent(tenantId, 'agent:error', {
-                executionId, jobId, agentType, error: errorMessage,
-            });
-            try {
-                await this.prisma.agentJob.update({
-                    where: { id: jobId },
-                    data: { status: 'FAILED', error: errorMessage },
-                });
-                await this.mergeEnrichment(note.id, agentType, {
-                    executionId,
-                    status: types_1.AgentExecutionStatus.FAILED,
-                    result: null,
-                    completedAt: new Date().toISOString(),
-                    error: errorMessage,
-                });
-            }
-            catch {
-                /* best-effort */
-            }
-            await this.updateStatus(executionId, 'FAILED', {
-                error: errorMessage,
-                completedAt: new Date(),
-            });
-        }
-    }
-    async getExecution(executionId, tenantId) {
-        const exec = await this.prisma.agentExecution.findFirst({
-            where: { id: executionId, tenantId },
-        });
-        if (!exec)
-            return null;
-        return this.mapToResponse(exec);
-    }
-    async getExecutionsByNote(noteId, tenantId) {
-        const executions = await this.prisma.agentExecution.findMany({
-            where: { noteId, tenantId },
-            orderBy: { createdAt: 'desc' },
-        });
-        return executions.map((e) => this.mapToResponse(e));
-    }
-    mapToResponse(exec) {
-        let status = exec.status;
-        if (!this.VALID_STATUSES.has(status)) {
-            this.logger.warn({
-                message: 'Unknown execution status in DB',
-                executionId: exec.id,
-                status: exec.status,
-            });
-            status = types_1.AgentExecutionStatus.FAILED;
-        }
-        return {
-            id: exec.id,
-            noteId: exec.noteId,
-            resultNoteId: exec.resultNoteId,
-            status,
-            agentType: exec.agentType,
-            estimatedCostEur: exec.estimatedCostEur ? Number(exec.estimatedCostEur) : null,
-            actualCostEur: exec.actualCostEur ? Number(exec.actualCostEur) : null,
-            error: exec.error,
-            durationMs: exec.durationMs,
-            createdAt: exec.createdAt.toISOString(),
-            completedAt: exec.completedAt?.toISOString() ?? null,
-        };
-    }
-};
-exports.AgentExecutionService = AgentExecutionService;
-exports.AgentExecutionService = AgentExecutionService = AgentExecutionService_1 = tslib_1.__decorate([
-    (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof openclaw_client_service_1.OpenClawClientService !== "undefined" && openclaw_client_service_1.OpenClawClientService) === "function" ? _b : Object, typeof (_c = typeof agent_prompt_service_1.AgentPromptService !== "undefined" && agent_prompt_service_1.AgentPromptService) === "function" ? _c : Object, typeof (_d = typeof agent_registry_service_1.AgentRegistryService !== "undefined" && agent_registry_service_1.AgentRegistryService) === "function" ? _d : Object, typeof (_e = typeof budget_service_1.BudgetService !== "undefined" && budget_service_1.BudgetService) === "function" ? _e : Object, typeof (_f = typeof agent_execution_event_bus_service_1.AgentExecutionEventBus !== "undefined" && agent_execution_event_bus_service_1.AgentExecutionEventBus) === "function" ? _f : Object, typeof (_g = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _g : Object])
-], AgentExecutionService);
-
-
-/***/ }),
-/* 154 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var OpenClawClientService_1;
-var _a;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.OpenClawClientService = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const config_1 = __webpack_require__(5);
-const undici_1 = __webpack_require__(155);
-let OpenClawClientService = OpenClawClientService_1 = class OpenClawClientService {
-    constructor(configService) {
-        this.configService = configService;
-        this.logger = new common_1.Logger(OpenClawClientService_1.name);
-        this.relayUrl = this.configService.get('OPENCLAW_RELAY_URL') ?? '';
-        this.authToken = this.configService.get('OPENCLAW_AUTH_TOKEN') ?? '';
-        this.timeoutSeconds = parseInt(this.configService.get('OPENCLAW_TIMEOUT_SECONDS') ?? '600', 10);
-        // Derive streaming URL: /execute → /stream
-        this.supportsStreaming = true;
-        // undici Agent with extended timeouts
-        const timeoutMs = (this.timeoutSeconds + 60) * 1000;
-        this.dispatcher = new undici_1.Agent({
-            headersTimeout: timeoutMs,
-            bodyTimeout: timeoutMs,
-            connectTimeout: 30_000,
-            keepAliveTimeout: timeoutMs,
-        });
-    }
-    isConfigured() {
-        return !!this.authToken && !!this.relayUrl;
-    }
-    getStreamUrl() {
-        // Replace /execute with /stream in the relay URL
-        return this.relayUrl.replace(/\/execute\/?$/, '/stream');
-    }
-    /**
-     * Execute agent with real-time SSE streaming.
-     * Falls back to blocking HTTP POST if streaming fails.
-     */
-    async executeAgent(message, options) {
-        const agentId = options?.agentId ?? 'main';
-        const sessionId = options?.sessionId;
-        const timeout = options?.timeoutSeconds ?? this.timeoutSeconds;
-        const hasCallbacks = !!(options?.onText || options?.onTool || options?.onStatus);
-        // Try SSE streaming first when callbacks are provided
-        if (hasCallbacks && this.supportsStreaming) {
-            try {
-                return await this.executeAgentStreaming(message, agentId, timeout, {
-                    onText: options?.onText,
-                    onTool: options?.onTool,
-                    onStatus: options?.onStatus,
-                }, sessionId);
-            }
-            catch (err) {
-                const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-                this.logger.warn({
-                    message: 'SSE streaming failed, falling back to blocking request',
-                    error: errorMsg,
-                    agentId,
-                });
-                // Fall through to blocking request
-            }
-        }
-        return this.executeAgentBlocking(message, agentId, timeout, sessionId);
-    }
-    /**
-     * SSE streaming execution — connects to /stream endpoint,
-     * parses Server-Sent Events, and invokes callbacks in real-time.
-     */
-    async executeAgentStreaming(message, agentId, timeout, callbacks, sessionId) {
-        const streamUrl = this.getStreamUrl();
-        this.logger.log({
-            message: 'SSE streaming to OpenClaw relay',
-            url: streamUrl,
-            agentId,
-            sessionId: sessionId || 'default',
-            msgLength: message.length,
-        });
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), (timeout + 60) * 1000);
-        try {
-            const requestBody = { message, agentId, timeoutSeconds: timeout };
-            if (sessionId)
-                requestBody.sessionId = sessionId;
-            const response = await (0, undici_1.fetch)(streamUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.authToken}`,
-                    'Accept': 'text/event-stream',
-                },
-                body: JSON.stringify(requestBody),
-                signal: controller.signal,
-                dispatcher: this.dispatcher,
-            });
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            const contentType = response.headers.get('content-type') || '';
-            if (!contentType.includes('text/event-stream')) {
-                // Server doesn't support streaming — parse as JSON and return
-                const text = await response.text();
-                if (!text) {
-                    throw new Error('Empty response body from stream endpoint');
-                }
-                const data = JSON.parse(text);
-                return data;
-            }
-            // Parse SSE stream — cast needed: undici Response uses stream/web types
-            return await this.parseSSEStream(response, callbacks);
-        }
-        finally {
-            clearTimeout(timer);
-        }
-    }
-    /**
-     * Parse SSE event stream from the relay and invoke callbacks.
-     * Returns the final result when the stream completes.
-     */
-    async parseSSEStream(response, callbacks) {
-        if (!response.body) {
-            return { success: false, output: '', durationMs: 0, error: 'Empty response body' };
-        }
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let finalResult = null;
-        const safeCallback = (fn) => {
-            try {
-                fn();
-            }
-            catch (err) {
-                this.logger.warn({
-                    message: 'SSE callback threw',
-                    error: err instanceof Error ? err.message : 'Unknown',
-                });
-            }
-        };
-        try {
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done)
-                    break;
-                buffer += decoder.decode(value, { stream: true });
-                // Process complete SSE messages (delimited by double newlines)
-                let boundary;
-                while ((boundary = buffer.indexOf('\n\n')) !== -1) {
-                    const rawMessage = buffer.substring(0, boundary);
-                    buffer = buffer.substring(boundary + 2);
-                    const event = this.parseSSEMessage(rawMessage);
-                    if (!event)
-                        continue;
-                    switch (event.type) {
-                        case 'stdout':
-                            safeCallback(() => callbacks.onText?.(event.data['text']));
-                            break;
-                        case 'tool':
-                            safeCallback(() => callbacks.onTool?.(event.data['tool'], event.data['status'], event.data['query']));
-                            break;
-                        case 'status':
-                            safeCallback(() => callbacks.onStatus?.(event.data['phase']));
-                            break;
-                        case 'result':
-                            finalResult = {
-                                success: event.data['success'],
-                                output: event.data['output'],
-                                durationMs: event.data['durationMs'],
-                                usage: event.data['usage'],
-                                runId: event.data['runId'],
-                                error: event.data['error'],
-                            };
-                            break;
-                        case 'error':
-                            if (!finalResult) {
-                                finalResult = {
-                                    success: false,
-                                    output: '',
-                                    durationMs: 0,
-                                    error: event.data['error'],
-                                };
-                            }
-                            break;
-                    }
-                }
-            }
-        }
-        finally {
-            reader.releaseLock();
-        }
-        if (!finalResult) {
-            return { success: false, output: '', durationMs: 0, error: 'No result received from stream' };
-        }
-        this.logger.log({
-            message: 'SSE streaming completed',
-            success: finalResult.success,
-            outputLength: finalResult.output.length,
-            durationMs: finalResult.durationMs,
-        });
-        return finalResult;
-    }
-    /**
-     * Parse a single SSE message block into an event.
-     * Format: "event: <type>\ndata: <json>"
-     */
-    parseSSEMessage(raw) {
-        let eventType = '';
-        let dataStr = '';
-        for (const line of raw.split('\n')) {
-            if (line.startsWith('event: ')) {
-                eventType = line.substring(7).trim();
-            }
-            else if (line.startsWith('data: ')) {
-                dataStr = line.substring(6);
-            }
-        }
-        if (!eventType || !dataStr)
-            return null;
-        try {
-            const data = JSON.parse(dataStr);
-            return { type: eventType, data };
-        }
-        catch {
-            return null;
-        }
-    }
-    /**
-     * Blocking HTTP POST execution (original approach, used as fallback).
-     */
-    async executeAgentBlocking(message, agentId, timeout, sessionId) {
-        this.logger.log({
-            message: 'Blocking request to OpenClaw relay',
-            agentId,
-            sessionId: sessionId || 'default',
-            msgLength: message.length,
-            timeoutSeconds: timeout,
-        });
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), (timeout + 60) * 1000);
-        const requestBody = { message, agentId, timeoutSeconds: timeout };
-        if (sessionId)
-            requestBody.sessionId = sessionId;
-        try {
-            const response = await (0, undici_1.fetch)(this.relayUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${this.authToken}`,
-                },
-                body: JSON.stringify(requestBody),
-                signal: controller.signal,
-                dispatcher: this.dispatcher,
-            });
-            const text = await response.text();
-            if (!text) {
-                this.logger.error({
-                    message: 'OpenClaw relay returned empty body',
-                    status: response.status,
-                    agentId,
-                });
-                return {
-                    success: false,
-                    output: '',
-                    durationMs: 0,
-                    error: `Empty response (HTTP ${response.status})`,
-                };
-            }
-            let data;
-            try {
-                data = JSON.parse(text);
-            }
-            catch {
-                this.logger.error({
-                    message: 'OpenClaw relay returned invalid JSON',
-                    status: response.status,
-                    bodyPreview: text.substring(0, 200),
-                });
-                return {
-                    success: false,
-                    output: '',
-                    durationMs: 0,
-                    error: `Invalid JSON response (HTTP ${response.status})`,
-                };
-            }
-            if (!response.ok) {
-                this.logger.error({
-                    message: 'OpenClaw relay error',
-                    status: response.status,
-                    error: data['error'],
-                });
-                return {
-                    success: false,
-                    output: '',
-                    durationMs: data['durationMs'] ?? 0,
-                    error: data['error'] ?? `HTTP ${response.status}`,
-                };
-            }
-            this.logger.log({
-                message: 'OpenClaw relay success',
-                durationMs: data['durationMs'],
-                outputLength: data['output']?.length ?? 0,
-                runId: data['runId'],
-            });
-            return data;
-        }
-        catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-            const cause = err instanceof Error && err.cause ? String(err.cause) : undefined;
-            this.logger.error({
-                message: 'OpenClaw relay call failed',
-                error: errorMessage,
-                cause,
-                agentId,
-                timeoutSeconds: timeout,
-            });
-            return {
-                success: false,
-                output: '',
-                durationMs: 0,
-                error: cause ? `${errorMessage}: ${cause}` : errorMessage,
-            };
-        }
-        finally {
-            clearTimeout(timer);
-        }
-    }
-};
-exports.OpenClawClientService = OpenClawClientService;
-exports.OpenClawClientService = OpenClawClientService = OpenClawClientService_1 = tslib_1.__decorate([
-    (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object])
-], OpenClawClientService);
-
-
-/***/ }),
-/* 155 */
-/***/ ((module) => {
-
-module.exports = require("undici");
-
-/***/ }),
-/* 156 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var AgentPromptService_1;
-var _a;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.AgentPromptService = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const agent_registry_service_1 = __webpack_require__(157);
-let AgentPromptService = AgentPromptService_1 = class AgentPromptService {
-    constructor(registry) {
-        this.registry = registry;
-        this.logger = new common_1.Logger(AgentPromptService_1.name);
-    }
-    /**
-     * Builds the final prompt for an OpenClaw agent by combining:
-     * 1. The job planner's instruction (already contextualized)
-     * 2. Task context (title, content, report excerpt)
-     * 3. Pre-check context from main agent (what's already known)
-     * 4. Grounding block (concept focus, format, anti-hallucination)
-     *
-     * NO LLM call — deterministic template assembly.
-     * The job planner's LLM call already produced a contextualized instruction.
-     * Adding another LLM call to "reformat" it was redundant.
-     */
-    formatPrompt(params) {
-        const { agentType, taskTitle, taskContent, userReport, expectedOutcome, preCheckContext } = params;
-        const agentDef = this.registry.getAgent(agentType);
-        // Build the prompt from components — no LLM call needed
-        const parts = [];
-        // 1. Task context
-        parts.push(`ZADATAK: ${taskTitle}`);
-        parts.push(`OPIS: ${taskContent}`);
-        if (expectedOutcome) {
-            parts.push(`OČEKIVANI REZULTAT: ${expectedOutcome}`);
-        }
-        // 2. What is already known (from main agent pre-check)
-        if (preCheckContext && preCheckContext.length > 50) {
-            parts.push(`\n--- VEĆ POZNATO (ne istraži ponovo) ---\n${preCheckContext}\n--- KRAJ VEĆ POZNATOG ---`);
-        }
-        // 3. Current report excerpt for context
-        if (userReport && userReport.length > 100) {
-            parts.push(`\n--- TRENUTNI IZVEŠTAJ (kontekst) ---\n${userReport.substring(0, 4000)}\n--- KRAJ IZVEŠTAJA ---`);
-        }
-        // 4. Grounding block — ALWAYS appended
-        parts.push(`
----
-KRITIČNO — UZEMLJENJE:
-- Radi ISKLJUČIVO na zadatku opisanom iznad. NE širi se na druge teme.
-- NIKADA ne izmišljaj podatke, izvore ili statistike. Ako ne možeš pronaći podatak, napiši "[POTREBNO ISTRAŽITI]".
-- Svaki nalaz MORA imati izvor (URL). Bez izvora = ne uključuj u rezultat.
-- NE ponavljaj generičke poslovne savete — samo SPECIFIČNE nalaze za ovu kompaniju i ovaj koncept.
-- Ako imaš prethodno iskustvo i memoriju o ovoj kompaniji — iskoristi to znanje. Nadogradi na postojeće nalaze.
-- Ako je ovo tvoj prvi zadatak — istraži temeljno od početka.
-
-FORMAT IZLAZA: Profesionalan Markdown (## zaglavlja, tabele, **bold** za ključne vrednosti, > za izvore sa URL-ovima). SVE na srpskom jeziku. NE objašnjavaj šta ćeš raditi — odmah piši rezultat.
----`);
-        const finalPrompt = parts.join('\n\n');
-        // Emit chunks for streaming feedback (simulate progress)
-        if (params.onChunk) {
-            params.onChunk(finalPrompt);
-        }
-        this.logger.log({
-            message: 'Prompt assembled for agent (no LLM call)',
-            agentType,
-            taskTitle,
-            hasPreCheck: !!preCheckContext,
-            instructionLength: finalPrompt.length,
-        });
-        return finalPrompt;
-    }
-};
-exports.AgentPromptService = AgentPromptService;
-exports.AgentPromptService = AgentPromptService = AgentPromptService_1 = tslib_1.__decorate([
-    (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof agent_registry_service_1.AgentRegistryService !== "undefined" && agent_registry_service_1.AgentRegistryService) === "function" ? _a : Object])
-], AgentPromptService);
-
-
-/***/ }),
-/* 157 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.AgentRegistryService = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const types_1 = __webpack_require__(86);
-let AgentRegistryService = class AgentRegistryService {
-    constructor() {
-        this.agents = new Map([
-            [
-                types_1.AgentType.WEB_SEARCH,
-                {
-                    type: types_1.AgentType.WEB_SEARCH,
-                    openClawAgentId: 'web-search',
-                    label: 'Online istraživanje',
-                    description: 'Pretražuje internet za relevantne informacije, trendove i izvore',
-                    icon: '🔍',
-                    estimatedCostEur: 0.5,
-                    systemPrompt: `You write a direct execution instruction for a web research agent. The agent has tools: web_search, web_fetch.
-
-SPEED IS CRITICAL — the agent must complete in under 60 seconds.
-
-Given the task report, business context, and what is ALREADY KNOWN, write an instruction that tells the agent:
-
-1. What is ALREADY KNOWN — do NOT research these topics again
-2. Make exactly 1-2 focused web searches (not more!) — write the EXACT search queries
-3. Extract ONLY the most important data points: key numbers, benchmarks, one competitor example
-4. Cite findings with source URL — NO source = DO NOT include
-5. NEVER fabricate data — if not found, state "[POTREBNO ISTRAŽITI]"
-6. Write ALL output in Serbian, clean markdown
-7. STAY FOCUSED — one concept, essential data only
-
-SPEED RULES:
-- Maximum 1-2 web_search calls — NO MORE
-- Do NOT use web_fetch unless absolutely necessary (only if web_search result needs deeper reading)
-- Do NOT use browser tool — too slow
-- Short, focused output: 500-1000 words maximum
-- If you already have useful data from the task report, USE IT — don't re-search
-
-Structure output with relevant domain headers:
-## KLJUČNI PODACI (najvažniji nalazi sa izvorima)
-## BENCHMARCI (industriski standardi, brojke)
-## PREPORUKE (kratke, konkretne akcije)
-
-QUALITY STANDARDS:
-- Every finding must cite its source
-- Prioritize depth over breadth — 3 solid findings beat 10 shallow ones
-- Connect findings to THIS specific business
-- NEVER fabricate data, sources, or statistics
-
-Write in English. Output ONLY the instruction text, under 300 words.`,
-                },
-            ],
-            [
-                types_1.AgentType.CONTENT,
-                {
-                    type: types_1.AgentType.CONTENT,
-                    openClawAgentId: 'content',
-                    label: 'Kreiranje sadržaja',
-                    description: 'Kreira gotov sadržaj sa tekstom i slikama',
-                    icon: '✏️',
-                    estimatedCostEur: 0.5,
-                    systemPrompt: `You write a direct execution instruction for a content creation agent. The agent has tools: exec (for image generation).
-
-This agent receives RESEARCH DATA from the web-search agent. It should NOT do its own web searches — all data is provided in the dependency context below.
-
-IMAGE GENERATION (use ONLY when the concept needs visual content — marketing materials, social media, branding):
-FAL_IMAGE_SIZE=landscape_16_9 fal-generate "prompt here in English"
-Available sizes: square_hd (social media), landscape_4_3 (presentations), landscape_16_9 (web banners), portrait_4_3 (stories), portrait_16_9 (mobile)
-Choose size based on content purpose. Embed as: ![description](returned_url)
-Do NOT generate images for analytical/financial/legal/operational concepts.
-
-Given the task report, business context, and research findings from web-search agent, write an instruction that tells the agent:
-1. What content to CREATE based on the research data provided (do NOT re-research)
-2. Write the full text content in Serbian language
-3. If visual content is needed: generate images with UNIQUE prompts specific to THIS concept
-4. Format ALL output as clean markdown — NOT HTML, NOT code blocks
-5. Include headlines, body copy, key takeaways
-6. Each content piece must have clear PURPOSE and TARGET audience
-
-QUALITY STANDARDS:
-- Create original content — do NOT repeat or rephrase the research data verbatim
-- Match the company's brand voice and positioning
-- Every claim in content must be supported by the research data provided
-- Content must be actionable and specific to THIS company, not generic advice
-- NEVER fabricate data, sources, or statistics
-
-Write in English. Output ONLY the instruction text, under 400 words.`,
-                },
-            ],
-            [
-                types_1.AgentType.MARKETING,
-                {
-                    type: types_1.AgentType.MARKETING,
-                    openClawAgentId: 'marketing',
-                    label: 'Marketing analiza',
-                    description: 'Analizira tržište i kreira marketing strategiju',
-                    icon: '📈',
-                    estimatedCostEur: 0.5,
-                    systemPrompt: `You write a direct execution instruction for a marketing strategy agent.
-
-This agent receives RESEARCH DATA from the web-search agent and possibly content from the content agent. It should NOT do its own web searches — all data is provided. If a critical data point is missing, the agent may use web_search as a FALLBACK only.
-
-Given the task report, business context, and research findings, write an instruction that tells the agent:
-1. What marketing analysis to perform based on the research data provided
-2. Select the APPROPRIATE framework for this concept (SWOT only for strategic decisions, brand audit for branding, segmentation for market entry — do NOT always default to SWOT)
-3. Build competitive positioning based on data from research
-4. Create actionable marketing recommendations specific to THIS company
-5. Format ALL output as clean markdown with tables, sections
-6. Write ALL output in Serbian language
-
-QUALITY STANDARDS:
-- Every recommendation must reference specific data from the research findings
-- Distinguish between facts (from research) and strategic recommendations (your analysis)
-- Recommendations must be specific to THIS company — not generic marketing advice
-- Include measurable KPIs for each recommendation
-- NEVER fabricate data, sources, or statistics
-
-Write in English. Output ONLY the instruction text, under 400 words.`,
-                },
-            ],
-            [
-                types_1.AgentType.SALES,
-                {
-                    type: types_1.AgentType.SALES,
-                    openClawAgentId: 'sales',
-                    label: 'Prodajna strategija',
-                    description: 'Kreira prodajne planove i strategije',
-                    icon: '💼',
-                    estimatedCostEur: 0.5,
-                    systemPrompt: `You write a direct execution instruction for a sales strategy agent.
-
-This agent receives RESEARCH DATA from the web-search agent and findings from other agents (marketing, content, financial). It should NOT do its own web searches — all data is provided. If a critical data point is missing, the agent may use web_search as a FALLBACK only.
-
-EMAIL SENDING (use ONLY when the concept directly involves customer outreach or lead generation):
-When the concept requires email outreach, the agent MUST send the email using:
-agentmail-send --to "vojinskrill@gmail.com" --subject "Subject here" --text "Email body here"
-Do NOT send emails for internal strategy concepts (inventory, HR, operations).
-After sending, include the email content in output under: ### Poslati Email: [Purpose]
-
-Given the task report, business context, and all prior agent findings, write an instruction that tells the agent:
-1. What sales strategy to develop based on ALL available data
-2. Target customer profile and approach strategy
-3. Objection handling based on competitor data from research
-4. Pricing strategy recommendations based on financial analysis
-5. Format ALL output as clean markdown with tables and sections
-6. Write ALL output in Serbian language
-
-QUALITY STANDARDS:
-- Base every strategy element on REAL data from the research — not assumptions
-- Include specific talk tracks and objection responses
-- Recommendations must reference THIS company's unique positioning
-- Include concrete next steps with timelines
-- NEVER fabricate data, sources, or statistics
-
-Write in English. Output ONLY the instruction text, under 400 words.`,
-                },
-            ],
-            [
-                types_1.AgentType.FINANCIAL,
-                {
-                    type: types_1.AgentType.FINANCIAL,
-                    openClawAgentId: 'financial',
-                    label: 'Finansijska analiza',
-                    description: 'Računanje ROI, budžetska analiza i finansijsko planiranje',
-                    icon: '💰',
-                    estimatedCostEur: 0.5,
-                    systemPrompt: `You write a direct execution instruction for a financial analyst agent.
-
-This agent receives RESEARCH DATA from the web-search agent with financial benchmarks and data. It should NOT do its own web searches — all data is provided. If a critical benchmark is missing, the agent may use web_search as a FALLBACK only.
-
-Given the task report, business context, and research findings with financial data, write an instruction that tells the agent:
-1. What specific financials to calculate (ROI, break-even, margins, projections) using data from research
-2. Build tables with actual numbers based on research benchmarks — not qualitative descriptions
-3. Include scenario analysis ONLY for concepts involving projections or investment decisions
-4. For regulatory/compliance concepts: focus on obligations and deadlines, not scenarios
-5. Include risk assessment with probability and financial impact
-6. Format ALL output as clean markdown with tables and sections
-7. Write ALL output in Serbian language
-
-QUALITY STANDARDS:
-- All calculations must show methodology and assumptions explicitly
-- Use benchmarks from research as comparison points, not as targets
-- Distinguish between verified industry data and company-specific estimates
-- Tables must have actual numbers, not placeholders
-- Include sensitivity analysis for key assumptions
-- NEVER fabricate data, sources, or statistics
-
-Write in English. Output ONLY the instruction text, under 400 words.`,
-                },
-            ],
-        ]);
-    }
-    getAgent(type) {
-        const agent = this.agents.get(type);
-        if (!agent) {
-            throw new Error(`Unknown agent type: ${type}`);
-        }
-        return agent;
-    }
-    getAllAgents() {
-        return Array.from(this.agents.values());
-    }
-    getAgentLabel(type) {
-        return this.getAgent(type).label;
-    }
-    getOpenClawAgentId(type) {
-        return this.getAgent(type).openClawAgentId;
-    }
-    getAllAgentTypeInfos() {
-        return this.getAllAgents().map((a) => ({
-            type: a.type,
-            label: a.label,
-            description: a.description,
-            icon: a.icon,
-            estimatedCostEur: a.estimatedCostEur,
-        }));
-    }
-};
-exports.AgentRegistryService = AgentRegistryService;
-exports.AgentRegistryService = AgentRegistryService = tslib_1.__decorate([
-    (0, common_1.Injectable)()
-], AgentRegistryService);
-
-
-/***/ }),
-/* 158 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var BudgetService_1;
-var _a, _b;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.BudgetService = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const config_1 = __webpack_require__(5);
-const tenant_context_1 = __webpack_require__(10);
-const library_1 = __webpack_require__(100);
-let BudgetService = BudgetService_1 = class BudgetService {
-    constructor(prisma, configService) {
-        this.prisma = prisma;
-        this.configService = configService;
-        this.logger = new common_1.Logger(BudgetService_1.name);
-        this.dailyLimitEur = parseFloat(this.configService.get('AGENT_DAILY_BUDGET_EUR') ?? '20');
-        this.estimatedCostEur = parseFloat(this.configService.get('AGENT_ESTIMATED_COST_EUR') ?? '0.50');
-    }
-    getEstimatedCost() {
-        return this.estimatedCostEur;
-    }
-    getDailyLimit() {
-        return this.dailyLimitEur;
-    }
-    async getDailySpent(tenantId) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const budget = await this.prisma.agentDailyBudget.findUnique({
-            where: { tenantId_date: { tenantId, date: today } },
-        });
-        return {
-            spentEur: budget ? Number(budget.spentEur) : 0,
-            limitEur: budget ? Number(budget.limitEur) : this.dailyLimitEur,
-        };
-    }
-    async canSpend(tenantId, amount) {
-        const cost = amount ?? this.estimatedCostEur;
-        const { spentEur, limitEur } = await this.getDailySpent(tenantId);
-        return spentEur + cost <= limitEur;
-    }
-    async recordSpend(tenantId, amountEur) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        await this.prisma.agentDailyBudget.upsert({
-            where: { tenantId_date: { tenantId, date: today } },
-            update: {
-                spentEur: { increment: new library_1.Decimal(amountEur) },
-            },
-            create: {
-                tenantId,
-                date: today,
-                spentEur: new library_1.Decimal(amountEur),
-                limitEur: new library_1.Decimal(this.dailyLimitEur),
-            },
-        });
-        this.logger.log({
-            message: 'Budget spend recorded',
-            tenantId,
-            amountEur,
-        });
-    }
-};
-exports.BudgetService = BudgetService;
-exports.BudgetService = BudgetService = BudgetService_1 = tslib_1.__decorate([
-    (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _b : Object])
-], BudgetService);
-
-
-/***/ }),
-/* 159 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var AgentExecutionEventBus_1;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.AgentExecutionEventBus = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const events_1 = __webpack_require__(160);
-let AgentExecutionEventBus = AgentExecutionEventBus_1 = class AgentExecutionEventBus {
-    constructor() {
-        this.logger = new common_1.Logger(AgentExecutionEventBus_1.name);
-        this.emitter = new events_1.EventEmitter();
-        this.listenerCount = 0;
-        this.emitter.setMaxListeners(20);
-    }
-    emit(event) {
-        if (event.eventName !== 'agent:text-chunk' && event.eventName !== 'agent:executing-heartbeat') {
-            this.logger.debug({
-                message: 'EventBus emit',
-                eventName: event.eventName,
-                tenantId: event.tenantId,
-                listeners: this.listenerCount,
-            });
-        }
-        try {
-            this.emitter.emit('agent-event', event);
-        }
-        catch (err) {
-            this.logger.error({
-                message: 'EventBus listener threw',
-                eventName: event.eventName,
-                error: err instanceof Error ? err.message : 'Unknown',
-            });
-        }
-    }
-    onEvent(handler) {
-        this.listenerCount++;
-        this.logger.log({ message: 'EventBus listener registered', totalListeners: this.listenerCount });
-        this.emitter.on('agent-event', handler);
-    }
-};
-exports.AgentExecutionEventBus = AgentExecutionEventBus;
-exports.AgentExecutionEventBus = AgentExecutionEventBus = AgentExecutionEventBus_1 = tslib_1.__decorate([
-    (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [])
-], AgentExecutionEventBus);
-
-
-/***/ }),
-/* 160 */
-/***/ ((module) => {
-
-module.exports = require("events");
-
-/***/ }),
-/* 161 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var _a, _b, _c;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.AgentExecutionController = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const jwt_auth_guard_1 = __webpack_require__(47);
-const current_user_decorator_1 = __webpack_require__(49);
-const agent_execution_service_1 = __webpack_require__(153);
-const job_planner_service_1 = __webpack_require__(162);
-const budget_service_1 = __webpack_require__(158);
-const types_1 = __webpack_require__(86);
-let AgentExecutionController = class AgentExecutionController {
-    constructor(agentExecutionService, jobPlannerService, budgetService) {
-        this.agentExecutionService = agentExecutionService;
-        this.jobPlannerService = jobPlannerService;
-        this.budgetService = budgetService;
-    }
-    async getTodaysBudget(user) {
-        const { spentEur, limitEur } = await this.budgetService.getDailySpent(user.tenantId);
-        return { data: { spentEur, limitEur } };
-    }
-    async triggerAgent(noteId, agentType, user) {
-        const validTypes = Object.values(types_1.AgentType);
-        if (!validTypes.includes(agentType)) {
-            throw new common_1.BadRequestException(`Invalid agent type: ${agentType}`);
-        }
-        const result = await this.agentExecutionService.triggerAgent(noteId, agentType, user.userId, user.tenantId);
-        return { data: result };
-    }
-    async getExecutionsByNote(noteId, user) {
-        const executions = await this.agentExecutionService.getExecutionsByNote(noteId, user.tenantId);
-        return { data: executions };
-    }
-    async getJobsForNote(noteId, user) {
-        const jobs = await this.jobPlannerService.getJobsForNote(noteId, user.tenantId);
-        const budget = await this.budgetService.getDailySpent(user.tenantId);
-        const estimatedCost = this.budgetService.getEstimatedCost();
-        return {
-            data: {
-                noteId,
-                jobs,
-                dailySpentEur: budget.spentEur,
-                dailyLimitEur: budget.limitEur,
-                canProceed: budget.spentEur + estimatedCost <= budget.limitEur,
-            },
-        };
-    }
-    async executeJob(jobId, user) {
-        const result = await this.agentExecutionService.executeJob(jobId, user.userId, user.tenantId);
-        return { data: result };
-    }
-    async retryJob(jobId, user) {
-        const result = await this.agentExecutionService.retryJob(jobId, user.userId, user.tenantId);
-        return { data: result };
-    }
-    /**
-     * POST /api/v1/agent-execution/retry-all-pending
-     * Retry all PLANNED/FAILED jobs in waves of 5, respecting dependencies.
-     * Fire-and-forget — returns immediately, processes in background.
-     */
-    /**
-     * POST /api/v1/agent-execution/stop-all
-     * Force-stop all running agent executions and jobs.
-     */
-    async stopAll(user) {
-        const result = await this.agentExecutionService.stopAllExecutions(user.tenantId);
-        return result;
-    }
-    async retryAllPending(user) {
-        const result = await this.agentExecutionService.retryAllPendingJobs(user.userId, user.tenantId);
-        return { data: result };
-    }
-    async getExecution(executionId, user) {
-        const execution = await this.agentExecutionService.getExecution(executionId, user.tenantId);
-        if (!execution) {
-            throw new common_1.NotFoundException(`Execution ${executionId} not found`);
-        }
-        return { data: execution };
-    }
-};
-exports.AgentExecutionController = AgentExecutionController;
-tslib_1.__decorate([
-    (0, common_1.Get)('budget/today'),
-    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object]),
-    tslib_1.__metadata("design:returntype", Promise)
-], AgentExecutionController.prototype, "getTodaysBudget", null);
-tslib_1.__decorate([
-    (0, common_1.Post)('trigger/:noteId/:agentType'),
-    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
-    tslib_1.__param(0, (0, common_1.Param)('noteId')),
-    tslib_1.__param(1, (0, common_1.Param)('agentType')),
-    tslib_1.__param(2, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [String, String, Object]),
-    tslib_1.__metadata("design:returntype", Promise)
-], AgentExecutionController.prototype, "triggerAgent", null);
-tslib_1.__decorate([
-    (0, common_1.Get)('note/:noteId'),
-    tslib_1.__param(0, (0, common_1.Param)('noteId')),
-    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [String, Object]),
-    tslib_1.__metadata("design:returntype", Promise)
-], AgentExecutionController.prototype, "getExecutionsByNote", null);
-tslib_1.__decorate([
-    (0, common_1.Get)('jobs/:noteId'),
-    tslib_1.__param(0, (0, common_1.Param)('noteId')),
-    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [String, Object]),
-    tslib_1.__metadata("design:returntype", Promise)
-], AgentExecutionController.prototype, "getJobsForNote", null);
-tslib_1.__decorate([
-    (0, common_1.Post)('jobs/:jobId/execute'),
-    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
-    tslib_1.__param(0, (0, common_1.Param)('jobId')),
-    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [String, Object]),
-    tslib_1.__metadata("design:returntype", Promise)
-], AgentExecutionController.prototype, "executeJob", null);
-tslib_1.__decorate([
-    (0, common_1.Post)('jobs/:jobId/retry'),
-    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
-    tslib_1.__param(0, (0, common_1.Param)('jobId')),
-    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [String, Object]),
-    tslib_1.__metadata("design:returntype", Promise)
-], AgentExecutionController.prototype, "retryJob", null);
-tslib_1.__decorate([
-    (0, common_1.Post)('stop-all'),
-    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
-    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object]),
-    tslib_1.__metadata("design:returntype", Promise)
-], AgentExecutionController.prototype, "stopAll", null);
-tslib_1.__decorate([
-    (0, common_1.Post)('retry-all-pending'),
-    (0, common_1.HttpCode)(common_1.HttpStatus.ACCEPTED),
-    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [Object]),
-    tslib_1.__metadata("design:returntype", Promise)
-], AgentExecutionController.prototype, "retryAllPending", null);
-tslib_1.__decorate([
-    (0, common_1.Get)(':executionId'),
-    tslib_1.__param(0, (0, common_1.Param)('executionId')),
-    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
-    tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [String, Object]),
-    tslib_1.__metadata("design:returntype", Promise)
-], AgentExecutionController.prototype, "getExecution", null);
-exports.AgentExecutionController = AgentExecutionController = tslib_1.__decorate([
-    (0, common_1.Controller)('v1/agent-execution'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof agent_execution_service_1.AgentExecutionService !== "undefined" && agent_execution_service_1.AgentExecutionService) === "function" ? _a : Object, typeof (_b = typeof job_planner_service_1.JobPlannerService !== "undefined" && job_planner_service_1.JobPlannerService) === "function" ? _b : Object, typeof (_c = typeof budget_service_1.BudgetService !== "undefined" && budget_service_1.BudgetService) === "function" ? _c : Object])
-], AgentExecutionController);
-
-
-/***/ }),
-/* 162 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-
-var JobPlannerService_1;
-var _a, _b, _c;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.JobPlannerService = void 0;
-const tslib_1 = __webpack_require__(4);
-const common_1 = __webpack_require__(1);
-const tenant_context_1 = __webpack_require__(10);
-const cuid2_1 = __webpack_require__(33);
-const ai_gateway_service_1 = __webpack_require__(90);
-const agent_registry_service_1 = __webpack_require__(157);
-const types_1 = __webpack_require__(86);
-let JobPlannerService = JobPlannerService_1 = class JobPlannerService {
-    constructor(prisma, aiGateway, registry) {
-        this.prisma = prisma;
-        this.aiGateway = aiGateway;
-        this.registry = registry;
-        this.logger = new common_1.Logger(JobPlannerService_1.name);
-    }
-    /**
-     * Analyzes a scored task report and creates ordered, dependent agent jobs.
-     * Uses LLM to determine which agents are relevant and what they should do.
-     * Automatically injects tenant business context via AiGatewayService.
-     */
-    async planJobs(noteId, tenantId, userId) {
-        const note = await this.prisma.note.findFirst({
-            where: { id: noteId, tenantId },
-        });
-        if (!note || !note.userReport) {
-            this.logger.warn({ message: 'Cannot plan jobs — note or report missing', noteId });
-            return [];
-        }
-        // Guard against duplicate planning — return existing jobs if already planned
-        const existingJobs = await this.getJobsForNote(noteId, tenantId);
-        if (existingJobs.length > 0) {
-            this.logger.log({
-                message: 'Jobs already exist for note, skipping planning',
-                noteId,
-                jobCount: existingJobs.length,
-            });
-            return existingJobs;
-        }
-        const agentDescriptions = this.registry
-            .getAllAgents()
-            .map((a) => `- ${a.type}: ${a.label} — ${a.description}`)
-            .join('\n');
-        const systemPrompt = `You are a business operations planner. Given a completed task report, create an execution plan of AI agent jobs.
-
-Available agent types:
-${agentDescriptions}
-
-ARCHITECTURE — HOW AGENTS COLLABORATE:
-1. web_search is ALWAYS the first job — it researches ALL aspects and structures output by domain
-2. Domain agents (content, marketing, sales, financial) receive web_search output and do their SPECIALIZED work
-3. Domain agents execute SEQUENTIALLY — each sees output from ALL previous agents
-4. Domain agents do NOT do their own web research — they USE the data from web_search
-
-DECISION FRAMEWORK:
-- web_search is ALWAYS included (order 1, no dependencies)
-- Add domain agents ONLY when the concept needs their expertise:
-  * financial: when concept involves costs, ROI, budgets, pricing, cash flow
-  * content: when concept needs written deliverables, brand materials, visual content
-  * marketing: when concept involves positioning, competition, market strategy
-  * sales: when concept involves customer outreach, selling strategy, pricing negotiation
-- Create 1-4 jobs total. Simple concepts may need ONLY web_search (1 job).
-
-Rules:
-- web_search instruction MUST tell the agent to structure output with domain headers:
-  ## FINANSIJSKI PODACI, ## MARKETING PODACI, ## SADRŽAJ I PRIMERI, ## PRODAJNI PODACI
-- Each domain agent instruction MUST say "Using the research data provided, ..." — NOT "Search for..."
-- Domain agents depend on web_search (and optionally on each other for collaboration)
-- Write instructions in English (agents produce Serbian output)
-- Respond ONLY with a JSON array, no other text.
-
-Output format:
-[{"agentType":"web_search","order":1,"dependsOnOrders":[],"instruction":"Research ALL aspects of [topic]..."},{"agentType":"financial","order":2,"dependsOnOrders":[1],"instruction":"Using the financial data from research, calculate..."}]`;
-        const userMessage = `Task: ${note.title}
-
-Description: ${note.content.substring(0, 500)}
-
-${note.expectedOutcome ? `Expected Outcome: ${note.expectedOutcome}\n` : ''}Completed Report:
-${note.userReport.substring(0, 4000)}
-
-Create an execution plan of agent jobs for this task. Return JSON array only.`;
-        const messages = [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userMessage },
-        ];
-        let result = '';
-        try {
-            await this.aiGateway.streamCompletionWithContext(messages, {
-                tenantId,
-                userId,
-                skipRateLimit: true,
-                skipQuotaCheck: true,
-            }, (chunk) => {
-                result += chunk;
-            });
-            const jsonMatch = result.match(/\[[\s\S]*\]/);
-            if (!jsonMatch) {
-                this.logger.warn({
-                    message: 'No JSON array found in job plan response',
-                    result: result.substring(0, 200),
-                });
-                return this.createDefaultJobs(noteId, tenantId, userId, note.title, note.userReport);
-            }
-            const parsed = JSON.parse(jsonMatch[0]);
-            // If LLM returned empty array, use default web_search → content chain
-            if (parsed.length === 0) {
-                this.logger.warn({ message: 'LLM returned empty job plan — using default chain', noteId });
-                return this.createDefaultJobs(noteId, tenantId, userId, note.title, note.userReport);
-            }
-            const validTypes = Object.values(types_1.AgentType);
-            const validJobs = parsed
-                .filter((j) => validTypes.includes(j.agentType) && j.instruction?.length > 10)
-                .sort((a, b) => a.order - b.order)
-                .slice(0, 4);
-            if (validJobs.length === 0) {
-                return this.createDefaultJobs(noteId, tenantId, userId, note.title, note.userReport);
-            }
-            return await this.persistJobs(validJobs, noteId, tenantId, userId);
-        }
-        catch (err) {
-            this.logger.error({
-                message: 'Failed to plan jobs',
-                noteId,
-                error: err instanceof Error ? err.message : 'Unknown',
-            });
-            return this.createDefaultJobs(noteId, tenantId, userId, note.title, note.userReport);
-        }
-    }
-    /**
-     * Persist parsed LLM job plan into AgentJob rows.
-     * Pre-generates IDs, resolves order-based dependencies to IDs, batch creates.
-     */
-    async persistJobs(jobs, noteId, tenantId, userId) {
-        // Pre-generate IDs and build original-order→ID map BEFORE renormalizing
-        const jobsWithIds = jobs.map((j, idx) => ({
-            ...j,
-            id: `ajob_${(0, cuid2_1.createId)()}`,
-            originalOrder: j.order,
-            order: idx + 1, // Normalize to 1-based sequential
-        }));
-        // Map from ORIGINAL LLM order to ID (so dependsOnOrders references resolve correctly)
-        const orderToId = new Map(jobsWithIds.map((j) => [j.originalOrder, j.id]));
-        // Resolve dependsOnOrders to actual IDs
-        const jobData = jobsWithIds.map((j) => ({
-            id: j.id,
-            noteId,
-            tenantId,
-            userId,
-            agentType: j.agentType,
-            order: j.order,
-            dependsOn: j.dependsOnOrders
-                .map((depOrder) => orderToId.get(depOrder))
-                .filter((id) => !!id),
-            instruction: j.instruction,
-            status: 'PLANNED',
-        }));
-        // Batch create in transaction
-        await this.prisma.$transaction(jobData.map((data) => this.prisma.agentJob.create({ data })));
-        this.logger.log({
-            message: 'Agent jobs planned',
-            noteId,
-            jobCount: jobData.length,
-            types: jobData.map((j) => j.agentType),
-        });
-        return this.getJobsForNote(noteId, tenantId);
-    }
-    /**
-     * Fallback: create a simple web_search → content chain.
-     */
-    async createDefaultJobs(noteId, tenantId, userId, taskTitle, userReport) {
-        const searchId = `ajob_${(0, cuid2_1.createId)()}`;
-        const contentId = `ajob_${(0, cuid2_1.createId)()}`;
-        await this.prisma.$transaction([
-            this.prisma.agentJob.create({
-                data: {
-                    id: searchId,
-                    noteId,
-                    tenantId,
-                    userId,
-                    agentType: types_1.AgentType.WEB_SEARCH,
-                    order: 1,
-                    dependsOn: [],
-                    instruction: `Research the topic "${taskTitle}" — find market data, competitors, pricing, and trends relevant to the business. Report: ${userReport.substring(0, 500)}`,
-                    status: 'PLANNED',
-                },
-            }),
-            this.prisma.agentJob.create({
-                data: {
-                    id: contentId,
-                    noteId,
-                    tenantId,
-                    userId,
-                    agentType: types_1.AgentType.CONTENT,
-                    order: 2,
-                    dependsOn: [searchId],
-                    instruction: `Using the research results from the previous step, create actionable content deliverables for "${taskTitle}". Include blog posts, social media content, or marketing materials as appropriate.`,
-                    status: 'PLANNED',
-                },
-            }),
-        ]);
-        return this.getJobsForNote(noteId, tenantId);
-    }
-    /**
-     * Returns all jobs for a note, ordered by execution order.
-     */
-    async getJobsForNote(noteId, tenantId) {
-        const jobs = await this.prisma.agentJob.findMany({
-            where: { noteId, tenantId },
-            orderBy: { order: 'asc' },
-        });
-        return jobs.map((j) => ({
-            id: j.id,
-            noteId: j.noteId,
-            agentType: j.agentType,
-            order: j.order,
-            dependsOn: j.dependsOn,
-            instruction: j.instruction,
-            status: j.status,
-            executionId: j.executionId,
-            agentOutput: j.agentOutput,
-            error: j.error,
-            createdAt: j.createdAt.toISOString(),
-            updatedAt: j.updatedAt.toISOString(),
-        }));
-    }
-};
-exports.JobPlannerService = JobPlannerService;
-exports.JobPlannerService = JobPlannerService = JobPlannerService_1 = tslib_1.__decorate([
-    (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof agent_registry_service_1.AgentRegistryService !== "undefined" && agent_registry_service_1.AgentRegistryService) === "function" ? _c : Object])
-], JobPlannerService);
-
-
-/***/ }),
-/* 163 */
+/* 177 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 var MaturityEngineService_1;
-var _a, _b, _c, _d, _e, _f;
+var _a, _b, _c, _d, _e, _f, _g, _h;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.MaturityEngineService = void 0;
 const tslib_1 = __webpack_require__(4);
@@ -19658,10 +23731,12 @@ const config_1 = __webpack_require__(5);
 const tenant_context_1 = __webpack_require__(10);
 const prisma_1 = __webpack_require__(36);
 const types_1 = __webpack_require__(86);
-const stage_classifier_service_1 = __webpack_require__(164);
-const ws_server_holder_service_1 = __webpack_require__(166);
-const headless_executor_service_1 = __webpack_require__(167);
-const cross_persona_intelligence_service_1 = __webpack_require__(170);
+const stage_classifier_service_1 = __webpack_require__(178);
+const ws_server_holder_service_1 = __webpack_require__(180);
+const headless_executor_service_1 = __webpack_require__(181);
+const cross_persona_intelligence_service_1 = __webpack_require__(184);
+const event_emitter_1 = __webpack_require__(148);
+const app_event_bus_service_1 = __webpack_require__(147);
 const client_1 = __webpack_require__(12);
 const cuid2_1 = __webpack_require__(33);
 const department_categories_1 = __webpack_require__(119);
@@ -19682,16 +23757,19 @@ const STAGE_ORDER = [
     types_1.MaturityStage.AUTONOMOUS,
 ];
 let MaturityEngineService = MaturityEngineService_1 = class MaturityEngineService {
-    constructor(prisma, classifier, wsHolder, headlessExecutor, crossPersonaIntelligence, configService) {
+    constructor(prisma, classifier, wsHolder, headlessExecutor, crossPersonaIntelligence, appEventBus, configService) {
         this.prisma = prisma;
         this.classifier = classifier;
         this.wsHolder = wsHolder;
         this.headlessExecutor = headlessExecutor;
         this.crossPersonaIntelligence = crossPersonaIntelligence;
+        this.appEventBus = appEventBus;
         this.configService = configService;
         this.logger = new common_1.Logger(MaturityEngineService_1.name);
         /** Tracks running stage executions per tenant to prevent concurrent runs */
         this.runningExecutions = new Set();
+        this.continuationCount = new Map();
+        this.MAX_CONTINUATIONS = 10;
         /** Tracks running stage initializations per tenant */
         this.initializingTenants = new Set();
         /** Tracks execution progress per tenant for API polling (dashboard page load) */
@@ -20347,6 +24425,13 @@ let MaturityEngineService = MaturityEngineService_1 = class MaturityEngineServic
                 stage,
                 timestamp: new Date().toISOString(),
             });
+            // Emit stage execution started event (backend orchestration)
+            this.appEventBus.emit(app_event_bus_service_1.APP_EVENTS.STAGE_EXECUTION_STARTED, {
+                tenantId,
+                stage,
+                userId,
+                status: 'started',
+            });
             // Load all assignments with their notes and prerequisite info
             const assignments = await this.prisma.stageConceptAssignment.findMany({
                 where: { tenantId, stage, noteId: { not: null } },
@@ -20389,6 +24474,7 @@ let MaturityEngineService = MaturityEngineService_1 = class MaturityEngineServic
             });
             // Also track failed concepts so dependents can detect unresolvable deps
             const failedConcepts = new Set();
+            let waveNumber = 0;
             // Topological execution: process tasks whose prerequisites are all complete
             const remaining = new Map(pendingAssignments.map((a) => [a.conceptId, a]));
             while (remaining.size > 0) {
@@ -20497,9 +24583,30 @@ let MaturityEngineService = MaturityEngineService_1 = class MaturityEngineServic
                         stage, total, executed, failed, current: null,
                     });
                 }
+                // Emit wave.completed event (fire-and-forget, non-blocking)
+                waveNumber++;
+                this.appEventBus.emit(app_event_bus_service_1.APP_EVENTS.WAVE_COMPLETED, {
+                    tenantId,
+                    stage,
+                    userId,
+                    waveNumber,
+                    completed: executed,
+                    failed,
+                    remaining: remaining.size,
+                });
             }
             this.wsHolder.emitToTenant(tenantId, 'maturity:execution-complete', {
                 stage, total, executed, failed, timestamp: new Date().toISOString(),
+            });
+            // Emit stage execution completed event (backend orchestration)
+            this.appEventBus.emit(app_event_bus_service_1.APP_EVENTS.STAGE_EXECUTION_COMPLETED, {
+                tenantId,
+                stage,
+                userId,
+                status: 'completed',
+                total,
+                executed,
+                failed,
             });
             this.logger.log({ message: 'Stage auto-execution complete', tenantId, stage, total, executed, failed });
             // Auto-continue: if there are still PENDING assignments, re-trigger execution.
@@ -20509,25 +24616,46 @@ let MaturityEngineService = MaturityEngineService_1 = class MaturityEngineServic
                 where: { tenantId, stage, status: { in: ['PENDING', 'IN_PROGRESS'] }, noteId: { not: null } },
             });
             if (stillPending > 0) {
-                this.logger.log({
-                    message: `Auto-continue: ${stillPending} assignments still pending, re-triggering`,
-                    tenantId, stage,
-                });
-                // Release lock first, then re-trigger after short delay
-                this.runningExecutions.delete(tenantId);
-                this.executionProgress.delete(tenantId);
-                setTimeout(() => {
-                    this.runStageExecution(tenantId, stage, userId).catch((err) => {
-                        this.logger.error({ message: 'Auto-continue failed', error: err instanceof Error ? err.message : 'Unknown' });
+                const count = (this.continuationCount.get(tenantId) ?? 0) + 1;
+                if (count > this.MAX_CONTINUATIONS) {
+                    this.logger.warn({
+                        message: `Auto-continue: max ${this.MAX_CONTINUATIONS} continuations reached, stopping`,
+                        tenantId, stage, stillPending,
                     });
-                }, 5_000);
-                return; // skip the finally block's delete (already done)
+                    this.continuationCount.delete(tenantId);
+                }
+                else {
+                    this.continuationCount.set(tenantId, count);
+                    this.logger.log({
+                        message: `Auto-continue ${count}/${this.MAX_CONTINUATIONS}: ${stillPending} pending`,
+                        tenantId, stage,
+                    });
+                    this.runningExecutions.delete(tenantId);
+                    this.executionProgress.delete(tenantId);
+                    this.appEventBus.emit(app_event_bus_service_1.APP_EVENTS.STAGE_EXECUTION_CONTINUE, {
+                        tenantId, stage, userId, status: 'continue',
+                    });
+                    return;
+                }
+            }
+            else {
+                this.continuationCount.delete(tenantId);
             }
         }
         finally {
             this.runningExecutions.delete(tenantId);
             this.executionProgress.delete(tenantId);
         }
+    }
+    // ─── Event Handlers ───
+    handleStageExecutionContinue(event) {
+        const { tenantId, stage, userId } = event;
+        // Small delay for DB sync, then re-trigger
+        setTimeout(() => {
+            this.runStageExecution(tenantId, stage, userId).catch((err) => {
+                this.logger.error({ message: 'Event-driven continue failed', error: err instanceof Error ? err.message : 'Unknown' });
+            });
+        }, 1_000);
     }
     // ─── Helpers ───
     /**
@@ -20591,15 +24719,21 @@ let MaturityEngineService = MaturityEngineService_1 = class MaturityEngineServic
     }
 };
 exports.MaturityEngineService = MaturityEngineService;
+tslib_1.__decorate([
+    (0, event_emitter_1.OnEvent)(app_event_bus_service_1.APP_EVENTS.STAGE_EXECUTION_CONTINUE),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_h = typeof app_event_bus_service_1.StageExecutionEvent !== "undefined" && app_event_bus_service_1.StageExecutionEvent) === "function" ? _h : Object]),
+    tslib_1.__metadata("design:returntype", void 0)
+], MaturityEngineService.prototype, "handleStageExecutionContinue", null);
 exports.MaturityEngineService = MaturityEngineService = MaturityEngineService_1 = tslib_1.__decorate([
     (0, common_1.Injectable)(),
     tslib_1.__param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => headless_executor_service_1.HeadlessExecutorService))),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof stage_classifier_service_1.StageClassifierService !== "undefined" && stage_classifier_service_1.StageClassifierService) === "function" ? _b : Object, typeof (_c = typeof ws_server_holder_service_1.WsServerHolder !== "undefined" && ws_server_holder_service_1.WsServerHolder) === "function" ? _c : Object, typeof (_d = typeof headless_executor_service_1.HeadlessExecutorService !== "undefined" && headless_executor_service_1.HeadlessExecutorService) === "function" ? _d : Object, typeof (_e = typeof cross_persona_intelligence_service_1.CrossPersonaIntelligenceService !== "undefined" && cross_persona_intelligence_service_1.CrossPersonaIntelligenceService) === "function" ? _e : Object, typeof (_f = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _f : Object])
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof stage_classifier_service_1.StageClassifierService !== "undefined" && stage_classifier_service_1.StageClassifierService) === "function" ? _b : Object, typeof (_c = typeof ws_server_holder_service_1.WsServerHolder !== "undefined" && ws_server_holder_service_1.WsServerHolder) === "function" ? _c : Object, typeof (_d = typeof headless_executor_service_1.HeadlessExecutorService !== "undefined" && headless_executor_service_1.HeadlessExecutorService) === "function" ? _d : Object, typeof (_e = typeof cross_persona_intelligence_service_1.CrossPersonaIntelligenceService !== "undefined" && cross_persona_intelligence_service_1.CrossPersonaIntelligenceService) === "function" ? _e : Object, typeof (_f = typeof app_event_bus_service_1.AppEventBus !== "undefined" && app_event_bus_service_1.AppEventBus) === "function" ? _f : Object, typeof (_g = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _g : Object])
 ], MaturityEngineService);
 
 
 /***/ }),
-/* 164 */
+/* 178 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -20612,7 +24746,7 @@ const common_1 = __webpack_require__(1);
 const ai_gateway_service_1 = __webpack_require__(90);
 const tenant_context_1 = __webpack_require__(10);
 const types_1 = __webpack_require__(86);
-const persona_labels_1 = __webpack_require__(165);
+const persona_labels_1 = __webpack_require__(179);
 const STAGE_DESCRIPTIONS = {
     [types_1.MaturityStage.BASIC]: 'Fondacioni koncepti koje svako poslovanje MORA imati. Pokrij osnove: identitet brenda, ciljno tržište, osnovne finansije, ključne operacije, pravni okvir. Fokus je na izgradnji STABILNE BAZE.',
     [types_1.MaturityStage.ADVANCED]: 'Napredni koncepti za optimizaciju i rast. Nadogradnja na BASIC: dublja analiza konkurencije, napredne strategije, automatizacija procesa, ekspanzija tržišta. Fokus je na SKALIRANJU I OPTIMIZACIJI.',
@@ -20714,7 +24848,7 @@ exports.StageClassifierService = StageClassifierService = StageClassifierService
 
 
 /***/ }),
-/* 165 */
+/* 179 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -20734,7 +24868,7 @@ exports.PERSONA_LABELS = {
 
 
 /***/ }),
-/* 166 */
+/* 180 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -20768,28 +24902,28 @@ exports.WsServerHolder = WsServerHolder = tslib_1.__decorate([
 
 
 /***/ }),
-/* 167 */
+/* 181 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 var HeadlessExecutorService_1;
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.HeadlessExecutorService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const tenant_context_1 = __webpack_require__(10);
-// NoteSource, NoteType, NoteStatus removed — no longer used after workflow step removal
-const workflow_service_1 = __webpack_require__(168);
+const workflow_service_1 = __webpack_require__(182);
 const ai_gateway_service_1 = __webpack_require__(90);
-const job_planner_service_1 = __webpack_require__(162);
-const agent_execution_service_1 = __webpack_require__(153);
-const openclaw_client_service_1 = __webpack_require__(154);
+const job_planner_service_1 = __webpack_require__(150);
+const agent_execution_service_1 = __webpack_require__(138);
+const openclaw_client_service_1 = __webpack_require__(139);
 const business_context_service_1 = __webpack_require__(120);
-const maturity_engine_service_1 = __webpack_require__(163);
-const ws_server_holder_service_1 = __webpack_require__(166);
-const cross_persona_intelligence_service_1 = __webpack_require__(170);
+const maturity_engine_service_1 = __webpack_require__(177);
+const ws_server_holder_service_1 = __webpack_require__(180);
+const cross_persona_intelligence_service_1 = __webpack_require__(184);
+const app_event_bus_service_1 = __webpack_require__(147);
 /**
  * Headless task executor — runs the full auto-popuni pipeline
  * (workflow → synthesis → scoring → jobs → maturity update)
@@ -20798,7 +24932,7 @@ const cross_persona_intelligence_service_1 = __webpack_require__(170);
  * Broadcasts progress events to tenant room if connected clients exist.
  */
 let HeadlessExecutorService = HeadlessExecutorService_1 = class HeadlessExecutorService {
-    constructor(prisma, workflowService, aiGateway, jobPlanner, agentExecutionService, businessContext, maturityEngine, wsHolder, crossPersonaIntelligence, openClawClient, configService) {
+    constructor(prisma, workflowService, aiGateway, jobPlanner, agentExecutionService, businessContext, maturityEngine, wsHolder, crossPersonaIntelligence, openClawClient, appEventBus, configService) {
         this.prisma = prisma;
         this.workflowService = workflowService;
         this.aiGateway = aiGateway;
@@ -20809,19 +24943,9 @@ let HeadlessExecutorService = HeadlessExecutorService_1 = class HeadlessExecutor
         this.wsHolder = wsHolder;
         this.crossPersonaIntelligence = crossPersonaIntelligence;
         this.openClawClient = openClawClient;
+        this.appEventBus = appEventBus;
         this.configService = configService;
         this.logger = new common_1.Logger(HeadlessExecutorService_1.name);
-        /**
-         * Periodic watchdog: detects stuck EXECUTING/RUNNING jobs and resets them for retry.
-         * Jobs get stuck when OpenClaw completes but the response is never received
-         * (connection drop, relay crash, timeout).
-         *
-         * Resets stuck job to PLANNED + cleans up the execution record.
-         * The headless executor's executeJobsInOrder/waitForJobCompletion loop will
-         * automatically pick up the reset job on its next poll cycle.
-         * Max 2 automatic retries per job, then permanently fails.
-         */
-        this.stuckRetryCount = new Map();
         // Align job completion timeout with OpenClaw execution time + retry budget
         const openclawTimeout = parseInt(this.configService.get('OPENCLAW_TIMEOUT_SECONDS') ?? '600', 10);
         // Single OpenClaw call can take up to openclawTimeout + 60s buffer.
@@ -20831,10 +24955,19 @@ let HeadlessExecutorService = HeadlessExecutorService_1 = class HeadlessExecutor
         // Start stuck job watchdog — checks every 30s for jobs stuck >20 min
         this.startStuckJobWatchdog();
     }
+    /**
+     * Periodic watchdog: detects stuck EXECUTING/RUNNING jobs and resets them for retry.
+     * Jobs get stuck when OpenClaw completes but the response is never received
+     * (connection drop, relay crash, timeout).
+     *
+     * Resets stuck job to PLANNED + cleans up the execution record.
+     * The headless executor's executeJobsInOrder/waitForJobCompletion loop will
+     * automatically pick up the reset job on its next poll cycle.
+     * Max 2 automatic retries per job, then permanently fails.
+     */
     startStuckJobWatchdog() {
         const STUCK_THRESHOLD_MS = 20 * 60_000; // 20 minutes (agents with multiple web_search calls need 10-15 min)
         const CHECK_INTERVAL_MS = 30_000; // 30 seconds
-        const MAX_AUTO_RETRIES = 2;
         setInterval(async () => {
             try {
                 const cutoff = new Date(Date.now() - STUCK_THRESHOLD_MS);
@@ -20844,7 +24977,7 @@ let HeadlessExecutorService = HeadlessExecutorService_1 = class HeadlessExecutor
                         status: { in: ['EXECUTING', 'FORMATTING', 'PENDING'] },
                         startedAt: { lt: cutoff },
                     },
-                    select: { id: true, agentType: true, startedAt: true },
+                    select: { id: true, agentType: true, startedAt: true, tenantId: true },
                 });
                 if (stuckExecs.length === 0)
                     return;
@@ -20858,45 +24991,15 @@ let HeadlessExecutorService = HeadlessExecutorService_1 = class HeadlessExecutor
                         where: { executionId: exec.id },
                         select: { id: true, status: true },
                     });
-                    const jobId = linkedJob?.id ?? exec.id;
-                    const retries = this.stuckRetryCount.get(jobId) ?? 0;
-                    // Force-fail the execution to release concurrency slot
-                    await this.prisma.agentExecution.update({
-                        where: { id: exec.id },
-                        data: {
-                            status: 'FAILED',
-                            error: `Watchdog: stuck >20min (retry ${retries + 1}/${MAX_AUTO_RETRIES})`,
-                            completedAt: new Date(),
-                        },
+                    const stuckDurationMs = Date.now() - new Date(exec.startedAt).getTime();
+                    // Emit stuck event — recovery is handled by AppEventHandlers
+                    this.appEventBus.emit(app_event_bus_service_1.APP_EVENTS.AGENT_JOB_STUCK, {
+                        tenantId: exec.tenantId,
+                        executionId: exec.id,
+                        jobId: linkedJob?.id,
+                        agentType: exec.agentType,
+                        stuckDurationMs,
                     });
-                    if (linkedJob && ['RUNNING', 'PENDING'].includes(linkedJob.status)) {
-                        if (retries < MAX_AUTO_RETRIES) {
-                            // Reset job to PLANNED for automatic retry
-                            await this.prisma.agentJob.update({
-                                where: { id: linkedJob.id },
-                                data: { status: 'PLANNED', executionId: null, error: null },
-                            });
-                            this.stuckRetryCount.set(jobId, retries + 1);
-                            this.logger.log({
-                                message: `Watchdog: reset job to PLANNED for retry`,
-                                jobId: linkedJob.id,
-                                attempt: retries + 1,
-                                maxRetries: MAX_AUTO_RETRIES,
-                            });
-                        }
-                        else {
-                            // Exceeded retries — permanently fail
-                            await this.prisma.agentJob.update({
-                                where: { id: linkedJob.id },
-                                data: { status: 'FAILED', error: `Watchdog: exceeded ${MAX_AUTO_RETRIES} auto-retries` },
-                            });
-                            this.stuckRetryCount.delete(jobId);
-                            this.logger.warn({
-                                message: `Watchdog: job permanently failed after ${MAX_AUTO_RETRIES} retries`,
-                                jobId: linkedJob.id,
-                            });
-                        }
-                    }
                 }
                 // Also check for PLANNED jobs whose dependencies are all done but weren't picked up
                 const plannedJobs = await this.prisma.agentJob.findMany({
@@ -20964,9 +25067,10 @@ let HeadlessExecutorService = HeadlessExecutorService_1 = class HeadlessExecutor
      */
     async executeTask(params) {
         const { taskId, tenantId, userId } = params;
+        let taskNote = null;
         try {
             // Load task note
-            const taskNote = await this.prisma.note.findUnique({ where: { id: taskId } });
+            taskNote = await this.prisma.note.findUnique({ where: { id: taskId } });
             if (!taskNote)
                 return { success: false, error: 'Task not found' };
             // If note already completed (e.g., from prior execution before server restart),
@@ -20987,8 +25091,17 @@ let HeadlessExecutorService = HeadlessExecutorService_1 = class HeadlessExecutor
                 timestamp: new Date().toISOString(),
                 auto: true,
             });
+            // Bridge event: task execution started (activity panel sees it)
+            this.appEventBus.emit('bridge.agent.status', {
+                tenantId,
+                taskId,
+                agent: 'maturity',
+                status: 'running',
+                message: `Izvršavanje: ${taskNote.title?.substring(0, 60)}`,
+                timestamp: new Date().toISOString(),
+            });
             // Pre-load tenant + brain context once for all steps
-            const [cachedTenantData, brainCtx] = await Promise.all([
+            const [cachedTenantData, _brainCtx] = await Promise.all([
                 this.prisma.tenant.findUnique({
                     where: { id: tenantId },
                     select: { name: true, industry: true, description: true },
@@ -21093,7 +25206,7 @@ let HeadlessExecutorService = HeadlessExecutorService_1 = class HeadlessExecutor
             let mainPreCheckContext = '';
             if (this.openClawClient.isConfigured()) {
                 try {
-                    const preCheckResult = await this.executeWithLockRetry(() => this.openClawClient.executeAgent(`Šta znaš o konceptu "${taskNote.title}" za kompaniju ${cachedTenantData?.name || 'Unknown'}? Koji aspekti su već pokriveni iz prethodnih koncepata? Šta treba NOVO istražiti? Odgovori kratko, u 200-300 reči.`, { agentId: 'main', timeoutSeconds: 60 }), 'pre-check-main');
+                    const preCheckResult = await this.executeWithLockRetry(() => this.openClawClient.executeAgent(`Šta znaš o konceptu "${taskNote.title}" za kompaniju ${cachedTenantData?.name || 'Unknown'}? Koji aspekti su već pokriveni iz prethodnih koncepata? Šta treba NOVO istražiti? Odgovori kratko, u 200-300 reči.`, { agentId: 'main', tenantProfile: tenantId, timeoutSeconds: 60 }), 'pre-check-main');
                     if (preCheckResult.success && preCheckResult.output.length > 50) {
                         mainPreCheckContext = preCheckResult.output;
                         this.logger.log({
@@ -21183,24 +25296,26 @@ OVO JE NACRT — biće obogaćen istraživanjem agenata:
                 auto: true,
             });
             // ── Post-scoring hooks ──
-            // Job planning + execution
-            try {
-                const jobs = await this.jobPlanner.planJobs(taskId, tenantId, userId);
-                if (jobs.length > 0) {
-                    this.wsHolder.emitToTenant(tenantId, 'jobs:planned', {
-                        noteId: taskId,
-                        conversationId: convId,
-                        jobs,
-                    });
-                    await this.executeJobsInOrder(jobs, userId, tenantId);
-                }
-            }
-            catch (jobErr) {
-                this.logger.error({
-                    message: 'Headless: job planning/execution failed',
-                    taskId,
-                    error: jobErr instanceof Error ? jobErr.message : 'Unknown',
+            // Job planning + execution (MUST complete before continuing)
+            const jobs = await this.jobPlanner.planJobs(taskId, tenantId, userId);
+            if (jobs.length > 0) {
+                this.wsHolder.emitToTenant(tenantId, 'jobs:planned', {
+                    noteId: taskId,
+                    conversationId: convId,
+                    jobs,
                 });
+                await this.executeJobsInOrder(jobs, userId, tenantId);
+                // Verify all jobs reached terminal state before continuing
+                const pendingJobs = await this.prisma.agentJob.count({
+                    where: { noteId: taskId, tenantId, status: { in: ['PLANNED', 'RUNNING'] } },
+                });
+                if (pendingJobs > 0) {
+                    this.logger.warn({
+                        message: `Headless: ${pendingJobs} jobs still pending after executeJobsInOrder — marking task as incomplete`,
+                        taskId,
+                    });
+                    throw new Error(`${pendingJobs} agent jobs did not complete`);
+                }
             }
             // ── Final consolidation + scoring (single step, replaces 3 separate rewrites) ──
             // Merges draft synthesis + ALL agent findings into one final document with scores.
@@ -21228,7 +25343,7 @@ OVO JE NACRT — biće obogaćen istraživanjem agenata:
                         // Summarize long outputs via LLM to preserve key findings
                         try {
                             let summary = '';
-                            await this.aiGateway.streamCompletionWithContext([{ role: 'user', content: `Sumiraj KLJUČNE NALAZE iz ovog istraživanja u 800-1200 reči. Zadrži sve konkretne podatke, brojke, izvore (URL-ove) i preporuke. NE gubiiteralnu ni jednu konkretnu činjenicu.\n\n${output}` }], { tenantId, userId, conversationId: convId, businessContext: bizContext, useFallback: true }, (chunk) => { summary += chunk; });
+                            await this.aiGateway.streamCompletionWithContext([{ role: 'user', content: `Sumiraj KLJUCNE NALAZE iz ovog istrazivanja u 800-1200 reci. Zadrzi sve konkretne podatke, brojke, izvore (URL-ove) i preporuke. KRITICNO: Zadrzi SVE slike u formatu ![opis](url) — ne brisaj ih i ne menjaj URL-ove. NE gubi nijednu konkretnu cinjenicu.\n\n${output}` }], { tenantId, userId, conversationId: convId, businessContext: bizContext, useFallback: true }, (chunk) => { summary += chunk; });
                             agentParts.push(`### ${job.agentType.toUpperCase()} istraživanje (sumirano)\n${summary}`);
                             this.logger.log({ message: `Headless: summarized ${job.agentType} output`, taskId, original: output.length, summarized: summary.length });
                         }
@@ -21255,15 +25370,43 @@ ${agentFindings.length > 0 ? `2. REZULTATI ISTRAŽIVANJA AGENATA:\n${agentFindin
 
 ZADATAK — DVE STVARI:
 
-A) NAPRAVI FINALNI DOKUMENT koji:
-- Integriše SVE nalaze iz nacrta i agentskog istraživanja
-- Daje prednost KONKRETNIM podacima sa izvorima nad generičkim analizama
-- Strukturiraj: ## zaglavlja, tabele, **bold** za ključne vrednosti
-- Uključi sekciju "Izvori" sa URL-ovima iz istraživanja
-- NE ponavljaj iste informacije — konsoliduj ih
-- Proporcionalna dužina: jednostavni koncepti 300-500 reči, strateški 800-1500, kompleksni 1500+
-- Dodaj sekciju "Sledeći koraci" sa konkretnim akcijama
-- NIKADA ne izmišljaj podatke — ako nešto nije istraženo, napiši "[POTREBNO ISTRAŽITI]"
+A) NAPRAVI IZUZETAN FINALNI DOKUMENT (4000-5000 reci) koji:
+
+STRUKTURA I FORMATIRANJE:
+- Koristi jasnu hijerarhiju: # naslov, ## sekcije, ### podsekcije
+- Svaka sekcija mora imati tabele sa konkretnim podacima, brojevima, metrikama
+- Koristi **bold** za kljucne vrednosti, brojke i zakljucke
+- Koristi > blockquote za kljucne uvide i preporuke
+- Koristi bullet liste za akcione stavke
+- Koristi horizontalne linije (---) za razdvajanje glavnih sekcija
+
+SADRZAJ I KVALITET:
+- Integriši SVE nalaze iz nacrta i SVIH agentskih istrazivanja — ne preskaci nijedan nalaz
+- Daj prednost KONKRETNIM podacima sa izvorima nad generickim analizama
+- Svaki podatak, benchmark ili statistika MORA imati izvor: ([Naziv](URL))
+- Ukljuci detaljne tabele sa uporednim analizama, metrikama, benchmarkovima
+- Za svaku preporuku daj KONKRETAN akcioni plan sa odgovornom osobom/timom i rokom
+- Ukljuci sekciju "Finansijski Uticaj" sa konkretnim projekcijama
+- Ukljuci sekciju "Rizici i Mitigacija" sa tabelom rizika
+- Ukljuci sekciju "KPI-jevi i Merenje Uspeha" sa konkretnim ciljnim vrednostima
+- Ukljuci sekciju "Sledeci Koraci" sa vremenskim okvirom (nedelja/mesec)
+- Ukljuci sekciju "Izvori" na kraju sa svim koriscenim URL-ovima
+
+SLIKE:
+- OBAVEZNO SACUVAJ SVE slike (![opis](url)) iz agentskih nalaza
+- Kopiraj ih TACNO kako su — ne menjaj URL-ove
+- Postavi ih na odgovarajuca mesta u dokumentu gde su kontekstualno relevantne
+
+PRAVILA:
+- Pisi na SRPSKOM jeziku
+- NIKADA ne izmisljaj podatke — ako podatak nije dostupan, napravi razumnu procenu i navedi pretpostavku
+- NIKADA ne pisi "[POTREBNO ISTRAZITI]" ili "[POTREBNO DODATNO ISTRAZITI]" — svi podaci su vec istrazeni
+- NE ponavljaj iste informacije iz razlicitih agenata — sintetizuj ih u jedinstven zakljucak
+- Dokument mora biti PROFESIONALAN, spreman za prezentaciju C-level menadzerima
+- 4000-5000 reci — budi temeljit, detaljan i sveobuhvatan
+- NIKADA ne pisi programski kod (JavaScript, Python, itd.) — samo tekst, tabele i markdown
+- Za slike koristi ISKLJUCIVO markdown format: ![opis slike](url) — NIKADA ne pisi fal-generate komande ili kod
+- NIKADA ne pisi FAL_IMAGE_SIZE, fal-generate, require("fal-ai") ili bilo kakav kod za generisanje slika
 
 B) NA KRAJU DOKUMENTA OCENI po 5 kriterijuma (svaki 1-10):
 ---
@@ -21289,6 +25432,17 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                     }
                 }
                 if (consolidated.length > 300) {
+                    // Restore images lost during consolidation (supports http URLs, data: URLs, and any other URL scheme)
+                    const imgRegex = /!\[[^\]]*\]\([^)]+\)/g;
+                    const originalImages = agentFindings.match(imgRegex) ?? [];
+                    const consolidatedImages = consolidated.match(imgRegex) ?? [];
+                    if (originalImages.length > consolidatedImages.length) {
+                        const missingImages = originalImages.filter((img) => !consolidatedImages.some((ci) => ci === img));
+                        if (missingImages.length > 0) {
+                            consolidated += '\n\n---\n## Vizuali\n' + missingImages.join('\n\n');
+                            this.logger.warn({ message: 'Headless: restored lost images', taskId, restored: missingImages.length });
+                        }
+                    }
                     await this.prisma.note.update({
                         where: { id: taskId },
                         data: {
@@ -21303,6 +25457,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                         agentJobCount: completedJobs.length,
                         consolidatedLength: consolidated.length,
                         aiScore: score,
+                        images: consolidatedImages.length,
                     });
                 }
             }
@@ -21314,76 +25469,34 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                 });
             }
             // ── Knowledge Update: Send findings to domain masters + main ──
-            // After consolidation, update domain master agents so they accumulate knowledge.
+            // Fire-and-forget: runs in background so it doesn't block the next wave.
             // Uses default sessions (no session-id) for persistent memory.
             // Stagger delay prevents lock contention when parallel tasks complete simultaneously.
+            // Emit knowledge update event (handled async by AppEventHandlers, non-blocking)
             try {
                 const finalNote = await this.prisma.note.findUnique({
                     where: { id: taskId },
-                    select: { userReport: true, title: true, conceptId: true },
+                    select: { userReport: true, title: true },
                 });
                 if (finalNote?.userReport && finalNote.userReport.length > 200) {
-                    // Reuse completedJobs from consolidation above (already fetched at line ~388)
-                    // If consolidation was skipped, fetch fresh
-                    const jobsForKnowledge = completedJobs ?? await this.prisma.agentJob.findMany({
-                        where: { noteId: taskId, tenantId, status: 'COMPLETED' },
-                        select: { agentType: true, agentOutput: true, order: true },
-                        orderBy: { order: 'asc' },
+                    const jobTypes = completedJobs
+                        ? [...new Set(completedJobs.map((j) => j.agentType))]
+                        : [];
+                    const assignment = await this.prisma.stageConceptAssignment.findFirst({
+                        where: { noteId: taskId, tenantId },
+                        select: { personaType: true },
                     });
-                    const agentTypes = [...new Set(jobsForKnowledge.map((j) => j.agentType))];
-                    const knowledgeSummary = finalNote.userReport.substring(0, 5000);
-                    const conceptName = finalNote.title || 'Unknown';
-                    const companyName = cachedTenantData?.name || 'Unknown Company';
-                    // Stagger: random 0-10s delay to spread out parallel task completions
-                    await new Promise((r) => setTimeout(r, Math.random() * 10_000));
-                    // Update domain masters (sequential, with retry on lock)
-                    for (const agentTypeStr of agentTypes) {
-                        try {
-                            const agentId = agentTypeStr.replace(/_/g, '-');
-                            await this.executeWithLockRetry(() => this.openClawClient.executeAgent(`KNOWLEDGE UPDATE za ${companyName} - Koncept: ${conceptName}. Zapamti ove nalaze za buduce istrazivanje i analizu. Ovo su FINALNI, KONSOLIDOVANI rezultati:\n\n${knowledgeSummary}`, { agentId, timeoutSeconds: 180 }), `knowledge-update-${agentId}`);
-                            this.logger.log({
-                                message: `Headless: knowledge update sent to ${agentTypeStr} master`,
-                                taskId,
-                                conceptName,
-                            });
-                        }
-                        catch (kuErr) {
-                            this.logger.warn({
-                                message: `Headless: knowledge update to ${agentTypeStr} failed (non-blocking)`,
-                                taskId,
-                                error: kuErr instanceof Error ? kuErr.message : 'Unknown',
-                            });
-                        }
-                    }
-                    // Update main agent (business brain)
-                    try {
-                        const assignment = await this.prisma.stageConceptAssignment.findFirst({
-                            where: { noteId: taskId, tenantId },
-                            select: { personaType: true },
-                        });
-                        await this.executeWithLockRetry(() => this.openClawClient.executeAgent(`KNOWLEDGE UPDATE za ${companyName}: Koncept "${conceptName}" (${assignment?.personaType ?? 'UNKNOWN'} perspektiva) zavrsen. Zapamti i organizuj ove nalaze:\n${knowledgeSummary.substring(0, 3000)}`, { agentId: 'main', timeoutSeconds: 120 }), 'knowledge-update-main');
-                        this.logger.log({
-                            message: 'Headless: knowledge update sent to main (business brain)',
-                            taskId,
-                            conceptName,
-                        });
-                    }
-                    catch (mainErr) {
-                        this.logger.warn({
-                            message: 'Headless: main knowledge update failed (non-blocking)',
-                            taskId,
-                            error: mainErr instanceof Error ? mainErr.message : 'Unknown',
-                        });
-                    }
+                    this.appEventBus.emit(app_event_bus_service_1.APP_EVENTS.KNOWLEDGE_UPDATE_NEEDED, {
+                        tenantId,
+                        conceptName: finalNote.title || 'Unknown',
+                        agentTypes: jobTypes,
+                        summary: finalNote.userReport.substring(0, 5000),
+                        companyName: cachedTenantData?.name || 'Unknown Company',
+                        personaType: assignment?.personaType,
+                    });
                 }
             }
-            catch (knowledgeErr) {
-                this.logger.warn({
-                    message: 'Headless: knowledge updates failed (non-blocking)',
-                    taskId,
-                    error: knowledgeErr instanceof Error ? knowledgeErr.message : 'Unknown',
-                });
-            }
+            catch { /* non-blocking */ }
             // Maturity update (non-blocking)
             try {
                 if (taskNote.conceptId) {
@@ -21402,15 +25515,57 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                     error: maturityErr instanceof Error ? maturityErr.message : 'Unknown',
                 });
             }
+            // Emit concept.completed event (fire-and-forget, non-blocking)
+            if (taskNote.conceptId) {
+                this.appEventBus.emit(app_event_bus_service_1.APP_EVENTS.CONCEPT_COMPLETED, {
+                    tenantId,
+                    conceptId: taskNote.conceptId,
+                    noteId: taskId,
+                    userId,
+                    stage: conceptAssignment?.stage ?? 'UNKNOWN',
+                    personaType: conceptAssignment?.personaType ?? 'UNKNOWN',
+                    success: true,
+                });
+                // Bridge events: task complete + tree update (so frontend activity/tree/graph update)
+                const noteScore = await this.prisma.note.findUnique({
+                    where: { id: taskId },
+                    select: { aiScore: true },
+                });
+                this.appEventBus.emit('bridge.task.complete', {
+                    tenantId,
+                    noteId: taskId,
+                    score: noteScore?.aiScore ?? null,
+                });
+                this.appEventBus.emit('bridge.tree.updated', {
+                    tenantId,
+                    action: 'concept-completed',
+                    conceptId: taskNote.conceptId,
+                    conceptName: taskNote.title,
+                });
+            }
             return { success: true };
         }
         catch (err) {
+            const errorMsg = err instanceof Error ? err.message : 'Unknown error';
             this.logger.error({
                 message: 'Headless: task execution failed',
                 taskId,
-                error: err instanceof Error ? err.message : 'Unknown',
+                error: errorMsg,
             });
-            return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+            // Emit concept.failed event (fire-and-forget, non-blocking)
+            if (taskNote?.conceptId) {
+                this.appEventBus.emit(app_event_bus_service_1.APP_EVENTS.CONCEPT_FAILED, {
+                    tenantId,
+                    conceptId: taskNote.conceptId,
+                    noteId: taskId,
+                    userId,
+                    stage: 'UNKNOWN',
+                    personaType: 'UNKNOWN',
+                    success: false,
+                    error: errorMsg,
+                });
+            }
+            return { success: false, error: errorMsg };
         }
     }
     /**
@@ -21480,56 +25635,92 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
                     failed.add(job.id);
                     continue;
                 }
-                try {
-                    // Retry with backoff if concurrency limit is hit (MAX_CONCURRENT_PER_TENANT = 5)
-                    // Multiple headless tasks run in parallel, competing for limited agent slots
-                    const MAX_CONCURRENCY_RETRIES = 60; // 60 × 5s = 5 min max wait for a slot
-                    let started = false;
-                    for (let attempt = 0; attempt < MAX_CONCURRENCY_RETRIES; attempt++) {
-                        try {
-                            await this.agentExecutionService.executeJob(job.id, userId, tenantId);
-                            started = true;
-                            break;
-                        }
-                        catch (concErr) {
-                            const msg = concErr instanceof Error ? concErr.message : '';
-                            if (msg.includes('concurrent') || msg.includes('Maximum')) {
-                                if (attempt % 10 === 0) {
-                                    this.logger.log({
-                                        message: 'Headless: waiting for agent slot',
-                                        jobId: job.id, attempt, maxAttempts: MAX_CONCURRENCY_RETRIES,
-                                    });
-                                }
-                                await new Promise((r) => setTimeout(r, 5_000));
-                                continue;
+                const MAX_JOB_RETRIES = 1; // 1 extra attempt on transient failure
+                let jobSucceeded = false;
+                for (let jobAttempt = 0; jobAttempt <= MAX_JOB_RETRIES; jobAttempt++) {
+                    try {
+                        // Retry with backoff if concurrency limit is hit (MAX_CONCURRENT_PER_TENANT = 5)
+                        const MAX_CONCURRENCY_RETRIES = 60; // 60 × 5s = 5 min max wait for a slot
+                        let started = false;
+                        for (let attempt = 0; attempt < MAX_CONCURRENCY_RETRIES; attempt++) {
+                            try {
+                                await this.agentExecutionService.executeJob(job.id, userId, tenantId);
+                                started = true;
+                                break;
                             }
-                            throw concErr; // non-concurrency error — propagate
+                            catch (concErr) {
+                                const msg = concErr instanceof Error ? concErr.message : '';
+                                if (msg.includes('concurrent') || msg.includes('Maximum')) {
+                                    if (attempt % 10 === 0) {
+                                        this.logger.log({
+                                            message: 'Headless: waiting for agent slot',
+                                            jobId: job.id, attempt, maxAttempts: MAX_CONCURRENCY_RETRIES,
+                                        });
+                                    }
+                                    await new Promise((r) => setTimeout(r, 5_000));
+                                    continue;
+                                }
+                                throw concErr; // non-concurrency error — propagate
+                            }
                         }
+                        if (!started) {
+                            throw new Error('Timed out waiting for agent concurrency slot');
+                        }
+                        // Verify the job was actually started before polling
+                        const jobRecord = await this.prisma.agentJob.findFirst({
+                            where: { id: job.id, tenantId },
+                            select: { status: true },
+                        });
+                        if (jobRecord && jobRecord.status !== 'PLANNED') {
+                            await this.waitForJobCompletion(job.id, tenantId);
+                        }
+                        // Check final job status — auto-retry on transient failure
+                        const finalJob = await this.prisma.agentJob.findFirst({
+                            where: { id: job.id, tenantId },
+                            select: { status: true, error: true },
+                        });
+                        if (finalJob?.status === 'FAILED' && jobAttempt < MAX_JOB_RETRIES &&
+                            this.openClawClient.isRetryableError(finalJob.error)) {
+                            this.logger.warn({
+                                message: `Headless: transient job failure, retrying (${jobAttempt + 1}/${MAX_JOB_RETRIES})`,
+                                jobId: job.id, error: finalJob.error?.substring(0, 100),
+                            });
+                            // Reset job to PLANNED for retry
+                            await this.prisma.agentJob.update({
+                                where: { id: job.id },
+                                data: { status: 'PLANNED', executionId: null, error: null },
+                            });
+                            await new Promise((r) => setTimeout(r, 10_000)); // 10s cooldown
+                            continue; // retry the job
+                        }
+                        jobSucceeded = finalJob?.status === 'COMPLETED';
+                        break; // exit retry loop (either success or non-retryable failure)
                     }
-                    if (!started) {
-                        throw new Error('Timed out waiting for agent concurrency slot');
+                    catch (err) {
+                        if (jobAttempt < MAX_JOB_RETRIES && this.openClawClient.isRetryableError(err instanceof Error ? err.message : String(err))) {
+                            this.logger.warn({
+                                message: `Headless: job execution error, retrying (${jobAttempt + 1}/${MAX_JOB_RETRIES})`,
+                                jobId: job.id, error: err instanceof Error ? err.message : 'Unknown',
+                            });
+                            await new Promise((r) => setTimeout(r, 10_000));
+                            continue;
+                        }
+                        this.logger.error({
+                            message: 'Headless: agent job execution failed',
+                            jobId: job.id,
+                            error: err instanceof Error ? err.message : 'Unknown',
+                        });
+                        break; // non-retryable error
                     }
-                    // Verify the job was actually started before polling
-                    const jobRecord = await this.prisma.agentJob.findFirst({
-                        where: { id: job.id, tenantId },
-                        select: { status: true },
-                    });
-                    if (jobRecord && jobRecord.status !== 'PLANNED') {
-                        await this.waitForJobCompletion(job.id, tenantId);
-                    }
-                    finished.add(job.id);
+                }
+                finished.add(job.id);
+                if (jobSucceeded) {
                     this.logger.log({
                         message: 'Headless: agent job completed',
                         jobId: job.id,
                     });
                 }
-                catch (err) {
-                    this.logger.error({
-                        message: 'Headless: agent job execution failed',
-                        jobId: job.id,
-                        error: err instanceof Error ? err.message : 'Unknown',
-                    });
-                    finished.add(job.id);
+                else {
                     failed.add(job.id);
                 }
             }
@@ -21590,6 +25781,10 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
         }
     }
     /**
+     * Knowledge updates are now handled by AppEventBus KNOWLEDGE_UPDATE_NEEDED event.
+     * See event-handlers.service.ts handleKnowledgeUpdate().
+     */
+    /**
      * Execute an async operation with retry on session lock errors.
      * Retries up to 5 times with 10s delay between attempts.
      */
@@ -21630,17 +25825,17 @@ exports.HeadlessExecutorService = HeadlessExecutorService = HeadlessExecutorServ
     (0, common_1.Injectable)(),
     tslib_1.__param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => workflow_service_1.WorkflowService))),
     tslib_1.__param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => maturity_engine_service_1.MaturityEngineService))),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof workflow_service_1.WorkflowService !== "undefined" && workflow_service_1.WorkflowService) === "function" ? _b : Object, typeof (_c = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _c : Object, typeof (_d = typeof job_planner_service_1.JobPlannerService !== "undefined" && job_planner_service_1.JobPlannerService) === "function" ? _d : Object, typeof (_e = typeof agent_execution_service_1.AgentExecutionService !== "undefined" && agent_execution_service_1.AgentExecutionService) === "function" ? _e : Object, typeof (_f = typeof business_context_service_1.BusinessContextService !== "undefined" && business_context_service_1.BusinessContextService) === "function" ? _f : Object, typeof (_g = typeof maturity_engine_service_1.MaturityEngineService !== "undefined" && maturity_engine_service_1.MaturityEngineService) === "function" ? _g : Object, typeof (_h = typeof ws_server_holder_service_1.WsServerHolder !== "undefined" && ws_server_holder_service_1.WsServerHolder) === "function" ? _h : Object, typeof (_j = typeof cross_persona_intelligence_service_1.CrossPersonaIntelligenceService !== "undefined" && cross_persona_intelligence_service_1.CrossPersonaIntelligenceService) === "function" ? _j : Object, typeof (_k = typeof openclaw_client_service_1.OpenClawClientService !== "undefined" && openclaw_client_service_1.OpenClawClientService) === "function" ? _k : Object, typeof (_l = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _l : Object])
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof workflow_service_1.WorkflowService !== "undefined" && workflow_service_1.WorkflowService) === "function" ? _b : Object, typeof (_c = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _c : Object, typeof (_d = typeof job_planner_service_1.JobPlannerService !== "undefined" && job_planner_service_1.JobPlannerService) === "function" ? _d : Object, typeof (_e = typeof agent_execution_service_1.AgentExecutionService !== "undefined" && agent_execution_service_1.AgentExecutionService) === "function" ? _e : Object, typeof (_f = typeof business_context_service_1.BusinessContextService !== "undefined" && business_context_service_1.BusinessContextService) === "function" ? _f : Object, typeof (_g = typeof maturity_engine_service_1.MaturityEngineService !== "undefined" && maturity_engine_service_1.MaturityEngineService) === "function" ? _g : Object, typeof (_h = typeof ws_server_holder_service_1.WsServerHolder !== "undefined" && ws_server_holder_service_1.WsServerHolder) === "function" ? _h : Object, typeof (_j = typeof cross_persona_intelligence_service_1.CrossPersonaIntelligenceService !== "undefined" && cross_persona_intelligence_service_1.CrossPersonaIntelligenceService) === "function" ? _j : Object, typeof (_k = typeof openclaw_client_service_1.OpenClawClientService !== "undefined" && openclaw_client_service_1.OpenClawClientService) === "function" ? _k : Object, typeof (_l = typeof app_event_bus_service_1.AppEventBus !== "undefined" && app_event_bus_service_1.AppEventBus) === "function" ? _l : Object, typeof (_m = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _m : Object])
 ], HeadlessExecutorService);
 
 
 /***/ }),
-/* 168 */
+/* 182 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 var WorkflowService_1;
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.WorkflowService = void 0;
 const tslib_1 = __webpack_require__(4);
@@ -21653,14 +25848,15 @@ const concept_matching_service_1 = __webpack_require__(111);
 const citation_injector_service_1 = __webpack_require__(115);
 const citation_service_1 = __webpack_require__(108);
 const ai_gateway_service_1 = __webpack_require__(90);
-const notes_service_1 = __webpack_require__(134);
-const web_search_service_1 = __webpack_require__(148);
+const notes_service_1 = __webpack_require__(146);
+const web_search_service_1 = __webpack_require__(137);
 const business_context_service_1 = __webpack_require__(120);
 const concept_relevance_service_1 = __webpack_require__(121);
-const prompt_checker_service_1 = __webpack_require__(169);
-const maturity_engine_service_1 = __webpack_require__(163);
+const prompt_checker_service_1 = __webpack_require__(183);
+const maturity_engine_service_1 = __webpack_require__(177);
 const persona_prompts_1 = __webpack_require__(93);
 const department_categories_1 = __webpack_require__(119);
+const app_event_bus_service_1 = __webpack_require__(147);
 const MAX_RECURSION_DEPTH = 10;
 const WORKFLOW_GENERATION_SYSTEM_PROMPT = `Ti si iskusan dizajner poslovnih radnih tokova za srpska preduzeća. Kreiraj strukturirane, sekvencijalne radne tokove gde svaki korak PROIZVODI konkretan poslovni dokument.
 
@@ -21708,7 +25904,7 @@ Primer LOŠ promptTemplate:
 VAŽNO: Sav tekst MORA biti na SRPSKOM JEZIKU.
 Vrati SAMO validan JSON niz bez markdown formatiranja.`;
 let WorkflowService = WorkflowService_1 = class WorkflowService {
-    constructor(prisma, conceptService, conceptMatchingService, citationInjectorService, citationService, aiGatewayService, notesService, webSearchService, businessContextService, conceptRelevanceService, promptCheckerService, maturityEngine) {
+    constructor(prisma, conceptService, conceptMatchingService, citationInjectorService, citationService, aiGatewayService, notesService, webSearchService, businessContextService, conceptRelevanceService, promptCheckerService, maturityEngine, eventBus) {
         this.prisma = prisma;
         this.conceptService = conceptService;
         this.conceptMatchingService = conceptMatchingService;
@@ -21721,6 +25917,7 @@ let WorkflowService = WorkflowService_1 = class WorkflowService {
         this.conceptRelevanceService = conceptRelevanceService;
         this.promptCheckerService = promptCheckerService;
         this.maturityEngine = maturityEngine;
+        this.eventBus = eventBus;
         this.logger = new common_1.Logger(WorkflowService_1.name);
         /** In-memory store for active execution plans */
         this.activePlans = new Map();
@@ -22266,6 +26463,16 @@ Generiši 3-4 koraka. Redosled:
                     summary: result.content.substring(0, 2000),
                 });
                 callbacks.onStepComplete(step.stepId, result.content, result.citations);
+                this.eventBus.emit(app_event_bus_service_1.APP_EVENTS.WORKFLOW_STEP_COMPLETED, {
+                    tenantId,
+                    planId,
+                    stepId: step.stepId,
+                    conceptId: step.conceptId,
+                    conceptName: step.conceptName,
+                    userId,
+                    stepNumber: i + 1,
+                    totalSteps: plan.steps.length,
+                });
                 // Create sub-task note linked to parent task (with dedup by parentNoteId + stepNumber, Story 3.4 AC3)
                 for (const taskId of plan.taskIds) {
                     try {
@@ -22370,6 +26577,14 @@ Generiši 3-4 koraka. Redosled:
         }
         plan.status = 'completed';
         callbacks.onComplete('completed', completedCount, plan.steps.length);
+        this.eventBus.emit(app_event_bus_service_1.APP_EVENTS.WORKFLOW_COMPLETED, {
+            tenantId,
+            planId,
+            userId,
+            status: 'completed',
+            completedSteps: completedCount,
+            totalSteps: plan.steps.length,
+        });
         this.scheduledCleanup(planId);
     }
     /**
@@ -23007,12 +27222,12 @@ exports.WorkflowService = WorkflowService;
 exports.WorkflowService = WorkflowService = WorkflowService_1 = tslib_1.__decorate([
     (0, common_1.Injectable)(),
     tslib_1.__param(11, (0, common_1.Inject)((0, common_1.forwardRef)(() => maturity_engine_service_1.MaturityEngineService))),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _b : Object, typeof (_c = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _c : Object, typeof (_d = typeof citation_injector_service_1.CitationInjectorService !== "undefined" && citation_injector_service_1.CitationInjectorService) === "function" ? _d : Object, typeof (_e = typeof citation_service_1.CitationService !== "undefined" && citation_service_1.CitationService) === "function" ? _e : Object, typeof (_f = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _f : Object, typeof (_g = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _g : Object, typeof (_h = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _h : Object, typeof (_j = typeof business_context_service_1.BusinessContextService !== "undefined" && business_context_service_1.BusinessContextService) === "function" ? _j : Object, typeof (_k = typeof concept_relevance_service_1.ConceptRelevanceService !== "undefined" && concept_relevance_service_1.ConceptRelevanceService) === "function" ? _k : Object, typeof (_l = typeof prompt_checker_service_1.PromptCheckerService !== "undefined" && prompt_checker_service_1.PromptCheckerService) === "function" ? _l : Object, typeof (_m = typeof maturity_engine_service_1.MaturityEngineService !== "undefined" && maturity_engine_service_1.MaturityEngineService) === "function" ? _m : Object])
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _b : Object, typeof (_c = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _c : Object, typeof (_d = typeof citation_injector_service_1.CitationInjectorService !== "undefined" && citation_injector_service_1.CitationInjectorService) === "function" ? _d : Object, typeof (_e = typeof citation_service_1.CitationService !== "undefined" && citation_service_1.CitationService) === "function" ? _e : Object, typeof (_f = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _f : Object, typeof (_g = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _g : Object, typeof (_h = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _h : Object, typeof (_j = typeof business_context_service_1.BusinessContextService !== "undefined" && business_context_service_1.BusinessContextService) === "function" ? _j : Object, typeof (_k = typeof concept_relevance_service_1.ConceptRelevanceService !== "undefined" && concept_relevance_service_1.ConceptRelevanceService) === "function" ? _k : Object, typeof (_l = typeof prompt_checker_service_1.PromptCheckerService !== "undefined" && prompt_checker_service_1.PromptCheckerService) === "function" ? _l : Object, typeof (_m = typeof maturity_engine_service_1.MaturityEngineService !== "undefined" && maturity_engine_service_1.MaturityEngineService) === "function" ? _m : Object, typeof (_o = typeof app_event_bus_service_1.AppEventBus !== "undefined" && app_event_bus_service_1.AppEventBus) === "function" ? _o : Object])
 ], WorkflowService);
 
 
 /***/ }),
-/* 169 */
+/* 183 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -23025,7 +27240,7 @@ const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const axios_1 = tslib_1.__importDefault(__webpack_require__(58));
 const ai_gateway_service_1 = __webpack_require__(90);
-const web_search_service_1 = __webpack_require__(148);
+const web_search_service_1 = __webpack_require__(137);
 /** Maximum rewrite cycles before force pass-through */
 const MAX_REWRITE_CYCLES = 2;
 /** Timeout for URL HEAD requests (ms) */
@@ -23336,7 +27551,7 @@ exports.PromptCheckerService = PromptCheckerService = PromptCheckerService_1 = t
 
 
 /***/ }),
-/* 170 */
+/* 184 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -23347,7 +27562,7 @@ exports.CrossPersonaIntelligenceService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(10);
-const persona_labels_1 = __webpack_require__(165);
+const persona_labels_1 = __webpack_require__(179);
 const RELATIONSHIP_LABELS = {
     PREREQUISITE: 'PREDUSLOV',
     RELATED: 'POVEZAN',
@@ -23530,7 +27745,7 @@ exports.CrossPersonaIntelligenceService = CrossPersonaIntelligenceService = Cros
 
 
 /***/ }),
-/* 171 */
+/* 185 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -23776,7 +27991,7 @@ exports.StalenessDetectorService = StalenessDetectorService = StalenessDetectorS
 
 
 /***/ }),
-/* 172 */
+/* 186 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -23788,11 +28003,11 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const schedule_1 = __webpack_require__(6);
 const tenant_context_1 = __webpack_require__(10);
-const staleness_detector_service_1 = __webpack_require__(171);
-const maturity_engine_service_1 = __webpack_require__(163);
-const headless_executor_service_1 = __webpack_require__(167);
+const staleness_detector_service_1 = __webpack_require__(185);
+const maturity_engine_service_1 = __webpack_require__(177);
+const headless_executor_service_1 = __webpack_require__(181);
 const ai_gateway_service_1 = __webpack_require__(90);
-const ws_server_holder_service_1 = __webpack_require__(166);
+const ws_server_holder_service_1 = __webpack_require__(180);
 const cuid2_1 = __webpack_require__(33);
 /**
  * Autonomous scheduler — runs cron jobs for tenants in AUTONOMOUS stage.
@@ -24172,29 +28387,31 @@ exports.AutonomousSchedulerService = AutonomousSchedulerService = AutonomousSche
 
 
 /***/ }),
-/* 173 */
+/* 187 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 var MaturityController_1;
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.MaturityController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const jwt_auth_guard_1 = __webpack_require__(47);
 const current_user_decorator_1 = __webpack_require__(49);
+const config_1 = __webpack_require__(5);
 const tenant_context_1 = __webpack_require__(10);
-const maturity_engine_service_1 = __webpack_require__(163);
-const staleness_detector_service_1 = __webpack_require__(171);
-const autonomous_scheduler_service_1 = __webpack_require__(172);
+const maturity_engine_service_1 = __webpack_require__(177);
+const staleness_detector_service_1 = __webpack_require__(185);
+const autonomous_scheduler_service_1 = __webpack_require__(186);
 const types_1 = __webpack_require__(86);
 let MaturityController = MaturityController_1 = class MaturityController {
-    constructor(engine, staleness, scheduler, prisma) {
+    constructor(engine, staleness, scheduler, prisma, configService) {
         this.engine = engine;
         this.staleness = staleness;
         this.scheduler = scheduler;
         this.prisma = prisma;
+        this.configService = configService;
         this.logger = new common_1.Logger(MaturityController_1.name);
     }
     /**
@@ -24261,6 +28478,13 @@ let MaturityController = MaturityController_1 = class MaturityController {
      * GET /api/v1/maturity/graph — graph visualization data (active concepts + edges + agents)
      */
     async getGraphData(user, stageParam) {
+        const brainRelayMode = this.configService.get('BRAIN_RELAY_MODE', 'false') === 'true';
+        if (brainRelayMode) {
+            // Brain mode: build graph from tasks + proposals + concept relationships
+            const data = await this.buildBrainGraph(user.tenantId);
+            return { data };
+        }
+        // Legacy mode: from maturity engine assignments
         const tenant = await this.prisma.tenant.findUnique({
             where: { id: user.tenantId },
             select: { maturityStage: true },
@@ -24269,6 +28493,134 @@ let MaturityController = MaturityController_1 = class MaturityController {
         this.validateStage(stage);
         const data = await this.engine.getGraphData(user.tenantId, stage);
         return { data };
+    }
+    /**
+     * Build graph from tasks, proposals, and concept relationships (brain relay mode).
+     */
+    async buildBrainGraph(tenantId) {
+        // Get concepts from tasks AND proposals
+        const [tasks, proposals] = await Promise.all([
+            this.prisma.note.findMany({
+                where: { tenantId, noteType: 'TASK', conceptId: { not: null } },
+                select: { id: true, conceptId: true, status: true, aiScore: true, title: true },
+            }),
+            this.prisma.brainProposal.findMany({
+                where: { tenantId, relatedConcepts: { isEmpty: false } },
+                select: { id: true, relatedConcepts: true, status: true, title: true, canvasBlock: true },
+            }),
+        ]);
+        // Collect all concept IDs from both tasks and proposals
+        const conceptIdSet = new Set();
+        for (const t of tasks) {
+            if (t.conceptId)
+                conceptIdSet.add(t.conceptId);
+        }
+        for (const p of proposals) {
+            for (const cId of p.relatedConcepts) {
+                conceptIdSet.add(cId);
+            }
+        }
+        const conceptIds = [...conceptIdSet];
+        if (conceptIds.length === 0) {
+            return { nodes: [], edges: [], activeAgents: [] };
+        }
+        // Load concepts
+        const concepts = await this.prisma.concept.findMany({
+            where: { id: { in: conceptIds } },
+            select: { id: true, name: true, category: true, canvasBlock: true },
+        });
+        const conceptMap = new Map(concepts.map(c => [c.id, c]));
+        // Build nodes — one per concept, status from task or proposal
+        const taskByConceptId = new Map();
+        for (const t of tasks) {
+            if (!taskByConceptId.has(t.conceptId) || t.status !== 'PENDING') {
+                taskByConceptId.set(t.conceptId, t);
+            }
+        }
+        // Map proposal concepts to their proposal info
+        const proposalByConceptId = new Map();
+        for (const p of proposals) {
+            for (const cId of p.relatedConcepts) {
+                if (!proposalByConceptId.has(cId)) {
+                    proposalByConceptId.set(cId, p);
+                }
+            }
+        }
+        const nodes = conceptIds.map(cId => {
+            const concept = conceptMap.get(cId);
+            const task = taskByConceptId.get(cId);
+            const proposal = proposalByConceptId.get(cId);
+            // Canvas block from concept, proposal, or inferred
+            const canvasBlock = concept?.canvasBlock ?? proposal?.canvasBlock ?? '';
+            return {
+                id: cId,
+                name: concept?.name ?? cId,
+                category: concept?.category ?? '',
+                status: task?.status ?? (proposal ? 'PENDING' : 'PENDING'),
+                personaType: this.canvasBlockToPersona(canvasBlock),
+                aiScore: task?.aiScore ?? null,
+                noteId: task?.id ?? proposal?.id ?? '',
+            };
+        });
+        // Load edges between active concepts
+        const relationships = await this.prisma.conceptRelationship.findMany({
+            where: {
+                sourceConceptId: { in: conceptIds },
+                targetConceptId: { in: conceptIds },
+            },
+            select: { sourceConceptId: true, targetConceptId: true, relationshipType: true },
+        });
+        const edgeSet = new Set();
+        const edges = [];
+        for (const rel of relationships) {
+            const key = `${rel.sourceConceptId}:${rel.targetConceptId}:${rel.relationshipType}`;
+            if (!edgeSet.has(key)) {
+                edgeSet.add(key);
+                edges.push({
+                    source: rel.sourceConceptId,
+                    target: rel.targetConceptId,
+                    type: rel.relationshipType,
+                });
+            }
+        }
+        // Active agents: currently executing tasks (from agentExecution or bridge status)
+        const activeExecs = await this.prisma.agentExecution.findMany({
+            where: {
+                tenantId,
+                status: { in: ['PENDING', 'FORMATTING', 'EXECUTING'] },
+            },
+            select: { noteId: true, agentType: true, status: true },
+        });
+        const activeAgents = activeExecs
+            .filter(e => {
+            const task = tasks.find(t => t.id === e.noteId);
+            return task?.conceptId;
+        })
+            .map(e => {
+            const task = tasks.find(t => t.id === e.noteId);
+            const concept = task?.conceptId ? conceptMap.get(task.conceptId) : null;
+            return {
+                agentType: e.agentType,
+                conceptId: task?.conceptId ?? '',
+                personaType: this.canvasBlockToPersona(concept?.canvasBlock ?? ''),
+                status: e.status,
+            };
+        });
+        return { nodes, edges, activeAgents };
+    }
+    canvasBlockToPersona(canvasBlock) {
+        const map = {
+            KEY_PARTNERS: 'OPERATIONS',
+            KEY_ACTIVITIES: 'OPERATIONS',
+            KEY_RESOURCES: 'CTO',
+            VALUE_PROPOSITION: 'CMO',
+            CUSTOMER_RELATIONSHIPS: 'SALES',
+            CHANNELS: 'CMO',
+            CUSTOMER_SEGMENTS: 'SALES',
+            REVENUE_STREAMS: 'CFO',
+            COST_STRUCTURE: 'CFO',
+        };
+        return map[canvasBlock] ?? 'OPERATIONS';
     }
     /**
      * POST /api/v1/maturity/stage/:stage/initialize — initialize a stage
@@ -24585,7 +28937,7 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
     tslib_1.__metadata("design:type", Function),
     tslib_1.__metadata("design:paramtypes", [Object]),
-    tslib_1.__metadata("design:returntype", typeof (_e = typeof Promise !== "undefined" && Promise) === "function" ? _e : Object)
+    tslib_1.__metadata("design:returntype", typeof (_f = typeof Promise !== "undefined" && Promise) === "function" ? _f : Object)
 ], MaturityController.prototype, "getCurrentStage", null);
 tslib_1.__decorate([
     (0, common_1.Get)('stage/:stage/progress'),
@@ -24593,7 +28945,7 @@ tslib_1.__decorate([
     tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
     tslib_1.__metadata("design:type", Function),
     tslib_1.__metadata("design:paramtypes", [String, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_f = typeof Promise !== "undefined" && Promise) === "function" ? _f : Object)
+    tslib_1.__metadata("design:returntype", typeof (_g = typeof Promise !== "undefined" && Promise) === "function" ? _g : Object)
 ], MaturityController.prototype, "getStageProgress", null);
 tslib_1.__decorate([
     (0, common_1.Get)('graph'),
@@ -24609,14 +28961,14 @@ tslib_1.__decorate([
     tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
     tslib_1.__metadata("design:type", Function),
     tslib_1.__metadata("design:paramtypes", [String, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_g = typeof Promise !== "undefined" && Promise) === "function" ? _g : Object)
+    tslib_1.__metadata("design:returntype", typeof (_h = typeof Promise !== "undefined" && Promise) === "function" ? _h : Object)
 ], MaturityController.prototype, "initializeStage", null);
 tslib_1.__decorate([
     (0, common_1.Get)('execution-status'),
     tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
     tslib_1.__metadata("design:type", Function),
     tslib_1.__metadata("design:paramtypes", [Object]),
-    tslib_1.__metadata("design:returntype", typeof (_h = typeof Promise !== "undefined" && Promise) === "function" ? _h : Object)
+    tslib_1.__metadata("design:returntype", typeof (_j = typeof Promise !== "undefined" && Promise) === "function" ? _j : Object)
 ], MaturityController.prototype, "getExecutionStatus", null);
 tslib_1.__decorate([
     (0, common_1.Post)('stage/:stage/execute'),
@@ -24624,14 +28976,14 @@ tslib_1.__decorate([
     tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
     tslib_1.__metadata("design:type", Function),
     tslib_1.__metadata("design:paramtypes", [String, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_j = typeof Promise !== "undefined" && Promise) === "function" ? _j : Object)
+    tslib_1.__metadata("design:returntype", typeof (_k = typeof Promise !== "undefined" && Promise) === "function" ? _k : Object)
 ], MaturityController.prototype, "executeStage", null);
 tslib_1.__decorate([
     (0, common_1.Post)('stage/transition'),
     tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
     tslib_1.__metadata("design:type", Function),
     tslib_1.__metadata("design:paramtypes", [Object]),
-    tslib_1.__metadata("design:returntype", typeof (_k = typeof Promise !== "undefined" && Promise) === "function" ? _k : Object)
+    tslib_1.__metadata("design:returntype", typeof (_l = typeof Promise !== "undefined" && Promise) === "function" ? _l : Object)
 ], MaturityController.prototype, "transitionStage", null);
 tslib_1.__decorate([
     (0, common_1.Get)('concept/:conceptId/prerequisites'),
@@ -24639,7 +28991,7 @@ tslib_1.__decorate([
     tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
     tslib_1.__metadata("design:type", Function),
     tslib_1.__metadata("design:paramtypes", [String, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_l = typeof Promise !== "undefined" && Promise) === "function" ? _l : Object)
+    tslib_1.__metadata("design:returntype", typeof (_m = typeof Promise !== "undefined" && Promise) === "function" ? _m : Object)
 ], MaturityController.prototype, "checkPrerequisites", null);
 tslib_1.__decorate([
     (0, common_1.Post)('concept/:conceptId/re-execute'),
@@ -24647,35 +28999,35 @@ tslib_1.__decorate([
     tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
     tslib_1.__metadata("design:type", Function),
     tslib_1.__metadata("design:paramtypes", [String, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_m = typeof Promise !== "undefined" && Promise) === "function" ? _m : Object)
+    tslib_1.__metadata("design:returntype", typeof (_o = typeof Promise !== "undefined" && Promise) === "function" ? _o : Object)
 ], MaturityController.prototype, "reExecuteConcept", null);
 tslib_1.__decorate([
     (0, common_1.Get)('staleness'),
     tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
     tslib_1.__metadata("design:type", Function),
     tslib_1.__metadata("design:paramtypes", [Object]),
-    tslib_1.__metadata("design:returntype", typeof (_o = typeof Promise !== "undefined" && Promise) === "function" ? _o : Object)
+    tslib_1.__metadata("design:returntype", typeof (_p = typeof Promise !== "undefined" && Promise) === "function" ? _p : Object)
 ], MaturityController.prototype, "getStaleConcepts", null);
 tslib_1.__decorate([
     (0, common_1.Get)('autonomous/status'),
     tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
     tslib_1.__metadata("design:type", Function),
     tslib_1.__metadata("design:paramtypes", [Object]),
-    tslib_1.__metadata("design:returntype", typeof (_p = typeof Promise !== "undefined" && Promise) === "function" ? _p : Object)
+    tslib_1.__metadata("design:returntype", typeof (_q = typeof Promise !== "undefined" && Promise) === "function" ? _q : Object)
 ], MaturityController.prototype, "getAutonomousStatus", null);
 tslib_1.__decorate([
     (0, common_1.Post)('autonomous/trigger'),
     tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
     tslib_1.__metadata("design:type", Function),
     tslib_1.__metadata("design:paramtypes", [Object]),
-    tslib_1.__metadata("design:returntype", typeof (_q = typeof Promise !== "undefined" && Promise) === "function" ? _q : Object)
+    tslib_1.__metadata("design:returntype", typeof (_r = typeof Promise !== "undefined" && Promise) === "function" ? _r : Object)
 ], MaturityController.prototype, "triggerAutonomousRun", null);
 tslib_1.__decorate([
     (0, common_1.Get)('autonomous/runs'),
     tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
     tslib_1.__metadata("design:type", Function),
     tslib_1.__metadata("design:paramtypes", [Object]),
-    tslib_1.__metadata("design:returntype", typeof (_r = typeof Promise !== "undefined" && Promise) === "function" ? _r : Object)
+    tslib_1.__metadata("design:returntype", typeof (_s = typeof Promise !== "undefined" && Promise) === "function" ? _s : Object)
 ], MaturityController.prototype, "getAutonomousRuns", null);
 tslib_1.__decorate([
     (0, common_1.Get)('digests'),
@@ -24684,17 +29036,17 @@ tslib_1.__decorate([
     tslib_1.__param(2, (0, common_1.Query)('offset')),
     tslib_1.__metadata("design:type", Function),
     tslib_1.__metadata("design:paramtypes", [Object, String, String]),
-    tslib_1.__metadata("design:returntype", typeof (_s = typeof Promise !== "undefined" && Promise) === "function" ? _s : Object)
+    tslib_1.__metadata("design:returntype", typeof (_t = typeof Promise !== "undefined" && Promise) === "function" ? _t : Object)
 ], MaturityController.prototype, "getDigests", null);
 exports.MaturityController = MaturityController = MaturityController_1 = tslib_1.__decorate([
     (0, common_1.Controller)('v1/maturity'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof maturity_engine_service_1.MaturityEngineService !== "undefined" && maturity_engine_service_1.MaturityEngineService) === "function" ? _a : Object, typeof (_b = typeof staleness_detector_service_1.StalenessDetectorService !== "undefined" && staleness_detector_service_1.StalenessDetectorService) === "function" ? _b : Object, typeof (_c = typeof autonomous_scheduler_service_1.AutonomousSchedulerService !== "undefined" && autonomous_scheduler_service_1.AutonomousSchedulerService) === "function" ? _c : Object, typeof (_d = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _d : Object])
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof maturity_engine_service_1.MaturityEngineService !== "undefined" && maturity_engine_service_1.MaturityEngineService) === "function" ? _a : Object, typeof (_b = typeof staleness_detector_service_1.StalenessDetectorService !== "undefined" && staleness_detector_service_1.StalenessDetectorService) === "function" ? _b : Object, typeof (_c = typeof autonomous_scheduler_service_1.AutonomousSchedulerService !== "undefined" && autonomous_scheduler_service_1.AutonomousSchedulerService) === "function" ? _c : Object, typeof (_d = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _d : Object, typeof (_e = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _e : Object])
 ], MaturityController);
 
 
 /***/ }),
-/* 174 */
+/* 188 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -24707,8 +29059,8 @@ const common_1 = __webpack_require__(1);
 const cuid2_1 = __webpack_require__(33);
 const tenant_context_1 = __webpack_require__(10);
 const prisma_1 = __webpack_require__(36);
-const workflow_service_1 = __webpack_require__(168);
-const notes_service_1 = __webpack_require__(134);
+const workflow_service_1 = __webpack_require__(182);
+const notes_service_1 = __webpack_require__(146);
 const concept_service_1 = __webpack_require__(106);
 const concept_matching_service_1 = __webpack_require__(111);
 const curriculum_service_1 = __webpack_require__(109);
@@ -25439,7 +29791,7 @@ exports.YoloSchedulerService = YoloSchedulerService = YoloSchedulerService_1 = t
 
 
 /***/ }),
-/* 175 */
+/* 189 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -25448,8 +29800,8 @@ exports.AttachmentsModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(10);
-const attachments_controller_1 = __webpack_require__(176);
-const attachments_service_1 = __webpack_require__(178);
+const attachments_controller_1 = __webpack_require__(190);
+const attachments_service_1 = __webpack_require__(192);
 let AttachmentsModule = class AttachmentsModule {
 };
 exports.AttachmentsModule = AttachmentsModule;
@@ -25464,7 +29816,7 @@ exports.AttachmentsModule = AttachmentsModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 176 */
+/* 190 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -25474,10 +29826,10 @@ exports.AttachmentsController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const platform_express_1 = __webpack_require__(28);
-const express_1 = __webpack_require__(177);
+const express_1 = __webpack_require__(191);
 const jwt_auth_guard_1 = __webpack_require__(47);
 const current_user_decorator_1 = __webpack_require__(49);
-const attachments_service_1 = __webpack_require__(178);
+const attachments_service_1 = __webpack_require__(192);
 let AttachmentsController = class AttachmentsController {
     constructor(attachmentsService) {
         this.attachmentsService = attachmentsService;
@@ -25527,13 +29879,13 @@ exports.AttachmentsController = AttachmentsController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 177 */
+/* 191 */
 /***/ ((module) => {
 
 module.exports = require("express");
 
 /***/ }),
-/* 178 */
+/* 192 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -25690,7 +30042,7 @@ let AttachmentsService = AttachmentsService_1 = class AttachmentsService {
         let text = null;
         switch (mimeType) {
             case 'application/pdf': {
-                const pdfParse = __webpack_require__(179);
+                const pdfParse = __webpack_require__(193);
                 const result = await pdfParse(buffer);
                 text = result.text;
                 break;
@@ -25701,7 +30053,7 @@ let AttachmentsService = AttachmentsService_1 = class AttachmentsService {
                 break;
             }
             case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': {
-                const XLSX = __webpack_require__(180);
+                const XLSX = __webpack_require__(194);
                 const workbook = XLSX.read(buffer, { type: 'buffer' });
                 const sheets = [];
                 for (const name of workbook.SheetNames) {
@@ -25712,7 +30064,7 @@ let AttachmentsService = AttachmentsService_1 = class AttachmentsService {
                 break;
             }
             case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': {
-                const mammoth = __webpack_require__(181);
+                const mammoth = __webpack_require__(195);
                 const result = await mammoth.extractRawText({ buffer });
                 text = result.value;
                 break;
@@ -25738,25 +30090,25 @@ exports.AttachmentsService = AttachmentsService = AttachmentsService_1 = tslib_1
 
 
 /***/ }),
-/* 179 */
+/* 193 */
 /***/ ((module) => {
 
 module.exports = require("pdf-parse");
 
 /***/ }),
-/* 180 */
+/* 194 */
 /***/ ((module) => {
 
 module.exports = require("xlsx");
 
 /***/ }),
-/* 181 */
+/* 195 */
 /***/ ((module) => {
 
 module.exports = require("mammoth");
 
 /***/ }),
-/* 182 */
+/* 196 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -25768,13 +30120,13 @@ const common_1 = __webpack_require__(1);
 const jwt_auth_guard_1 = __webpack_require__(47);
 const department_guard_1 = __webpack_require__(123);
 const current_user_decorator_1 = __webpack_require__(49);
-const conversation_service_1 = __webpack_require__(183);
-const create_conversation_dto_1 = __webpack_require__(184);
-const update_conversation_dto_1 = __webpack_require__(185);
-const update_persona_dto_1 = __webpack_require__(186);
+const conversation_service_1 = __webpack_require__(197);
+const create_conversation_dto_1 = __webpack_require__(198);
+const update_conversation_dto_1 = __webpack_require__(199);
+const update_persona_dto_1 = __webpack_require__(200);
 const curriculum_service_1 = __webpack_require__(109);
 const concept_service_1 = __webpack_require__(106);
-const concept_plan_service_1 = __webpack_require__(187);
+const concept_plan_service_1 = __webpack_require__(201);
 /**
  * Controller for chat conversation management.
  * All endpoints require JWT authentication.
@@ -25953,12 +30305,12 @@ exports.ConversationController = ConversationController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 183 */
+/* 197 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 var ConversationService_1;
-var _a, _b, _c, _d, _e;
+var _a, _b, _c, _d, _e, _f;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ConversationService = void 0;
 const tslib_1 = __webpack_require__(4);
@@ -25969,19 +30321,21 @@ const client_1 = __webpack_require__(12);
 const concept_service_1 = __webpack_require__(106);
 const curriculum_service_1 = __webpack_require__(109);
 const citation_service_1 = __webpack_require__(108);
-const notes_service_1 = __webpack_require__(134);
+const notes_service_1 = __webpack_require__(146);
 const department_categories_1 = __webpack_require__(119);
+const app_event_bus_service_1 = __webpack_require__(147);
 /**
  * Service for managing chat conversations.
  * All operations are tenant-scoped through the TenantPrismaService.
  */
 let ConversationService = ConversationService_1 = class ConversationService {
-    constructor(tenantPrisma, conceptService, curriculumService, citationService, notesService) {
+    constructor(tenantPrisma, conceptService, curriculumService, citationService, notesService, eventBus) {
         this.tenantPrisma = tenantPrisma;
         this.conceptService = conceptService;
         this.curriculumService = curriculumService;
         this.citationService = citationService;
         this.notesService = notesService;
+        this.eventBus = eventBus;
         this.logger = new common_1.Logger(ConversationService_1.name);
     }
     /**
@@ -26023,6 +30377,13 @@ let ConversationService = ConversationService_1 = class ConversationService {
             tenantId,
             personaType: personaType ?? 'none',
             conceptId: conceptId ?? 'none',
+        });
+        this.eventBus.emit(app_event_bus_service_1.APP_EVENTS.CONVERSATION_CREATED, {
+            tenantId,
+            conversationId,
+            userId,
+            personaType: personaType ?? undefined,
+            conceptId: conceptId ?? undefined,
         });
         return this.mapConversation(conversation, conceptName, conceptCategory);
     }
@@ -26327,6 +30688,12 @@ let ConversationService = ConversationService_1 = class ConversationService {
                 pendingMap.set(task.conceptId, { userId: task.userId, noteId: task.noteId });
             }
         }
+        // 3b. Also include AI-discovered concepts (tenant-specific)
+        const aiConcepts = await this.conceptService.findTenantConcepts(tenantId);
+        this.logger.log({ message: 'AI-discovered concepts for tree', count: aiConcepts.length, tenantId });
+        for (const c of aiConcepts) {
+            allConceptIds.add(c.id);
+        }
         if (allConceptIds.size === 0) {
             return { tree: [], uncategorized: [] };
         }
@@ -26338,25 +30705,33 @@ let ConversationService = ConversationService_1 = class ConversationService {
         //    For each active concept, include it + all its ancestors
         const neededCurriculumIds = new Set();
         const conceptToCurriculum = new Map(); // conceptId → curriculumId
+        // Track which concepts are AI-discovered (tenant-specific) — they bypass category filtering
+        const aiConceptIdSet = new Set(aiConcepts.map(c => c.id));
         for (const [conceptId, info] of conceptMap) {
-            // Filter by visible categories (strip number prefix from DB category for comparison)
-            const normalizedCategory = info.category.replace(/^\d+(\.\d+)*\.?\s+/, '');
-            if (visibleCategories && !visibleCategories.includes(normalizedCategory)) {
-                continue;
+            // AI-discovered concepts bypass category filtering
+            if (!aiConceptIdSet.has(conceptId)) {
+                const normalizedCategory = info.category.replace(/^\d+(\.\d+)*\.?\s+/, '');
+                if (visibleCategories && !visibleCategories.includes(normalizedCategory)) {
+                    continue;
+                }
             }
             // Resolve curriculum ID — fall back to slug, stripping number prefix if needed
             let curriculumId = info.curriculumId ?? info.slug;
-            if (!this.curriculumService.findNode(curriculumId)) {
+            let foundInCurriculum = !!this.curriculumService.findNode(curriculumId);
+            if (!foundInCurriculum) {
                 const stripped = curriculumId.replace(/^\d+-/, '');
                 if (this.curriculumService.findNode(stripped)) {
                     curriculumId = stripped;
+                    foundInCurriculum = true;
                 }
             }
-            conceptToCurriculum.set(conceptId, curriculumId);
-            // Add this node and all its ancestors to the needed set
-            const chain = this.curriculumService.getAncestorChain(curriculumId);
-            for (const ancestor of chain) {
-                neededCurriculumIds.add(ancestor.id);
+            // Only map to curriculum if the node was actually found
+            if (foundInCurriculum) {
+                conceptToCurriculum.set(conceptId, curriculumId);
+                const chain = this.curriculumService.getAncestorChain(curriculumId);
+                for (const ancestor of chain) {
+                    neededCurriculumIds.add(ancestor.id);
+                }
             }
         }
         // 7. Build sparse tree from curriculum nodes
@@ -26403,6 +30778,57 @@ let ConversationService = ConversationService_1 = class ConversationService {
                 linkedConversationId,
             });
         }
+        // 7b. Group unmapped concepts by matching root category
+        const mappedConceptIds = new Set(conceptToCurriculum.keys());
+        // Map English/mixed categories to root curriculum IDs
+        const CATEGORY_TO_ROOT = {
+            'marketing': 'marketing', 'Marketing': 'marketing',
+            'prodaja': 'prodaja', 'Prodaja': 'prodaja', 'sales': 'prodaja', 'Sales': 'prodaja',
+            'finansije': 'finansije', 'Finansije': 'finansije', 'finance': 'finansije', 'Finance': 'finansije',
+            'operacije': 'operacije-i-proizvodnja', 'Operacije': 'operacije-i-proizvodnja',
+            'operations': 'operacije-i-proizvodnja', 'Operations': 'operacije-i-proizvodnja',
+            'proizvodnja': 'operacije-i-proizvodnja',
+            'strategija': 'strategija', 'Strategija': 'strategija', 'strategy': 'strategija', 'Strategy': 'strategija',
+            'vrednost': 'vrednost', 'Vrednost': 'vrednost', 'value': 'vrednost', 'Value': 'vrednost',
+            'technology': 'razvoj-i-tehnologija', 'Technology': 'razvoj-i-tehnologija',
+            'razvoj': 'razvoj-i-tehnologija', 'Razvoj': 'razvoj-i-tehnologija',
+            'quality': 'operacije-i-proizvodnja', 'Quality': 'operacije-i-proizvodnja',
+            'customer service': 'prodaja', 'Customer Service': 'prodaja',
+            'poslovni modeli': 'poslovni-modeli', 'Poslovni Modeli': 'poslovni-modeli',
+            'hr': 'ljudski-resursi', 'HR': 'ljudski-resursi', 'Human Resources': 'ljudski-resursi',
+            'legal': 'operacije-i-proizvodnja', 'Legal': 'operacije-i-proizvodnja',
+            'logistics': 'operacije-i-proizvodnja', 'Logistics': 'operacije-i-proizvodnja',
+            'innovation': 'razvoj-i-tehnologija', 'Innovation': 'razvoj-i-tehnologija',
+            'design': 'marketing', 'Design': 'marketing',
+            'Inovacije': 'razvoj-i-tehnologija',
+            'Pravo': 'operacije-i-proizvodnja',
+            'Logistika': 'operacije-i-proizvodnja',
+        };
+        // Group unmapped concepts by their target root
+        const unmappedByRoot = new Map();
+        for (const [conceptId, info] of conceptMap) {
+            if (mappedConceptIds.has(conceptId))
+                continue;
+            const completed = completedMap.get(conceptId);
+            const pending = pendingMap.get(conceptId);
+            const conv = convMap.get(conceptId);
+            const node = {
+                curriculumId: `ai-${conceptId}`,
+                label: info.name,
+                conceptId,
+                children: [],
+                conversationCount: (convsByConceptId.get(conceptId) ?? []).length,
+                conversations: (convsByConceptId.get(conceptId) ?? []),
+                status: completed ? 'completed' : pending ? 'pending' : undefined,
+                completedByUserId: completed?.userId,
+                pendingNoteId: pending?.noteId,
+                linkedConversationId: conv?.conversationId,
+            };
+            const rootId = CATEGORY_TO_ROOT[info.category] ?? CATEGORY_TO_ROOT[info.category.toLowerCase()] ?? 'ostalo';
+            if (!unmappedByRoot.has(rootId))
+                unmappedByRoot.set(rootId, []);
+            unmappedByRoot.get(rootId).push(node);
+        }
         // 8. Wire up parent-child relationships
         const rootNodes = [];
         for (const [currId, treeNode] of treeNodeMap) {
@@ -26414,6 +30840,30 @@ let ConversationService = ConversationService_1 = class ConversationService {
             else {
                 const parent = treeNodeMap.get(currNode.parentId);
                 parent.children.push(treeNode);
+            }
+        }
+        // 8b. Attach unmapped AI concepts to matching root nodes (or create new roots)
+        const rootLabels = {
+            'marketing': 'Marketing', 'prodaja': 'Prodaja', 'finansije': 'Finansije',
+            'operacije-i-proizvodnja': 'Operacije i Proizvodnja', 'strategija': 'Strategija',
+            'vrednost': 'Vrednost', 'razvoj-i-tehnologija': 'Razvoj i Tehnologija',
+            'poslovni-modeli': 'Poslovni Modeli', 'ostalo': 'Ostalo',
+        };
+        for (const [rootId, concepts] of unmappedByRoot) {
+            // Try to find existing root node
+            const existingRoot = rootNodes.find(r => r.curriculumId === rootId)
+                ?? rootNodes.find(r => String(r.label).toLowerCase().includes(rootId.split('-')[0]));
+            if (existingRoot) {
+                existingRoot.children.push(...concepts);
+            }
+            else {
+                rootNodes.push({
+                    curriculumId: rootId,
+                    label: rootLabels[rootId] ?? rootId,
+                    children: concepts,
+                    conversationCount: 0,
+                    conversations: [],
+                });
             }
         }
         // 9. Sort children at every level by the curriculum sortOrder
@@ -26800,12 +31250,12 @@ let ConversationService = ConversationService_1 = class ConversationService {
 exports.ConversationService = ConversationService;
 exports.ConversationService = ConversationService = ConversationService_1 = tslib_1.__decorate([
     (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.TenantPrismaService !== "undefined" && tenant_context_1.TenantPrismaService) === "function" ? _a : Object, typeof (_b = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _b : Object, typeof (_c = typeof curriculum_service_1.CurriculumService !== "undefined" && curriculum_service_1.CurriculumService) === "function" ? _c : Object, typeof (_d = typeof citation_service_1.CitationService !== "undefined" && citation_service_1.CitationService) === "function" ? _d : Object, typeof (_e = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _e : Object])
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.TenantPrismaService !== "undefined" && tenant_context_1.TenantPrismaService) === "function" ? _a : Object, typeof (_b = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _b : Object, typeof (_c = typeof curriculum_service_1.CurriculumService !== "undefined" && curriculum_service_1.CurriculumService) === "function" ? _c : Object, typeof (_d = typeof citation_service_1.CitationService !== "undefined" && citation_service_1.CitationService) === "function" ? _d : Object, typeof (_e = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _e : Object, typeof (_f = typeof app_event_bus_service_1.AppEventBus !== "undefined" && app_event_bus_service_1.AppEventBus) === "function" ? _f : Object])
 ], ConversationService);
 
 
 /***/ }),
-/* 184 */
+/* 198 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -26853,7 +31303,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 185 */
+/* 199 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -26873,7 +31323,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 186 */
+/* 200 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -26905,28 +31355,28 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 187 */
+/* 201 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 var ConceptPlanService_1;
-var _a, _b, _c, _d, _e, _f, _g;
+var _a, _b, _c, _d, _e, _f, _g, _h;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ConceptPlanService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const cuid2_1 = __webpack_require__(33);
 const tenant_context_1 = __webpack_require__(10);
 const prisma_1 = __webpack_require__(36);
 const types_1 = __webpack_require__(86);
-const workflow_service_1 = __webpack_require__(168);
-const notes_service_1 = __webpack_require__(134);
-const conversation_service_1 = __webpack_require__(183);
+const workflow_service_1 = __webpack_require__(182);
+const notes_service_1 = __webpack_require__(146);
+const conversation_service_1 = __webpack_require__(197);
 const ai_gateway_service_1 = __webpack_require__(90);
 const business_context_service_1 = __webpack_require__(120);
-const agent_execution_event_bus_service_1 = __webpack_require__(159);
+const agent_execution_event_bus_service_1 = __webpack_require__(144);
+const headless_executor_service_1 = __webpack_require__(181);
 let ConceptPlanService = ConceptPlanService_1 = class ConceptPlanService {
-    constructor(prisma, workflowService, notesService, conversationService, aiGatewayService, businessContextService, eventBus) {
+    constructor(prisma, workflowService, notesService, conversationService, aiGatewayService, businessContextService, eventBus, headlessExecutor) {
         this.prisma = prisma;
         this.workflowService = workflowService;
         this.notesService = notesService;
@@ -26934,6 +31384,7 @@ let ConceptPlanService = ConceptPlanService_1 = class ConceptPlanService {
         this.aiGatewayService = aiGatewayService;
         this.businessContextService = businessContextService;
         this.eventBus = eventBus;
+        this.headlessExecutor = headlessExecutor;
         this.logger = new common_1.Logger(ConceptPlanService_1.name);
     }
     /**
@@ -27025,72 +31476,46 @@ let ConceptPlanService = ConceptPlanService_1 = class ConceptPlanService {
             parentNoteId: parentNote.id,
             stepCount: steps.length,
         });
-        // 7. Execute steps sequentially
-        const completedSummaries = [];
-        for (const [i, step] of steps.entries()) {
-            const childNoteId = childNoteIds[i];
-            const planStep = {
-                stepId: `auto_${(0, cuid2_1.createId)()}`,
-                conceptId,
-                conceptName,
-                workflowStepNumber: step.stepNumber,
-                title: step.title,
-                description: step.description,
-                estimatedMinutes: step.estimatedMinutes,
-                departmentTag: step.departmentTag,
-                status: 'in_progress',
-            };
-            try {
-                const result = await this.workflowService.executeStepAutonomous(planStep, conversationId, userId, tenantId, () => {
-                    // onChunk callback required by interface — content comes from result.content
-                }, completedSummaries);
-                // Update child task with generated content
-                await this.prisma.note.update({
-                    where: { id: childNoteId },
-                    data: {
-                        content: result.content,
-                        status: prisma_1.NoteStatus.READY_FOR_REVIEW,
-                    },
-                });
-                completedSummaries.push({
-                    title: step.title,
-                    conceptName,
-                    summary: result.content.substring(0, 500),
-                });
-                // Notify frontend that task was updated
-                this.emitNotesUpdated(tenantId, conversationId);
+        // 7. Execute via HeadlessExecutor — same pipeline as maturity flow
+        // This triggers: synthesis → job planning → Gemini search → Brave → DeepSeek agents
+        // with cross-agent collaboration, web search enrichment, and consolidated output.
+        try {
+            const result = await this.headlessExecutor.executeTask({
+                taskId: parentNote.id,
+                tenantId,
+                userId,
+            });
+            if (result.success) {
                 this.logger.log({
-                    message: 'Plan step executed',
-                    stepNumber: step.stepNumber,
-                    title: step.title,
-                    contentLength: result.content.length,
-                    citations: result.citations.length,
+                    message: 'Chat plan executed via headless pipeline',
+                    conceptId,
+                    conceptName,
+                    parentNoteId: parentNote.id,
                 });
             }
-            catch (err) {
-                this.logger.error({
-                    message: 'Plan step execution failed',
-                    stepNumber: step.stepNumber,
-                    title: step.title,
-                    error: err instanceof Error ? err.message : 'Unknown',
+            else {
+                this.logger.warn({
+                    message: 'Chat plan execution failed',
+                    conceptId,
+                    error: result.error,
                 });
-                // Continue with remaining steps — don't let one failure block others
             }
         }
-        // 8. Mark parent task as READY_FOR_REVIEW
-        await this.prisma.note.update({
-            where: { id: parentNote.id },
-            data: { status: prisma_1.NoteStatus.READY_FOR_REVIEW },
-        });
+        catch (err) {
+            this.logger.error({
+                message: 'Chat plan execution error',
+                conceptId,
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+        }
         this.emitNotesUpdated(tenantId, conversationId);
-        // 9. Send completion message in chat
-        await this.sendChatMessage(tenantId, conversationId, `Plan za **${conceptName}** je završen. Izvršeno ${completedSummaries.length}/${steps.length} koraka. Rezultati su dostupni u panelu zadataka.`);
+        // 8. Send completion message in chat
+        await this.sendChatMessage(tenantId, conversationId, `Plan za **${conceptName}** je zavrsen. Rezultati su dostupni u panelu zadataka.`);
         this.logger.log({
             message: 'Plan execution complete',
             conceptId,
             conceptName,
-            completedSteps: completedSummaries.length,
-            totalSteps: steps.length,
+            stepCount: steps.length,
         });
     }
     // ─── Branch B: Notes exist — suggest next steps via chat message ───
@@ -27234,48 +31659,53 @@ Piši na srpskom jeziku. Minimum 400 reči.`;
 exports.ConceptPlanService = ConceptPlanService;
 exports.ConceptPlanService = ConceptPlanService = ConceptPlanService_1 = tslib_1.__decorate([
     (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof workflow_service_1.WorkflowService !== "undefined" && workflow_service_1.WorkflowService) === "function" ? _b : Object, typeof (_c = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _c : Object, typeof (_d = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _d : Object, typeof (_e = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _e : Object, typeof (_f = typeof business_context_service_1.BusinessContextService !== "undefined" && business_context_service_1.BusinessContextService) === "function" ? _f : Object, typeof (_g = typeof agent_execution_event_bus_service_1.AgentExecutionEventBus !== "undefined" && agent_execution_event_bus_service_1.AgentExecutionEventBus) === "function" ? _g : Object])
+    tslib_1.__param(7, (0, common_1.Inject)((0, common_1.forwardRef)(() => headless_executor_service_1.HeadlessExecutorService))),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof workflow_service_1.WorkflowService !== "undefined" && workflow_service_1.WorkflowService) === "function" ? _b : Object, typeof (_c = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _c : Object, typeof (_d = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _d : Object, typeof (_e = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _e : Object, typeof (_f = typeof business_context_service_1.BusinessContextService !== "undefined" && business_context_service_1.BusinessContextService) === "function" ? _f : Object, typeof (_g = typeof agent_execution_event_bus_service_1.AgentExecutionEventBus !== "undefined" && agent_execution_event_bus_service_1.AgentExecutionEventBus) === "function" ? _g : Object, typeof (_h = typeof headless_executor_service_1.HeadlessExecutorService !== "undefined" && headless_executor_service_1.HeadlessExecutorService) === "function" ? _h : Object])
 ], ConceptPlanService);
 
 
 /***/ }),
-/* 188 */
+/* 202 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 var ConversationGateway_1;
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, _32;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ConversationGateway = void 0;
 const tslib_1 = __webpack_require__(4);
-const websockets_1 = __webpack_require__(189);
-const socket_io_1 = __webpack_require__(190);
+const websockets_1 = __webpack_require__(203);
+const socket_io_1 = __webpack_require__(204);
 const common_1 = __webpack_require__(1);
 const config_1 = __webpack_require__(5);
 const jsonwebtoken_1 = __webpack_require__(59);
-const jwks_rsa_1 = tslib_1.__importDefault(__webpack_require__(191));
-const conversation_service_1 = __webpack_require__(183);
+const jwks_rsa_1 = tslib_1.__importDefault(__webpack_require__(205));
+const conversation_service_1 = __webpack_require__(197);
 const ai_gateway_service_1 = __webpack_require__(90);
-const notes_service_1 = __webpack_require__(134);
+const notes_service_1 = __webpack_require__(146);
 const concept_matching_service_1 = __webpack_require__(111);
 const concept_classifier_service_1 = __webpack_require__(122);
 const concept_service_1 = __webpack_require__(106);
 const citation_injector_service_1 = __webpack_require__(115);
 const citation_service_1 = __webpack_require__(108);
-const memory_context_builder_service_1 = __webpack_require__(145);
-const memory_extraction_service_1 = __webpack_require__(143);
-const memory_service_1 = __webpack_require__(140);
+const memory_context_builder_service_1 = __webpack_require__(172);
+const memory_extraction_service_1 = __webpack_require__(170);
+const memory_service_1 = __webpack_require__(167);
 const concept_extraction_service_1 = __webpack_require__(116);
-const workflow_service_1 = __webpack_require__(168);
-const yolo_scheduler_service_1 = __webpack_require__(174);
-const web_search_service_1 = __webpack_require__(148);
+const workflow_service_1 = __webpack_require__(182);
+const yolo_scheduler_service_1 = __webpack_require__(188);
+const web_search_service_1 = __webpack_require__(137);
 const business_context_service_1 = __webpack_require__(120);
-const execution_state_service_1 = __webpack_require__(150);
-const attachments_service_1 = __webpack_require__(178);
-const job_planner_service_1 = __webpack_require__(162);
-const agent_execution_event_bus_service_1 = __webpack_require__(159);
-const maturity_engine_service_1 = __webpack_require__(163);
-const ws_server_holder_service_1 = __webpack_require__(166);
+const execution_state_service_1 = __webpack_require__(175);
+const attachments_service_1 = __webpack_require__(192);
+const job_planner_service_1 = __webpack_require__(150);
+const agent_execution_event_bus_service_1 = __webpack_require__(144);
+const openclaw_client_service_1 = __webpack_require__(139);
+const headless_executor_service_1 = __webpack_require__(181);
+const maturity_engine_service_1 = __webpack_require__(177);
+const ws_server_holder_service_1 = __webpack_require__(180);
+const app_event_bus_service_1 = __webpack_require__(147);
+const bridge_service_1 = __webpack_require__(159);
 const tenant_context_1 = __webpack_require__(10);
 const cuid2_1 = __webpack_require__(33);
 const prisma_1 = __webpack_require__(36);
@@ -27287,7 +31717,7 @@ const types_2 = __webpack_require__(86);
  * Note: CORS origin is configured dynamically in afterInit using ConfigService.
  */
 let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
-    constructor(conversationService, aiGatewayService, configService, prisma, notesService, conceptMatchingService, conceptClassifierService, citationInjectorService, citationService, memoryContextBuilder, memoryExtractionService, memoryService, workflowService, conceptService, conceptExtractionService, yoloScheduler, webSearchService, businessContextService, executionStateService, attachmentsService, jobPlannerService, agentEventBus, maturityEngine, wsServerHolder) {
+    constructor(conversationService, aiGatewayService, configService, prisma, notesService, conceptMatchingService, conceptClassifierService, citationInjectorService, citationService, memoryContextBuilder, memoryExtractionService, memoryService, workflowService, conceptService, conceptExtractionService, yoloScheduler, webSearchService, businessContextService, executionStateService, attachmentsService, jobPlannerService, agentEventBus, maturityEngine, wsServerHolder, appEventBus, openClawClient, headlessExecutor) {
         this.conversationService = conversationService;
         this.aiGatewayService = aiGatewayService;
         this.configService = configService;
@@ -27312,9 +31742,13 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
         this.agentEventBus = agentEventBus;
         this.maturityEngine = maturityEngine;
         this.wsServerHolder = wsServerHolder;
+        this.appEventBus = appEventBus;
+        this.openClawClient = openClawClient;
+        this.headlessExecutor = headlessExecutor;
         this.logger = new common_1.Logger(ConversationGateway_1.name);
         /** Cached dev user resolved from DB (avoids repeat queries per connection) */
         this.resolvedDevUser = null;
+        // Legacy autoPopuniSingleTask body removed - now uses HeadlessExecutor
         // ─── YOLO Auto-Popuni Queue (H2 fix: sequential to avoid LLM overload) ───
         this.autoPopuniYoloQueue = [];
         this.isProcessingAutoPopuniYolo = false;
@@ -27347,9 +31781,10 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
             });
         }
         // Find recently active executions (not stale) that can be resumed
+        const brainRelay = this.configService.get('BRAIN_RELAY_MODE', 'false') === 'true';
         const resumable = await this.executionStateService.getAllActiveExecutions();
         for (const exec of resumable) {
-            if (exec.type === 'yolo' || exec.type === 'domain-yolo') {
+            if ((exec.type === 'yolo' || exec.type === 'domain-yolo') && !brainRelay) {
                 this.scheduleYoloResume(exec);
             }
             // Workflows with user-confirmation steps cannot auto-resume
@@ -27385,6 +31820,46 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
                 });
             }
         });
+        // Subscribe to Bridge events and broadcast to ALL connected clients
+        // (Room-based targeting had socketsInRoom=0 issue; using global emit instead)
+        for (const eventName of Object.values(bridge_service_1.BRIDGE_EVENTS)) {
+            this.appEventBus.on(eventName, (payload) => {
+                try {
+                    if (this.server) {
+                        const wsEventName = eventName.replace('bridge.', '').replace(/\./g, ':');
+                        // Emit to all connected sockets — frontend filters by tenantId if needed
+                        this.server.emit(wsEventName, payload);
+                        this.logger.log({
+                            message: 'Bridge event broadcast (global)',
+                            wsEvent: wsEventName,
+                            tenantId: payload['tenantId'],
+                        });
+                        // Also emit agent:concept-activity for graph view when agent status changes
+                        if (eventName === bridge_service_1.BRIDGE_EVENTS.AGENT_STATUS && payload['taskId']) {
+                            this.prisma.note.findUnique({
+                                where: { id: payload['taskId'] },
+                                select: { conceptId: true },
+                            }).then((note) => {
+                                if (note?.conceptId) {
+                                    this.server.emit('agent:concept-activity', {
+                                        agentType: payload['agent'] ?? 'direktor',
+                                        conceptId: note.conceptId,
+                                        status: payload['status'] === 'completed' ? 'completed' : 'started',
+                                    });
+                                }
+                            }).catch(() => { });
+                        }
+                    }
+                }
+                catch (err) {
+                    this.logger.error({
+                        message: 'Failed to broadcast bridge event',
+                        eventName,
+                        error: err instanceof Error ? err.message : 'Unknown',
+                    });
+                }
+            });
+        }
         // Daily event journal cleanup
         setInterval(() => {
             this.executionStateService
@@ -27864,6 +32339,114 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
             });
         }
     }
+    /**
+     * Brain Relay Mode: Thin gateway that forwards messages to OpenClaw
+     * without any NestJS-side intelligence (no enrichment, no auto-actions).
+     * OpenClaw handles all thinking via SOUL.md + mentor-ai-bridge skill.
+     *
+     * Toggle: Set BRAIN_RELAY_MODE=true in .env to enable.
+     */
+    async handleMessageRelay(client, authenticatedClient, conversationId, content, attachmentIds, isRegenerate) {
+        // 1. Extract attachment text if provided
+        let attachmentContext = '';
+        if (attachmentIds?.length) {
+            attachmentContext = await this.attachmentsService
+                .getExtractedText(attachmentIds, authenticatedClient.tenantId)
+                .catch(() => '');
+        }
+        // 2. Save user message (skip on regeneration)
+        let userMessage;
+        if (!isRegenerate) {
+            userMessage = await this.conversationService.addMessage(authenticatedClient.tenantId, conversationId, types_2.MessageRole.USER, content);
+            // Link attachments
+            if (attachmentIds?.length && userMessage) {
+                await Promise.all(attachmentIds.map((attId) => this.attachmentsService
+                    .linkToMessage(attId, userMessage.id, authenticatedClient.tenantId)
+                    .catch(() => { })));
+            }
+            client.emit('chat:message-received', {
+                messageId: userMessage.id,
+                role: 'USER',
+            });
+        }
+        // 3. Forward to OpenClaw — no enrichment, no context building
+        const messageToSend = attachmentContext
+            ? `${attachmentContext}\n\n${content}`
+            : content;
+        let fullContent = '';
+        let chunkIndex = 0;
+        if (this.openClawClient.isConfigured()) {
+            const ocResult = await this.openClawClient.executeAgent(messageToSend, {
+                agentId: 'main',
+                sessionId: conversationId,
+                tenantProfile: authenticatedClient.tenantId,
+                onText: (text) => {
+                    fullContent += text;
+                    client.emit('chat:message-chunk', { content: text, index: chunkIndex++ });
+                },
+                onTool: (tool, status, query) => {
+                    if (status === 'start') {
+                        client.emit('chat:research-phase', { phase: 'researching', tool, query });
+                    }
+                },
+            });
+            if (!ocResult.success) {
+                // Fallback to AiGateway on OpenClaw failure
+                this.logger.warn({ message: 'OpenClaw relay failed, falling back to AiGateway', error: ocResult.error });
+                fullContent = '';
+                chunkIndex = 0;
+                const conversation = await this.conversationService.getConversation(authenticatedClient.tenantId, conversationId, authenticatedClient.userId);
+                const messages = conversation.messages.map((m) => ({
+                    role: m.role.toLowerCase(),
+                    content: m.content,
+                }));
+                await this.aiGatewayService.streamCompletionWithContext(messages, {
+                    tenantId: authenticatedClient.tenantId,
+                    userId: authenticatedClient.userId,
+                    conversationId,
+                }, (chunk) => {
+                    fullContent += chunk;
+                    client.emit('chat:message-chunk', { content: chunk, index: chunkIndex++ });
+                });
+            }
+        }
+        else {
+            // No OpenClaw — fallback to AiGateway
+            const conversation = await this.conversationService.getConversation(authenticatedClient.tenantId, conversationId, authenticatedClient.userId);
+            const messages = conversation.messages.map((m) => ({
+                role: m.role.toLowerCase(),
+                content: m.content,
+            }));
+            await this.aiGatewayService.streamCompletionWithContext(messages, {
+                tenantId: authenticatedClient.tenantId,
+                userId: authenticatedClient.userId,
+                conversationId,
+            }, (chunk) => {
+                fullContent += chunk;
+                client.emit('chat:message-chunk', { content: chunk, index: chunkIndex++ });
+            });
+        }
+        // 4. Save AI message
+        const aiMessage = await this.conversationService.addMessage(authenticatedClient.tenantId, conversationId, types_2.MessageRole.ASSISTANT, fullContent);
+        // 5. Emit completion (minimal metadata — no confidence, no citations from NestJS)
+        client.emit('chat:complete', {
+            messageId: aiMessage.id,
+            fullContent,
+            metadata: {
+                totalChunks: chunkIndex,
+                confidence: null,
+                citations: [],
+                suggestedActions: undefined,
+            },
+        });
+        this.logger.log({
+            message: 'Chat message processed (relay mode)',
+            conversationId,
+            userId: authenticatedClient.userId,
+            aiMessageId: aiMessage.id,
+            contentLength: fullContent.length,
+        });
+    }
     async handleMessage(client, payload) {
         const authenticatedClient = client;
         const { conversationId, content, attachmentIds: rawAttachmentIds } = payload;
@@ -27897,6 +32480,27 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
                 type: 'message_too_long',
                 message: `Message cannot exceed ${MAX_MESSAGE_LENGTH} characters`,
             });
+            return;
+        }
+        // ── BRAIN RELAY MODE ──
+        // When enabled, forward directly to OpenClaw without NestJS intelligence.
+        // Toggle: BRAIN_RELAY_MODE=true in .env
+        const relayMode = this.configService.get('BRAIN_RELAY_MODE', 'false') === 'true';
+        if (relayMode) {
+            try {
+                await this.handleMessageRelay(client, authenticatedClient, conversationId, content, attachmentIds, payload._isRegenerate);
+            }
+            catch (error) {
+                this.logger.error({
+                    message: 'Relay mode error',
+                    conversationId,
+                    error: error instanceof Error ? error.message : 'Unknown',
+                });
+                client.emit('chat:error', {
+                    type: 'relay_error',
+                    message: error instanceof Error ? error.message : 'Failed to process message',
+                });
+            }
             return;
         }
         try {
@@ -28052,27 +32656,73 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
                 ? `${enrichedContext}\n\n--- ISTRAŽIVAČKI BRIEF ---\n${researchBrief}\n--- KRAJ BRIEFA ---\nKoristi brief kao osnovu za stručan odgovor. Ne pominjaj brief — samo daj sveobuhvatan odgovor.`
                 : enrichedContext;
             perf.finalContextChars = finalContext.length;
-            // Stream AI response with confidence calculation (Story 2.5)
+            // Stream AI response — route to OpenClaw main agent if configured, else fallback to AiGateway
             let fullContent = '';
             let chunkIndex = 0;
             const aiCallStart = Date.now();
-            const completionResult = await this.aiGatewayService.streamCompletionWithContext(messages, {
-                tenantId: authenticatedClient.tenantId,
-                userId: authenticatedClient.userId,
-                conversationId,
-                personaType: conversation.personaType ?? undefined,
-                messageCount: conversation.messages.length,
-                hasClientContext: memoryContext.attributions.length > 0,
-                hasSpecificData: relevantConcepts.length > 0 || researchBrief.length > 0,
-                userQuestion: content,
-                businessContext: finalContext,
-            }, (chunk) => {
-                fullContent += chunk;
-                client.emit('chat:message-chunk', {
-                    content: chunk,
-                    index: chunkIndex++,
+            let completionResult = {};
+            if (this.openClawClient.isConfigured()) {
+                // Build message for OpenClaw main agent with all enriched context
+                const contextBlock = finalContext
+                    ? `\n--- KONTEKST ---\n${finalContext.substring(0, 6000)}\n--- KRAJ KONTEKSTA ---\n`
+                    : '';
+                const mainMessage = `${contextBlock}\n${content}`;
+                // Use conversationId as session so main agent remembers this conversation
+                const ocResult = await this.openClawClient.executeAgent(mainMessage, {
+                    agentId: 'main',
+                    sessionId: conversationId,
+                    tenantProfile: authenticatedClient.tenantId,
+                    onText: (text) => {
+                        fullContent += text;
+                        client.emit('chat:message-chunk', {
+                            content: text,
+                            index: chunkIndex++,
+                        });
+                    },
+                    onTool: (tool, status, query) => {
+                        if (status === 'start') {
+                            client.emit('chat:research-phase', { phase: 'researching', tool, query });
+                        }
+                    },
                 });
-            });
+                if (ocResult.success) {
+                    // OpenClaw doesn't provide confidence scores — leave completionResult empty
+                    completionResult = { provider: 'openclaw-main' };
+                }
+                else {
+                    // Fallback to AiGateway on OpenClaw failure
+                    this.logger.warn({ message: 'OpenClaw main agent failed, falling back to AiGateway', error: ocResult.error });
+                    fullContent = '';
+                    chunkIndex = 0;
+                    completionResult = await this.aiGatewayService.streamCompletionWithContext(messages, {
+                        tenantId: authenticatedClient.tenantId,
+                        userId: authenticatedClient.userId,
+                        conversationId,
+                        personaType: conversation.personaType ?? undefined,
+                        businessContext: finalContext,
+                    }, (chunk) => {
+                        fullContent += chunk;
+                        client.emit('chat:message-chunk', { content: chunk, index: chunkIndex++ });
+                    });
+                }
+            }
+            else {
+                // No OpenClaw — use AiGateway directly
+                completionResult = await this.aiGatewayService.streamCompletionWithContext(messages, {
+                    tenantId: authenticatedClient.tenantId,
+                    userId: authenticatedClient.userId,
+                    conversationId,
+                    personaType: conversation.personaType ?? undefined,
+                    messageCount: conversation.messages.length,
+                    hasClientContext: memoryContext.attributions.length > 0,
+                    hasSpecificData: relevantConcepts.length > 0 || researchBrief.length > 0,
+                    userQuestion: content,
+                    businessContext: finalContext,
+                }, (chunk) => {
+                    fullContent += chunk;
+                    client.emit('chat:message-chunk', { content: chunk, index: chunkIndex++ });
+                });
+            }
             perf.aiCall = Date.now() - aiCallStart;
             perf.totalMs = Date.now() - perfStart;
             // === LOG PERFORMANCE BREAKDOWN ===
@@ -28167,6 +32817,13 @@ let ConversationGateway = ConversationGateway_1 = class ConversationGateway {
                 citationCount: citations.length,
                 conceptsFound: relevantConcepts.length,
                 memoriesUsed: memoryContext.attributions.length,
+            });
+            this.appEventBus.emit(app_event_bus_service_1.APP_EVENTS.CONVERSATION_MESSAGE_ADDED, {
+                tenantId: authenticatedClient.tenantId,
+                conversationId,
+                messageId: aiMessage.id,
+                role: 'ASSISTANT',
+                userId: authenticatedClient.userId,
             });
             // Fire-and-forget: detect explicit task creation or auto-generate tasks
             const forceRedo = this.hasRedoIntent(content);
@@ -28816,6 +33473,15 @@ Odgovori SAMO sa validnim JSON nizom:
             });
             // Also notify notes updated
             client.emit('chat:notes-updated', { conversationId, count: totalCreated });
+            // Send chat message listing created tasks
+            const taskList = createdTasks.map((t, i) => `${i + 1}. **${t.title}**`).join('\n');
+            const taskMsg = `Kreirao sam ${createdTasks.length} zadatak${createdTasks.length > 1 ? 'a' : ''}:\n\n${taskList}\n\nPokrecem automatsko izvrsavanje. Rezultati ce biti dostupni u panelu zadataka.`;
+            try {
+                await this.conversationService.addMessage(tenantId, conversationId, types_2.MessageRole.ASSISTANT, taskMsg);
+                client.emit('chat:message-chunk', { content: taskMsg, index: 0 });
+                client.emit('chat:message-complete', { conversationId });
+            }
+            catch { /* non-blocking */ }
             this.logger.log({
                 message: 'Explicit tasks created',
                 conversationId,
@@ -28823,8 +33489,7 @@ Odgovori SAMO sa validnim JSON nizom:
                 reusedCount: reusedTasks.length,
                 conceptsLinked: createdTasks.filter((t) => t.conceptId !== null).length,
             });
-            // Auto AI Popuni is now triggered from frontend when toggle is ON
-            // (frontend receives 'chat:tasks-created-for-execution' and auto-emits 'task:execute-ai')
+            // Tasks created as PENDING — user launches them manually from task panel
         }
         catch (error) {
             this.logger.warn({
@@ -28949,423 +33614,35 @@ Odgovori SAMO sa validnim JSON nizom:
      */
     async autoPopuniSingleTask(client, tenantId, userId, task, _originConversationId) {
         const convId = task.conversationId;
-        // ── Phase 1: Generate workflow + execute steps ──
+        // Use HeadlessExecutor — same pipeline as maturity flow:
+        // synthesis → job planner → Gemini search → Brave → DeepSeek agents → consolidation
         client.emit('task:ai-start', {
             taskId: task.id,
             conversationId: convId,
             timestamp: new Date().toISOString(),
             auto: true,
         });
-        const businessContext = await this.buildBusinessContext(tenantId, userId, { lean: true });
-        // Pre-load tenant + brainContext once for all workflow steps (avoids per-step DB lookups)
-        const [cachedTenantData, brainCtx] = await Promise.all([
-            this.prisma.tenant.findUnique({
-                where: { id: tenantId },
-                select: { name: true, industry: true, description: true },
-            }),
-            this.businessContextService.getBusinessContext(tenantId).catch(() => ''),
-        ]);
-        const stepCachedContext = { tenant: cachedTenantData, brainContext: brainCtx };
-        // Load task details
-        const taskNote = await this.prisma.note.findUnique({ where: { id: task.id } });
-        if (!taskNote)
-            return;
-        // Check if this task already has children (workflow steps)
-        let childNotes = await this.prisma.note.findMany({
-            where: { parentNoteId: task.id },
-            select: { title: true, content: true, workflowStepNumber: true, status: true },
-            orderBy: { workflowStepNumber: 'asc' },
+        const result = await this.headlessExecutor.executeTask({
+            taskId: task.id,
+            tenantId,
+            userId,
         });
-        // Generate and execute workflow if no children exist
-        if (childNotes.length === 0) {
-            try {
-                client.emit('task:ai-workflow-start', {
-                    taskId: task.id,
-                    conversationId: convId,
-                    message: 'Generišem plan izvršavanja...',
-                    auto: true,
-                });
-                // Choose workflow type: concept-based for concept-linked tasks with minimal content
-                const isMinimalContent = !taskNote.content || taskNote.content.length < 200;
-                const hasConcept = !!taskNote.conceptId;
-                let workflow;
-                if (hasConcept && isMinimalContent) {
-                    workflow = await this.workflowService.getOrGenerateWorkflow(taskNote.conceptId, tenantId, userId);
-                }
-                else {
-                    workflow = await this.workflowService.generateTaskSpecificWorkflow({
-                        title: taskNote.title,
-                        content: taskNote.content ?? '',
-                        conversationId: convId ?? null,
-                        conceptId: taskNote.conceptId,
-                    }, tenantId, userId);
-                }
-                this.logger.log({
-                    message: 'Auto-popuni: workflow generated for task',
-                    taskId: task.id,
-                    taskTitle: taskNote.title,
-                    stepCount: workflow.steps.length,
-                    workflowType: hasConcept && isMinimalContent ? 'concept-based' : 'task-specific',
-                });
-                const completedSummaries = [];
-                for (let stepIdx = 0; stepIdx < workflow.steps.length; stepIdx++) {
-                    const workflowStep = workflow.steps[stepIdx];
-                    client.emit('task:ai-step-progress', {
-                        taskId: task.id,
-                        conversationId: convId,
-                        stepIndex: stepIdx,
-                        totalSteps: workflow.steps.length,
-                        stepTitle: workflowStep.title,
-                        auto: true,
-                    });
-                    const step = {
-                        stepId: `auto_step_${(0, cuid2_1.createId)()}`,
-                        conceptId: taskNote.conceptId ?? '',
-                        conceptName: workflow.conceptName,
-                        workflowStepNumber: workflowStep.stepNumber,
-                        title: workflowStep.title,
-                        description: workflowStep.description,
-                        estimatedMinutes: workflowStep.estimatedMinutes,
-                        departmentTag: workflowStep.departmentTag,
-                        status: 'in_progress',
-                        taskTitle: taskNote.title,
-                        taskContent: taskNote.content ?? undefined,
-                        taskConversationId: convId ?? undefined,
-                    };
-                    const result = await this.workflowService.executeStepAutonomous(step, convId ?? '', userId, tenantId, () => {
-                        /* auto-popuni: collect silently */
-                    }, completedSummaries, workflow.steps, stepCachedContext);
-                    // Dedup: check if child note already exists
-                    const existingSubTask = await this.notesService.findExistingSubTask(tenantId, task.id, workflowStep.stepNumber);
-                    if (!existingSubTask) {
-                        await this.notesService.createNote({
-                            title: workflowStep.title,
-                            content: result.content,
-                            source: prisma_1.NoteSource.CONVERSATION,
-                            noteType: prisma_1.NoteType.TASK,
-                            status: prisma_1.NoteStatus.READY_FOR_REVIEW,
-                            userId,
-                            tenantId,
-                            conversationId: convId ?? undefined,
-                            conceptId: taskNote.conceptId ?? undefined,
-                            parentNoteId: task.id,
-                            expectedOutcome: workflowStep.expectedOutcome?.substring(0, 500),
-                            workflowStepNumber: workflowStep.stepNumber,
-                        });
-                    }
-                    completedSummaries.push({
-                        title: workflowStep.title,
-                        conceptName: workflow.conceptName,
-                        summary: result.content.substring(0, 500),
-                    });
-                    client.emit('task:ai-step-complete', {
-                        taskId: task.id,
-                        conversationId: convId,
-                        stepIndex: stepIdx,
-                        totalSteps: workflow.steps.length,
-                        stepTitle: workflowStep.title,
-                        auto: true,
-                    });
-                }
-                // Re-load children
-                childNotes = await this.prisma.note.findMany({
-                    where: { parentNoteId: task.id },
-                    select: { title: true, content: true, workflowStepNumber: true, status: true },
-                    orderBy: { workflowStepNumber: 'asc' },
-                });
-                this.logger.log({
-                    message: 'Auto-popuni: workflow steps completed, proceeding to synthesis',
-                    taskId: task.id,
-                    childCount: childNotes.length,
-                });
-            }
-            catch (err) {
-                this.logger.warn({
-                    message: 'Auto-popuni: workflow generation failed, falling back to direct execution',
-                    taskId: task.id,
-                    error: err instanceof Error ? err.message : 'Unknown',
-                });
-            }
-        }
-        // ── Phase 2: Synthesis ──
-        // Load concept knowledge for synthesis prompt
-        let conceptKnowledge = '';
-        if (taskNote.conceptId) {
-            try {
-                const concept = await this.conceptService.findById(taskNote.conceptId);
-                conceptKnowledge = `\n\n--- BAZA ZNANJA ---`;
-                conceptKnowledge += `\nKONCEPT: ${concept.name} (${concept.category})`;
-                conceptKnowledge += `\nDEFINICIJA: ${concept.definition}`;
-                if (concept.extendedDescription) {
-                    conceptKnowledge += `\nDETALJNO: ${concept.extendedDescription}`;
-                }
-                if (concept.relatedConcepts && concept.relatedConcepts.length > 0) {
-                    const related = concept.relatedConcepts
-                        .slice(0, 5)
-                        .map((r) => `${r.concept.name} (${r.relationshipType})`)
-                        .join(', ');
-                    conceptKnowledge += `\nPOVEZANI KONCEPTI: ${related}`;
-                }
-                conceptKnowledge += '\n--- KRAJ BAZE ZNANJA ---';
-            }
-            catch {
-                /* concept not found */
-            }
-        }
-        // Web search for synthesis enrichment
-        let webContext = '';
-        if (this.webSearchService.isAvailable()) {
-            try {
-                const tenant = await this.prisma.tenant.findUnique({
-                    where: { id: tenantId },
-                    select: { name: true, industry: true },
-                });
-                const searchQuery = `${taskNote.title} ${tenant?.industry ?? ''} ${new Date().getFullYear()}`;
-                const webResults = await this.webSearchService.searchAndExtract(searchQuery, 3);
-                if (webResults.length > 0) {
-                    webContext = this.webSearchService.formatSourcesAsObsidian(webResults);
-                }
-            }
-            catch {
-                /* non-blocking */
-            }
-        }
-        let prompt;
-        if (childNotes.length > 0) {
-            // Synthesis from workflow step outputs
-            const workflowResults = childNotes
-                .map((note, i) => {
-                const stepNum = note.workflowStepNumber ?? i + 1;
-                return `--- KORAK ${stepNum}: ${note.title} ---\n${note.content}`;
-            })
-                .join('\n\n');
-            prompt = `Ti si vrhunski poslovni stručnjak. Tvoj tim je završio detaljnu analizu kroz ${childNotes.length} koraka workflow-a. Sintetiši SVE rezultate u FINALNI DOKUMENT koji vlasnik može odmah koristiti.
-
-ZADATAK: ${taskNote.title}
-${taskNote.content ? `OPIS ZADATKA: ${taskNote.content}` : ''}
-${taskNote.expectedOutcome ? `OČEKIVANI REZULTAT: ${taskNote.expectedOutcome}` : ''}
-
-REZULTATI ISTRAŽIVANJA I ANALIZE (koristi SVE podatke iz svih koraka):
-${workflowResults}
-${conceptKnowledge}${webContext}
-
-KRITIČNO — RAZLIKUJ DVA TIPA ZADATAKA:
-
-A) DIGITALNI ZADACI (sadržaj, planovi, kampanje, mejlovi, strategije, analize, dokumenti, budžeti, prezentacije):
-   → PROIZVEDI GOTOV REZULTAT. Ne piši instrukcije — NAPIŠI sam dokument/sadržaj/plan.
-   → Primer: ako je zadatak "Napišite marketing email" → NAPIŠI ceo email sa subject linijom, telom, CTA
-   → Primer: ako je zadatak "Kreirajte content calendar" → NAPRAVI kompletan kalendar sa datumima, temama, platformama
-
-B) FIZIČKI ZADACI (odlazak u prodavnicu, naručivanje, pozivanje klijenta, fizička instalacija):
-   → NE simuliraj da si uradio fizičku radnju. NE piši "Naručio sam..." ili "Obavio sam poziv..."
-   → UMESTO TOGA: napiši TAČNO šta treba uraditi, ko treba da uradi, sa svim detaljima
-   → Označi sa "⚠ ZAHTEVA LJUDSKU AKCIJU:"
-
-PRAVILA ZA FINALNI DOKUMENT:
-1. Ovo je FINALNI DELIVERABLE — gotov dokument, NE izveštaj o radu
-2. Sintetiši rezultate iz koraka u koherentan, upotrebljiv dokument
-3. NIKADA ne piši "trebalo bi da...", "preporučuje se..." za digitalne zadatke — URADI to
-4. Koristi SPECIFIČNE podatke, brojke i nalaze iz koraka — ne generalizuj
-5. Strukturiraj sa ## zaglavljima, tabelama, nabrajanjima
-6. Dodaj sekciju "Sledeći koraci" sa konkretnim akcijama koje zahtevaju LJUDSKU INTERVENCIJU
-7. NIKADA ne piši "u prethodnim koracima smo..." — PRIKAŽI gotov rezultat
-8. Ako imaš web izvore, citiraj INLINE: ([Naziv](URL))
-9. Minimum 1000 reči — ovo je sveobuhvatan dokument
-10. Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
+        if (result.success) {
+            client.emit('task:ai-complete', {
+                taskId: task.id,
+                conversationId: convId,
+                auto: true,
+            });
         }
         else {
-            // Fallback: direct execution (no workflow steps available)
-            let conversationContext = '';
-            try {
-                const conv = await this.conversationService.getConversation(tenantId, convId, userId);
-                const recentMessages = conv.messages.slice(-10);
-                conversationContext = recentMessages
-                    .map((m) => {
-                    const role = m.role === 'USER' ? 'KORISNIK' : 'AI';
-                    const content = m.content.length > 800 ? m.content.substring(0, 800) + '...' : m.content;
-                    return `${role}: ${content}`;
-                })
-                    .join('\n\n');
-            }
-            catch {
-                /* no context available */
-            }
-            prompt = `Ti si poslovni stručnjak. IZVRŠI sledeći zadatak u potpunosti.
-
-ZADATAK: ${taskNote.title}
-${taskNote.content ? `OPIS:\n${taskNote.content}` : ''}
-${taskNote.expectedOutcome ? `OČEKIVANI REZULTAT: ${taskNote.expectedOutcome}` : ''}
-${conceptKnowledge}${webContext}
-${conversationContext ? `\nKONTEKST IZ KONVERZACIJE (tvoj rezultat MORA biti relevantan za ovo):\n${conversationContext}` : ''}
-
-KRITIČNO — RAZLIKUJ DVA TIPA ZADATAKA:
-
-A) DIGITALNI ZADACI (sadržaj, planovi, kampanje, mejlovi, strategije, analize, dokumenti, budžeti, šabloni, procedure):
-   → PROIZVEDI GOTOV REZULTAT koji se može odmah koristiti. NE daj instrukcije — URADI posao.
-
-B) FIZIČKI ZADACI (odlazak negde, naručivanje, pozivi, fizička instalacija, sastanci):
-   → NE simuliraj da si obavio fizičku radnju
-   → NAPIŠI DETALJAN PLAN: ko treba da uradi šta, sa svim detaljima
-   → Jasno naznači: "⚠ ZAHTEVA LJUDSKU AKCIJU:" ispred svakog koraka koji AI ne može izvršiti
-
-PRAVILA:
-1. Proizvedi KOMPLETAN, GOTOV dokument — ne skicu, ne sažetak, ne listu preporuka
-2. NIKADA ne piši "trebalo bi da...", "preporučuje se..." za digitalne zadatke — NAPRAVI to sam
-3. NIKADA ne izmišljaj podatke — ako nemaš podatak, naznači "[POPUNITI: ...]"
-4. Strukturiraj sa ## zaglavljima, tabelama, nabrajanjima
-5. Minimum 800 reči za analitičke zadatke
-6. Odgovaraj ISKLJUČIVO na srpskom jeziku`;
-        }
-        let fullContent = '';
-        let chunkIndex = 0;
-        await this.aiGatewayService.streamCompletionWithContext([{ role: 'user', content: prompt }], { tenantId, userId, conversationId: convId, businessContext }, (chunk) => {
-            fullContent += chunk;
-            client.emit('task:ai-chunk', {
+            client.emit('task:ai-error', {
                 taskId: task.id,
                 conversationId: convId,
-                content: chunk,
-                index: chunkIndex++,
+                error: result.error,
                 auto: true,
             });
-        });
-        // Save AI output as message + mark task COMPLETED
-        if (convId) {
-            await this.conversationService.addMessage(tenantId, convId, types_2.MessageRole.ASSISTANT, fullContent);
         }
-        await this.prisma.note.update({
-            where: { id: task.id },
-            data: { status: 'COMPLETED', userReport: fullContent },
-        });
-        client.emit('task:ai-complete', {
-            taskId: task.id,
-            fullContent,
-            conversationId: convId,
-            auto: true,
-        });
         client.emit('chat:notes-updated', { conversationId: convId, count: 0 });
-        // ── Phase 3: Score the result ──
-        client.emit('task:result-start', {
-            taskId: task.id,
-            conversationId: convId,
-            timestamp: new Date().toISOString(),
-            auto: true,
-        });
-        // Use pre-loaded tenant data for scoring context (cachedTenantData from line 2067)
-        let tenantInfo = '';
-        if (cachedTenantData) {
-            tenantInfo = `\nKOMPANIJA: ${cachedTenantData.name}${cachedTenantData.industry ? ` | INDUSTRIJA: ${cachedTenantData.industry}` : ''}`;
-        }
-        let conceptScoreContext = '';
-        if (taskNote.conceptId) {
-            try {
-                const concept = await this.conceptService.findById(taskNote.conceptId);
-                conceptScoreContext = `\nKONCEPT: ${concept.name} (${concept.category}) — ${concept.definition}`;
-            }
-            catch {
-                /* non-blocking */
-            }
-        }
-        const scorePrompt = `Ti si senior poslovni konsultant koji recenzira deliverable-e. Tvoj zadatak je da:
-
-1. OPTIMIZUJEŠ rezultat — napravi finalnu, poliranu verziju:
-   - Poboljšaj strukturu (## zaglavlja, tabele, nabrajanja)
-   - Dodaj konkretne brojke, rokove i metrike gde nedostaju
-   - Zameni generičke preporuke SPECIFIČNIM akcijama prilagođenim kompaniji
-   - Ukloni redundantni tekst i ponavljanja
-   - Dodaj sekciju "Sledeći koraci" ako ne postoji
-
-2. OCENI rezultat po 5 kriterijuma (svaki 1-10):
-   - PRIMENLJIVOST: Da li se može odmah implementirati?
-   - SPECIFIČNOST: Da li sadrži konkretne brojke, nazive, rokove?
-   - KOMPLETNOST: Da li pokriva sve aspekte zadatka?
-   - RELEVANTNOST: Da li je prilagođen industriji i kompaniji?
-   - KVALITET: Da li je profesionalno strukturiran i jasan?
-${tenantInfo}${conceptScoreContext}
-
-ZADATAK: ${taskNote.title}
-${taskNote.content ? `OPIS: ${taskNote.content}` : ''}
-${taskNote.expectedOutcome ? `OČEKIVANI REZULTAT: ${taskNote.expectedOutcome}` : ''}
-
-IZLAZ KOJI TREBA OCENITI I OPTIMIZOVATI:
-${fullContent}
-
-FORMAT ODGOVORA:
-1. Napiši OPTIMIZOVANI REZULTAT (kompletan dokument)
-2. Na samom kraju dodaj:
----
-EVALUACIJA:
-- Primenljivost: X/10
-- Specifičnost: X/10
-- Kompletnost: X/10
-- Relevantnost: X/10
-- Kvalitet: X/10
-OCENA: X/10
----
-
-Gde je OCENA prosek svih pet kriterijuma (zaokružen na ceo broj).
-Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
-        let scoreResult = '';
-        let scoreChunkIndex = 0;
-        await this.aiGatewayService.streamCompletionWithContext([{ role: 'user', content: scorePrompt }], { tenantId, userId, conversationId: convId, businessContext, useFallback: true }, (chunk) => {
-            scoreResult += chunk;
-            client.emit('task:result-chunk', {
-                taskId: task.id,
-                conversationId: convId,
-                content: chunk,
-                index: scoreChunkIndex++,
-                auto: true,
-            });
-        });
-        // Extract score
-        let score = null;
-        const scoreMatch = scoreResult.match(/OCENA:\s*(\d{1,2})\s*\/\s*10/i);
-        if (scoreMatch) {
-            const rawScore = parseInt(scoreMatch[1], 10);
-            if (rawScore >= 1 && rawScore <= 10) {
-                score = rawScore * 10;
-            }
-        }
-        // Save optimized result + score
-        await this.prisma.note.update({
-            where: { id: task.id },
-            data: {
-                userReport: scoreResult,
-                aiScore: score,
-                aiFeedback: score !== null ? `AI ocena: ${score}/100` : null,
-            },
-        });
-        client.emit('task:result-complete', {
-            taskId: task.id,
-            conversationId: convId,
-            score,
-            finalResult: scoreResult,
-            timestamp: new Date().toISOString(),
-            auto: true,
-        });
-        client.emit('chat:notes-updated', { conversationId: convId, count: 0 });
-        // Auto-plan agent jobs after scoring
-        try {
-            const jobs = await this.jobPlannerService.planJobs(task.id, tenantId, userId);
-            if (jobs.length > 0) {
-                client.emit('jobs:planned', {
-                    noteId: task.id,
-                    conversationId: convId,
-                    jobs,
-                });
-                this.logger.log({
-                    message: 'Jobs planned after auto-popuni scoring',
-                    taskId: task.id,
-                    jobCount: jobs.length,
-                });
-            }
-        }
-        catch (jobErr) {
-            this.logger.error({
-                message: 'Job planning failed after auto-popuni scoring',
-                taskId: task.id,
-                error: jobErr instanceof Error ? jobErr.message : 'Unknown',
-            });
-        }
     }
     /**
      * Enqueue a YOLO-completed task for auto-popuni (synthesize + score).
@@ -29531,6 +33808,14 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
         }
     }
     async handleParallelPopuni(client, payload) {
+        // Block old pipeline in brain relay mode
+        if (this.configService.get('BRAIN_RELAY_MODE', 'false') === 'true') {
+            client.emit('workflow:error', {
+                message: 'Brain relay mode aktivan — koristite novi UI za pokretanje zadataka.',
+                conversationId: payload.conversationId,
+            });
+            return;
+        }
         const auth = client;
         const { userId, tenantId } = auth;
         try {
@@ -29840,7 +34125,7 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
      * Full lifecycle: workflow → steps → synthesis → scoring → job planning.
      * Modeled after autoPopuniSingleTask but emits parallel-popuni events.
      */
-    async executeParallelPopuniWorker(client, task, batchId, tenantId, userId, businessContext, completedSummaries, autoPopuni, conceptConversations, stepCachedContext) {
+    async executeParallelPopuniWorker(client, task, batchId, tenantId, userId, _businessContext, completedSummaries, _autoPopuni, _conceptConversations, _stepCachedContext) {
         const taskNote = await this.prisma.note.findUnique({ where: { id: task.id } });
         if (!taskNote)
             throw new Error(`Task ${task.id} not found`);
@@ -29856,279 +34141,28 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
             completedSummaries.set(task.id, (taskNote.userReport ?? '').substring(0, 500));
             return;
         }
-        // Prefer per-concept conversation, fall back to task's stored conversationId
-        const convId = (taskNote.conceptId && conceptConversations.has(taskNote.conceptId)
-            ? conceptConversations.get(taskNote.conceptId)
-            : taskNote.conversationId) || '';
         try {
-            // ── Phase 1: Generate workflow ──
-            const progressWorkflow = {
+            // Execute via HeadlessExecutor — same pipeline as maturity flow
+            const progressPayload = {
                 batchId,
                 taskId: task.id,
                 status: 'running-workflow',
             };
-            client.emit('parallel-popuni:task-progress', progressWorkflow);
-            let childNotes = await this.prisma.note.findMany({
-                where: { parentNoteId: task.id },
-                select: { title: true, content: true, workflowStepNumber: true, status: true },
-                orderBy: { workflowStepNumber: 'asc' },
-            });
-            if (childNotes.length === 0) {
-                const isMinimalContent = !taskNote.content || taskNote.content.length < 200;
-                const hasConcept = !!taskNote.conceptId;
-                let workflow;
-                if (hasConcept && isMinimalContent) {
-                    workflow = await this.workflowService.getOrGenerateWorkflow(taskNote.conceptId, tenantId, userId);
-                }
-                else {
-                    workflow = await this.workflowService.generateTaskSpecificWorkflow({
-                        title: taskNote.title,
-                        content: taskNote.content ?? '',
-                        conversationId: convId || null,
-                        conceptId: taskNote.conceptId,
-                    }, tenantId, userId);
-                }
-                // ── Phase 2: Execute steps ──
-                const progressSteps = {
-                    batchId,
-                    taskId: task.id,
-                    status: 'running-steps',
-                    currentStep: 0,
-                    totalSteps: workflow.steps.length,
-                };
-                client.emit('parallel-popuni:task-progress', progressSteps);
-                const stepSummaries = [];
-                for (let stepIdx = 0; stepIdx < workflow.steps.length; stepIdx++) {
-                    if (this.parallelPopuniCancelled.get(batchId)) {
-                        throw new Error('Batch cancelled');
-                    }
-                    const workflowStep = workflow.steps[stepIdx];
-                    const stepProgress = {
-                        batchId,
-                        taskId: task.id,
-                        status: 'running-steps',
-                        currentStep: stepIdx + 1,
-                        totalSteps: workflow.steps.length,
-                        stepLabel: workflowStep.title,
-                    };
-                    client.emit('parallel-popuni:task-progress', stepProgress);
-                    const step = {
-                        stepId: `parallel_step_${(0, cuid2_1.createId)()}`,
-                        conceptId: taskNote.conceptId ?? '',
-                        conceptName: workflow.conceptName,
-                        workflowStepNumber: workflowStep.stepNumber,
-                        title: workflowStep.title,
-                        description: workflowStep.description,
-                        estimatedMinutes: workflowStep.estimatedMinutes,
-                        departmentTag: workflowStep.departmentTag,
-                        status: 'in_progress',
-                        taskTitle: taskNote.title,
-                        taskContent: taskNote.content ?? undefined,
-                        taskConversationId: convId || undefined,
-                    };
-                    // Inject cross-task context from completed siblings
-                    const crossTaskContext = completedSummaries.size > 0
-                        ? Array.from(completedSummaries.entries())
-                            .map(([, summary]) => summary)
-                            .join('\n\n')
-                        : '';
-                    const result = await this.workflowService.executeStepAutonomous(step, convId, userId, tenantId, () => {
-                        /* parallel: collect silently */
-                    }, [
-                        ...stepSummaries,
-                        ...(crossTaskContext
-                            ? [
-                                {
-                                    title: 'Kontekst završenih zadataka',
-                                    conceptName: '',
-                                    summary: crossTaskContext,
-                                },
-                            ]
-                            : []),
-                    ], workflow.steps, stepCachedContext);
-                    // Dedup: check if child note already exists
-                    const existingSubTask = await this.notesService.findExistingSubTask(tenantId, task.id, workflowStep.stepNumber);
-                    if (!existingSubTask) {
-                        await this.notesService.createNote({
-                            title: workflowStep.title,
-                            content: result.content,
-                            source: prisma_1.NoteSource.CONVERSATION,
-                            noteType: prisma_1.NoteType.TASK,
-                            status: prisma_1.NoteStatus.READY_FOR_REVIEW,
-                            userId,
-                            tenantId,
-                            conversationId: convId || undefined,
-                            conceptId: taskNote.conceptId ?? undefined,
-                            parentNoteId: task.id,
-                            expectedOutcome: workflowStep.expectedOutcome?.substring(0, 500),
-                            workflowStepNumber: workflowStep.stepNumber,
-                        });
-                    }
-                    stepSummaries.push({
-                        title: workflowStep.title,
-                        conceptName: workflow.conceptName,
-                        summary: result.content.substring(0, 500),
-                    });
-                }
-                // Re-load children after step execution
-                childNotes = await this.prisma.note.findMany({
-                    where: { parentNoteId: task.id },
-                    select: { title: true, content: true, workflowStepNumber: true, status: true },
-                    orderBy: { workflowStepNumber: 'asc' },
-                });
-            }
-            // ── Phase 3: Synthesis ──
-            const synthProgress = {
-                batchId,
+            client.emit('parallel-popuni:task-progress', progressPayload);
+            const result = await this.headlessExecutor.executeTask({
                 taskId: task.id,
-                status: 'synthesizing',
-            };
-            client.emit('parallel-popuni:task-progress', synthProgress);
-            // Load concept knowledge
-            let conceptKnowledge = '';
-            if (taskNote.conceptId) {
-                try {
-                    const concept = await this.conceptService.findById(taskNote.conceptId);
-                    conceptKnowledge = `\n\n--- BAZA ZNANJA ---`;
-                    conceptKnowledge += `\nKONCEPT: ${concept.name} (${concept.category})`;
-                    conceptKnowledge += `\nDEFINICIJA: ${concept.definition}`;
-                    if (concept.extendedDescription) {
-                        conceptKnowledge += `\nDETALJNO: ${concept.extendedDescription}`;
-                    }
-                    conceptKnowledge += '\n--- KRAJ BAZE ZNANJA ---';
-                }
-                catch {
-                    /* concept not found */
-                }
-            }
-            // Cross-task context for synthesis
-            let crossTaskSynthesis = '';
-            if (completedSummaries.size > 0) {
-                crossTaskSynthesis = '\n\n--- KONTEKST ZAVRŠENIH ZADATAKA ---';
-                for (const [, summary] of completedSummaries) {
-                    crossTaskSynthesis += `\n${summary.substring(0, 300)}`;
-                }
-                crossTaskSynthesis += '\n--- KRAJ KONTEKSTA ---';
-            }
-            let prompt;
-            if (childNotes.length > 0) {
-                const workflowResults = childNotes
-                    .map((note, i) => {
-                    const stepNum = note.workflowStepNumber ?? i + 1;
-                    return `--- KORAK ${stepNum}: ${note.title} ---\n${note.content}`;
-                })
-                    .join('\n\n');
-                prompt = `Ti si vrhunski poslovni stručnjak. Tvoj tim je završio detaljnu analizu kroz ${childNotes.length} koraka workflow-a. Sintetiši SVE rezultate u FINALNI DOKUMENT koji vlasnik može odmah koristiti.
-
-ZADATAK: ${taskNote.title}
-${taskNote.content ? `OPIS ZADATKA: ${taskNote.content}` : ''}
-${taskNote.expectedOutcome ? `OČEKIVANI REZULTAT: ${taskNote.expectedOutcome}` : ''}
-
-REZULTATI ISTRAŽIVANJA I ANALIZE (koristi SVE podatke iz svih koraka):
-${workflowResults}
-${conceptKnowledge}${crossTaskSynthesis}
-
-KRITIČNO — RAZLIKUJ DVA TIPA ZADATAKA:
-
-A) DIGITALNI ZADACI (sadržaj, planovi, kampanje, mejlovi, strategije, analize, dokumenti, budžeti, prezentacije):
-   → PROIZVEDI GOTOV REZULTAT. Ne piši instrukcije — NAPIŠI sam dokument/sadržaj/plan.
-
-B) FIZIČKI ZADACI (odlazak u prodavnicu, naručivanje, pozivanje klijenta, fizička instalacija):
-   → NE simuliraj da si uradio fizičku radnju.
-   → UMESTO TOGA: napiši TAČNO šta treba uraditi, ko treba da uradi, sa svim detaljima
-   → Označi sa "⚠ ZAHTEVA LJUDSKU AKCIJU:"
-
-PRAVILA ZA FINALNI DOKUMENT:
-1. Ovo je FINALNI DELIVERABLE — gotov dokument, NE izveštaj o radu
-2. Sintetiši rezultate iz koraka u koherentan, upotrebljiv dokument
-3. NIKADA ne piši "trebalo bi da...", "preporučuje se..." za digitalne zadatke — URADI to
-4. Koristi SPECIFIČNE podatke, brojke i nalaze iz koraka — ne generalizuj
-5. Strukturiraj sa ## zaglavljima, tabelama, nabrajanjima
-6. Minimum 1000 reči — ovo je sveobuhvatan dokument
-7. Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
-            }
-            else {
-                // Fallback: direct execution (no workflow steps)
-                let conversationContext = '';
-                try {
-                    if (convId) {
-                        const conv = await this.conversationService.getConversation(tenantId, convId, userId);
-                        const recentMessages = conv.messages.slice(-10);
-                        conversationContext = recentMessages
-                            .map((m) => {
-                            const role = m.role === 'USER' ? 'KORISNIK' : 'AI';
-                            const content = m.content.length > 800 ? m.content.substring(0, 800) + '...' : m.content;
-                            return `${role}: ${content}`;
-                        })
-                            .join('\n\n');
-                    }
-                }
-                catch {
-                    /* no context available */
-                }
-                prompt = `Ti si poslovni stručnjak. IZVRŠI sledeći zadatak u potpunosti.
-
-ZADATAK: ${taskNote.title}
-${taskNote.content ? `OPIS:\n${taskNote.content}` : ''}
-${taskNote.expectedOutcome ? `OČEKIVANI REZULTAT: ${taskNote.expectedOutcome}` : ''}
-${conceptKnowledge}${crossTaskSynthesis}
-${conversationContext ? `\nKONTEKST IZ KONVERZACIJE:\n${conversationContext}` : ''}
-
-PRAVILA:
-1. Proizvedi KOMPLETAN, GOTOV dokument
-2. NIKADA ne piši "trebalo bi da..." za digitalne zadatke — NAPRAVI to sam
-3. Strukturiraj sa ## zaglavljima, tabelama, nabrajanjima
-4. Minimum 800 reči za analitičke zadatke
-5. Odgovaraj ISKLJUČIVO na srpskom jeziku`;
-            }
-            let fullContent = '';
-            await this.aiGatewayService.streamCompletionWithContext([{ role: 'user', content: prompt }], { tenantId, userId, conversationId: convId, businessContext }, (chunk) => {
-                fullContent += chunk;
+                tenantId,
+                userId,
             });
-            // Save synthesis result
-            if (convId) {
-                await this.conversationService.addMessage(tenantId, convId, types_2.MessageRole.ASSISTANT, fullContent);
-            }
-            await this.prisma.note.update({
+            const updatedNote = await this.prisma.note.findUnique({
                 where: { id: task.id },
-                data: { status: 'COMPLETED', userReport: fullContent },
+                select: { userReport: true, aiScore: true },
             });
-            // Add to shared summaries for sibling tasks
-            completedSummaries.set(task.id, fullContent.substring(0, 500));
-            client.emit('chat:notes-updated', { conversationId: convId, count: 0 });
-            // ── Phase 4: Scoring — always score after parallel popuni ──
-            let score = null;
-            const scoreProgress = {
-                batchId,
-                taskId: task.id,
-                status: 'scoring',
-            };
-            client.emit('parallel-popuni:task-progress', scoreProgress);
-            const scoreResult = await this.scoreTaskInternal(client, task.id, tenantId, userId, businessContext);
-            score = scoreResult.score;
-            // Auto-plan agent jobs after scoring
-            try {
-                const jobs = await this.jobPlannerService.planJobs(task.id, tenantId, userId);
-                if (jobs.length > 0) {
-                    client.emit('jobs:planned', {
-                        noteId: task.id,
-                        conversationId: convId,
-                        jobs,
-                    });
-                    this.logger.log({
-                        message: 'Jobs planned after parallel popuni scoring',
-                        taskId: task.id,
-                        jobCount: jobs.length,
-                    });
-                }
+            completedSummaries.set(task.id, (updatedNote?.userReport ?? '').substring(0, 500));
+            if (!result.success) {
+                throw new Error(result.error ?? 'HeadlessExecutor failed');
             }
-            catch (jobErr) {
-                this.logger.error({
-                    message: 'Job planning failed after parallel popuni scoring',
-                    taskId: task.id,
-                    error: jobErr instanceof Error ? jobErr.message : 'Unknown',
-                });
-            }
+            const score = updatedNote?.aiScore ?? null;
             // Emit task done
             const donePayload = {
                 batchId,
@@ -30468,535 +34502,107 @@ PRAVILA:
         const authenticatedClient = client;
         try {
             this.logger.log({
-                message: 'AI task execution requested',
+                message: 'AI task execution requested (HeadlessExecutor pipeline)',
                 userId: authenticatedClient.userId,
                 taskId: payload.taskId,
             });
-            // 1. Load the task note
             const task = await this.prisma.note.findUnique({
                 where: { id: payload.taskId },
             });
             if (!task || task.tenantId !== authenticatedClient.tenantId) {
-                client.emit('task:ai-error', { taskId: payload.taskId, message: 'Zadatak nije pronađen' });
+                client.emit('task:ai-error', { taskId: payload.taskId, message: 'Zadatak nije pronadjen' });
                 return;
             }
-            // 1b. Resolve conversation ID early for all emissions
             const convId = task.conversationId ?? payload.conversationId;
-            // 1c. Emit immediate acknowledgment so frontend knows execution has started
             client.emit('task:ai-start', {
                 taskId: payload.taskId,
                 conversationId: convId,
                 timestamp: new Date().toISOString(),
             });
-            // 2. Load all workflow step outputs (child notes = completed workflow steps)
-            let childNotes = await this.prisma.note.findMany({
-                where: { parentNoteId: task.id },
-                select: { title: true, content: true, workflowStepNumber: true, status: true },
-                orderBy: { workflowStepNumber: 'asc' },
-            });
-            // Pre-load tenant info once (reused for workflow steps + web search + scoring)
-            const execTenant = await this.prisma.tenant.findUnique({
-                where: { id: authenticatedClient.tenantId },
-                select: { name: true, industry: true, description: true },
-            });
-            // 2b. If no children exist, generate a workflow and execute each step first
-            //     This ensures every task goes through multi-step research before synthesis
-            if (childNotes.length === 0) {
-                try {
-                    client.emit('task:ai-workflow-start', {
-                        taskId: payload.taskId,
-                        conversationId: convId,
-                        message: 'Generišem plan izvršavanja...',
-                    });
-                    // Choose workflow type: concept-based (rich context from KB) for concept-linked
-                    // tasks with minimal content; task-specific (uses conversation context) otherwise
-                    const isMinimalContent = !task.content || task.content.length < 200;
-                    const hasConcept = !!task.conceptId;
-                    let workflow;
-                    if (hasConcept && isMinimalContent) {
-                        // Concept-based: gets definition, prerequisites, related concepts, tenant context
-                        workflow = await this.workflowService.getOrGenerateWorkflow(task.conceptId, authenticatedClient.tenantId, authenticatedClient.userId);
-                    }
-                    else {
-                        // Task-specific: uses task title, content, conversation context
-                        workflow = await this.workflowService.generateTaskSpecificWorkflow({
-                            title: task.title,
-                            content: task.content ?? '',
-                            conversationId: convId ?? null,
-                            conceptId: task.conceptId,
-                        }, authenticatedClient.tenantId, authenticatedClient.userId);
-                    }
-                    this.logger.log({
-                        message: 'AI Popuni: workflow generated for task',
-                        taskId: payload.taskId,
-                        taskTitle: task.title,
-                        stepCount: workflow.steps.length,
-                        workflowType: hasConcept && isMinimalContent ? 'concept-based' : 'task-specific',
-                    });
-                    // Execute each workflow step and save as child note
-                    const completedSummaries = [];
-                    // Pre-load brainContext once for all steps (tenant already loaded above)
-                    const execBrainCtx = await this.businessContextService
-                        .getBusinessContext(authenticatedClient.tenantId)
-                        .catch(() => '');
-                    const execCachedContext = { tenant: execTenant, brainContext: execBrainCtx };
-                    for (let stepIdx = 0; stepIdx < workflow.steps.length; stepIdx++) {
-                        const workflowStep = workflow.steps[stepIdx];
-                        client.emit('task:ai-step-progress', {
-                            taskId: payload.taskId,
-                            conversationId: convId,
-                            stepIndex: stepIdx,
-                            totalSteps: workflow.steps.length,
-                            stepTitle: workflowStep.title,
-                        });
-                        const step = {
-                            stepId: `popuni_step_${(0, cuid2_1.createId)()}`,
-                            conceptId: task.conceptId ?? '',
-                            conceptName: workflow.conceptName,
-                            workflowStepNumber: workflowStep.stepNumber,
-                            title: workflowStep.title,
-                            description: workflowStep.description,
-                            estimatedMinutes: workflowStep.estimatedMinutes,
-                            departmentTag: workflowStep.departmentTag,
-                            status: 'in_progress',
-                            taskTitle: task.title,
-                            taskContent: task.content ?? undefined,
-                            taskConversationId: convId ?? undefined,
-                        };
-                        const result = await this.workflowService.executeStepAutonomous(step, convId ?? '', authenticatedClient.userId, authenticatedClient.tenantId, (chunk) => {
-                            // Stream step chunks to frontend so user sees progress
-                            client.emit('task:ai-chunk', {
-                                taskId: payload.taskId,
-                                conversationId: convId,
-                                content: chunk,
-                                index: stepIdx * 1000 + completedSummaries.length,
-                                stepTitle: workflowStep.title,
-                            });
-                        }, completedSummaries, workflow.steps, execCachedContext);
-                        // Dedup: check if child note already exists for this step
-                        const existingSubTask = await this.notesService.findExistingSubTask(authenticatedClient.tenantId, payload.taskId, workflowStep.stepNumber);
-                        if (!existingSubTask) {
-                            await this.notesService.createNote({
-                                title: workflowStep.title,
-                                content: result.content,
-                                source: prisma_1.NoteSource.CONVERSATION,
-                                noteType: prisma_1.NoteType.TASK,
-                                status: prisma_1.NoteStatus.READY_FOR_REVIEW,
-                                userId: authenticatedClient.userId,
-                                tenantId: authenticatedClient.tenantId,
-                                conversationId: convId ?? undefined,
-                                conceptId: task.conceptId ?? undefined,
-                                parentNoteId: payload.taskId,
-                                expectedOutcome: workflowStep.expectedOutcome?.substring(0, 500),
-                                workflowStepNumber: workflowStep.stepNumber,
-                            });
-                        }
-                        completedSummaries.push({
-                            title: workflowStep.title,
-                            conceptName: workflow.conceptName,
-                            summary: result.content.substring(0, 500),
-                        });
-                        client.emit('task:ai-step-complete', {
-                            taskId: payload.taskId,
-                            conversationId: convId,
-                            stepIndex: stepIdx,
-                            totalSteps: workflow.steps.length,
-                            stepTitle: workflowStep.title,
-                        });
-                    }
-                    // Re-load child notes now that they exist
-                    childNotes = await this.prisma.note.findMany({
-                        where: { parentNoteId: task.id },
-                        select: { title: true, content: true, workflowStepNumber: true, status: true },
-                        orderBy: { workflowStepNumber: 'asc' },
-                    });
-                    this.logger.log({
-                        message: 'AI Popuni: workflow steps completed, proceeding to synthesis',
-                        taskId: payload.taskId,
-                        childCount: childNotes.length,
-                    });
-                }
-                catch (err) {
-                    this.logger.warn({
-                        message: 'AI Popuni: workflow generation/execution failed, falling back to direct execution',
-                        taskId: payload.taskId,
-                        error: err instanceof Error ? err.message : 'Unknown',
-                    });
-                    // Fall through to direct execution (childNotes still empty)
-                }
-            }
-            // 3. Build business context (lean: skip chat-only formatting/capabilities)
-            const businessContext = await this.buildBusinessContext(authenticatedClient.tenantId, authenticatedClient.userId, { lean: true });
-            // 4. Load concept knowledge if task is linked to a concept
-            let conceptKnowledge = '';
-            if (task.conceptId) {
-                try {
-                    const concept = await this.conceptService.findById(task.conceptId);
-                    conceptKnowledge = `\n\n--- BAZA ZNANJA ---`;
-                    conceptKnowledge += `\nKONCEPT: ${concept.name} (${concept.category})`;
-                    conceptKnowledge += `\nDEFINICIJA: ${concept.definition}`;
-                    if (concept.extendedDescription) {
-                        conceptKnowledge += `\nDETALJNO: ${concept.extendedDescription}`;
-                    }
-                    if (concept.relatedConcepts && concept.relatedConcepts.length > 0) {
-                        const related = concept.relatedConcepts
-                            .slice(0, 5)
-                            .map((r) => `${r.concept.name} (${r.relationshipType})`)
-                            .join(', ');
-                        conceptKnowledge += `\nPOVEZANI KONCEPTI: ${related}`;
-                    }
-                    conceptKnowledge += '\n--- KRAJ BAZE ZNANJA ---';
-                }
-                catch {
-                    /* concept not found */
-                }
-            }
-            // 4b. Web search for current data (if available)
-            let webContext = '';
-            if (this.webSearchService.isAvailable()) {
-                try {
-                    // Reuse pre-loaded execTenant instead of redundant DB query
-                    const searchQuery = `${task.title} ${execTenant?.industry ?? ''} ${new Date().getFullYear()}`;
-                    const webResults = await this.webSearchService.searchAndExtract(searchQuery, 3);
-                    if (webResults.length > 0) {
-                        webContext = this.webSearchService.formatSourcesAsObsidian(webResults);
-                    }
-                }
-                catch {
-                    /* non-blocking */
-                }
-            }
-            // 5. Build the prompt
-            let prompt;
-            if (childNotes.length > 0) {
-                // Build workflow results section from all child notes
-                const workflowResults = childNotes
-                    .map((note, i) => {
-                    const stepNum = note.workflowStepNumber ?? i + 1;
-                    return `--- KORAK ${stepNum}: ${note.title} ---\n${note.content}`;
-                })
-                    .join('\n\n');
-                prompt = `Ti si vrhunski poslovni stručnjak. Tvoj tim je završio detaljnu analizu kroz ${childNotes.length} koraka workflow-a. Sintetiši SVE rezultate u FINALNI DOKUMENT koji vlasnik može odmah koristiti.
-
-ZADATAK: ${task.title}
-${task.content ? `OPIS ZADATKA: ${task.content}` : ''}
-${task.expectedOutcome ? `OČEKIVANI REZULTAT: ${task.expectedOutcome}` : ''}
-
-REZULTATI ISTRAŽIVANJA I ANALIZE (koristi SVE podatke iz svih koraka):
-${workflowResults}
-${conceptKnowledge}${webContext}
-
-KRITIČNO — RAZLIKUJ DVA TIPA ZADATAKA:
-
-A) DIGITALNI ZADACI (sadržaj, planovi, kampanje, mejlovi, strategije, analize, dokumenti, budžeti, prezentacije):
-   → PROIZVEDI GOTOV REZULTAT. Ne piši instrukcije — NAPIŠI sam dokument/sadržaj/plan.
-   → Primer: ako je zadatak "Napišite marketing email" → NAPIŠI ceo email sa subject linijom, telom, CTA
-   → Primer: ako je zadatak "Kreirajte content calendar" → NAPRAVI kompletan kalendar sa datumima, temama, platformama
-   → Primer: ako je zadatak "Definišite budžet" → NAPRAVI tabelu sa stavkama, iznosima, totalima
-
-B) FIZIČKI ZADACI (odlazak u prodavnicu, naručivanje, pozivanje klijenta, fizička instalacija):
-   → NE simuliraj da si uradio fizičku radnju. NE piši "Naručio sam..." ili "Obavio sam poziv..."
-   → UMESTO TOGA: napiši TAČNO šta treba uraditi, ko treba da uradi, sa svim detaljima (kontakti, rokovi, koraci)
-   → Primer: "Vlasnik treba da pozove dobavljača XY na broj 011-... i dogovori isporuku do DD.MM."
-
-PRAVILA ZA FINALNI DOKUMENT:
-1. Ovo je FINALNI DELIVERABLE — gotov dokument, NE izveštaj o radu
-2. Ako su koraci proizveli analizu → sintetiši u AKCIONI PLAN sa konkretnim preporukama, rokovima i odgovornim osobama
-3. Ako su koraci definisali strategiju → napravi KOMPLETNU STRATEGIJU sa implementacionim koracima i metrikama
-4. Ako su koraci istražili vrednost → definiši KONKRETNE OBLIKE VREDNOSTI sa cenovnom strategijom
-5. NIKADA ne piši "trebalo bi da...", "preporučuje se..." za digitalne zadatke — URADI to
-6. Koristi SPECIFIČNE podatke, brojke i nalaze iz koraka — ne generalizuj
-7. Strukturiraj sa ## zaglavljima, tabelama, nabrajanjima
-8. Dodaj sekciju "Sledeći koraci" sa konkretnim akcijama koje zahtevaju LJUDSKU INTERVENCIJU (samo ono što AI ne može)
-9. NIKADA ne piši "u prethodnim koracima smo..." — PRIKAŽI gotov rezultat
-10. Ako imaš web izvore, citiraj INLINE: ([Naziv](URL))
-11. Minimum 1000 reči — ovo je sveobuhvatan dokument
-
-Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
-            }
-            else {
-                // No workflow steps — direct task execution with full context
-                let conversationContext = '';
-                if (convId) {
-                    try {
-                        const conv = await this.conversationService.getConversation(authenticatedClient.tenantId, convId, authenticatedClient.userId);
-                        const recentMessages = conv.messages.slice(-10);
-                        conversationContext = recentMessages
-                            .map((m) => {
-                            const role = m.role === 'USER' ? 'KORISNIK' : 'AI';
-                            const content = m.content.length > 800 ? m.content.substring(0, 800) + '...' : m.content;
-                            return `${role}: ${content}`;
-                        })
-                            .join('\n\n');
-                    }
-                    catch {
-                        /* no context available */
-                    }
-                }
-                prompt = `Ti si poslovni stručnjak. IZVRŠI sledeći zadatak u potpunosti.
-
-ZADATAK: ${task.title}
-${task.content ? `OPIS:\n${task.content}` : ''}
-${task.expectedOutcome ? `OČEKIVANI REZULTAT: ${task.expectedOutcome}` : ''}
-${conceptKnowledge}${webContext}
-${conversationContext ? `\nKONTEKST IZ KONVERZACIJE (tvoj rezultat MORA biti relevantan za ovo):\n${conversationContext}` : ''}
-
-KRITIČNO — RAZLIKUJ DVA TIPA ZADATAKA:
-
-A) DIGITALNI ZADACI (sadržaj, planovi, kampanje, mejlovi, strategije, analize, dokumenti, budžeti, prezentacije, šabloni, procedure):
-   → PROIZVEDI GOTOV REZULTAT koji se može odmah koristiti. NE daj instrukcije — URADI posao.
-   → Primer: "Napišite email za klijente" → NAPIŠI ceo email sa subject, telom i CTA
-   → Primer: "Kreirajte social media plan" → NAPRAVI kompletan plan sa konkretnim postovima, datumima, platformama
-   → Primer: "Definišite SOP za onboarding" → NAPIŠI celu proceduru korak po korak
-   → Primer: "Analizirajte konkurenciju" → URADI analizu sa tabelom konkurenata, cenama, prednostima/manama
-
-B) FIZIČKI ZADACI (odlazak negde, naručivanje, pozivi, fizička instalacija, sastanci):
-   → NE simuliraj da si obavio fizičku radnju
-   → NAPIŠI DETALJAN PLAN: ko treba da uradi šta, sa svim detaljima (kontakti, rokovi, koraci, budžet)
-   → Jasno naznači: "⚠ ZAHTEVA LJUDSKU AKCIJU:" ispred svakog koraka koji AI ne može izvršiti
-
-PRAVILA:
-1. Proizvedi KOMPLETAN, GOTOV dokument — ne skicu, ne sažetak, ne listu preporuka
-2. NIKADA ne piši "trebalo bi da...", "preporučuje se da napravite..." za digitalne zadatke — NAPRAVI to sam
-3. NIKADA ne izmišljaj podatke ili simuliraj da je nešto urađeno — ako nemaš podatak, naznači "[POPUNITI: ...]"
-4. Strukturiraj sa ## zaglavljima, tabelama, nabrajanjima
-5. Koristi znanje iz BAZE ZNANJA i WEB IZVORA ako su dostupni
-6. Kada referenciraš koncept, koristi [[Naziv Koncepta]] oznaku
-7. Ako imaš web izvore, citiraj INLINE: ([Naziv](URL))
-8. Na kraju dodaj "Sledeći koraci" SAMO za stvari koje zahtevaju LJUDSKU intervenciju
-9. Minimum 800 reči za analitičke zadatke
-10. Odgovaraj ISKLJUČIVO na srpskom jeziku`;
-            }
-            // 5. Stream the AI response
-            let fullContent = '';
-            let chunkIndex = 0;
-            await this.aiGatewayService.streamCompletionWithContext([{ role: 'user', content: prompt }], {
+            // Execute via HeadlessExecutor — same pipeline as maturity flow
+            this.logger.log({ message: 'Calling HeadlessExecutor for task panel', taskId: payload.taskId, hasExecutor: !!this.headlessExecutor });
+            const result = await this.headlessExecutor.executeTask({
+                taskId: payload.taskId,
                 tenantId: authenticatedClient.tenantId,
                 userId: authenticatedClient.userId,
-                conversationId: convId,
-                businessContext,
-            }, (chunk) => {
-                fullContent += chunk;
-                client.emit('task:ai-chunk', {
+            });
+            if (result.success) {
+                // Reload note to get updated userReport and score
+                const updatedNote = await this.prisma.note.findUnique({
+                    where: { id: payload.taskId },
+                    select: { userReport: true, aiScore: true },
+                });
+                client.emit('task:ai-complete', {
                     taskId: payload.taskId,
                     conversationId: convId,
-                    content: chunk,
-                    index: chunkIndex++,
-                });
-            });
-            // 6. Save AI output as message in the conversation
-            if (convId) {
-                await this.conversationService.addMessage(authenticatedClient.tenantId, convId, types_2.MessageRole.ASSISTANT, fullContent);
-            }
-            // 7. Mark task as completed with AI output as report
-            await this.prisma.note.update({
-                where: { id: payload.taskId },
-                data: {
-                    status: 'COMPLETED',
-                    userReport: fullContent,
-                },
-            });
-            // 8. Emit completion
-            client.emit('task:ai-complete', {
-                taskId: payload.taskId,
-                fullContent,
-                conversationId: convId,
-            });
-            // 9. Refresh notes
-            client.emit('chat:notes-updated', { conversationId: convId, count: 0 });
-            this.logger.log({
-                message: 'AI task execution completed',
-                taskId: payload.taskId,
-                contentLength: fullContent.length,
-            });
-            // 10. Auto-trigger AI Score after completion
-            try {
-                client.emit('task:scoring-start', { taskId: payload.taskId });
-                const { score, result, conversationId: scoredConvId, } = await this.scoreTaskInternal(client, payload.taskId, authenticatedClient.tenantId, authenticatedClient.userId, businessContext);
-                client.emit('task:result-complete', {
-                    taskId: payload.taskId,
-                    conversationId: scoredConvId,
-                    score,
-                    finalResult: result,
                     timestamp: new Date().toISOString(),
                 });
-                client.emit('chat:notes-updated', { conversationId: scoredConvId, count: 0 });
-                // Auto-plan agent jobs after scoring
-                try {
-                    const jobs = await this.jobPlannerService.planJobs(payload.taskId, authenticatedClient.tenantId, authenticatedClient.userId);
-                    if (jobs.length > 0) {
-                        client.emit('jobs:planned', {
-                            noteId: payload.taskId,
-                            conversationId: scoredConvId,
-                            jobs,
-                        });
-                        this.logger.log({
-                            message: 'Jobs planned after auto-score',
-                            taskId: payload.taskId,
-                            jobCount: jobs.length,
-                        });
-                    }
-                }
-                catch (jobErr) {
-                    this.logger.error({
-                        message: 'Job planning failed after auto-score',
-                        taskId: payload.taskId,
-                        error: jobErr instanceof Error ? jobErr.message : 'Unknown',
-                    });
-                }
-            }
-            catch (scoreErr) {
-                this.logger.warn({
-                    message: 'Auto-scoring failed after AI task execution',
+                client.emit('task:result-complete', {
                     taskId: payload.taskId,
-                    error: scoreErr instanceof Error ? scoreErr.message : 'Unknown error',
+                    conversationId: convId,
+                    score: updatedNote?.aiScore ?? null,
+                    finalResult: updatedNote?.userReport ?? '',
+                    timestamp: new Date().toISOString(),
                 });
-                // Non-fatal — task stays COMPLETED, user can manually retry via "Get AI Score"
             }
+            else {
+                client.emit('task:ai-error', {
+                    taskId: payload.taskId,
+                    conversationId: convId,
+                    message: result.error ?? 'Izvrsavanje neuspesno',
+                });
+            }
+            client.emit('chat:notes-updated', { conversationId: convId, count: 0 });
         }
-        catch (error) {
+        catch (err) {
+            const errMsg = err instanceof Error ? err.message : 'Unknown';
+            const errStack = err instanceof Error ? err.stack?.substring(0, 500) : '';
             this.logger.error({
-                message: 'AI task execution failed',
+                message: 'Task execution failed in handleExecuteTaskAi',
                 taskId: payload.taskId,
-                error: error instanceof Error ? error.message : 'Unknown error',
+                error: errMsg,
+                stack: errStack,
             });
             client.emit('task:ai-error', {
                 taskId: payload.taskId,
-                conversationId: payload.conversationId,
-                message: 'Izvršavanje zadatka nije uspelo. Pokušajte ponovo.',
+                message: errMsg,
             });
         }
     }
-    /**
-     * Internal scoring logic: loads task, builds context, streams optimization + score.
-     * Used by both manual "Get AI Score" and auto-scoring after AI Popuni.
-     */
     async scoreTaskInternal(client, taskId, tenantId, userId, prebuiltBusinessContext) {
-        // 1. Load the completed task note
-        const task = await this.prisma.note.findUnique({
-            where: { id: taskId },
-        });
-        if (!task || task.tenantId !== tenantId) {
-            throw new Error('Zadatak nije pronađen');
-        }
-        if (task.status !== 'COMPLETED' || !task.userReport) {
-            throw new Error('Zadatak nema izveštaj za ocenjivanje');
-        }
-        // 2. Build context for scoring (reuse pre-built if available)
-        const businessContext = prebuiltBusinessContext ??
-            (await this.buildBusinessContext(tenantId, userId, { lean: true }));
+        const task = await this.prisma.note.findUnique({ where: { id: taskId } });
+        if (!task || task.tenantId !== tenantId)
+            throw new Error('Zadatak nije pronadjen');
+        if (task.status !== 'COMPLETED' || !task.userReport)
+            throw new Error('Zadatak nema izvestaj');
+        const businessContext = prebuiltBusinessContext ?? (await this.buildBusinessContext(tenantId, userId, { lean: true }));
         let conceptContext = '';
         if (task.conceptId) {
             try {
                 const concept = await this.conceptService.findById(task.conceptId);
-                conceptContext = `\n\nKONCEPT: ${concept.name} (${concept.category})`;
-                conceptContext += `\nDEFINICIJA: ${concept.definition}`;
-                if (concept.extendedDescription) {
-                    conceptContext += `\nDETALJNO: ${concept.extendedDescription.substring(0, 500)}`;
-                }
+                conceptContext = `\n\nKONCEPT: ${concept.name} (${concept.category})\nDEFINICIJA: ${concept.definition}`;
             }
-            catch {
-                /* concept not found */
-            }
+            catch { /* */ }
         }
-        // 2b. Load attachment text for richer scoring context (Sprint 2 Epic 2.2)
-        let scoringAttachmentContext = '';
-        try {
-            const attachments = await this.prisma.attachment.findMany({
-                where: { noteId: taskId, tenantId },
-                select: { id: true },
-            });
-            if (attachments.length > 0) {
-                scoringAttachmentContext = await this.attachmentsService.getExtractedText(attachments.map((a) => a.id), tenantId);
-            }
-        }
-        catch {
-            /* non-blocking — score without attachments */
-        }
-        // 3. Build the optimization + scoring prompt
-        const prompt = `Ti si senior poslovni konsultant koji recenzira deliverable-e za klijenta. Tvoj zadatak je da:
-
-1. OPTIMIZUJEŠ rezultat — napravi finalnu, poliranu verziju dokumenta:
-   - Poboljšaj strukturu (## zaglavlja, tabele, nabrajanja)
-   - Dodaj konkretne brojke, rokove i metrike gde nedostaju
-   - Zameni generičke preporuke SPECIFIČNIM akcijama prilagođenim kompaniji
-   - Ukloni redundantni tekst i ponavljanja
-   - Dodaj sekciju "Sledeći koraci" ako ne postoji
-
-2. OCENI rezultat po 5 kriterijuma (svaki 1-10):
-   - PRIMENLJIVOST: Da li se može odmah implementirati bez dodatnog istraživanja?
-   - SPECIFIČNOST: Da li sadrži konkretne brojke, nazive, rokove, a ne generičke savete?
-   - KOMPLETNOST: Da li pokriva sve aspekte zadatka i očekivanog rezultata?
-   - RELEVANTNOST: Da li je prilagođen industriji i specifičnim potrebama kompanije?
-   - KVALITET: Da li je profesionalno strukturiran, jasan i bez grešaka?
-${conceptContext}
-
-ZADATAK: ${task.title}
-${task.content ? `OPIS: ${task.content}` : ''}
-${task.expectedOutcome ? `OČEKIVANI REZULTAT: ${task.expectedOutcome}` : ''}
-${scoringAttachmentContext ? `\nPRILOŽENI DOKUMENTI:\n${scoringAttachmentContext}` : ''}
-
-IZLAZ KOJI TREBA OCENITI I OPTIMIZOVATI:
-${task.userReport}
-
-FORMAT ODGOVORA:
-1. Napiši OPTIMIZOVANI REZULTAT (kompletan dokument, ne samo izmene)
-2. Na samom kraju dodaj:
----
-EVALUACIJA:
-- Primenljivost: X/10
-- Specifičnost: X/10
-- Kompletnost: X/10
-- Relevantnost: X/10
-- Kvalitet: X/10
-OCENA: X/10
----
-
-Gde je OCENA prosek svih pet kriterijuma (zaokružen na ceo broj).
-Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
-        // 4. Stream the optimized result
+        const prompt = `Ti si senior poslovni konsultant. Optimizuj i oceni rezultat.\n${conceptContext}\n\nZADATAK: ${task.title}\n${task.content ? 'OPIS: ' + task.content : ''}\n${task.expectedOutcome ? 'OCEKIVANI REZULTAT: ' + task.expectedOutcome : ''}\n\nIZLAZ:\n${task.userReport}\n\nNapravi OPTIMIZOVANI REZULTAT pa na kraju:\n---\nEVALUACIJA:\n- Primenljivost: X/10\n- Specificnost: X/10\n- Kompletnost: X/10\n- Relevantnost: X/10\n- Kvalitet: X/10\nOCENA: X/10\n---\nSrpski jezik.`;
         let fullResult = '';
         let chunkIndex = 0;
-        await this.aiGatewayService.streamCompletionWithContext([{ role: 'user', content: prompt }], {
-            tenantId,
-            userId,
-            conversationId: task.conversationId ?? undefined,
-            businessContext,
-            useFallback: true,
-        }, (chunk) => {
+        await this.aiGatewayService.streamCompletionWithContext([{ role: 'user', content: prompt }], { tenantId, userId, conversationId: task.conversationId ?? undefined, businessContext, useFallback: true }, (chunk) => {
             fullResult += chunk;
-            client.emit('task:result-chunk', {
-                taskId,
-                conversationId: task.conversationId,
-                content: chunk,
-                index: chunkIndex++,
-            });
+            client.emit('task:result-chunk', { taskId, conversationId: task.conversationId, content: chunk, index: chunkIndex++ });
         });
-        // 5. Extract score from the result (only accept 1-10)
         let score = null;
         const scoreMatch = fullResult.match(/OCENA:\s*(\d{1,2})\s*\/\s*10/i);
         if (scoreMatch) {
             const rawScore = parseInt(scoreMatch[1], 10);
-            if (rawScore >= 1 && rawScore <= 10) {
-                score = rawScore * 10; // Scale 1-10 → 10-100
-            }
+            if (rawScore >= 1 && rawScore <= 10)
+                score = rawScore * 10;
         }
-        // 6. Update the task note with optimized result, score, and mark COMPLETED (M11)
         await this.prisma.note.update({
             where: { id: taskId },
-            data: {
-                userReport: fullResult,
-                aiScore: score,
-                aiFeedback: score !== null ? `AI ocena: ${score}/100` : null,
-                status: 'COMPLETED',
-            },
+            data: { userReport: fullResult, aiScore: score, aiFeedback: score !== null ? `AI ocena: ${score}/100` : null, status: 'COMPLETED' },
         });
-        this.logger.log({
-            message: 'Task scoring completed',
-            taskId,
-            score,
-            resultLength: fullResult.length,
-        });
+        this.logger.log({ message: 'Task scoring completed', taskId, score, resultLength: fullResult.length });
         return { score, result: fullResult, conversationId: task.conversationId };
     }
     /**
@@ -31171,6 +34777,10 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
      * Loads all pending tasks, creates per-concept conversations, and starts the scheduler.
      */
     async handleStartYolo(client, payload) {
+        if (this.configService.get('BRAIN_RELAY_MODE', 'false') === 'true') {
+            client.emit('workflow:error', { message: 'Brain relay mode aktivan — YOLO isključen.', conversationId: payload.conversationId });
+            return;
+        }
         const authenticatedClient = client;
         try {
             this.logger.log({
@@ -31343,6 +34953,10 @@ Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
      * Scopes YOLO to a single category (domain).
      */
     async handleStartDomainYolo(client, payload) {
+        if (this.configService.get('BRAIN_RELAY_MODE', 'false') === 'true') {
+            client.emit('workflow:error', { message: 'Brain relay mode aktivan — domain YOLO isključen.', conversationId: payload.conversationId });
+            return;
+        }
         const authenticatedClient = client;
         try {
             this.logger.log({
@@ -32006,29 +35620,29 @@ FORMAT BRIEFA:
 exports.ConversationGateway = ConversationGateway;
 tslib_1.__decorate([
     (0, websockets_1.WebSocketServer)(),
-    tslib_1.__metadata("design:type", typeof (_0 = typeof socket_io_1.Server !== "undefined" && socket_io_1.Server) === "function" ? _0 : Object)
+    tslib_1.__metadata("design:type", typeof (_3 = typeof socket_io_1.Server !== "undefined" && socket_io_1.Server) === "function" ? _3 : Object)
 ], ConversationGateway.prototype, "server", void 0);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('execution:get-active'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_1 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _1 : Object]),
-    tslib_1.__metadata("design:returntype", typeof (_2 = typeof Promise !== "undefined" && Promise) === "function" ? _2 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_4 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _4 : Object]),
+    tslib_1.__metadata("design:returntype", typeof (_5 = typeof Promise !== "undefined" && Promise) === "function" ? _5 : Object)
 ], ConversationGateway.prototype, "handleGetActiveExecutions", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('execution:replay-events'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_3 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _3 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_4 = typeof Promise !== "undefined" && Promise) === "function" ? _4 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_6 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _6 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_7 = typeof Promise !== "undefined" && Promise) === "function" ? _7 : Object)
 ], ConversationGateway.prototype, "handleReplayEvents", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('chat:regenerate'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_5 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _5 : Object, Object]),
+    tslib_1.__metadata("design:paramtypes", [typeof (_8 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _8 : Object, Object]),
     tslib_1.__metadata("design:returntype", Promise)
 ], ConversationGateway.prototype, "handleRegenerate", null);
 tslib_1.__decorate([
@@ -32036,7 +35650,7 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_6 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _6 : Object, Object]),
+    tslib_1.__metadata("design:paramtypes", [typeof (_9 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _9 : Object, Object]),
     tslib_1.__metadata("design:returntype", Promise)
 ], ConversationGateway.prototype, "handleMessage", null);
 tslib_1.__decorate([
@@ -32044,23 +35658,23 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_7 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _7 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_8 = typeof Promise !== "undefined" && Promise) === "function" ? _8 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_10 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _10 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_11 = typeof Promise !== "undefined" && Promise) === "function" ? _11 : Object)
 ], ConversationGateway.prototype, "handleRunAgents", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('workflow:parallel-popuni'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_9 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _9 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_10 = typeof Promise !== "undefined" && Promise) === "function" ? _10 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_12 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _12 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_13 = typeof Promise !== "undefined" && Promise) === "function" ? _13 : Object)
 ], ConversationGateway.prototype, "handleParallelPopuni", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('parallel-popuni:cancel'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_11 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _11 : Object, Object]),
+    tslib_1.__metadata("design:paramtypes", [typeof (_14 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _14 : Object, Object]),
     tslib_1.__metadata("design:returntype", void 0)
 ], ConversationGateway.prototype, "handleParallelPopuniCancel", null);
 tslib_1.__decorate([
@@ -32068,23 +35682,23 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_12 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _12 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_13 = typeof Promise !== "undefined" && Promise) === "function" ? _13 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_15 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _15 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_16 = typeof Promise !== "undefined" && Promise) === "function" ? _16 : Object)
 ], ConversationGateway.prototype, "handleGetPlan", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('workflow:approve'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_14 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _14 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_15 = typeof Promise !== "undefined" && Promise) === "function" ? _15 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_17 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _17 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_18 = typeof Promise !== "undefined" && Promise) === "function" ? _18 : Object)
 ], ConversationGateway.prototype, "handleWorkflowApproval", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('workflow:cancel'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_16 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _16 : Object, Object]),
+    tslib_1.__metadata("design:paramtypes", [typeof (_19 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _19 : Object, Object]),
     tslib_1.__metadata("design:returntype", void 0)
 ], ConversationGateway.prototype, "handleWorkflowCancel", null);
 tslib_1.__decorate([
@@ -32092,7 +35706,7 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_17 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _17 : Object, Object]),
+    tslib_1.__metadata("design:paramtypes", [typeof (_20 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _20 : Object, Object]),
     tslib_1.__metadata("design:returntype", void 0)
 ], ConversationGateway.prototype, "handleStepContinue", null);
 tslib_1.__decorate([
@@ -32100,48 +35714,48 @@ tslib_1.__decorate([
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_18 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _18 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_19 = typeof Promise !== "undefined" && Promise) === "function" ? _19 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_21 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _21 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_22 = typeof Promise !== "undefined" && Promise) === "function" ? _22 : Object)
 ], ConversationGateway.prototype, "handleExecuteTaskAi", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('task:submit-result'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_20 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _20 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_21 = typeof Promise !== "undefined" && Promise) === "function" ? _21 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_23 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _23 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_24 = typeof Promise !== "undefined" && Promise) === "function" ? _24 : Object)
 ], ConversationGateway.prototype, "handleSubmitTaskResult", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('task:step-feedback'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_22 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _22 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_23 = typeof Promise !== "undefined" && Promise) === "function" ? _23 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_25 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _25 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_26 = typeof Promise !== "undefined" && Promise) === "function" ? _26 : Object)
 ], ConversationGateway.prototype, "handleStepFeedback", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('workflow:start-yolo'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_24 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _24 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_25 = typeof Promise !== "undefined" && Promise) === "function" ? _25 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_27 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _27 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_28 = typeof Promise !== "undefined" && Promise) === "function" ? _28 : Object)
 ], ConversationGateway.prototype, "handleStartYolo", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('yolo:start-domain'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_26 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _26 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_27 = typeof Promise !== "undefined" && Promise) === "function" ? _27 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_29 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _29 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_30 = typeof Promise !== "undefined" && Promise) === "function" ? _30 : Object)
 ], ConversationGateway.prototype, "handleStartDomainYolo", null);
 tslib_1.__decorate([
     (0, websockets_1.SubscribeMessage)('discovery:send-message'),
     tslib_1.__param(0, (0, websockets_1.ConnectedSocket)()),
     tslib_1.__param(1, (0, websockets_1.MessageBody)()),
     tslib_1.__metadata("design:type", Function),
-    tslib_1.__metadata("design:paramtypes", [typeof (_28 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _28 : Object, Object]),
-    tslib_1.__metadata("design:returntype", typeof (_29 = typeof Promise !== "undefined" && Promise) === "function" ? _29 : Object)
+    tslib_1.__metadata("design:paramtypes", [typeof (_31 = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _31 : Object, Object]),
+    tslib_1.__metadata("design:returntype", typeof (_32 = typeof Promise !== "undefined" && Promise) === "function" ? _32 : Object)
 ], ConversationGateway.prototype, "handleDiscoveryMessage", null);
 exports.ConversationGateway = ConversationGateway = ConversationGateway_1 = tslib_1.__decorate([
     (0, websockets_1.WebSocketGateway)({
@@ -32151,30 +35765,31 @@ exports.ConversationGateway = ConversationGateway = ConversationGateway_1 = tsli
             credentials: true,
         },
     }),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _c : Object, typeof (_d = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _d : Object, typeof (_e = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _e : Object, typeof (_f = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _f : Object, typeof (_g = typeof concept_classifier_service_1.ConceptClassifierService !== "undefined" && concept_classifier_service_1.ConceptClassifierService) === "function" ? _g : Object, typeof (_h = typeof citation_injector_service_1.CitationInjectorService !== "undefined" && citation_injector_service_1.CitationInjectorService) === "function" ? _h : Object, typeof (_j = typeof citation_service_1.CitationService !== "undefined" && citation_service_1.CitationService) === "function" ? _j : Object, typeof (_k = typeof memory_context_builder_service_1.MemoryContextBuilderService !== "undefined" && memory_context_builder_service_1.MemoryContextBuilderService) === "function" ? _k : Object, typeof (_l = typeof memory_extraction_service_1.MemoryExtractionService !== "undefined" && memory_extraction_service_1.MemoryExtractionService) === "function" ? _l : Object, typeof (_m = typeof memory_service_1.MemoryService !== "undefined" && memory_service_1.MemoryService) === "function" ? _m : Object, typeof (_o = typeof workflow_service_1.WorkflowService !== "undefined" && workflow_service_1.WorkflowService) === "function" ? _o : Object, typeof (_p = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _p : Object, typeof (_q = typeof concept_extraction_service_1.ConceptExtractionService !== "undefined" && concept_extraction_service_1.ConceptExtractionService) === "function" ? _q : Object, typeof (_r = typeof yolo_scheduler_service_1.YoloSchedulerService !== "undefined" && yolo_scheduler_service_1.YoloSchedulerService) === "function" ? _r : Object, typeof (_s = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _s : Object, typeof (_t = typeof business_context_service_1.BusinessContextService !== "undefined" && business_context_service_1.BusinessContextService) === "function" ? _t : Object, typeof (_u = typeof execution_state_service_1.ExecutionStateService !== "undefined" && execution_state_service_1.ExecutionStateService) === "function" ? _u : Object, typeof (_v = typeof attachments_service_1.AttachmentsService !== "undefined" && attachments_service_1.AttachmentsService) === "function" ? _v : Object, typeof (_w = typeof job_planner_service_1.JobPlannerService !== "undefined" && job_planner_service_1.JobPlannerService) === "function" ? _w : Object, typeof (_x = typeof agent_execution_event_bus_service_1.AgentExecutionEventBus !== "undefined" && agent_execution_event_bus_service_1.AgentExecutionEventBus) === "function" ? _x : Object, typeof (_y = typeof maturity_engine_service_1.MaturityEngineService !== "undefined" && maturity_engine_service_1.MaturityEngineService) === "function" ? _y : Object, typeof (_z = typeof ws_server_holder_service_1.WsServerHolder !== "undefined" && ws_server_holder_service_1.WsServerHolder) === "function" ? _z : Object])
+    tslib_1.__param(26, (0, common_1.Inject)((0, common_1.forwardRef)(() => headless_executor_service_1.HeadlessExecutorService))),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _c : Object, typeof (_d = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _d : Object, typeof (_e = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _e : Object, typeof (_f = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _f : Object, typeof (_g = typeof concept_classifier_service_1.ConceptClassifierService !== "undefined" && concept_classifier_service_1.ConceptClassifierService) === "function" ? _g : Object, typeof (_h = typeof citation_injector_service_1.CitationInjectorService !== "undefined" && citation_injector_service_1.CitationInjectorService) === "function" ? _h : Object, typeof (_j = typeof citation_service_1.CitationService !== "undefined" && citation_service_1.CitationService) === "function" ? _j : Object, typeof (_k = typeof memory_context_builder_service_1.MemoryContextBuilderService !== "undefined" && memory_context_builder_service_1.MemoryContextBuilderService) === "function" ? _k : Object, typeof (_l = typeof memory_extraction_service_1.MemoryExtractionService !== "undefined" && memory_extraction_service_1.MemoryExtractionService) === "function" ? _l : Object, typeof (_m = typeof memory_service_1.MemoryService !== "undefined" && memory_service_1.MemoryService) === "function" ? _m : Object, typeof (_o = typeof workflow_service_1.WorkflowService !== "undefined" && workflow_service_1.WorkflowService) === "function" ? _o : Object, typeof (_p = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _p : Object, typeof (_q = typeof concept_extraction_service_1.ConceptExtractionService !== "undefined" && concept_extraction_service_1.ConceptExtractionService) === "function" ? _q : Object, typeof (_r = typeof yolo_scheduler_service_1.YoloSchedulerService !== "undefined" && yolo_scheduler_service_1.YoloSchedulerService) === "function" ? _r : Object, typeof (_s = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _s : Object, typeof (_t = typeof business_context_service_1.BusinessContextService !== "undefined" && business_context_service_1.BusinessContextService) === "function" ? _t : Object, typeof (_u = typeof execution_state_service_1.ExecutionStateService !== "undefined" && execution_state_service_1.ExecutionStateService) === "function" ? _u : Object, typeof (_v = typeof attachments_service_1.AttachmentsService !== "undefined" && attachments_service_1.AttachmentsService) === "function" ? _v : Object, typeof (_w = typeof job_planner_service_1.JobPlannerService !== "undefined" && job_planner_service_1.JobPlannerService) === "function" ? _w : Object, typeof (_x = typeof agent_execution_event_bus_service_1.AgentExecutionEventBus !== "undefined" && agent_execution_event_bus_service_1.AgentExecutionEventBus) === "function" ? _x : Object, typeof (_y = typeof maturity_engine_service_1.MaturityEngineService !== "undefined" && maturity_engine_service_1.MaturityEngineService) === "function" ? _y : Object, typeof (_z = typeof ws_server_holder_service_1.WsServerHolder !== "undefined" && ws_server_holder_service_1.WsServerHolder) === "function" ? _z : Object, typeof (_0 = typeof app_event_bus_service_1.AppEventBus !== "undefined" && app_event_bus_service_1.AppEventBus) === "function" ? _0 : Object, typeof (_1 = typeof openclaw_client_service_1.OpenClawClientService !== "undefined" && openclaw_client_service_1.OpenClawClientService) === "function" ? _1 : Object, typeof (_2 = typeof headless_executor_service_1.HeadlessExecutorService !== "undefined" && headless_executor_service_1.HeadlessExecutorService) === "function" ? _2 : Object])
 ], ConversationGateway);
 
 
 /***/ }),
-/* 189 */
+/* 203 */
 /***/ ((module) => {
 
 module.exports = require("@nestjs/websockets");
 
 /***/ }),
-/* 190 */
+/* 204 */
 /***/ ((module) => {
 
 module.exports = require("socket.io");
 
 /***/ }),
-/* 191 */
+/* 205 */
 /***/ ((module) => {
 
 module.exports = require("jwks-rsa");
 
 /***/ }),
-/* 192 */
+/* 206 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -32188,13 +35803,16 @@ const ai_gateway_module_1 = __webpack_require__(89);
 const notes_module_1 = __webpack_require__(133);
 const knowledge_module_1 = __webpack_require__(74);
 const conversation_module_1 = __webpack_require__(132);
-const web_search_module_1 = __webpack_require__(147);
+const web_search_module_1 = __webpack_require__(136);
 const file_upload_module_1 = __webpack_require__(41);
-const workflow_module_1 = __webpack_require__(146);
-const maturity_module_1 = __webpack_require__(151);
-const onboarding_controller_1 = __webpack_require__(193);
-const onboarding_service_1 = __webpack_require__(194);
-const onboarding_metric_service_1 = __webpack_require__(195);
+const workflow_module_1 = __webpack_require__(173);
+const maturity_module_1 = __webpack_require__(176);
+const openclaw_tenant_module_1 = __webpack_require__(151);
+const agent_execution_module_1 = __webpack_require__(135);
+const bridge_module_1 = __webpack_require__(134);
+const onboarding_controller_1 = __webpack_require__(207);
+const onboarding_service_1 = __webpack_require__(208);
+const onboarding_metric_service_1 = __webpack_require__(209);
 /**
  * Module for the onboarding quick win flow.
  * Provides sub-5-minute first value experience for new users.
@@ -32215,6 +35833,9 @@ exports.OnboardingModule = OnboardingModule = tslib_1.__decorate([
             file_upload_module_1.FileUploadModule, // Provides FileUploadService for PDF validation
             workflow_module_1.WorkflowModule, // Provides WorkflowService for building execution plans
             maturity_module_1.MaturityModule, // Provides MaturityEngineService for auto-BASIC initialization
+            openclaw_tenant_module_1.OpenClawTenantModule, // Provides OpenClaw tenant provisioning services
+            agent_execution_module_1.AgentExecutionModule, // Provides OpenClawClientService for director briefing
+            (0, common_1.forwardRef)(() => bridge_module_1.BridgeModule), // For post-briefing processing (circular with AgentExecution)
         ],
         controllers: [onboarding_controller_1.OnboardingController],
         providers: [onboarding_service_1.OnboardingService, onboarding_metric_service_1.OnboardingMetricService],
@@ -32224,7 +35845,7 @@ exports.OnboardingModule = OnboardingModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 193 */
+/* 207 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -32235,8 +35856,8 @@ exports.OnboardingController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const platform_express_1 = __webpack_require__(28);
-const onboarding_service_1 = __webpack_require__(194);
-const quick_win_dto_1 = __webpack_require__(197);
+const onboarding_service_1 = __webpack_require__(208);
+const quick_win_dto_1 = __webpack_require__(211);
 const jwt_auth_guard_1 = __webpack_require__(47);
 const mfa_required_guard_1 = __webpack_require__(60);
 const skip_mfa_decorator_1 = __webpack_require__(52);
@@ -32539,12 +36160,12 @@ exports.OnboardingController = OnboardingController = OnboardingController_1 = t
 
 
 /***/ }),
-/* 194 */
+/* 208 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 var OnboardingService_1;
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.OnboardingService = void 0;
 const tslib_1 = __webpack_require__(4);
@@ -32552,25 +36173,32 @@ const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(10);
 const prisma_1 = __webpack_require__(36);
 const ai_gateway_service_1 = __webpack_require__(90);
-const notes_service_1 = __webpack_require__(134);
+const notes_service_1 = __webpack_require__(146);
 const concept_service_1 = __webpack_require__(106);
 const concept_matching_service_1 = __webpack_require__(111);
-const conversation_service_1 = __webpack_require__(183);
-const web_search_service_1 = __webpack_require__(148);
+const conversation_service_1 = __webpack_require__(197);
+const web_search_service_1 = __webpack_require__(137);
 const brain_seeding_service_1 = __webpack_require__(118);
 const concept_classifier_service_1 = __webpack_require__(122);
-const workflow_service_1 = __webpack_require__(168);
-const maturity_engine_service_1 = __webpack_require__(163);
+const workflow_service_1 = __webpack_require__(182);
+const maturity_engine_service_1 = __webpack_require__(177);
 const types_1 = __webpack_require__(86);
-const onboarding_metric_service_1 = __webpack_require__(195);
-const quick_task_templates_1 = __webpack_require__(196);
+const onboarding_metric_service_1 = __webpack_require__(209);
+const quick_task_templates_1 = __webpack_require__(210);
 const department_categories_1 = __webpack_require__(119);
+const app_event_bus_service_1 = __webpack_require__(147);
+const bridge_service_1 = __webpack_require__(159);
+const web_crawler_service_1 = __webpack_require__(152);
+const business_profile_service_1 = __webpack_require__(153);
+const soul_generator_service_1 = __webpack_require__(154);
+const openclaw_tenant_service_1 = __webpack_require__(155);
+const openclaw_client_service_1 = __webpack_require__(139);
 /**
  * Service for managing the onboarding quick win flow.
  * Enables users to experience AI value within 5 minutes of registration.
  */
 let OnboardingService = OnboardingService_1 = class OnboardingService {
-    constructor(prisma, aiGateway, notesService, metricService, conceptService, conceptMatchingService, conversationService, webSearchService, brainSeedingService, conceptClassifierService, workflowService, maturityEngineService) {
+    constructor(prisma, aiGateway, notesService, metricService, conceptService, conceptMatchingService, conversationService, webSearchService, brainSeedingService, conceptClassifierService, workflowService, maturityEngineService, eventBus, webCrawlerService, businessProfileService, soulGeneratorService, openClawTenantService, openClawClient, bridgeService) {
         this.prisma = prisma;
         this.aiGateway = aiGateway;
         this.notesService = notesService;
@@ -32583,6 +36211,13 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
         this.conceptClassifierService = conceptClassifierService;
         this.workflowService = workflowService;
         this.maturityEngineService = maturityEngineService;
+        this.eventBus = eventBus;
+        this.webCrawlerService = webCrawlerService;
+        this.businessProfileService = businessProfileService;
+        this.soulGeneratorService = soulGeneratorService;
+        this.openClawTenantService = openClawTenantService;
+        this.openClawClient = openClawClient;
+        this.bridgeService = bridgeService;
         this.logger = new common_1.Logger(OnboardingService_1.name);
     }
     /**
@@ -32601,7 +36236,7 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
         }
         let text;
         try {
-            const { PDFParse } = await Promise.resolve().then(() => tslib_1.__importStar(__webpack_require__(179)));
+            const { PDFParse } = await Promise.resolve().then(() => tslib_1.__importStar(__webpack_require__(193)));
             const parser = new PDFParse({ data: pdfBuffer });
             const result = await parser.getText();
             text = result.text?.trim() ?? '';
@@ -32718,6 +36353,65 @@ let OnboardingService = OnboardingService_1 = class OnboardingService {
             message: 'Company details and user record saved',
             tenantId,
             userId,
+        });
+        // Fire-and-forget: provision OpenClaw tenant profile in background
+        this.provisionOpenClawTenant(tenantId, companyName, websiteUrl).catch(err => {
+            this.logger.warn({
+                message: 'OpenClaw tenant provisioning failed (non-blocking)',
+                tenantId,
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+        });
+    }
+    /**
+     * Provisions a dedicated OpenClaw agent profile for this tenant.
+     * Crawls the website, generates SOUL.MD per agent, deploys to Hetzner.
+     * Runs in background — does not block onboarding flow.
+     */
+    async provisionOpenClawTenant(tenantId, companyName, websiteUrl) {
+        // Check if already provisioned
+        const exists = await this.openClawTenantService.tenantExists(tenantId);
+        if (exists) {
+            this.logger.log({ message: 'OpenClaw tenant already provisioned', tenantId });
+            return;
+        }
+        this.logger.log({ message: 'Starting OpenClaw tenant provisioning', tenantId, websiteUrl });
+        const startTime = Date.now();
+        // Step 1: Crawl website (if URL provided)
+        let crawlResult;
+        if (websiteUrl) {
+            crawlResult = await this.webCrawlerService.crawlWebsite(websiteUrl);
+            this.logger.log({ message: 'Website crawled', tenantId, pages: crawlResult.pages.length });
+        }
+        // Step 2: Generate business profile
+        const profile = crawlResult
+            ? await this.businessProfileService.analyzeWebsite(crawlResult, companyName)
+            : {
+                companyName,
+                industry: 'Unknown',
+                description: companyName,
+                products: [],
+                services: [],
+                targetClients: [],
+                geography: 'Unknown',
+                brandVoice: 'Professional',
+                competitors: [],
+                uniqueValue: '',
+                priceRange: '',
+                teamDescription: '',
+                visualStyle: 'Professional',
+                keyMetrics: {},
+                rawSummary: companyName,
+            };
+        // Step 3: Generate SOUL.MD files
+        const souls = await this.soulGeneratorService.generateAllSouls(profile);
+        // Step 4: Deploy to Hetzner
+        const result = await this.openClawTenantService.provisionTenant(tenantId, profile, souls);
+        this.logger.log({
+            message: `OpenClaw tenant provisioning ${result.success ? 'completed' : 'failed'}`,
+            tenantId,
+            durationMs: Date.now() - startTime,
+            error: result.error,
         });
     }
     /**
@@ -33298,73 +36992,103 @@ Kreiraj personalizovani Poslovni Mozak sa tačno 10 prioritizovanih zadataka.`;
             userId,
             tenantId,
         });
-        // Generate initial action plan from business context via embeddings
+        const brainRelayMode = process.env['BRAIN_RELAY_MODE'] === 'true';
         let welcomeConversationId = null;
         let taskIds = [];
-        try {
-            const planResult = await this.generateInitialPlan(tenantId, userId);
-            welcomeConversationId = planResult.conversationId;
-            taskIds = planResult.taskIds;
-        }
-        catch (err) {
-            this.logger.warn({
-                message: 'Initial plan generation failed (non-blocking)',
-                tenantId,
-                userId,
-                error: err instanceof Error ? err.message : 'Unknown',
-            });
-        }
-        // Build execution plan and return planId so frontend can load it
         let planId;
-        if (taskIds.length > 0 && welcomeConversationId) {
+        if (brainRelayMode) {
+            // ── AI BRAIN MODE ──
+            // OpenClaw handles all planning, task creation, and execution.
+            // AWAITED — frontend shows loading indicator while brain works.
+            this.logger.log({ message: 'Brain relay mode: awaiting director briefing', tenantId });
             try {
-                const plan = await this.workflowService.buildExecutionPlan(taskIds, userId, tenantId, welcomeConversationId);
-                planId = plan.planId;
-                this.logger.log({
-                    message: 'Execution plan built for onboarding',
-                    planId: plan.planId,
-                    taskCount: taskIds.length,
-                    tenantId,
-                    userId,
-                });
+                const convId = await this.briefOpenClawDirector(tenantId, userId, generatedOutput, taskIds, executionMode);
+                if (convId)
+                    welcomeConversationId = convId;
             }
             catch (err) {
                 this.logger.warn({
-                    message: 'Plan generation failed (non-blocking)',
+                    message: 'OpenClaw director briefing failed',
+                    tenantId,
+                    error: err instanceof Error ? err.message : 'Unknown',
+                });
+            }
+        }
+        else {
+            // ── LEGACY MODE ──
+            // NestJS handles planning, seeding, maturity, and workflow execution.
+            // Generate initial action plan from business context via embeddings
+            try {
+                const planResult = await this.generateInitialPlan(tenantId, userId);
+                welcomeConversationId = planResult.conversationId;
+                taskIds = planResult.taskIds;
+            }
+            catch (err) {
+                this.logger.warn({
+                    message: 'Initial plan generation failed (non-blocking)',
                     tenantId,
                     userId,
                     error: err instanceof Error ? err.message : 'Unknown',
                 });
             }
-        }
-        // Story 3.2: Seed Brain pending tasks based on user's department (fire-and-forget)
-        // Loads user's department from DB and seeds concept tasks accordingly
-        const user = await this.prisma.user.findUnique({
-            where: { id: userId },
-            select: { department: true, role: true },
-        });
-        this.brainSeedingService
-            .seedPendingTasksForUser(userId, tenantId, user?.department ?? null, user?.role ?? 'TENANT_OWNER')
-            .catch((err) => {
-            this.logger.warn({
-                message: 'Brain seeding failed after onboarding (non-blocking)',
-                userId,
-                tenantId,
-                error: err instanceof Error ? err.message : 'Unknown',
+            // Build execution plan and return planId so frontend can load it
+            if (taskIds.length > 0 && welcomeConversationId) {
+                try {
+                    const plan = await this.workflowService.buildExecutionPlan(taskIds, userId, tenantId, welcomeConversationId);
+                    planId = plan.planId;
+                    this.logger.log({
+                        message: 'Execution plan built for onboarding',
+                        planId: plan.planId,
+                        taskCount: taskIds.length,
+                        tenantId,
+                        userId,
+                    });
+                }
+                catch (err) {
+                    this.logger.warn({
+                        message: 'Plan generation failed (non-blocking)',
+                        tenantId,
+                        userId,
+                        error: err instanceof Error ? err.message : 'Unknown',
+                    });
+                }
+            }
+            // Story 3.2: Seed Brain pending tasks based on user's department
+            const user = await this.prisma.user.findUnique({
+                where: { id: userId },
+                select: { department: true, role: true },
             });
-        });
-        // Initialize BASIC maturity stage (fire-and-forget)
-        // Creates assignments + Note TASKs. Execution triggered separately from dashboard.
-        this.maturityEngineService
-            .initializeStage(tenantId, types_1.MaturityStage.BASIC, userId)
-            .catch((err) => {
-            this.logger.warn({
-                message: 'Auto-BASIC maturity initialization failed (non-blocking)',
-                tenantId,
-                userId,
-                error: err instanceof Error ? err.message : 'Unknown',
+            this.brainSeedingService
+                .seedPendingTasksForUser(userId, tenantId, user?.department ?? null, user?.role ?? 'TENANT_OWNER')
+                .catch((err) => {
+                this.logger.warn({
+                    message: 'Brain seeding failed after onboarding (non-blocking)',
+                    userId,
+                    tenantId,
+                    error: err instanceof Error ? err.message : 'Unknown',
+                });
             });
-        });
+            // Initialize BASIC maturity stage
+            this.maturityEngineService
+                .initializeStage(tenantId, types_1.MaturityStage.BASIC, userId)
+                .catch((err) => {
+                this.logger.warn({
+                    message: 'Auto-BASIC maturity initialization failed (non-blocking)',
+                    tenantId,
+                    userId,
+                    error: err instanceof Error ? err.message : 'Unknown',
+                });
+            });
+            // Deploy USER.md + AGENTS.md to OpenClaw and brief the director (fire-and-forget)
+            this.briefOpenClawDirector(tenantId, userId, generatedOutput, taskIds, executionMode)
+                .catch((err) => {
+                this.logger.warn({
+                    message: 'OpenClaw director briefing failed (non-blocking)',
+                    tenantId,
+                    error: err instanceof Error ? err.message : 'Unknown',
+                });
+            });
+        } // end legacy mode
         this.logger.log({
             message: 'Onboarding completed successfully',
             tenantId,
@@ -33372,6 +37096,14 @@ Kreiraj personalizovani Poslovni Mozak sa tačno 10 prioritizovanih zadataka.`;
             timeSavedMinutes,
             noteId: note.id,
             welcomeConversationId,
+        });
+        this.eventBus.emit(app_event_bus_service_1.APP_EVENTS.ONBOARDING_COMPLETED, {
+            tenantId,
+            userId,
+            taskId,
+            noteId: note.id,
+            timeSavedMinutes,
+            welcomeConversationId: welcomeConversationId ?? undefined,
         });
         return {
             output: generatedOutput,
@@ -33384,6 +37116,360 @@ Kreiraj personalizovani Poslovni Mozak sa tačno 10 prioritizovanih zadataka.`;
             planId,
             taskIds: taskIds.length > 0 ? taskIds : undefined,
         };
+    }
+    /**
+     * Brief the OpenClaw director agent after onboarding completion.
+     * Writes USER.md + AGENTS.md to Hetzner, then sends the onboarding analysis
+     * and task list so the director can start organizing work.
+     */
+    async briefOpenClawDirector(tenantId, userId, generatedOutput, taskIds, executionMode) {
+        // 1. Load tenant profile for USER.md
+        const tenant = await this.prisma.tenant.findUnique({
+            where: { id: tenantId },
+            select: { name: true, industry: true, description: true },
+        });
+        if (!tenant)
+            return null;
+        // 2. Write USER.md to Hetzner
+        try {
+            await this.openClawTenantService.writeUserMd(tenantId, {
+                companyName: tenant.name,
+                industry: tenant.industry,
+                description: tenant.description ?? undefined,
+                onboardingOutput: generatedOutput.substring(0, 3000),
+                strategy: executionMode === 'YOLO' ? 'AUTONOMNO' : 'MANUALNO',
+                executionMode: executionMode ?? 'MANUAL',
+            });
+            this.logger.log({ message: 'USER.md deployed to OpenClaw', tenantId });
+        }
+        catch (err) {
+            this.logger.warn({
+                message: 'USER.md deployment failed',
+                tenantId,
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+        }
+        // 3. Write AGENTS.md to Hetzner
+        try {
+            const bridgeUrl = process.env['OPENCLAW_RELAY_URL']?.replace('/execute', '') ?? 'http://localhost:3000/api';
+            await this.openClawTenantService.writeAgentsMd(tenantId, bridgeUrl);
+            this.logger.log({ message: 'AGENTS.md deployed to OpenClaw', tenantId });
+        }
+        catch (err) {
+            this.logger.warn({
+                message: 'AGENTS.md deployment failed',
+                tenantId,
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+        }
+        // 5. Create welcome conversation
+        const conversation = await this.conversationService.createConversation(tenantId, userId, `Poslovni Mozak — ${tenant.name}`);
+        const welcomeConvId = conversation.id;
+        // 5. Build briefing message and save as user message in the conversation
+        const briefing = [
+            `ONBOARDING ZAVRSEN za ${tenant.name} (${tenant.industry}).`,
+            '',
+            `VAZNO — tvoj tenantId za sve Bridge API pozive je: ${tenantId}`,
+            'Koristi TACNO ovaj tenantId u SVAKOM curl pozivu ka mentor-ai-bridge.',
+            '',
+            '=== BIZNIS ANALIZA ===',
+            generatedOutput.substring(0, 2500),
+            '=== KRAJ ANALIZE ===',
+            '',
+            'TVOJ ZADATAK:',
+            '',
+            'KORAK 1 — Pretrazi bazu znanja (obavezno uradi SVE ove pretrage):',
+            `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=prodaja&tenantId=${tenantId}"`,
+            `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=marketing&tenantId=${tenantId}"`,
+            `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=finansije&tenantId=${tenantId}"`,
+            `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=operacije&tenantId=${tenantId}"`,
+            `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=vrednost&tenantId=${tenantId}"`,
+            `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=strategija&tenantId=${tenantId}"`,
+            `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=cena&tenantId=${tenantId}"`,
+            'Iz rezultata odaberi koncepte koji su NAJRELEVANTNIJI za analizu biznisa. Zapamti njihove ID-jeve.',
+            '',
+            'KORAK 2 — Za svaku preporuku kreiraj proposal sa relatedConcepts:',
+            `  curl -s -X POST -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" -H "Content-Type: application/json" "http://100.114.192.85:3000/api/bridge/proposals" -d '{"tenantId":"${tenantId}","canvasBlock":"CANVAS_BLOCK","type":"task_execution","title":"NASLOV","reasoning":"OBRAZLOZENJE","proposedAction":"AKCIJA","estimatedCost":1.5,"priority":"high","relatedConcepts":["CONCEPT_ID"]}'`,
+            '',
+            'PRAVILA ZA NASLOVE I OPISE (OBAVEZNO):',
+            '- title: Konkretan i akcionski. NIKADA ne koristi jednu rec ili kategoriju.',
+            '  LOSE: "Marketing", "Prodaja", "Strategija"',
+            '  DOBRO: "Kreirati cenovnu strategiju za premium pozicioniranje skulptura"',
+            '  DOBRO: "Razviti B2B partnerski program sa arhitektama i dizajnerima"',
+            '  DOBRO: "Implementirati CRM sistem za pracenje prodajnog pipeline-a"',
+            '',
+            '- reasoning: Minimum 4-5 recenica. Objasni CEO-u ZASTO je ovo kriticno. Koristi brojeve.',
+            '  Primer: "Trenutno imate 15 klijenata sa prosecnom vrednoscu od 13K EUR. Povecanje prosecne',
+            '  vrednosti na 25K kroz upsell strategiju bi donelo dodatnih 180K EUR godisnje bez novih',
+            '  klijenata. Bez ovog, rast zavisi iskljucivo od akvizicije koja kosta 5x vise."',
+            '',
+            '- proposedAction: Korak-po-korak plan sa agentima. Minimum 4 koraka.',
+            '  Primer: "1. Research agent istrazuje konkurentske cene (brave-search). 2. Financial agent',
+            '  pravi Excel sa cenovnim modelom (excel-xlsx). 3. Content agent pise prodajni pitch.',
+            '  4. Designer pravi prezentaciju za klijente (generate-presentation). Output: Excel cenovnik,',
+            '  prodajni pitch dokument, prezentacija sa 10 slide-ova."',
+            '',
+            'canvasBlock: KEY_PARTNERS, KEY_ACTIVITIES, KEY_RESOURCES, VALUE_PROPOSITION, CUSTOMER_RELATIONSHIPS, CHANNELS, CUSTOMER_SEGMENTS, REVENUE_STREAMS, COST_STRUCTURE',
+            '',
+            'KREIRAJ MINIMUM 5 predloga. Svaki MORA imati relatedConcepts sa concept ID-jevima iz pretrage.',
+            '',
+            'NA KRAJU OBAVEZNO napisi kratak rezime sta si nasao i sta si kreirao.',
+            'Korisnik ce videti tvoj tekstualni odgovor u chatu. Ako ne napises nista, videce praznu poruku.',
+        ].join('\n');
+        await this.conversationService.addMessage(tenantId, welcomeConvId, 'USER', briefing);
+        // 6. Send to OpenClaw director and save response
+        if (!this.openClawClient.isConfigured()) {
+            this.logger.warn({ message: 'OpenClaw not configured, skipping director briefing' });
+            return welcomeConvId;
+        }
+        try {
+            const result = await this.openClawClient.executeAgent(briefing, {
+                agentId: 'main',
+                sessionId: welcomeConvId,
+                tenantProfile: tenantId,
+                timeoutSeconds: 3600, // 1 hour — matches OpenClaw config timeout
+                // Streaming callbacks — emit WebSocket events in real-time
+                onText: (text) => {
+                    // Text chunks from director — could be streamed to chat in future
+                    this.logger.debug({ message: 'Brain briefing chunk', tenantId, len: text.length });
+                },
+                onTool: (tool, status, query) => {
+                    // Tool events — director is using skills (search_concepts, brave_search, etc.)
+                    this.eventBus.emit(bridge_service_1.BRIDGE_EVENTS.AGENT_STATUS, {
+                        tenantId,
+                        taskId: welcomeConvId,
+                        agent: 'direktor',
+                        status: status === 'start' ? 'running' : 'completed',
+                        message: status === 'start'
+                            ? `Koristi ${tool}${query ? ': ' + query.substring(0, 100) : ''}`
+                            : `Završio ${tool}`,
+                        timestamp: new Date().toISOString(),
+                    });
+                    this.logger.log({ message: `Brain tool: ${tool} ${status}`, tenantId, query: query?.substring(0, 50) });
+                },
+                onStatus: (phase) => {
+                    this.eventBus.emit(bridge_service_1.BRIDGE_EVENTS.AGENT_STATUS, {
+                        tenantId,
+                        taskId: welcomeConvId,
+                        agent: 'direktor',
+                        status: 'running',
+                        message: `Faza: ${phase}`,
+                        timestamp: new Date().toISOString(),
+                    });
+                },
+            });
+            // Save director's response as assistant message in the welcome conversation
+            const directorOutput = result.output || 'Poslovni mozak je analizirao vaš biznis i kreirao predloge. Pogledajte panel Zadaci za detalje.';
+            await this.conversationService.addMessage(tenantId, welcomeConvId, 'ASSISTANT', directorOutput);
+            // Process director's response: extract concepts, create proposals, seed tree
+            if (result.output) {
+                await this.processDirectorResponse(tenantId, userId, welcomeConvId, result.output, generatedOutput);
+            }
+            this.eventBus.emit(bridge_service_1.BRIDGE_EVENTS.AGENT_STATUS, {
+                tenantId,
+                taskId: welcomeConvId,
+                agent: 'direktor',
+                status: 'completed',
+                message: 'Briefing završen — preporuke i koncepti kreirani',
+                timestamp: new Date().toISOString(),
+            });
+            this.logger.log({
+                message: 'OpenClaw director briefed, response processed, proposals created',
+                tenantId,
+                conversationId: welcomeConvId,
+                success: result.success,
+                outputLength: result.output?.length ?? 0,
+            });
+        }
+        catch (err) {
+            // Save fallback message
+            await this.conversationService.addMessage(tenantId, welcomeConvId, 'ASSISTANT', 'Poslovni mozak je primio analizu i razmišlja o preporukama. Predlozi će se pojaviti uskoro u panelu Zadaci.').catch(() => { });
+            this.logger.error({
+                message: 'Failed to brief OpenClaw director',
+                tenantId,
+                error: err instanceof Error ? err.message : 'Unknown',
+            });
+        }
+        return welcomeConvId;
+    }
+    /**
+     * Process director's response: extract recommendations, match to concepts,
+     * create proposals and tasks visible in the UI.
+     */
+    async processDirectorResponse(tenantId, userId, conversationId, directorResponse, businessAnalysis) {
+        this.logger.log({ message: 'Processing director response', tenantId, responseLen: directorResponse.length });
+        // 1. Extract recommendations from director's numbered list
+        const recommendations = this.extractRecommendations(directorResponse);
+        this.logger.log({ message: `Extracted ${recommendations.length} recommendations`, tenantId });
+        if (recommendations.length === 0) {
+            // Fallback: use the business analysis to find concepts
+            const fallbackRecs = this.extractRecommendations(businessAnalysis);
+            recommendations.push(...fallbackRecs.slice(0, 10));
+        }
+        // 2. For each recommendation, search knowledge graph and create task + proposal
+        const createdTaskIds = [];
+        const matchedConceptIds = [];
+        for (const rec of recommendations.slice(0, 15)) {
+            try {
+                // Search for matching concept — try multiple search strategies
+                let conceptId = null;
+                // Strategy 1: Search by title
+                let concepts = await this.bridgeService.searchConcepts(tenantId, rec.title, 3);
+                const firstMatch = concepts[0];
+                if (firstMatch) {
+                    conceptId = firstMatch.id;
+                }
+                // Strategy 2: Extract key business terms and search each
+                if (!conceptId) {
+                    const keywords = this.extractKeyTerms(rec.title + ' ' + rec.description);
+                    for (const kw of keywords) {
+                        concepts = await this.bridgeService.searchConcepts(tenantId, kw, 2);
+                        const kwMatch = concepts[0];
+                        if (kwMatch) {
+                            conceptId = kwMatch.id;
+                            break;
+                        }
+                    }
+                }
+                if (conceptId && !matchedConceptIds.includes(conceptId)) {
+                    matchedConceptIds.push(conceptId);
+                }
+                // Determine canvas block from recommendation keywords
+                const canvasBlock = this.inferCanvasBlock(rec.title + ' ' + rec.description);
+                // Create proposal (visible in Task Hub left panel)
+                await this.bridgeService.createProposal({
+                    tenantId,
+                    canvasBlock,
+                    type: 'task_execution',
+                    title: rec.title,
+                    reasoning: rec.description,
+                    proposedAction: rec.description,
+                    estimatedCost: 1.5,
+                    priority: rec.priority ?? 'medium',
+                    relatedConcepts: conceptId ? [conceptId] : [],
+                });
+                // Also create a TASK (visible in Task Hub right panel)
+                const task = await this.bridgeService.createTask({
+                    tenantId,
+                    title: rec.title,
+                    content: rec.description,
+                    conceptId: conceptId ?? undefined,
+                    expectedOutcome: rec.expectedOutcome,
+                });
+                createdTaskIds.push(task.id);
+            }
+            catch (err) {
+                this.logger.warn({
+                    message: 'Failed to process recommendation',
+                    title: rec.title,
+                    error: err instanceof Error ? err.message : 'Unknown',
+                });
+            }
+        }
+        // 3. Emit tree update so frontend refreshes the concept tree
+        if (matchedConceptIds.length > 0) {
+            this.eventBus.emit(bridge_service_1.BRIDGE_EVENTS.TREE_UPDATED, {
+                tenantId,
+                action: 'onboarding_concepts_linked',
+                conceptIds: matchedConceptIds,
+            });
+        }
+        this.logger.log({
+            message: 'Director response processed',
+            tenantId,
+            tasksCreated: createdTaskIds.length,
+            conceptsMatched: matchedConceptIds.length,
+            proposalsCreated: recommendations.length,
+        });
+    }
+    /**
+     * Extract structured recommendations from AI text.
+     * Handles numbered lists, markdown headings, and bullet points.
+     */
+    extractRecommendations(text) {
+        const recommendations = [];
+        let match;
+        // Pattern 1: "### N. **Title** (Category)\n**Zašto:** ...\n**Akcije:** ..."
+        // This is the director's preferred format
+        const heading = /###?\s*\d*\.?\s*\*\*([^*]+)\*\*[^\n]*\n((?:(?!###?\s)[\s\S])*?)(?=###?\s|\n##\s|$)/g;
+        while ((match = heading.exec(text)) !== null) {
+            const title = (match[1] ?? '').trim();
+            const body = (match[2] ?? '').trim();
+            if (title.length > 5 && !recommendations.some(r => r.title === title)) {
+                // Extract priority from keywords
+                const priority = body.toLowerCase().includes('kritič') || body.toLowerCase().includes('kritičan')
+                    ? 'critical' : body.toLowerCase().includes('visok') ? 'high' : 'medium';
+                recommendations.push({ title, description: body.substring(0, 800), priority });
+            }
+        }
+        if (recommendations.length >= 3)
+            return recommendations;
+        // Pattern 2: Numbered bold items: "1. **Title**: description" or "1. **Title** - description"
+        const numberedBold = /\d+\.\s*\*\*([^*]+)\*\*[:\s-]*([^\n]+(?:\n(?!\d+\.\s*\*\*).*)*)/g;
+        while ((match = numberedBold.exec(text)) !== null) {
+            const title = (match[1] ?? '').trim();
+            const desc = (match[2] ?? '').trim();
+            if (title.length > 5 && !recommendations.some(r => r.title === title)) {
+                recommendations.push({ title, description: desc.substring(0, 800) });
+            }
+        }
+        if (recommendations.length >= 3)
+            return recommendations;
+        // Pattern 3: Plain numbered: "1. Title\n description"
+        const numbered = /\d+\.\s+([^\n*]+)\n((?:(?!\d+\.).*\n?){1,5})/g;
+        while ((match = numbered.exec(text)) !== null) {
+            const title = (match[1] ?? '').trim();
+            const desc = (match[2] ?? '').trim();
+            if (title.length > 10 && !recommendations.some(r => r.title === title)) {
+                recommendations.push({ title, description: desc.substring(0, 800) });
+            }
+        }
+        return recommendations;
+    }
+    /**
+     * Infer BMC canvas block from task description keywords.
+     */
+    /**
+     * Extract key business terms from text for concept search.
+     */
+    extractKeyTerms(text) {
+        const terms = [];
+        const businessTerms = [
+            'prodaj', 'marketing', 'finansij', 'operacij', 'strategij', 'vrednost',
+            'klijent', 'cen', 'prihod', 'trošk', 'budžet', 'brand', 'konkurenc',
+            'lead', 'pipeline', 'ugovor', 'profit', 'investicij', 'digitalizacij',
+            'automatizacij', 'proces', 'tim', 'zaposleni', 'obuk', 'partner',
+            'kanal', 'segment', 'retencij', 'lojalnost', 'cash flow', 'ROI',
+        ];
+        const lower = text.toLowerCase();
+        for (const term of businessTerms) {
+            if (lower.includes(term)) {
+                terms.push(term);
+            }
+        }
+        return terms.slice(0, 5);
+    }
+    inferCanvasBlock(text) {
+        const lower = text.toLowerCase();
+        if (lower.match(/partner|dobavljač|supplier|vendor/))
+            return 'KEY_PARTNERS';
+        if (lower.match(/prodaj|sales|lead|outreach|klijent.*kontakt/))
+            return 'CUSTOMER_SEGMENTS';
+        if (lower.match(/marketing|kampanj|brand|advertis|reklam|SEO|content/))
+            return 'CHANNELS';
+        if (lower.match(/cen[aou]|pricing|pretplat|subscription|revenue|prihod/))
+            return 'REVENUE_STREAMS';
+        if (lower.match(/trošk|cost|budžet|budget|ušteda/))
+            return 'COST_STRUCTURE';
+        if (lower.match(/vrednost|value|ponuda|proposition|benefit/))
+            return 'VALUE_PROPOSITION';
+        if (lower.match(/odnos|relationship|lojalnost|loyalty|retencij|retention/))
+            return 'CUSTOMER_RELATIONSHIPS';
+        if (lower.match(/operacij|process|efikasnost|automat|workflow/))
+            return 'KEY_ACTIVITIES';
+        if (lower.match(/resurs|resource|tim|team|talent|zaposleni/))
+            return 'KEY_RESOURCES';
+        return 'KEY_ACTIVITIES'; // default
     }
     /**
      * Generates initial action plan by searching embeddings with business context.
@@ -33821,12 +37907,13 @@ ${match.category}
 exports.OnboardingService = OnboardingService;
 exports.OnboardingService = OnboardingService = OnboardingService_1 = tslib_1.__decorate([
     (0, common_1.Injectable)(),
-    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _c : Object, typeof (_d = typeof onboarding_metric_service_1.OnboardingMetricService !== "undefined" && onboarding_metric_service_1.OnboardingMetricService) === "function" ? _d : Object, typeof (_e = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _e : Object, typeof (_f = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _f : Object, typeof (_g = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _g : Object, typeof (_h = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _h : Object, typeof (_j = typeof brain_seeding_service_1.BrainSeedingService !== "undefined" && brain_seeding_service_1.BrainSeedingService) === "function" ? _j : Object, typeof (_k = typeof concept_classifier_service_1.ConceptClassifierService !== "undefined" && concept_classifier_service_1.ConceptClassifierService) === "function" ? _k : Object, typeof (_l = typeof workflow_service_1.WorkflowService !== "undefined" && workflow_service_1.WorkflowService) === "function" ? _l : Object, typeof (_m = typeof maturity_engine_service_1.MaturityEngineService !== "undefined" && maturity_engine_service_1.MaturityEngineService) === "function" ? _m : Object])
+    tslib_1.__param(18, (0, common_1.Inject)((0, common_1.forwardRef)(() => bridge_service_1.BridgeService))),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _b : Object, typeof (_c = typeof notes_service_1.NotesService !== "undefined" && notes_service_1.NotesService) === "function" ? _c : Object, typeof (_d = typeof onboarding_metric_service_1.OnboardingMetricService !== "undefined" && onboarding_metric_service_1.OnboardingMetricService) === "function" ? _d : Object, typeof (_e = typeof concept_service_1.ConceptService !== "undefined" && concept_service_1.ConceptService) === "function" ? _e : Object, typeof (_f = typeof concept_matching_service_1.ConceptMatchingService !== "undefined" && concept_matching_service_1.ConceptMatchingService) === "function" ? _f : Object, typeof (_g = typeof conversation_service_1.ConversationService !== "undefined" && conversation_service_1.ConversationService) === "function" ? _g : Object, typeof (_h = typeof web_search_service_1.WebSearchService !== "undefined" && web_search_service_1.WebSearchService) === "function" ? _h : Object, typeof (_j = typeof brain_seeding_service_1.BrainSeedingService !== "undefined" && brain_seeding_service_1.BrainSeedingService) === "function" ? _j : Object, typeof (_k = typeof concept_classifier_service_1.ConceptClassifierService !== "undefined" && concept_classifier_service_1.ConceptClassifierService) === "function" ? _k : Object, typeof (_l = typeof workflow_service_1.WorkflowService !== "undefined" && workflow_service_1.WorkflowService) === "function" ? _l : Object, typeof (_m = typeof maturity_engine_service_1.MaturityEngineService !== "undefined" && maturity_engine_service_1.MaturityEngineService) === "function" ? _m : Object, typeof (_o = typeof app_event_bus_service_1.AppEventBus !== "undefined" && app_event_bus_service_1.AppEventBus) === "function" ? _o : Object, typeof (_p = typeof web_crawler_service_1.WebCrawlerService !== "undefined" && web_crawler_service_1.WebCrawlerService) === "function" ? _p : Object, typeof (_q = typeof business_profile_service_1.BusinessProfileService !== "undefined" && business_profile_service_1.BusinessProfileService) === "function" ? _q : Object, typeof (_r = typeof soul_generator_service_1.SoulGeneratorService !== "undefined" && soul_generator_service_1.SoulGeneratorService) === "function" ? _r : Object, typeof (_s = typeof openclaw_tenant_service_1.OpenClawTenantService !== "undefined" && openclaw_tenant_service_1.OpenClawTenantService) === "function" ? _s : Object, typeof (_t = typeof openclaw_client_service_1.OpenClawClientService !== "undefined" && openclaw_client_service_1.OpenClawClientService) === "function" ? _t : Object, typeof (_u = typeof bridge_service_1.BridgeService !== "undefined" && bridge_service_1.BridgeService) === "function" ? _u : Object])
 ], OnboardingService);
 
 
 /***/ }),
-/* 195 */
+/* 209 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -33975,7 +38062,7 @@ exports.OnboardingMetricService = OnboardingMetricService = OnboardingMetricServ
 
 
 /***/ }),
-/* 196 */
+/* 210 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -34165,7 +38252,7 @@ Please generate a professional, ready-to-use output that demonstrates immediate 
 
 
 /***/ }),
-/* 197 */
+/* 211 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -34294,7 +38381,7 @@ tslib_1.__decorate([
 
 
 /***/ }),
-/* 198 */
+/* 212 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -34303,8 +38390,8 @@ exports.PersonasModule = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const auth_module_1 = __webpack_require__(42);
-const personas_service_1 = __webpack_require__(199);
-const personas_controller_1 = __webpack_require__(200);
+const personas_service_1 = __webpack_require__(213);
+const personas_controller_1 = __webpack_require__(214);
 /**
  * Module for department persona management.
  * Provides persona definitions and API endpoints for persona selection.
@@ -34323,7 +38410,7 @@ exports.PersonasModule = PersonasModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 199 */
+/* 213 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -34464,7 +38551,7 @@ exports.PersonasService = PersonasService = PersonasService_1 = tslib_1.__decora
 
 
 /***/ }),
-/* 200 */
+/* 214 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -34475,7 +38562,7 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const jwt_auth_guard_1 = __webpack_require__(47);
 const mfa_required_guard_1 = __webpack_require__(60);
-const personas_service_1 = __webpack_require__(199);
+const personas_service_1 = __webpack_require__(213);
 /**
  * Controller for persona-related API endpoints.
  * All endpoints require authentication and MFA verification.
@@ -34527,7 +38614,7 @@ exports.PersonasController = PersonasController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 201 */
+/* 215 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -34556,7 +38643,7 @@ exports.QdrantModule = QdrantModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 202 */
+/* 216 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -34566,9 +38653,9 @@ const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(10);
 const auth_module_1 = __webpack_require__(42);
-const data_integrity_controller_1 = __webpack_require__(203);
-const data_integrity_service_1 = __webpack_require__(204);
-const brain_config_controller_1 = __webpack_require__(205);
+const data_integrity_controller_1 = __webpack_require__(217);
+const data_integrity_service_1 = __webpack_require__(218);
+const brain_config_controller_1 = __webpack_require__(219);
 let AdminModule = class AdminModule {
 };
 exports.AdminModule = AdminModule;
@@ -34582,7 +38669,7 @@ exports.AdminModule = AdminModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 203 */
+/* 217 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -34591,7 +38678,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DataIntegrityController = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const data_integrity_service_1 = __webpack_require__(204);
+const data_integrity_service_1 = __webpack_require__(218);
 const jwt_auth_guard_1 = __webpack_require__(47);
 const roles_guard_1 = __webpack_require__(56);
 const roles_decorator_1 = __webpack_require__(55);
@@ -34619,7 +38706,7 @@ exports.DataIntegrityController = DataIntegrityController = tslib_1.__decorate([
 
 
 /***/ }),
-/* 204 */
+/* 218 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -34741,7 +38828,7 @@ exports.DataIntegrityService = DataIntegrityService = DataIntegrityService_1 = t
 
 
 /***/ }),
-/* 205 */
+/* 219 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -34816,7 +38903,7 @@ exports.BrainConfigController = BrainConfigController = BrainConfigController_1 
 
 
 /***/ }),
-/* 206 */
+/* 220 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -34827,9 +38914,9 @@ const common_1 = __webpack_require__(1);
 const tenant_context_1 = __webpack_require__(10);
 const auth_module_1 = __webpack_require__(42);
 const notes_module_1 = __webpack_require__(133);
-const pdf_export_controller_1 = __webpack_require__(207);
-const pdf_export_service_1 = __webpack_require__(208);
-const puppeteer_provider_1 = __webpack_require__(209);
+const pdf_export_controller_1 = __webpack_require__(221);
+const pdf_export_service_1 = __webpack_require__(222);
+const puppeteer_provider_1 = __webpack_require__(223);
 let PdfExportModule = class PdfExportModule {
 };
 exports.PdfExportModule = PdfExportModule;
@@ -34843,7 +38930,7 @@ exports.PdfExportModule = PdfExportModule = tslib_1.__decorate([
 
 
 /***/ }),
-/* 207 */
+/* 221 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -34854,10 +38941,10 @@ exports.PdfExportController = exports.ExportReportsDto = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
 const class_validator_1 = __webpack_require__(39);
-const express_1 = __webpack_require__(177);
+const express_1 = __webpack_require__(191);
 const jwt_auth_guard_1 = __webpack_require__(47);
 const current_user_decorator_1 = __webpack_require__(49);
-const pdf_export_service_1 = __webpack_require__(208);
+const pdf_export_service_1 = __webpack_require__(222);
 class ExportReportsDto {
 }
 exports.ExportReportsDto = ExportReportsDto;
@@ -34907,7 +38994,7 @@ exports.PdfExportController = PdfExportController = PdfExportController_1 = tsli
 
 
 /***/ }),
-/* 208 */
+/* 222 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -34917,10 +39004,10 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.PdfExportService = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const notes_service_1 = __webpack_require__(134);
+const notes_service_1 = __webpack_require__(146);
 const tenant_context_1 = __webpack_require__(10);
-const puppeteer_provider_1 = __webpack_require__(209);
-const pdf_html_builder_1 = __webpack_require__(211);
+const puppeteer_provider_1 = __webpack_require__(223);
+const pdf_html_builder_1 = __webpack_require__(225);
 let PdfExportService = PdfExportService_1 = class PdfExportService {
     constructor(notesService, puppeteer, prisma) {
         this.notesService = notesService;
@@ -35000,7 +39087,7 @@ exports.PdfExportService = PdfExportService = PdfExportService_1 = tslib_1.__dec
 
 
 /***/ }),
-/* 209 */
+/* 223 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -35009,7 +39096,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.PuppeteerProvider = void 0;
 const tslib_1 = __webpack_require__(4);
 const common_1 = __webpack_require__(1);
-const puppeteer_1 = tslib_1.__importDefault(__webpack_require__(210));
+const puppeteer_1 = tslib_1.__importDefault(__webpack_require__(224));
 let PuppeteerProvider = PuppeteerProvider_1 = class PuppeteerProvider {
     constructor() {
         this.logger = new common_1.Logger(PuppeteerProvider_1.name);
@@ -35053,20 +39140,20 @@ exports.PuppeteerProvider = PuppeteerProvider = PuppeteerProvider_1 = tslib_1.__
 
 
 /***/ }),
-/* 210 */
+/* 224 */
 /***/ ((module) => {
 
 module.exports = require("puppeteer");
 
 /***/ }),
-/* 211 */
+/* 225 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.buildPdfHtml = buildPdfHtml;
-const server_1 = __webpack_require__(212);
-const pdf_light_theme_1 = __webpack_require__(216);
+const server_1 = __webpack_require__(226);
+const pdf_light_theme_1 = __webpack_require__(230);
 function escapeHtml(str) {
     return str
         .replace(/&/g, '&amp;')
@@ -35173,7 +39260,7 @@ function buildPdfHtml(options) {
 
 
 /***/ }),
-/* 212 */
+/* 226 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -35181,11 +39268,11 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 const tslib_1 = __webpack_require__(4);
 // Server-only exports (Node.js dependencies like isomorphic-dompurify).
 // Do NOT import from frontend code — use @mentor-ai/shared/utils instead.
-tslib_1.__exportStar(__webpack_require__(213), exports);
+tslib_1.__exportStar(__webpack_require__(227), exports);
 
 
 /***/ }),
-/* 213 */
+/* 227 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -35197,8 +39284,8 @@ tslib_1.__exportStar(__webpack_require__(213), exports);
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.renderMarkdownServer = renderMarkdownServer;
 const tslib_1 = __webpack_require__(4);
-const marked_1 = __webpack_require__(214);
-const isomorphic_dompurify_1 = tslib_1.__importDefault(__webpack_require__(215));
+const marked_1 = __webpack_require__(228);
+const isomorphic_dompurify_1 = tslib_1.__importDefault(__webpack_require__(229));
 const callout_transform_1 = __webpack_require__(35);
 const PURIFY_CONFIG = {
     ADD_ATTR: ['target', 'rel', 'class'],
@@ -35263,19 +39350,19 @@ function renderMarkdownServer(value) {
 
 
 /***/ }),
-/* 214 */
+/* 228 */
 /***/ ((module) => {
 
 module.exports = require("marked");
 
 /***/ }),
-/* 215 */
+/* 229 */
 /***/ ((module) => {
 
 module.exports = require("isomorphic-dompurify");
 
 /***/ }),
-/* 216 */
+/* 230 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -35534,7 +39621,3189 @@ exports.PDF_LIGHT_THEME_CSS = `
 
 
 /***/ }),
-/* 217 */
+/* 231 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AppEventsModule = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const event_emitter_1 = __webpack_require__(148);
+const tenant_context_1 = __webpack_require__(10);
+const app_event_bus_service_1 = __webpack_require__(147);
+const event_handlers_service_1 = __webpack_require__(232);
+const agent_execution_module_1 = __webpack_require__(135);
+const maturity_module_1 = __webpack_require__(176);
+let AppEventsModule = class AppEventsModule {
+};
+exports.AppEventsModule = AppEventsModule;
+exports.AppEventsModule = AppEventsModule = tslib_1.__decorate([
+    (0, common_1.Global)(),
+    (0, common_1.Module)({
+        imports: [
+            event_emitter_1.EventEmitterModule.forRoot({
+                wildcard: true,
+                delimiter: '.',
+                maxListeners: 50,
+            }),
+            tenant_context_1.TenantModule,
+            agent_execution_module_1.AgentExecutionModule,
+            (0, common_1.forwardRef)(() => maturity_module_1.MaturityModule),
+        ],
+        providers: [app_event_bus_service_1.AppEventBus, event_handlers_service_1.AppEventHandlers],
+        exports: [app_event_bus_service_1.AppEventBus],
+    })
+], AppEventsModule);
+
+
+/***/ }),
+/* 232 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var AppEventHandlers_1;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AppEventHandlers = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const event_emitter_1 = __webpack_require__(148);
+const tenant_context_1 = __webpack_require__(10);
+const openclaw_client_service_1 = __webpack_require__(139);
+const ws_server_holder_service_1 = __webpack_require__(180);
+const app_event_bus_service_1 = __webpack_require__(147);
+/**
+ * Centralized Event Handlers
+ *
+ * React to application events with clean, isolated logic.
+ * Each handler is independent and non-blocking unless explicitly async.
+ */
+let AppEventHandlers = AppEventHandlers_1 = class AppEventHandlers {
+    constructor(prisma, openClawClient, wsHolder) {
+        this.prisma = prisma;
+        this.openClawClient = openClawClient;
+        this.wsHolder = wsHolder;
+        this.logger = new common_1.Logger(AppEventHandlers_1.name);
+        // Per-agent queue: ensures only ONE knowledge update per agent at a time (no lock contention)
+        this.agentQueues = new Map();
+    }
+    /**
+     * Queue a task per agent — ensures sequential execution per agent session.
+     * Different agents can run in parallel, but same agent is always sequential.
+     */
+    async enqueueForAgent(agentId, task) {
+        const current = this.agentQueues.get(agentId) ?? Promise.resolve();
+        const next = current.then(task).catch(() => { }).then(() => {
+            // Clean up if this was the last task
+            if (this.agentQueues.get(agentId) === next) {
+                this.agentQueues.delete(agentId);
+            }
+        });
+        this.agentQueues.set(agentId, next);
+        return next;
+    }
+    // ─── Knowledge Updates (queued per agent, no lock contention) ───
+    async handleKnowledgeUpdate(event) {
+        const { conceptName, agentTypes, summary, companyName, personaType, tenantId } = event;
+        // Queue updates per agent — parallel across agents, sequential within each agent
+        const promises = [];
+        for (const agentTypeStr of agentTypes) {
+            const agentId = agentTypeStr.replace(/_/g, '-');
+            promises.push(this.enqueueForAgent(agentId, async () => {
+                try {
+                    await this.openClawClient.executeAgent(`KNOWLEDGE UPDATE za ${companyName} - Koncept: ${conceptName}. Zapamti ove nalaze:\n\n${summary}`, { agentId, tenantProfile: tenantId, timeoutSeconds: 180 });
+                    this.logger.log({ message: `Knowledge update: ${agentTypeStr} master`, conceptName });
+                }
+                catch (err) {
+                    this.logger.warn({ message: `Knowledge update failed: ${agentTypeStr}`, error: err instanceof Error ? err.message : 'Unknown' });
+                }
+            }));
+        }
+        // Main agent — also queued
+        promises.push(this.enqueueForAgent('main', async () => {
+            try {
+                await this.openClawClient.executeAgent(`KNOWLEDGE UPDATE za ${companyName}: Koncept "${conceptName}" (${personaType ?? 'UNKNOWN'}) zavrsen. Zapamti:\n${summary.substring(0, 3000)}`, { agentId: 'main', tenantProfile: tenantId, timeoutSeconds: 120 });
+                this.logger.log({ message: 'Knowledge update: main', conceptName });
+            }
+            catch (err) {
+                this.logger.warn({ message: 'Knowledge update failed: main', error: err instanceof Error ? err.message : 'Unknown' });
+            }
+        }));
+        await Promise.all(promises);
+    }
+    // ─── Stuck Job Recovery ───
+    async handleStuckJob(event) {
+        const { tenantId: _tenantId, executionId, jobId, agentType } = event;
+        this.logger.warn({ message: 'Handling stuck job', executionId, jobId, agentType });
+        // Force-fail stuck execution (idempotent — only if still in active state)
+        await this.prisma.agentExecution.updateMany({
+            where: { id: executionId, status: { in: ['EXECUTING', 'FORMATTING', 'PENDING'] } },
+            data: {
+                status: 'FAILED',
+                error: `Stuck >20min — auto-recovered by event handler`,
+                completedAt: new Date(),
+            },
+        });
+        // Reset job to PLANNED for retry (idempotent — only if still RUNNING)
+        if (jobId) {
+            await this.prisma.agentJob.updateMany({
+                where: { id: jobId, status: 'RUNNING' },
+                data: { status: 'PLANNED', executionId: null, error: null },
+            });
+            this.logger.log({ message: 'Stuck job reset to PLANNED', jobId });
+        }
+    }
+    // Note: STAGE_EXECUTION_CONTINUE is handled by MaturityEngineService @OnEvent (not here)
+    // ─── Stage Execution Completed ───
+    handleStageExecutionCompleted(event) {
+        this.logger.log({
+            message: 'Stage execution completed',
+            tenantId: event.tenantId,
+            stage: event.stage,
+            total: event.total,
+            executed: event.executed,
+            failed: event.failed,
+        });
+    }
+    // ─── Concept Completed / Failed ───
+    async handleAgentJobCompleted(event) {
+        // Notify frontend to refresh task panel when agent job completes
+        try {
+            const note = await this.prisma.note.findUnique({
+                where: { id: event.noteId },
+                select: { conversationId: true },
+            });
+            if (note?.conversationId) {
+                this.wsHolder.emitToTenant(event.tenantId, 'chat:notes-updated', {
+                    conversationId: note.conversationId,
+                    count: 1,
+                });
+            }
+            // Always emit generic task update for task hub (Zadaci page)
+            this.wsHolder.emitToTenant(event.tenantId, 'task:updated', {
+                noteId: event.noteId,
+                agentType: event.agentType,
+            });
+        }
+        catch { /* non-blocking */ }
+    }
+    handleConceptCompleted(event) {
+        this.logger.log({
+            message: 'Concept completed',
+            tenantId: event.tenantId,
+            conceptId: event.conceptId,
+            noteId: event.noteId,
+            stage: event.stage,
+            personaType: event.personaType,
+        });
+    }
+    handleConceptFailed(event) {
+        this.logger.warn({
+            message: 'Concept failed',
+            tenantId: event.tenantId,
+            conceptId: event.conceptId,
+            noteId: event.noteId,
+            stage: event.stage,
+            personaType: event.personaType,
+            error: event.error,
+        });
+    }
+    // ─── Note Lifecycle ───
+    handleNoteCreated(event) {
+        this.logger.log({
+            message: 'Note created',
+            tenantId: event.tenantId,
+            noteId: event.noteId,
+            noteType: event.noteType,
+            source: event.source,
+            conceptId: event.conceptId,
+        });
+    }
+    handleNoteUpdated(event) {
+        this.logger.log({
+            message: 'Note updated',
+            tenantId: event.tenantId,
+            noteId: event.noteId,
+        });
+    }
+    handleNoteStatusChanged(event) {
+        this.logger.log({
+            message: 'Note status changed',
+            tenantId: event.tenantId,
+            noteId: event.noteId,
+            previousStatus: event.previousStatus,
+            newStatus: event.newStatus,
+        });
+    }
+    // ─── Conversation Lifecycle ───
+    handleConversationCreated(event) {
+        this.logger.log({
+            message: 'Conversation created',
+            tenantId: event.tenantId,
+            conversationId: event.conversationId,
+            userId: event.userId,
+            personaType: event.personaType,
+            conceptId: event.conceptId,
+        });
+    }
+    handleConversationMessageAdded(event) {
+        this.logger.log({
+            message: 'Conversation message added',
+            tenantId: event.tenantId,
+            conversationId: event.conversationId,
+            messageId: event.messageId,
+            role: event.role,
+        });
+    }
+    // ─── Onboarding ───
+    handleOnboardingCompleted(event) {
+        this.logger.log({
+            message: 'Onboarding completed',
+            tenantId: event.tenantId,
+            userId: event.userId,
+            taskId: event.taskId,
+            noteId: event.noteId,
+            timeSavedMinutes: event.timeSavedMinutes,
+            welcomeConversationId: event.welcomeConversationId,
+        });
+    }
+    // ─── Workflow Execution ───
+    handleWorkflowStepCompleted(event) {
+        this.logger.log({
+            message: 'Workflow step completed',
+            tenantId: event.tenantId,
+            planId: event.planId,
+            stepId: event.stepId,
+            conceptName: event.conceptName,
+            stepNumber: event.stepNumber,
+            totalSteps: event.totalSteps,
+        });
+    }
+    handleWorkflowCompleted(event) {
+        this.logger.log({
+            message: 'Workflow completed',
+            tenantId: event.tenantId,
+            planId: event.planId,
+            userId: event.userId,
+            status: event.status,
+            completedSteps: event.completedSteps,
+            totalSteps: event.totalSteps,
+        });
+    }
+    // ─── Helpers ───
+    async executeWithRetry(fn, label, maxRetries = 5, delayMs = 10_000) {
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                return await fn();
+            }
+            catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                const isLock = msg.includes('session file locked') || msg.includes('.lock') || msg.includes('EBUSY');
+                if (isLock && attempt < maxRetries) {
+                    this.logger.warn({ message: `Lock retry ${attempt + 1}/${maxRetries}: ${label}` });
+                    await new Promise((r) => setTimeout(r, delayMs));
+                    continue;
+                }
+                throw err;
+            }
+        }
+        throw new Error(`Retry exhausted: ${label}`);
+    }
+};
+exports.AppEventHandlers = AppEventHandlers;
+tslib_1.__decorate([
+    (0, event_emitter_1.OnEvent)(app_event_bus_service_1.APP_EVENTS.KNOWLEDGE_UPDATE_NEEDED, { async: true }),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_d = typeof app_event_bus_service_1.KnowledgeUpdateEvent !== "undefined" && app_event_bus_service_1.KnowledgeUpdateEvent) === "function" ? _d : Object]),
+    tslib_1.__metadata("design:returntype", typeof (_e = typeof Promise !== "undefined" && Promise) === "function" ? _e : Object)
+], AppEventHandlers.prototype, "handleKnowledgeUpdate", null);
+tslib_1.__decorate([
+    (0, event_emitter_1.OnEvent)(app_event_bus_service_1.APP_EVENTS.AGENT_JOB_STUCK, { async: true }),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_f = typeof app_event_bus_service_1.AgentJobStuckEvent !== "undefined" && app_event_bus_service_1.AgentJobStuckEvent) === "function" ? _f : Object]),
+    tslib_1.__metadata("design:returntype", typeof (_g = typeof Promise !== "undefined" && Promise) === "function" ? _g : Object)
+], AppEventHandlers.prototype, "handleStuckJob", null);
+tslib_1.__decorate([
+    (0, event_emitter_1.OnEvent)(app_event_bus_service_1.APP_EVENTS.STAGE_EXECUTION_COMPLETED),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_h = typeof app_event_bus_service_1.StageExecutionEvent !== "undefined" && app_event_bus_service_1.StageExecutionEvent) === "function" ? _h : Object]),
+    tslib_1.__metadata("design:returntype", void 0)
+], AppEventHandlers.prototype, "handleStageExecutionCompleted", null);
+tslib_1.__decorate([
+    (0, event_emitter_1.OnEvent)(app_event_bus_service_1.APP_EVENTS.AGENT_JOB_COMPLETED),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object]),
+    tslib_1.__metadata("design:returntype", typeof (_j = typeof Promise !== "undefined" && Promise) === "function" ? _j : Object)
+], AppEventHandlers.prototype, "handleAgentJobCompleted", null);
+tslib_1.__decorate([
+    (0, event_emitter_1.OnEvent)(app_event_bus_service_1.APP_EVENTS.CONCEPT_COMPLETED),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_k = typeof app_event_bus_service_1.ConceptCompletedEvent !== "undefined" && app_event_bus_service_1.ConceptCompletedEvent) === "function" ? _k : Object]),
+    tslib_1.__metadata("design:returntype", void 0)
+], AppEventHandlers.prototype, "handleConceptCompleted", null);
+tslib_1.__decorate([
+    (0, event_emitter_1.OnEvent)(app_event_bus_service_1.APP_EVENTS.CONCEPT_FAILED),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_l = typeof app_event_bus_service_1.ConceptCompletedEvent !== "undefined" && app_event_bus_service_1.ConceptCompletedEvent) === "function" ? _l : Object]),
+    tslib_1.__metadata("design:returntype", void 0)
+], AppEventHandlers.prototype, "handleConceptFailed", null);
+tslib_1.__decorate([
+    (0, event_emitter_1.OnEvent)(app_event_bus_service_1.APP_EVENTS.NOTE_CREATED),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_m = typeof app_event_bus_service_1.NoteCreatedEvent !== "undefined" && app_event_bus_service_1.NoteCreatedEvent) === "function" ? _m : Object]),
+    tslib_1.__metadata("design:returntype", void 0)
+], AppEventHandlers.prototype, "handleNoteCreated", null);
+tslib_1.__decorate([
+    (0, event_emitter_1.OnEvent)(app_event_bus_service_1.APP_EVENTS.NOTE_UPDATED),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_o = typeof app_event_bus_service_1.NoteUpdatedEvent !== "undefined" && app_event_bus_service_1.NoteUpdatedEvent) === "function" ? _o : Object]),
+    tslib_1.__metadata("design:returntype", void 0)
+], AppEventHandlers.prototype, "handleNoteUpdated", null);
+tslib_1.__decorate([
+    (0, event_emitter_1.OnEvent)(app_event_bus_service_1.APP_EVENTS.NOTE_STATUS_CHANGED),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_p = typeof app_event_bus_service_1.NoteStatusChangedEvent !== "undefined" && app_event_bus_service_1.NoteStatusChangedEvent) === "function" ? _p : Object]),
+    tslib_1.__metadata("design:returntype", void 0)
+], AppEventHandlers.prototype, "handleNoteStatusChanged", null);
+tslib_1.__decorate([
+    (0, event_emitter_1.OnEvent)(app_event_bus_service_1.APP_EVENTS.CONVERSATION_CREATED),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_q = typeof app_event_bus_service_1.ConversationCreatedEvent !== "undefined" && app_event_bus_service_1.ConversationCreatedEvent) === "function" ? _q : Object]),
+    tslib_1.__metadata("design:returntype", void 0)
+], AppEventHandlers.prototype, "handleConversationCreated", null);
+tslib_1.__decorate([
+    (0, event_emitter_1.OnEvent)(app_event_bus_service_1.APP_EVENTS.CONVERSATION_MESSAGE_ADDED),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_r = typeof app_event_bus_service_1.ConversationMessageAddedEvent !== "undefined" && app_event_bus_service_1.ConversationMessageAddedEvent) === "function" ? _r : Object]),
+    tslib_1.__metadata("design:returntype", void 0)
+], AppEventHandlers.prototype, "handleConversationMessageAdded", null);
+tslib_1.__decorate([
+    (0, event_emitter_1.OnEvent)(app_event_bus_service_1.APP_EVENTS.ONBOARDING_COMPLETED),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_s = typeof app_event_bus_service_1.OnboardingCompletedEvent !== "undefined" && app_event_bus_service_1.OnboardingCompletedEvent) === "function" ? _s : Object]),
+    tslib_1.__metadata("design:returntype", void 0)
+], AppEventHandlers.prototype, "handleOnboardingCompleted", null);
+tslib_1.__decorate([
+    (0, event_emitter_1.OnEvent)(app_event_bus_service_1.APP_EVENTS.WORKFLOW_STEP_COMPLETED),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_t = typeof app_event_bus_service_1.WorkflowStepCompletedEvent !== "undefined" && app_event_bus_service_1.WorkflowStepCompletedEvent) === "function" ? _t : Object]),
+    tslib_1.__metadata("design:returntype", void 0)
+], AppEventHandlers.prototype, "handleWorkflowStepCompleted", null);
+tslib_1.__decorate([
+    (0, event_emitter_1.OnEvent)(app_event_bus_service_1.APP_EVENTS.WORKFLOW_COMPLETED),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_u = typeof app_event_bus_service_1.WorkflowCompletedEvent !== "undefined" && app_event_bus_service_1.WorkflowCompletedEvent) === "function" ? _u : Object]),
+    tslib_1.__metadata("design:returntype", void 0)
+], AppEventHandlers.prototype, "handleWorkflowCompleted", null);
+exports.AppEventHandlers = AppEventHandlers = AppEventHandlers_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof openclaw_client_service_1.OpenClawClientService !== "undefined" && openclaw_client_service_1.OpenClawClientService) === "function" ? _b : Object, typeof (_c = typeof ws_server_holder_service_1.WsServerHolder !== "undefined" && ws_server_holder_service_1.WsServerHolder) === "function" ? _c : Object])
+], AppEventHandlers);
+
+
+/***/ }),
+/* 233 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ProcessModule = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const tenant_context_1 = __webpack_require__(10);
+const agent_execution_module_1 = __webpack_require__(135);
+const openclaw_tenant_module_1 = __webpack_require__(151);
+const knowledge_module_1 = __webpack_require__(74);
+const ai_gateway_module_1 = __webpack_require__(89);
+const process_controller_1 = __webpack_require__(234);
+const process_executor_service_1 = __webpack_require__(235);
+const process_scheduler_service_1 = __webpack_require__(244);
+const schema_validator_service_1 = __webpack_require__(236);
+const process_dedup_service_1 = __webpack_require__(241);
+const fal_image_service_1 = __webpack_require__(243);
+/**
+ * Process Workflow Engine Module
+ *
+ * Provides process definition, execution, scheduling, and validation.
+ * Orchestrates OpenClaw agents through multi-step business processes
+ * with JSON Schema validation and approval gates.
+ */
+let ProcessModule = class ProcessModule {
+};
+exports.ProcessModule = ProcessModule;
+exports.ProcessModule = ProcessModule = tslib_1.__decorate([
+    (0, common_1.Module)({
+        imports: [
+            config_1.ConfigModule,
+            tenant_context_1.TenantModule,
+            (0, common_1.forwardRef)(() => agent_execution_module_1.AgentExecutionModule), // For OpenClawClientService
+            openclaw_tenant_module_1.OpenClawTenantModule, // For SSH deploy of SKILL.md
+            ai_gateway_module_1.AiGatewayModule, // For auto-generate skills
+            knowledge_module_1.KnowledgeModule, // For EmbeddingService (lead dedup)
+        ],
+        controllers: [process_controller_1.ProcessController],
+        providers: [
+            process_executor_service_1.ProcessExecutorService,
+            process_scheduler_service_1.ProcessSchedulerService,
+            schema_validator_service_1.SchemaValidatorService,
+            process_dedup_service_1.ProcessDeduplicationService,
+            fal_image_service_1.FalImageService,
+        ],
+        exports: [process_executor_service_1.ProcessExecutorService, process_scheduler_service_1.ProcessSchedulerService],
+    })
+], ProcessModule);
+
+
+/***/ }),
+/* 234 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ProcessController = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const cuid2_1 = __webpack_require__(33);
+const client_1 = __webpack_require__(12);
+const tenant_context_1 = __webpack_require__(10);
+const jwt_auth_guard_1 = __webpack_require__(47);
+const roles_guard_1 = __webpack_require__(56);
+const roles_decorator_1 = __webpack_require__(55);
+const current_user_decorator_1 = __webpack_require__(49);
+const process_executor_service_1 = __webpack_require__(235);
+const process_scheduler_service_1 = __webpack_require__(244);
+const openclaw_tenant_service_1 = __webpack_require__(155);
+const ai_gateway_service_1 = __webpack_require__(90);
+const process_dto_1 = __webpack_require__(246);
+let ProcessController = class ProcessController {
+    constructor(prisma, executor, scheduler, openClawTenant, aiGateway) {
+        this.prisma = prisma;
+        this.executor = executor;
+        this.scheduler = scheduler;
+        this.openClawTenant = openClawTenant;
+        this.aiGateway = aiGateway;
+    }
+    // ════════════════════════════════════════════
+    //  Approved Items (saved from approval steps)
+    // ════════════════════════════════════════════
+    /** List all approved leads for tenant */
+    async listApprovedLeads(user) {
+        const leads = await this.prisma.approvedLead.findMany({
+            where: { tenantId: user.tenantId },
+            orderBy: { createdAt: 'desc' },
+        });
+        return { data: leads };
+    }
+    /** List all approved content for tenant */
+    async listApprovedContent(user) {
+        const content = await this.prisma.approvedContent.findMany({
+            where: { tenantId: user.tenantId },
+            orderBy: { createdAt: 'desc' },
+        });
+        return { data: content };
+    }
+    // ════════════════════════════════════════════
+    //  Run Operations (MUST come before :workflowId to avoid route collision)
+    // ════════════════════════════════════════════
+    /** Get a single run with step results */
+    async getRun(runId, user) {
+        const run = await this.prisma.processRun.findUnique({
+            where: { id: runId },
+            include: {
+                stepResults: {
+                    include: { step: true },
+                    orderBy: { step: { order: 'asc' } },
+                },
+                workflow: true,
+            },
+        });
+        if (!run || run.tenantId !== user.tenantId) {
+            throw new common_1.NotFoundException({
+                type: 'run_not_found',
+                title: 'Run Not Found',
+                status: 404,
+            });
+        }
+        return { data: run };
+    }
+    /** Cancel a running process */
+    async cancelRun(runId, user) {
+        try {
+            await this.executor.cancelRun(runId, user.tenantId);
+            return { data: { cancelled: true } };
+        }
+        catch (err) {
+            if (err.message?.includes('not found')) {
+                throw new common_1.NotFoundException({
+                    type: 'run_not_found',
+                    title: 'Run Not Found',
+                    status: 404,
+                    detail: err.message,
+                });
+            }
+            throw new common_1.BadRequestException({
+                type: 'cancel_failed',
+                title: 'Cancel Failed',
+                status: 400,
+                detail: err.message,
+            });
+        }
+    }
+    /** Approve or reject a step */
+    async approveStep(runId, stepResultId, dto, user) {
+        try {
+            await this.executor.handleApproval(stepResultId, dto.approved, user.userId, user.tenantId, dto.modifiedOutput);
+            return { data: { approved: dto.approved } };
+        }
+        catch (err) {
+            if (err.message?.includes('not found')) {
+                throw new common_1.NotFoundException({
+                    type: 'step_result_not_found',
+                    title: 'Step Result Not Found',
+                    status: 404,
+                    detail: err.message,
+                });
+            }
+            throw new common_1.BadRequestException({
+                type: 'approval_failed',
+                title: 'Approval Failed',
+                status: 400,
+                detail: err.message,
+            });
+        }
+    }
+    // ════════════════════════════════════════════
+    //  Workflow CRUD
+    // ════════════════════════════════════════════
+    /** List all workflows for the tenant */
+    async listWorkflows(user) {
+        const workflows = await this.prisma.processWorkflow.findMany({
+            where: { tenantId: user.tenantId },
+            include: { steps: { orderBy: { order: 'asc' } } },
+            orderBy: { createdAt: 'desc' },
+        });
+        return { data: workflows };
+    }
+    /** Get a single workflow with steps */
+    async getWorkflow(workflowId, user) {
+        const workflow = await this.prisma.processWorkflow.findUnique({
+            where: { id: workflowId },
+            include: { steps: { orderBy: { order: 'asc' } } },
+        });
+        if (!workflow || workflow.tenantId !== user.tenantId) {
+            throw new common_1.NotFoundException({
+                type: 'workflow_not_found',
+                title: 'Workflow Not Found',
+                status: 404,
+                detail: `Process workflow ${workflowId} not found`,
+            });
+        }
+        return { data: workflow };
+    }
+    /** Create a new workflow (TENANT_OWNER only) */
+    async createWorkflow(dto, user) {
+        // Validate cron if provided
+        if (dto.cronSchedule) {
+            try {
+                const { CronExpressionParser } = await Promise.resolve().then(() => tslib_1.__importStar(__webpack_require__(245)));
+                CronExpressionParser.parse(dto.cronSchedule);
+            }
+            catch {
+                throw new common_1.BadRequestException({
+                    type: 'invalid_cron',
+                    title: 'Invalid Cron Expression',
+                    status: 400,
+                    detail: `"${dto.cronSchedule}" is not a valid cron expression`,
+                });
+            }
+        }
+        // Check slug uniqueness within tenant
+        const existing = await this.prisma.processWorkflow.findUnique({
+            where: { tenantId_slug: { tenantId: user.tenantId, slug: dto.slug } },
+        });
+        if (existing) {
+            throw new common_1.ConflictException({
+                type: 'slug_conflict',
+                title: 'Slug Already Exists',
+                status: 409,
+                detail: `A workflow with slug "${dto.slug}" already exists`,
+            });
+        }
+        const workflow = await this.prisma.processWorkflow.create({
+            data: {
+                id: `proc_${(0, cuid2_1.createId)()}`,
+                tenantId: user.tenantId,
+                name: dto.name,
+                slug: dto.slug,
+                description: dto.description,
+                cronSchedule: dto.cronSchedule,
+                skillMd: dto.skillMd,
+            },
+        });
+        // Register cron if provided
+        if (dto.cronSchedule) {
+            this.scheduler.schedule(workflow.id, user.tenantId, dto.cronSchedule);
+        }
+        return { data: workflow };
+    }
+    /** Update a workflow (TENANT_OWNER only) */
+    async updateWorkflow(workflowId, dto, user) {
+        const existing = await this.prisma.processWorkflow.findUnique({
+            where: { id: workflowId },
+        });
+        if (!existing || existing.tenantId !== user.tenantId) {
+            throw new common_1.NotFoundException({
+                type: 'workflow_not_found',
+                title: 'Workflow Not Found',
+                status: 404,
+            });
+        }
+        if (dto.cronSchedule) {
+            try {
+                const { CronExpressionParser } = await Promise.resolve().then(() => tslib_1.__importStar(__webpack_require__(245)));
+                CronExpressionParser.parse(dto.cronSchedule);
+            }
+            catch {
+                throw new common_1.BadRequestException({
+                    type: 'invalid_cron',
+                    title: 'Invalid Cron Expression',
+                    status: 400,
+                    detail: `"${dto.cronSchedule}" is not a valid cron expression`,
+                });
+            }
+        }
+        const workflow = await this.prisma.processWorkflow.update({
+            where: { id: workflowId },
+            data: {
+                ...(dto.name !== undefined && { name: dto.name }),
+                ...(dto.description !== undefined && { description: dto.description }),
+                ...(dto.cronSchedule !== undefined && { cronSchedule: dto.cronSchedule }),
+                ...(dto.skillMd !== undefined && { skillMd: dto.skillMd }),
+                ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+            },
+        });
+        // Update cron schedule
+        if (dto.cronSchedule !== undefined || dto.isActive !== undefined) {
+            if (workflow.isActive && workflow.cronSchedule) {
+                this.scheduler.schedule(workflow.id, user.tenantId, workflow.cronSchedule);
+            }
+            else {
+                this.scheduler.unschedule(workflow.id);
+            }
+        }
+        return { data: workflow };
+    }
+    /** Delete a workflow and all runs (TENANT_OWNER only) */
+    async deleteWorkflow(workflowId, user) {
+        const existing = await this.prisma.processWorkflow.findUnique({
+            where: { id: workflowId },
+        });
+        if (!existing || existing.tenantId !== user.tenantId) {
+            throw new common_1.NotFoundException({
+                type: 'workflow_not_found',
+                title: 'Workflow Not Found',
+                status: 404,
+            });
+        }
+        this.scheduler.unschedule(workflowId);
+        // Delete in correct order within transaction: stepResults → runs → steps → workflow
+        // (deleteMany doesn't trigger Prisma cascades, so we must handle manually)
+        await this.prisma.$transaction(async (tx) => {
+            // Delete step results for all runs of this workflow
+            const runIds = (await tx.processRun.findMany({
+                where: { workflowId },
+                select: { id: true },
+            })).map(r => r.id);
+            if (runIds.length > 0) {
+                await tx.processStepResult.deleteMany({ where: { runId: { in: runIds } } });
+                await tx.processRun.deleteMany({ where: { workflowId } });
+            }
+            // Steps have onDelete: Cascade from workflow, but deleteMany on workflow
+            // doesn't trigger it, so delete steps explicitly
+            await tx.processStep.deleteMany({ where: { workflowId } });
+            await tx.processWorkflow.delete({ where: { id: workflowId } });
+        });
+        return { data: { deleted: true } };
+    }
+    // ════════════════════════════════════════════
+    //  Step CRUD
+    // ════════════════════════════════════════════
+    /** Add a step to a workflow (TENANT_OWNER only) */
+    async createStep(workflowId, dto, user) {
+        const workflow = await this.prisma.processWorkflow.findUnique({
+            where: { id: workflowId },
+        });
+        if (!workflow || workflow.tenantId !== user.tenantId) {
+            throw new common_1.NotFoundException({
+                type: 'workflow_not_found',
+                title: 'Workflow Not Found',
+                status: 404,
+            });
+        }
+        const step = await this.prisma.processStep.create({
+            data: {
+                id: `pstep_${(0, cuid2_1.createId)()}`,
+                workflowId,
+                order: dto.order,
+                name: dto.name,
+                description: dto.description,
+                stepType: dto.stepType,
+                agentType: dto.agentType,
+                toolSkill: dto.toolSkill,
+                inputSchema: dto.inputSchema,
+                outputSchema: dto.outputSchema,
+                skillMdSection: dto.skillMdSection,
+                retryPolicy: (dto.retryPolicy ?? {}),
+                verifyRules: dto.verifyRules ?? client_1.Prisma.JsonNull,
+            },
+        });
+        return { data: step };
+    }
+    /** Update a step (TENANT_OWNER only) */
+    async updateStep(workflowId, stepId, dto, user) {
+        const step = await this.prisma.processStep.findUnique({
+            where: { id: stepId },
+            include: { workflow: true },
+        });
+        if (!step || step.workflowId !== workflowId || step.workflow.tenantId !== user.tenantId) {
+            throw new common_1.NotFoundException({
+                type: 'step_not_found',
+                title: 'Step Not Found',
+                status: 404,
+            });
+        }
+        const updateData = {};
+        if (dto.order !== undefined)
+            updateData.order = dto.order;
+        if (dto.name !== undefined)
+            updateData.name = dto.name;
+        if (dto.description !== undefined)
+            updateData.description = dto.description;
+        if (dto.stepType !== undefined)
+            updateData.stepType = dto.stepType;
+        if (dto.agentType !== undefined)
+            updateData.agentType = dto.agentType;
+        if (dto.toolSkill !== undefined)
+            updateData.toolSkill = dto.toolSkill;
+        if (dto.inputSchema !== undefined)
+            updateData.inputSchema = dto.inputSchema;
+        if (dto.outputSchema !== undefined)
+            updateData.outputSchema = dto.outputSchema;
+        if (dto.skillMdSection !== undefined)
+            updateData.skillMdSection = dto.skillMdSection;
+        if (dto.retryPolicy !== undefined)
+            updateData.retryPolicy = dto.retryPolicy;
+        if (dto.verifyRules !== undefined)
+            updateData.verifyRules = dto.verifyRules;
+        const updated = await this.prisma.processStep.update({
+            where: { id: stepId },
+            data: updateData,
+        });
+        return { data: updated };
+    }
+    /** Delete a step (TENANT_OWNER only) */
+    async deleteStep(workflowId, stepId, user) {
+        const step = await this.prisma.processStep.findUnique({
+            where: { id: stepId },
+            include: { workflow: true },
+        });
+        if (!step || step.workflowId !== workflowId || step.workflow.tenantId !== user.tenantId) {
+            throw new common_1.NotFoundException({
+                type: 'step_not_found',
+                title: 'Step Not Found',
+                status: 404,
+            });
+        }
+        await this.prisma.processStep.delete({ where: { id: stepId } });
+        return { data: { deleted: true } };
+    }
+    /** Deploy SKILL.md to Hetzner for a workflow (TENANT_OWNER only) */
+    async deploySkill(workflowId, user) {
+        const workflow = await this.prisma.processWorkflow.findUnique({
+            where: { id: workflowId },
+            include: { steps: { orderBy: { order: 'asc' } } },
+        });
+        if (!workflow || workflow.tenantId !== user.tenantId) {
+            throw new common_1.NotFoundException({
+                type: 'workflow_not_found',
+                title: 'Workflow Not Found',
+                status: 404,
+            });
+        }
+        // Generate combined SKILL.md from workflow + steps
+        const skillMd = this.generateSkillMd(workflow.name, workflow.steps);
+        const skillPath = `/root/.openclaw/workspace/skills/lsa-${workflow.slug}/SKILL.md`;
+        try {
+            await this.openClawTenant.writeRemoteFile(skillPath, skillMd);
+            return { data: { deployed: true, path: skillPath } };
+        }
+        catch (err) {
+            throw new common_1.BadRequestException({
+                type: 'deploy_failed',
+                title: 'SKILL.md Deploy Failed',
+                status: 400,
+                detail: err.message,
+            });
+        }
+    }
+    generateSkillMd(workflowName, steps) {
+        const parts = [
+            `# SKILL: ${workflowName}`,
+            '',
+            'Follow each step exactly. Return ONLY valid JSON matching the output schema.',
+            '',
+            '---',
+        ];
+        for (const step of steps) {
+            parts.push('');
+            parts.push(`## Step ${step.order}: ${step.name}`);
+            parts.push(`**Agent:** ${step.agentType}`);
+            parts.push(`**Tool:** ${step.toolSkill}`);
+            parts.push(`**Type:** ${step.stepType}`);
+            if (step.skillMdSection) {
+                parts.push('', step.skillMdSection);
+            }
+            const schema = step.outputSchema;
+            if (schema && Object.keys(schema).length > 0) {
+                parts.push('', '**Output Schema:**', '```json', JSON.stringify(schema, null, 2), '```');
+            }
+            parts.push('', '---');
+        }
+        return parts.join('\n');
+    }
+    /** Auto-generate SKILL.md sections for all steps using AI + business context */
+    async autoGenerateSkills(workflowId, user) {
+        const workflow = await this.prisma.processWorkflow.findUnique({
+            where: { id: workflowId },
+            include: { steps: { orderBy: { order: 'asc' } } },
+        });
+        if (!workflow || workflow.tenantId !== user.tenantId) {
+            throw new common_1.NotFoundException({ type: 'workflow_not_found', title: 'Workflow Not Found', status: 404 });
+        }
+        // Load business context
+        const tenant = await this.prisma.tenant.findUnique({
+            where: { id: user.tenantId },
+            select: { name: true, industry: true, description: true },
+        });
+        const memories = await this.prisma.memory.findMany({
+            where: { tenantId: user.tenantId, isDeleted: false },
+            select: { content: true, subject: true },
+            orderBy: { updatedAt: 'desc' },
+            take: 15,
+        });
+        const businessContext = [
+            `Company: ${tenant?.name ?? 'Unknown'}`,
+            `Industry: ${tenant?.industry ?? 'Unknown'}`,
+            tenant?.description ? `Description: ${tenant.description}` : '',
+            '',
+            memories.length > 0 ? 'Business knowledge:' : '',
+            ...memories.map(m => `- ${m.subject ? `[${m.subject}] ` : ''}${m.content.slice(0, 150)}`),
+        ].filter(Boolean).join('\n');
+        // Generate skillMdSection for each step
+        const updatedSteps = [];
+        for (const step of workflow.steps) {
+            if (step.stepType === 'APPROVAL') {
+                // Approval steps get a simple description
+                await this.prisma.processStep.update({
+                    where: { id: step.id },
+                    data: { skillMdSection: `Owner reviews the output from previous steps. Can approve, edit, or reject.` },
+                });
+                updatedSteps.push({ id: step.id, name: step.name, skillMdSection: 'Auto-generated (approval step)' });
+                continue;
+            }
+            const prompt = [
+                `You are writing agent instructions for step "${step.name}" (step ${step.order} of ${workflow.steps.length}) in the "${workflow.name}" process.`,
+                '',
+                '## Business Context',
+                businessContext,
+                '',
+                '## Step Details',
+                `- Name: ${step.name}`,
+                `- Description: ${step.description ?? 'None'}`,
+                `- Agent: ${step.agentType}`,
+                `- Tool: ${step.toolSkill}`,
+                `- Type: ${step.stepType}`,
+                '',
+                '## Output Schema (what the agent must produce)',
+                '```json',
+                JSON.stringify(step.outputSchema, null, 2).slice(0, 3000),
+                '```',
+                '',
+                step.order > 1 ? `This step receives input from step ${step.order - 1}. Use that data as context.` : 'This is the first step — no input from previous steps.',
+                '',
+                'Write detailed, actionable instructions for the AI agent executing this step.',
+                'Be specific about:',
+                '- What to search for / analyze / create',
+                '- Quality criteria and constraints',
+                '- What to NEVER do (hallucinate, invent data, etc.)',
+                '- How this relates to the business context above',
+                '',
+                'Keep it under 500 words. Be direct and specific to THIS business.',
+                'Return ONLY the instruction text, no JSON wrapping, no markdown code fences.',
+            ].join('\n');
+            // Collect streaming output into a string
+            let skillMd = '';
+            try {
+                await this.aiGateway.streamCompletionWithContext([{ role: 'user', content: prompt }], { tenantId: user.tenantId, userId: user.userId, useFallback: true, skipQuotaCheck: true }, (chunk) => { skillMd += chunk; });
+            }
+            catch (err) {
+                skillMd = `[Auto-generation failed: ${err.message ?? 'unknown'}]`;
+            }
+            await this.prisma.processStep.update({
+                where: { id: step.id },
+                data: { skillMdSection: skillMd },
+            });
+            updatedSteps.push({ id: step.id, name: step.name, skillMdSection: skillMd.slice(0, 100) + '...' });
+        }
+        return { data: { generated: updatedSteps.length, steps: updatedSteps } };
+    }
+    // ════════════════════════════════════════════
+    //  Run Trigger + List (under :workflowId)
+    // ════════════════════════════════════════════
+    /** Trigger a new process run */
+    async triggerRun(workflowId, dto, user, correlationId) {
+        try {
+            const runId = await this.executor.startRun(workflowId, user.tenantId, dto.input, correlationId);
+            return { data: { runId } };
+        }
+        catch (err) {
+            if (err.message?.includes('already has an active run')) {
+                throw new common_1.ConflictException({
+                    type: 'run_already_active',
+                    title: 'Run Already Active',
+                    status: 409,
+                    detail: err.message,
+                });
+            }
+            if (err.message?.includes('not found')) {
+                throw new common_1.NotFoundException({
+                    type: 'workflow_not_found',
+                    title: 'Workflow Not Found',
+                    status: 404,
+                    detail: err.message,
+                });
+            }
+            throw err;
+        }
+    }
+    /** List runs for a workflow with pagination */
+    async listRuns(workflowId, query, user) {
+        const page = query.page ?? 1;
+        const limit = query.limit ?? 20;
+        const skip = (page - 1) * limit;
+        const where = {
+            workflowId,
+            workflow: { tenantId: user.tenantId },
+        };
+        if (query.status) {
+            where.status = query.status;
+        }
+        const [runs, total] = await Promise.all([
+            this.prisma.processRun.findMany({
+                where,
+                include: { stepResults: { orderBy: { step: { order: 'asc' } } } },
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
+            }),
+            this.prisma.processRun.count({ where }),
+        ]);
+        return {
+            data: runs,
+            meta: { page, pageSize: limit, total },
+        };
+    }
+};
+exports.ProcessController = ProcessController;
+tslib_1.__decorate([
+    (0, common_1.Get)('approved/leads'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ProcessController.prototype, "listApprovedLeads", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('approved/content'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ProcessController.prototype, "listApprovedContent", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('runs/:runId'),
+    tslib_1.__param(0, (0, common_1.Param)('runId')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ProcessController.prototype, "getRun", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('runs/:runId/cancel'),
+    tslib_1.__param(0, (0, common_1.Param)('runId')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ProcessController.prototype, "cancelRun", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('runs/:runId/approve/:stepResultId'),
+    tslib_1.__param(0, (0, common_1.Param)('runId')),
+    tslib_1.__param(1, (0, common_1.Param)('stepResultId')),
+    tslib_1.__param(2, (0, common_1.Body)()),
+    tslib_1.__param(3, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, String, typeof (_f = typeof process_dto_1.ApproveStepDto !== "undefined" && process_dto_1.ApproveStepDto) === "function" ? _f : Object, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ProcessController.prototype, "approveStep", null);
+tslib_1.__decorate([
+    (0, common_1.Get)(),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ProcessController.prototype, "listWorkflows", null);
+tslib_1.__decorate([
+    (0, common_1.Get)(':workflowId'),
+    tslib_1.__param(0, (0, common_1.Param)('workflowId')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ProcessController.prototype, "getWorkflow", null);
+tslib_1.__decorate([
+    (0, common_1.Post)(),
+    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
+    tslib_1.__param(0, (0, common_1.Body)()),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [typeof (_g = typeof process_dto_1.CreateWorkflowDto !== "undefined" && process_dto_1.CreateWorkflowDto) === "function" ? _g : Object, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ProcessController.prototype, "createWorkflow", null);
+tslib_1.__decorate([
+    (0, common_1.Patch)(':workflowId'),
+    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
+    tslib_1.__param(0, (0, common_1.Param)('workflowId')),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__param(2, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_h = typeof process_dto_1.UpdateWorkflowDto !== "undefined" && process_dto_1.UpdateWorkflowDto) === "function" ? _h : Object, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ProcessController.prototype, "updateWorkflow", null);
+tslib_1.__decorate([
+    (0, common_1.Delete)(':workflowId'),
+    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
+    tslib_1.__param(0, (0, common_1.Param)('workflowId')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ProcessController.prototype, "deleteWorkflow", null);
+tslib_1.__decorate([
+    (0, common_1.Post)(':workflowId/steps'),
+    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
+    tslib_1.__param(0, (0, common_1.Param)('workflowId')),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__param(2, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_j = typeof process_dto_1.CreateStepDto !== "undefined" && process_dto_1.CreateStepDto) === "function" ? _j : Object, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ProcessController.prototype, "createStep", null);
+tslib_1.__decorate([
+    (0, common_1.Patch)(':workflowId/steps/:stepId'),
+    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
+    tslib_1.__param(0, (0, common_1.Param)('workflowId')),
+    tslib_1.__param(1, (0, common_1.Param)('stepId')),
+    tslib_1.__param(2, (0, common_1.Body)()),
+    tslib_1.__param(3, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, String, typeof (_k = typeof process_dto_1.UpdateStepDto !== "undefined" && process_dto_1.UpdateStepDto) === "function" ? _k : Object, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ProcessController.prototype, "updateStep", null);
+tslib_1.__decorate([
+    (0, common_1.Delete)(':workflowId/steps/:stepId'),
+    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
+    tslib_1.__param(0, (0, common_1.Param)('workflowId')),
+    tslib_1.__param(1, (0, common_1.Param)('stepId')),
+    tslib_1.__param(2, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ProcessController.prototype, "deleteStep", null);
+tslib_1.__decorate([
+    (0, common_1.Post)(':workflowId/deploy-skill'),
+    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
+    tslib_1.__param(0, (0, common_1.Param)('workflowId')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ProcessController.prototype, "deploySkill", null);
+tslib_1.__decorate([
+    (0, common_1.Post)(':workflowId/auto-generate-skills'),
+    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('TENANT_OWNER'),
+    tslib_1.__param(0, (0, common_1.Param)('workflowId')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ProcessController.prototype, "autoGenerateSkills", null);
+tslib_1.__decorate([
+    (0, common_1.Post)(':workflowId/run'),
+    tslib_1.__param(0, (0, common_1.Param)('workflowId')),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__param(2, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(3, (0, common_1.Headers)('x-correlation-id')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_l = typeof process_dto_1.TriggerRunDto !== "undefined" && process_dto_1.TriggerRunDto) === "function" ? _l : Object, Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ProcessController.prototype, "triggerRun", null);
+tslib_1.__decorate([
+    (0, common_1.Get)(':workflowId/runs'),
+    tslib_1.__param(0, (0, common_1.Param)('workflowId')),
+    tslib_1.__param(1, (0, common_1.Query)()),
+    tslib_1.__param(2, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, typeof (_m = typeof process_dto_1.ListRunsQueryDto !== "undefined" && process_dto_1.ListRunsQueryDto) === "function" ? _m : Object, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], ProcessController.prototype, "listRuns", null);
+exports.ProcessController = ProcessController = tslib_1.__decorate([
+    (0, common_1.Controller)('v1/processes'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof process_executor_service_1.ProcessExecutorService !== "undefined" && process_executor_service_1.ProcessExecutorService) === "function" ? _b : Object, typeof (_c = typeof process_scheduler_service_1.ProcessSchedulerService !== "undefined" && process_scheduler_service_1.ProcessSchedulerService) === "function" ? _c : Object, typeof (_d = typeof openclaw_tenant_service_1.OpenClawTenantService !== "undefined" && openclaw_tenant_service_1.OpenClawTenantService) === "function" ? _d : Object, typeof (_e = typeof ai_gateway_service_1.AiGatewayService !== "undefined" && ai_gateway_service_1.AiGatewayService) === "function" ? _e : Object])
+], ProcessController);
+
+
+/***/ }),
+/* 235 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var ProcessExecutorService_1;
+var _a, _b, _c, _d, _e, _f;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ProcessExecutorService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const cuid2_1 = __webpack_require__(33);
+const tenant_context_1 = __webpack_require__(10);
+const app_event_bus_service_1 = __webpack_require__(147);
+const openclaw_client_service_1 = __webpack_require__(139);
+const schema_validator_service_1 = __webpack_require__(236);
+const process_dedup_service_1 = __webpack_require__(241);
+const fal_image_service_1 = __webpack_require__(243);
+const bridge_service_1 = __webpack_require__(159);
+/** Default retry policy if none specified on the step */
+const DEFAULT_RETRY_POLICY = { maxRetries: 2, backoffMs: 2000 };
+/** Max age for cancelled run entries before cleanup (10 minutes) */
+const CANCEL_CLEANUP_MS = 10 * 60 * 1000;
+let ProcessExecutorService = ProcessExecutorService_1 = class ProcessExecutorService {
+    constructor(prisma, eventBus, openClawClient, schemaValidator, dedup, falImage) {
+        this.prisma = prisma;
+        this.eventBus = eventBus;
+        this.openClawClient = openClawClient;
+        this.schemaValidator = schemaValidator;
+        this.dedup = dedup;
+        this.falImage = falImage;
+        this.logger = new common_1.Logger(ProcessExecutorService_1.name);
+        /** Track active run cancellation signals with timestamp for cleanup (F5) */
+        this.cancelledRuns = new Map();
+        /** Max chars for previous step output before triggering intelligent summary.
+         *  OpenClaw agents have ~27K system prompt overhead, so keep our prompt compact.
+         */
+        this.MAX_RAW_INPUT_CHARS = 4000;
+        // Periodic cleanup of stale cancel entries (F5)
+        this.cleanupInterval = setInterval(() => this.cleanupCancelledRuns(), CANCEL_CLEANUP_MS);
+    }
+    onModuleDestroy() {
+        clearInterval(this.cleanupInterval);
+    }
+    /**
+     * Start a new process run for a given workflow
+     */
+    async startRun(workflowId, tenantId, input, correlationId) {
+        const workflow = await this.prisma.processWorkflow.findUnique({
+            where: { id: workflowId },
+            include: { steps: { orderBy: { order: 'asc' } } },
+        });
+        if (!workflow) {
+            throw new Error(`Workflow ${workflowId} not found`);
+        }
+        if (workflow.tenantId !== tenantId) {
+            throw new Error('Workflow does not belong to this tenant');
+        }
+        // Atomic dedup: try to create the run, catch unique constraint if concurrent (F6)
+        // Use optimistic approach: create first, let DB enforce uniqueness via status check
+        const runId = `prun_${(0, cuid2_1.createId)()}`;
+        try {
+            // Check-and-create in a transaction for atomicity (F6)
+            const run = await this.prisma.$transaction(async (tx) => {
+                const activeRun = await tx.processRun.findFirst({
+                    where: {
+                        workflowId,
+                        status: { in: ['RUNNING', 'WAITING_APPROVAL'] },
+                    },
+                });
+                if (activeRun) {
+                    throw new Error(`Workflow already has an active run: ${activeRun.id}`);
+                }
+                return tx.processRun.create({
+                    data: {
+                        id: runId,
+                        workflowId,
+                        tenantId,
+                        status: 'RUNNING',
+                        currentStepOrder: 1,
+                        correlationId,
+                        input: (input ?? null),
+                        startedAt: new Date(),
+                    },
+                });
+            });
+            // Emit run started event
+            this.eventBus.emit(bridge_service_1.BRIDGE_EVENTS.PROCESS_RUN_STARTED, {
+                tenantId,
+                runId: run.id,
+                workflowName: workflow.name,
+                totalSteps: workflow.steps.length,
+                correlationId,
+            });
+            // Load tenant business context for enriched prompts (F15)
+            const businessContext = await this.loadBusinessContext(tenantId);
+            // Start executing steps asynchronously
+            this.executeSteps(run.id, workflow.steps, tenantId, workflow.name, correlationId, businessContext).catch((err) => this.logger.error(`Run ${runId} failed unexpectedly: ${err}`));
+            return runId;
+        }
+        catch (err) {
+            // Re-throw application errors as-is
+            throw err;
+        }
+    }
+    /**
+     * Load tenant business context (memories, company info) for prompt enrichment (F15)
+     */
+    async loadBusinessContext(tenantId) {
+        try {
+            const [tenant, memories, concepts] = await Promise.all([
+                this.prisma.tenant.findUnique({
+                    where: { id: tenantId },
+                    select: { name: true, industry: true, description: true },
+                }),
+                this.prisma.memory.findMany({
+                    where: { tenantId, isDeleted: false },
+                    select: { content: true, type: true, subject: true },
+                    orderBy: { updatedAt: 'desc' },
+                    take: 20,
+                }),
+                // Load relevant business concepts (marketing, sales, branding)
+                this.prisma.concept.findMany({
+                    where: {
+                        OR: [{ tenantId: null }, { tenantId }],
+                        category: { contains: 'Marketing' },
+                    },
+                    select: { name: true, definition: true, category: true },
+                    take: 15,
+                }).catch(() => []),
+            ]);
+            const parts = [];
+            if (tenant) {
+                parts.push(`Company: ${tenant.name}`);
+                parts.push(`Industry: ${tenant.industry}`);
+                if (tenant.description)
+                    parts.push(`Description: ${tenant.description}`);
+            }
+            if (memories.length > 0) {
+                parts.push('', 'Business Knowledge (from conversations and learning):');
+                for (const mem of memories) {
+                    const prefix = mem.subject ? `[${mem.subject}] ` : '';
+                    parts.push(`- ${prefix}${mem.content.slice(0, 200)}`);
+                }
+            }
+            if (concepts.length > 0) {
+                parts.push('', 'Domain Expertise (key business concepts we know about):');
+                for (const c of concepts) {
+                    parts.push(`- ${c.name}: ${c.definition.slice(0, 150)}`);
+                }
+            }
+            // Brand visual identity guidelines (used for image generation and content)
+            parts.push('', 'Brand Visual Identity:');
+            parts.push('- Color palette: #0D0D0D (base black), #1A1A1A (dark surface), #C9A96E (gold accent), #FAFAFA (white text)');
+            parts.push('- Photography style: Dark, dramatic, cinematic lighting. High contrast. Moody atmosphere.');
+            parts.push('- Aesthetic: Luxury gallery, museum-quality. Clean lines. Architectural spaces.');
+            parts.push('- Tone: Elegant, exclusive, understated luxury. Gallery-curator voice.');
+            parts.push('- Typography: Minimal, serif for headlines, clean sans-serif for body.');
+            parts.push('- Image style for FAL.ai: Always include "dramatic dark lighting, gold accent tones, luxury architectural interior, cinematic photography, 8k, photorealistic" in prompts.');
+            return parts.join('\n');
+        }
+        catch (err) {
+            this.logger.warn(`Failed to load business context for tenant ${tenantId}: ${err}`);
+            return '';
+        }
+    }
+    /**
+     * Execute steps sequentially for a run
+     */
+    async executeSteps(runId, steps, tenantId, workflowName, correlationId, businessContext, 
+    /** Override total steps count (for correct progress after approval resume) */
+    totalStepsOverride) {
+        const totalSteps = totalStepsOverride ?? steps.length;
+        let lastStepOutput = null;
+        for (const step of steps) {
+            // Check for cancellation (F5: don't update status here, already set in cancelRun)
+            if (this.isCancelled(runId)) {
+                this.cancelledRuns.delete(runId);
+                return; // Status already CANCELLED — just stop executing
+            }
+            // Update current step
+            await this.prisma.processRun.update({
+                where: { id: runId },
+                data: { currentStepOrder: step.order },
+            });
+            // Create step result record (unique constraint prevents duplicates)
+            let resultId;
+            try {
+                const result = await this.prisma.processStepResult.create({
+                    data: {
+                        id: `psres_${(0, cuid2_1.createId)()}`,
+                        runId,
+                        stepId: step.id,
+                        status: 'RUNNING',
+                        input: lastStepOutput,
+                        startedAt: new Date(),
+                    },
+                });
+                resultId = result.id;
+            }
+            catch (err) {
+                // Unique constraint violation → step already has a result (concurrent guard)
+                if (err?.code === 'P2002') {
+                    this.logger.warn(`Duplicate step result prevented for run=${runId} step=${step.id}`);
+                    return;
+                }
+                throw err;
+            }
+            // Emit step started
+            this.eventBus.emit(bridge_service_1.BRIDGE_EVENTS.PROCESS_STEP_STARTED, {
+                tenantId,
+                runId,
+                stepName: step.name,
+                stepOrder: step.order,
+                totalSteps,
+                agentType: step.agentType,
+                status: 'started',
+                correlationId,
+            });
+            // Handle step types (F4: explicitly handle MANUAL and APPROVAL)
+            if (step.stepType === 'APPROVAL' || step.stepType === 'MANUAL') {
+                // Both APPROVAL and MANUAL halt for human input
+                // For APPROVAL: previous step output is presented for review
+                // For MANUAL: human provides the data
+                await this.prisma.processStepResult.update({
+                    where: { id: resultId },
+                    data: { output: lastStepOutput }, // (F7) store previous output for review
+                });
+                await this.prisma.processRun.update({
+                    where: { id: runId },
+                    data: { status: 'WAITING_APPROVAL' },
+                });
+                this.eventBus.emit(bridge_service_1.BRIDGE_EVENTS.PROCESS_APPROVAL_NEEDED, {
+                    tenantId,
+                    runId,
+                    stepResultId: resultId,
+                    stepName: step.name,
+                    stepOrder: step.order,
+                    totalSteps,
+                    output: lastStepOutput, // (F7) send previous output for display
+                    correlationId,
+                });
+                // Execution halts here — resumed via handleApproval()
+                return;
+            }
+            // Execute AUTOMATIC step
+            const stepOutput = await this.executeStep(runId, resultId, step, lastStepOutput, tenantId, steps.length, correlationId, businessContext);
+            if (stepOutput === null) {
+                // Step failed after retries — check if already cancelled (F5)
+                if (this.isCancelled(runId)) {
+                    this.cancelledRuns.delete(runId);
+                    return; // Already CANCELLED, don't overwrite to FAILED
+                }
+                await this.prisma.processRun.update({
+                    where: { id: runId },
+                    data: { status: 'FAILED', completedAt: new Date() },
+                });
+                this.eventBus.emit(bridge_service_1.BRIDGE_EVENTS.PROCESS_COMPLETE, {
+                    tenantId,
+                    runId,
+                    workflowName,
+                    success: false,
+                    correlationId,
+                });
+                return;
+            }
+            lastStepOutput = stepOutput;
+        }
+        // All steps complete
+        await this.prisma.processRun.update({
+            where: { id: runId },
+            data: {
+                status: 'COMPLETED',
+                finalOutput: lastStepOutput,
+                completedAt: new Date(),
+            },
+        });
+        this.eventBus.emit(bridge_service_1.BRIDGE_EVENTS.PROCESS_COMPLETE, {
+            tenantId,
+            runId,
+            workflowName,
+            success: true,
+            correlationId,
+        });
+        // Store leads in Qdrant for future deduplication
+        this.storeLeadsForDedup(lastStepOutput, tenantId, workflowName, runId).catch((err) => this.logger.warn(`Lead dedup storage failed: ${err}`));
+    }
+    /**
+     * Extract leads from final output and store in Qdrant for deduplication.
+     */
+    async storeLeadsForDedup(finalOutput, tenantId, workflowName, runId) {
+        if (!finalOutput || typeof finalOutput !== 'object')
+            return;
+        const output = finalOutput;
+        // Store leads from lead discovery processes
+        const leadArrays = ['approvedLeads', 'scoredLeads', 'enrichedLeads', 'outreachLeads', 'leads'];
+        for (const key of leadArrays) {
+            const arr = output[key];
+            if (Array.isArray(arr) && arr.length > 0) {
+                const records = arr.map((l) => ({
+                    name: String(l['name'] ?? ''),
+                    company: String(l['company'] ?? ''),
+                    email: l['email'],
+                    website: l['website'],
+                    location: l['location'],
+                    score: l['score'],
+                    tenantId,
+                    workflowSlug: workflowName,
+                    runId,
+                    createdAt: new Date().toISOString(),
+                }));
+                await this.dedup.storeLeads(records);
+                return;
+            }
+        }
+        // Store content topics from content processes
+        const contentArrays = ['posts', 'contentIdeas', 'approvedPosts'];
+        for (const key of contentArrays) {
+            const arr = output[key];
+            if (Array.isArray(arr) && arr.length > 0) {
+                const records = arr.map((item) => ({
+                    name: String(item['topic'] ?? item['title'] ?? ''),
+                    company: workflowName, // use workflow name as "company" for content
+                    tenantId,
+                    workflowSlug: workflowName,
+                    runId,
+                    createdAt: new Date().toISOString(),
+                    contentType: 'instagram-post',
+                }));
+                await this.dedup.storeLeads(records);
+                return;
+            }
+        }
+    }
+    /**
+     * Execute a single step: send to agent, validate, retry with correction
+     */
+    async executeStep(runId, resultId, step, previousOutput, tenantId, totalSteps, correlationId, businessContext) {
+        const retryPolicy = {
+            ...DEFAULT_RETRY_POLICY,
+            ...(typeof step.retryPolicy === 'object' && step.retryPolicy ? step.retryPolicy : {}),
+        };
+        const maxRetries = retryPolicy.maxRetries ?? 2;
+        // Build original prompt once and keep for retries (F11)
+        const originalPrompt = await this.buildStepPrompt(step, previousOutput, businessContext, tenantId);
+        let prompt = originalPrompt;
+        let lastError = null;
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            if (this.isCancelled(runId))
+                return null;
+            // Update retry count
+            if (attempt > 0) {
+                await this.prisma.processStepResult.update({
+                    where: { id: resultId },
+                    data: { retries: attempt },
+                });
+            }
+            // Execute via OpenClaw (1 hour timeout — processes can be long-running)
+            // Fresh random session every call — prevents context accumulation in OpenClaw
+            const result = await this.openClawClient.executeAgent(prompt, {
+                agentId: step.agentType,
+                timeoutSeconds: 3600,
+            });
+            if (!result.success) {
+                lastError = result.error ?? 'Agent execution failed';
+                this.logger.warn(`Step ${step.name} attempt ${attempt + 1} failed: ${lastError}`);
+                // Build correction prompt preserving original context (F11)
+                prompt = originalPrompt + '\n\n' + this.schemaValidator.buildCorrectionPrompt([lastError], result.output ?? '');
+                continue;
+            }
+            // Check for known error responses before JSON parse
+            const output = result.output?.trim() ?? '';
+            if (output.includes('rate limit') || output.includes('API rate limit') || output.startsWith('⚠️')) {
+                lastError = `Agent returned error: ${output.slice(0, 200)}`;
+                this.logger.warn(`Step ${step.name} attempt ${attempt + 1}: agent error response — ${lastError}`);
+                // Wait before retry on rate limit
+                await new Promise(r => setTimeout(r, 5000));
+                prompt = originalPrompt; // Retry with original prompt, not correction
+                continue;
+            }
+            // Try to parse JSON from agent output — extract JSON even if wrapped in text/markdown
+            let parsedOutput;
+            try {
+                parsedOutput = JSON.parse(output);
+            }
+            catch {
+                // Try to extract JSON from markdown code fences or surrounding text
+                const extracted = this.extractJson(output);
+                if (extracted) {
+                    try {
+                        parsedOutput = JSON.parse(extracted);
+                    }
+                    catch {
+                        // Still invalid
+                    }
+                }
+            }
+            if (!parsedOutput) {
+                lastError = `Agent output is not valid JSON (got ${output.length} chars: "${output.slice(0, 100)}...")`;
+                this.logger.warn(`Step ${step.name} attempt ${attempt + 1}: invalid JSON — ${output.slice(0, 100)}`);
+                prompt = originalPrompt + '\n\n' + this.schemaValidator.buildCorrectionPrompt(['Output must be valid JSON. Your output could not be parsed.'], output);
+                continue;
+            }
+            // Level 1: Schema validation
+            const outputSchema = step.outputSchema;
+            if (outputSchema && Object.keys(outputSchema).length > 0) {
+                const validation = this.schemaValidator.validateSchema(parsedOutput, outputSchema);
+                if (!validation.valid) {
+                    lastError = `Schema validation failed: ${validation.errors.join('; ')}`;
+                    this.logger.warn(`Step ${step.name} attempt ${attempt + 1}: ${lastError}`);
+                    prompt = originalPrompt + '\n\n' + this.schemaValidator.buildCorrectionPrompt(validation.errors, result.output);
+                    continue;
+                }
+            }
+            // Level 2: Data verification (if rules defined)
+            const verifyRules = step.verifyRules;
+            if (verifyRules && Array.isArray(verifyRules) && verifyRules.length > 0) {
+                const verification = await this.schemaValidator.verifyData(parsedOutput, verifyRules);
+                if (!verification.valid) {
+                    // Verification failures are warnings — null out failing fields rather than retry
+                    this.logger.warn(`Step ${step.name}: verification issues: ${verification.failures.map(f => f.reason).join('; ')}`);
+                    // Null out unverified fields to prevent hallucinated data
+                    for (const failure of verification.failures) {
+                        this.nullifyField(parsedOutput, failure.field);
+                    }
+                }
+            }
+            // Post-process: generate images via FAL.ai if output contains imagePrompt fields
+            parsedOutput = await this.generateImagesIfNeeded(parsedOutput);
+            // Success — update step result
+            await this.prisma.processStepResult.update({
+                where: { id: resultId },
+                data: {
+                    status: 'COMPLETED',
+                    output: parsedOutput,
+                    rawOutput: result.output,
+                    completedAt: new Date(),
+                },
+            });
+            // Emit step output
+            this.eventBus.emit(bridge_service_1.BRIDGE_EVENTS.PROCESS_STEP_OUTPUT, {
+                tenantId,
+                runId,
+                stepName: step.name,
+                stepOrder: step.order,
+                totalSteps,
+                agentType: step.agentType,
+                status: 'output',
+                output: parsedOutput,
+                correlationId,
+            });
+            return parsedOutput;
+        }
+        // All retries exhausted
+        await this.prisma.processStepResult.update({
+            where: { id: resultId },
+            data: {
+                status: 'FAILED',
+                error: lastError,
+                completedAt: new Date(),
+            },
+        });
+        this.eventBus.emit(bridge_service_1.BRIDGE_EVENTS.PROCESS_STEP_FAILED, {
+            tenantId,
+            runId,
+            stepName: step.name,
+            stepOrder: step.order,
+            totalSteps,
+            agentType: step.agentType,
+            status: 'failed',
+            error: lastError,
+            correlationId,
+        });
+        return null;
+    }
+    /**
+     * Handle approval or rejection for a WAITING_APPROVAL run
+     */
+    async handleApproval(resultId, approved, userId, tenantId, modifiedOutput) {
+        const stepResult = await this.prisma.processStepResult.findUnique({
+            where: { id: resultId },
+            include: {
+                run: { include: { workflow: { include: { steps: { orderBy: { order: 'asc' } } } } } },
+                step: true,
+            },
+        });
+        if (!stepResult)
+            throw new Error('Step result not found');
+        if (stepResult.run.tenantId !== tenantId)
+            throw new Error('Tenant mismatch');
+        if (stepResult.run.status !== 'WAITING_APPROVAL') {
+            throw new Error('Run is not waiting for approval');
+        }
+        // Use modifiedOutput if provided, otherwise fall back to stored output (F7: now populated)
+        const finalStepOutput = modifiedOutput ?? stepResult.output ?? {};
+        // Update step result
+        await this.prisma.processStepResult.update({
+            where: { id: resultId },
+            data: {
+                status: approved ? 'APPROVED' : 'REJECTED',
+                output: finalStepOutput,
+                approvedBy: userId,
+                approvedAt: new Date(),
+                completedAt: new Date(),
+            },
+        });
+        // Save approved items to dedicated tables
+        if (approved) {
+            await this.saveApprovedItems(finalStepOutput, tenantId, stepResult.runId, stepResult.run.workflow.slug).catch((err) => this.logger.warn(`Failed to save approved items: ${err}`));
+        }
+        if (!approved) {
+            // Rejection → fail the run
+            await this.prisma.processRun.update({
+                where: { id: stepResult.runId },
+                data: { status: 'FAILED', completedAt: new Date(), error: 'Step rejected by user' },
+            });
+            this.eventBus.emit(bridge_service_1.BRIDGE_EVENTS.PROCESS_COMPLETE, {
+                tenantId,
+                runId: stepResult.runId,
+                workflowName: stepResult.run.workflow.name,
+                success: false,
+                correlationId: stepResult.run.correlationId,
+            });
+            return;
+        }
+        // Approval → resume execution from next step
+        const allSteps = stepResult.run.workflow.steps;
+        const currentStepIndex = allSteps.findIndex(s => s.id === stepResult.stepId);
+        const remainingSteps = allSteps.slice(currentStepIndex + 1);
+        if (remainingSteps.length === 0) {
+            // Last step was approved → complete run
+            await this.prisma.processRun.update({
+                where: { id: stepResult.runId },
+                data: {
+                    status: 'COMPLETED',
+                    finalOutput: finalStepOutput,
+                    completedAt: new Date(),
+                },
+            });
+            this.eventBus.emit(bridge_service_1.BRIDGE_EVENTS.PROCESS_COMPLETE, {
+                tenantId,
+                runId: stepResult.runId,
+                workflowName: stepResult.run.workflow.name,
+                success: true,
+                correlationId: stepResult.run.correlationId,
+            });
+            return;
+        }
+        // Resume running
+        await this.prisma.processRun.update({
+            where: { id: stepResult.runId },
+            data: { status: 'RUNNING' },
+        });
+        // Load business context for remaining steps
+        const businessContext = await this.loadBusinessContext(tenantId);
+        // Continue execution with remaining steps (pass original total for correct progress events)
+        this.executeSteps(stepResult.runId, remainingSteps, tenantId, stepResult.run.workflow.name, stepResult.run.correlationId ?? undefined, businessContext, allSteps.length).catch((err) => this.logger.error(`Resume after approval failed: ${err}`));
+    }
+    /**
+     * Cancel a running process
+     */
+    async cancelRun(runId, tenantId) {
+        const run = await this.prisma.processRun.findUnique({
+            where: { id: runId },
+            include: { workflow: true },
+        });
+        if (!run)
+            throw new Error('Run not found');
+        if (run.tenantId !== tenantId)
+            throw new Error('Tenant mismatch');
+        if (run.status !== 'RUNNING' && run.status !== 'WAITING_APPROVAL') {
+            throw new Error('Run is not active');
+        }
+        // Signal cancellation with timestamp (F5)
+        this.cancelledRuns.set(runId, Date.now());
+        await this.prisma.processRun.update({
+            where: { id: runId },
+            data: { status: 'CANCELLED', completedAt: new Date() },
+        });
+        this.eventBus.emit(bridge_service_1.BRIDGE_EVENTS.PROCESS_CANCELLED, {
+            tenantId,
+            runId,
+            workflowName: run.workflow.name,
+            correlationId: run.correlationId,
+        });
+    }
+    /**
+     * Check if a run has been cancelled (F5)
+     */
+    isCancelled(runId) {
+        return this.cancelledRuns.has(runId);
+    }
+    /**
+     * Cleanup stale cancel entries older than CANCEL_CLEANUP_MS (F5)
+     */
+    cleanupCancelledRuns() {
+        const now = Date.now();
+        for (const [runId, timestamp] of this.cancelledRuns) {
+            if (now - timestamp > CANCEL_CLEANUP_MS) {
+                this.cancelledRuns.delete(runId);
+            }
+        }
+    }
+    /**
+     * Build the prompt for an agent step execution.
+     * If previous output is too large, summarizes it via LLM first.
+     */
+    async buildStepPrompt(step, previousOutput, businessContext, tenantId) {
+        const parts = [
+            `# Step: ${step.name}`,
+            `Tool/Skill: ${step.toolSkill}`,
+        ];
+        // Inject business context so agents know about the specific business (F15)
+        if (businessContext) {
+            parts.push('', '## Business Context', businessContext);
+        }
+        // Inject dedup context for first step to avoid repeating known contacts/content
+        if (step.order === 1 && tenantId) {
+            try {
+                const [leadDedup, contentDedup] = await Promise.all([
+                    this.dedup.buildDeduplicationContext(tenantId),
+                    this.dedup.buildContentDeduplicationContext(tenantId),
+                ]);
+                if (leadDedup)
+                    parts.push('', leadDedup);
+                if (contentDedup)
+                    parts.push('', contentDedup);
+            }
+            catch (err) {
+                this.logger.warn(`Dedup context failed: ${err}`);
+            }
+        }
+        if (step.skillMdSection) {
+            parts.push('', '## Instructions', step.skillMdSection);
+        }
+        if (step.outputSchema && Object.keys(step.outputSchema).length > 0) {
+            parts.push('', '## Required Output Format (JSON Schema)', 'You MUST return valid JSON matching this schema exactly:', '```json', JSON.stringify(step.outputSchema, null, 2), '```');
+        }
+        if (previousOutput) {
+            const rawJson = JSON.stringify(previousOutput, null, 2);
+            if (rawJson.length > this.MAX_RAW_INPUT_CHARS) {
+                // Summarize large output intelligently via LLM
+                this.logger.log(`Previous output too large (${rawJson.length} chars), summarizing for step "${step.name}"`);
+                const summary = await this.summarizePreviousOutput(rawJson, step.name);
+                parts.push('', '## Input from Previous Step (Intelligent Summary)', '(Full data was too large. Key details preserved below.)', '', summary);
+            }
+            else {
+                parts.push('', '## Input from Previous Step', '```json', rawJson, '```');
+            }
+        }
+        parts.push('', '## CRITICAL: Return ONLY valid JSON. No markdown, no commentary, no code fences.');
+        return parts.join('\n');
+    }
+    /**
+     * Use LLM to create an intelligent summary of large previous step output.
+     * Preserves key data (names, emails, scores, companies) but reduces volume.
+     */
+    async summarizePreviousOutput(rawJson, nextStepName) {
+        try {
+            const summarizePrompt = [
+                `Compress this data for the next step "${nextStepName}". Output MUST be under 3000 characters.`,
+                '',
+                'FORMAT: One line per item. Keep ONLY: name, company, role, email, linkedin, score, location.',
+                'Example line: "Marko Petrovic | Lux Design Studio | CEO | marko@lux.rs | linkedin.com/in/marko | score:8 | Belgrade"',
+                '',
+                'Drop: verbose descriptions, reasoning, full URLs (shorten), source links, notes.',
+                'Keep ALL items — just make each one a single compact line.',
+                '',
+                'Data:',
+                rawJson.slice(0, 30000),
+            ].join('\n');
+            const result = await this.openClawClient.executeAgent(summarizePrompt, {
+                agentId: 'main',
+                timeoutSeconds: 120,
+                sessionId: `summary-${Date.now()}`,
+            });
+            if (result.success && result.output) {
+                this.logger.log(`Summary generated: ${result.output.length} chars (from ${rawJson.length})`);
+                return result.output;
+            }
+            // Fallback: extract just the key fields
+            this.logger.warn('Summary generation failed, using compact extraction');
+            return this.compactExtract(rawJson);
+        }
+        catch (err) {
+            this.logger.warn(`Summary failed: ${err}, using compact extraction`);
+            return this.compactExtract(rawJson);
+        }
+    }
+    /**
+     * Fallback: extract compact key fields from JSON without LLM
+     */
+    compactExtract(rawJson) {
+        try {
+            const data = JSON.parse(rawJson);
+            // Find arrays of leads/items and extract key fields only
+            const arrays = this.findArrays(data);
+            if (arrays.length === 0)
+                return rawJson.slice(0, 3000);
+            const compacted = [];
+            for (const { key, items } of arrays) {
+                compacted.push(`\n### ${key} (${items.length} items):`);
+                for (const item of items) {
+                    const line = [
+                        item['name'] ?? item['company'] ?? '',
+                        item['company'] ? `@ ${item['company']}` : '',
+                        item['email'] ? `| ${item['email']}` : '',
+                        item['score'] !== undefined ? `| score:${item['score']}` : '',
+                        item['location'] ? `| ${item['location']}` : '',
+                        item['role'] ? `(${item['role']})` : '',
+                    ].filter(Boolean).join(' ');
+                    compacted.push(`- ${line}`);
+                }
+            }
+            return compacted.join('\n');
+        }
+        catch {
+            return rawJson.slice(0, this.MAX_RAW_INPUT_CHARS);
+        }
+    }
+    /**
+     * Find arrays in an object (top-level or one level deep)
+     */
+    findArrays(obj) {
+        const result = [];
+        if (!obj || typeof obj !== 'object')
+            return result;
+        for (const [key, val] of Object.entries(obj)) {
+            if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'object') {
+                result.push({ key, items: val });
+            }
+        }
+        return result;
+    }
+    /**
+     * Save approved items to dedicated database tables for easy querying.
+     */
+    async saveApprovedItems(output, tenantId, runId, workflowSlug) {
+        // Save approved leads
+        const leadArrays = ['approvedLeads', 'scoredLeads', 'outreachLeads', 'enrichedLeads'];
+        for (const key of leadArrays) {
+            const arr = output[key];
+            if (Array.isArray(arr) && arr.length > 0) {
+                for (const lead of arr) {
+                    const l = lead;
+                    await this.prisma.approvedLead.create({
+                        data: {
+                            id: `alead_${(0, cuid2_1.createId)()}`,
+                            tenantId,
+                            runId,
+                            name: String(l['name'] ?? ''),
+                            company: String(l['company'] ?? ''),
+                            role: l['role'] ?? null,
+                            email: l['email'] ?? null,
+                            emailSource: l['emailSource'] ?? null,
+                            linkedin: l['linkedin'] ?? null,
+                            phone: l['phone'] ?? null,
+                            website: l['website'] ?? null,
+                            location: l['location'] ?? null,
+                            companyDescription: l['companyDescription'] ?? null,
+                            whyGoodFit: l['whyGoodFit'] ?? null,
+                            score: typeof l['score'] === 'number' ? l['score'] : null,
+                            scoreBreakdown: l['scoreBreakdown'] ?? null,
+                            reasoning: l['reasoning'] ?? null,
+                            message: l['message'] ?? null,
+                            recentProjects: Array.isArray(l['recentProjects']) ? l['recentProjects'] : [],
+                        },
+                    });
+                }
+                this.logger.log(`Saved ${arr.length} approved leads`);
+                return;
+            }
+        }
+        // Save approved content/posts
+        const contentArrays = ['approvedPosts', 'posts', 'contentIdeas'];
+        for (const key of contentArrays) {
+            const arr = output[key];
+            if (Array.isArray(arr) && arr.length > 0) {
+                for (const post of arr) {
+                    const p = post;
+                    await this.prisma.approvedContent.create({
+                        data: {
+                            id: `acont_${(0, cuid2_1.createId)()}`,
+                            tenantId,
+                            runId,
+                            topic: String(p['topic'] ?? p['title'] ?? ''),
+                            caption: String(p['caption'] ?? p['body'] ?? ''),
+                            hookLine: p['hookLine'] ?? null,
+                            hashtags: Array.isArray(p['hashtags']) ? p['hashtags'] : [],
+                            imageType: p['imageType'] ?? null,
+                            imageUrl: p['imageUrl'] ?? null,
+                            imagePrompt: p['imagePrompt'] ?? null,
+                            imageReference: p['imageReference'] ?? null,
+                            callToAction: p['callToAction'] ?? null,
+                            score: typeof p['score'] === 'number' ? p['score'] : null,
+                            reasoning: p['reasoning'] ?? null,
+                            whyItWorks: p['whyItWorks'] ?? null,
+                        },
+                    });
+                }
+                this.logger.log(`Saved ${arr.length} approved content items`);
+                return;
+            }
+        }
+    }
+    /**
+     * Post-process step output: if any items have imagePrompt but no imageUrl,
+     * generate images via FAL.ai automatically.
+     */
+    async generateImagesIfNeeded(output) {
+        if (!output || typeof output !== 'object')
+            return output;
+        const obj = output;
+        // Find arrays with items that have imagePrompt
+        for (const [key, val] of Object.entries(obj)) {
+            if (!Array.isArray(val))
+                continue;
+            let changed = false;
+            for (const item of val) {
+                if (typeof item !== 'object' || !item)
+                    continue;
+                const record = item;
+                if (!record['imageUrl']) {
+                    const imageType = String(record['imageType'] ?? 'generated');
+                    const refName = String(record['imageReference'] ?? '').toLowerCase();
+                    const photoMap = {
+                        'eterna harmonia': 'Eterna Harmonija Statua.png',
+                        'eterna harmonija': 'Eterna Harmonija Statua.png',
+                        'nebeski uzlazak': 'Nebeski Uzlazak Statua.png',
+                        'golden flux': 'Golden Flux Statue.png',
+                        'sertifikat': 'Sertifikat.png',
+                        'certificate': 'Sertifikat.png',
+                    };
+                    const photoFile = Object.entries(photoMap).find(([k]) => refName.includes(k))?.[1];
+                    if (imageType === 'real' && photoFile) {
+                        // Mode A: Use actual sculpture photograph
+                        record['imageUrl'] = `http://91.98.231.87:8003/${photoFile.replace(/ /g, '%20')}`;
+                        this.logger.log(`Using real photo: ${photoFile}`);
+                        changed = true;
+                    }
+                    else if (imageType === 'composite' && photoFile) {
+                        // Mode B: Kontext — real sculpture placed in AI scene
+                        // Pass ALL context to optimizer, not just imagePrompt
+                        const fullContext = [
+                            record['imagePrompt'] ? `Image direction: ${record['imagePrompt']}` : '',
+                            record['topic'] ? `Post topic: ${record['topic']}` : '',
+                            record['reasoning'] ? `Why: ${record['reasoning']}` : '',
+                            record['whyItWorks'] ? `Goal: ${record['whyItWorks']}` : '',
+                            record['visualStyle'] ? `Visual style: ${record['visualStyle']}` : '',
+                        ].filter(Boolean).join('\n');
+                        this.logger.log(`Composite: ${photoFile} + context ${fullContext.length} chars`);
+                        const result = await this.falImage.generateComposite(photoFile, fullContext);
+                        if (result.success) {
+                            record['imageUrl'] = result.url;
+                            changed = true;
+                        }
+                        else {
+                            this.logger.warn(`Composite failed: ${result.error}`);
+                            record['imageError'] = result.error;
+                        }
+                    }
+                    else if (record['imagePrompt'] || record['reasoning'] || record['topic']) {
+                        // Mode C: Also Kontext — our sculpture must always be in the image
+                        const defaultPhotos = ['Eterna Harmonija Statua.png', 'Nebeski Uzlazak Statua.png', 'Golden Flux Statue.png'];
+                        const randomPhoto = photoFile ?? defaultPhotos[Math.floor(Math.random() * defaultPhotos.length)] ?? defaultPhotos[0];
+                        const fullContext = [
+                            record['imagePrompt'] ? `Image direction: ${record['imagePrompt']}` : '',
+                            record['topic'] ? `Post topic: ${record['topic']}` : '',
+                            record['reasoning'] ? `Why: ${record['reasoning']}` : '',
+                            record['whyItWorks'] ? `Goal: ${record['whyItWorks']}` : '',
+                            record['visualStyle'] ? `Visual style: ${record['visualStyle']}` : '',
+                        ].filter(Boolean).join('\n');
+                        this.logger.log(`Composite scene: ${randomPhoto} + context ${fullContext.length} chars`);
+                        const result = await this.falImage.generateComposite(randomPhoto, fullContext);
+                        if (result.success) {
+                            record['imageUrl'] = result.url;
+                            changed = true;
+                        }
+                        else {
+                            this.logger.warn(`Scene generation failed: ${result.error}`);
+                            record['imageError'] = result.error;
+                        }
+                    }
+                }
+            }
+            if (changed) {
+                obj[key] = val;
+            }
+        }
+        return obj;
+    }
+    /**
+     * Extract JSON from agent output that may contain markdown fences or surrounding text.
+     * Tries: raw parse → strip code fences → find outermost { } brackets
+     */
+    extractJson(output) {
+        // 1. Strip markdown code fences: ```json ... ``` or ``` ... ```
+        const fenceMatch = output.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+        if (fenceMatch?.[1]) {
+            try {
+                JSON.parse(fenceMatch[1].trim());
+                return fenceMatch[1].trim();
+            }
+            catch { /* continue */ }
+        }
+        // 2. Find the outermost { ... } or [ ... ]
+        const firstBrace = output.indexOf('{');
+        const firstBracket = output.indexOf('[');
+        let start = -1;
+        let openChar = '{';
+        let closeChar = '}';
+        if (firstBrace >= 0 && (firstBracket < 0 || firstBrace < firstBracket)) {
+            start = firstBrace;
+        }
+        else if (firstBracket >= 0) {
+            start = firstBracket;
+            openChar = '[';
+            closeChar = ']';
+        }
+        if (start < 0)
+            return null;
+        // Find matching closing bracket
+        let depth = 0;
+        let inString = false;
+        let escape = false;
+        for (let i = start; i < output.length; i++) {
+            const ch = output[i];
+            if (escape) {
+                escape = false;
+                continue;
+            }
+            if (ch === '\\' && inString) {
+                escape = true;
+                continue;
+            }
+            if (ch === '"' && !escape) {
+                inString = !inString;
+                continue;
+            }
+            if (inString)
+                continue;
+            if (ch === openChar)
+                depth++;
+            if (ch === closeChar)
+                depth--;
+            if (depth === 0) {
+                return output.slice(start, i + 1);
+            }
+        }
+        // Unbalanced — truncated JSON. Try to repair by closing open brackets.
+        return this.repairTruncatedJson(output.slice(start));
+    }
+    /**
+     * Attempt to repair truncated JSON by closing open brackets/braces.
+     * Handles the common case where LLM output gets cut off mid-JSON.
+     */
+    repairTruncatedJson(json) {
+        // Remove any trailing incomplete string (cut mid-value)
+        let trimmed = json.replace(/,\s*"[^"]*$/, ''); // trailing incomplete key
+        trimmed = trimmed.replace(/,\s*$/, ''); // trailing comma
+        trimmed = trimmed.replace(/:\s*"[^"]*$/, ': ""'); // incomplete string value
+        trimmed = trimmed.replace(/:\s*$/, ': null'); // incomplete value
+        // Count open brackets/braces and close them
+        let inString = false;
+        let escape = false;
+        const stack = [];
+        for (let i = 0; i < trimmed.length; i++) {
+            const ch = trimmed[i];
+            if (escape) {
+                escape = false;
+                continue;
+            }
+            if (ch === '\\' && inString) {
+                escape = true;
+                continue;
+            }
+            if (ch === '"') {
+                inString = !inString;
+                continue;
+            }
+            if (inString)
+                continue;
+            if (ch === '{')
+                stack.push('}');
+            if (ch === '[')
+                stack.push(']');
+            if (ch === '}' || ch === ']')
+                stack.pop();
+        }
+        if (stack.length === 0)
+            return trimmed; // Already balanced
+        // Close all open brackets
+        const repaired = trimmed + stack.reverse().join('');
+        try {
+            JSON.parse(repaired);
+            return repaired;
+        }
+        catch {
+            return null;
+        }
+    }
+    /**
+     * Null out a field in an object by dot-path (for unverified data)
+     */
+    nullifyField(obj, path) {
+        const parts = path.split('.');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let current = obj;
+        for (let i = 0; i < parts.length - 1; i++) {
+            const key = parts[i];
+            if (current == null || typeof current !== 'object' || !key)
+                return;
+            current = current[key];
+        }
+        const lastKey = parts[parts.length - 1];
+        if (current != null && typeof current === 'object' && lastKey) {
+            current[lastKey] = null;
+        }
+    }
+};
+exports.ProcessExecutorService = ProcessExecutorService;
+exports.ProcessExecutorService = ProcessExecutorService = ProcessExecutorService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof app_event_bus_service_1.AppEventBus !== "undefined" && app_event_bus_service_1.AppEventBus) === "function" ? _b : Object, typeof (_c = typeof openclaw_client_service_1.OpenClawClientService !== "undefined" && openclaw_client_service_1.OpenClawClientService) === "function" ? _c : Object, typeof (_d = typeof schema_validator_service_1.SchemaValidatorService !== "undefined" && schema_validator_service_1.SchemaValidatorService) === "function" ? _d : Object, typeof (_e = typeof process_dedup_service_1.ProcessDeduplicationService !== "undefined" && process_dedup_service_1.ProcessDeduplicationService) === "function" ? _e : Object, typeof (_f = typeof fal_image_service_1.FalImageService !== "undefined" && fal_image_service_1.FalImageService) === "function" ? _f : Object])
+], ProcessExecutorService);
+
+
+/***/ }),
+/* 236 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var SchemaValidatorService_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SchemaValidatorService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const ajv_1 = tslib_1.__importDefault(__webpack_require__(237));
+const ajv_formats_1 = tslib_1.__importDefault(__webpack_require__(238));
+const dns = tslib_1.__importStar(__webpack_require__(239));
+const util_1 = __webpack_require__(240);
+const dnsResolve = (0, util_1.promisify)(dns.resolve);
+let SchemaValidatorService = SchemaValidatorService_1 = class SchemaValidatorService {
+    constructor() {
+        this.logger = new common_1.Logger(SchemaValidatorService_1.name);
+        this.ajv = new ajv_1.default({ allErrors: true, strict: false });
+        (0, ajv_formats_1.default)(this.ajv);
+    }
+    /**
+     * Level 1: JSON Schema validation (ajv draft-07)
+     */
+    validateSchema(data, schema) {
+        const validate = this.ajv.compile(schema);
+        const valid = validate(data);
+        if (valid) {
+            return { valid: true, errors: [] };
+        }
+        const errors = (validate.errors ?? []).map((e) => `${e.instancePath || '/'}: ${e.message ?? 'unknown error'}`);
+        return { valid: false, errors };
+    }
+    /**
+     * Level 2: Data verification (DNS lookup, URL check, enum, regex)
+     */
+    async verifyData(data, rules) {
+        const failures = [];
+        for (const rule of rules) {
+            const fieldValue = this.getNestedField(data, rule.field);
+            if (fieldValue === undefined || fieldValue === null)
+                continue;
+            try {
+                switch (rule.type) {
+                    case 'dns': {
+                        const email = String(fieldValue);
+                        const domain = email.includes('@') ? email.split('@')[1] ?? email : email;
+                        try {
+                            await dnsResolve(domain, 'MX');
+                        }
+                        catch {
+                            failures.push({ field: rule.field, reason: `DNS MX lookup failed for ${domain}` });
+                        }
+                        break;
+                    }
+                    case 'url': {
+                        const urlStr = String(fieldValue);
+                        // SSRF protection: only allow http/https and block private IP ranges
+                        if (!this.isSafeUrl(urlStr)) {
+                            failures.push({ field: rule.field, reason: `URL blocked by SSRF protection: ${urlStr}` });
+                            break;
+                        }
+                        try {
+                            const response = await fetch(urlStr, {
+                                method: 'HEAD',
+                                signal: AbortSignal.timeout(15000),
+                                redirect: 'manual', // Don't follow redirects to internal URLs
+                            });
+                            if (!response.ok && response.status !== 301 && response.status !== 302) {
+                                failures.push({ field: rule.field, reason: `URL returned ${response.status}` });
+                            }
+                        }
+                        catch {
+                            failures.push({ field: rule.field, reason: `URL unreachable: ${urlStr}` });
+                        }
+                        break;
+                    }
+                    case 'enum': {
+                        const allowed = Array.isArray(rule.value) ? rule.value : [];
+                        if (!allowed.includes(String(fieldValue))) {
+                            failures.push({ field: rule.field, reason: `Value "${fieldValue}" not in allowed values` });
+                        }
+                        break;
+                    }
+                    case 'regex': {
+                        if (typeof rule.value !== 'string')
+                            break;
+                        // ReDoS protection: limit pattern length and use timeout
+                        if (rule.value.length > 200) {
+                            failures.push({ field: rule.field, reason: 'Regex pattern too long (max 200 chars)' });
+                            break;
+                        }
+                        try {
+                            const pattern = new RegExp(rule.value);
+                            // Run regex with a simple length guard to limit catastrophic backtracking
+                            const testStr = String(fieldValue).slice(0, 1000);
+                            if (!pattern.test(testStr)) {
+                                failures.push({ field: rule.field, reason: `Value does not match pattern ${rule.value}` });
+                            }
+                        }
+                        catch {
+                            failures.push({ field: rule.field, reason: `Invalid regex pattern: ${rule.value}` });
+                        }
+                        break;
+                    }
+                }
+            }
+            catch (err) {
+                this.logger.warn(`Verify rule failed for ${rule.field}: ${err}`);
+                failures.push({ field: rule.field, reason: `Verification error: ${err}` });
+            }
+        }
+        return { valid: failures.length === 0, failures };
+    }
+    /**
+     * Level 3: Semantic quality check via LLM
+     * Called externally with AiGateway — this method just builds the prompt
+     */
+    buildSemanticCheckPrompt(data, schema) {
+        const schemaStr = JSON.stringify(schema, null, 2).slice(0, 2000);
+        const dataStr = JSON.stringify(data, null, 2).slice(0, 3000);
+        return [
+            'Check if this data looks real and consistent. Flag any fields that appear hallucinated, fabricated, or implausible.',
+            'Respond ONLY with valid JSON: { "passed": true/false, "flags": ["issue1", ...] }',
+            '',
+            `Schema (expected structure):`,
+            schemaStr,
+            '',
+            `Data to check:`,
+            dataStr,
+        ].join('\n');
+    }
+    /**
+     * Build a corrective feedback prompt for agent retry
+     */
+    buildCorrectionPrompt(errors, rawOutput) {
+        const errorList = errors.map((e, i) => `  ${i + 1}. ${e}`).join('\n');
+        const truncatedOutput = rawOutput.slice(0, 2000);
+        return [
+            'Your previous output had validation errors. Fix ONLY the specific issues listed below.',
+            'Return the corrected JSON output with all fields intact.',
+            '',
+            'Errors found:',
+            errorList,
+            '',
+            'Your previous output (truncated):',
+            truncatedOutput,
+        ].join('\n');
+    }
+    /**
+     * SSRF protection: block private IPs and non-http(s) schemes
+     */
+    isSafeUrl(urlStr) {
+        try {
+            const url = new URL(urlStr);
+            if (url.protocol !== 'http:' && url.protocol !== 'https:')
+                return false;
+            const hostname = url.hostname;
+            // Block localhost, private IPs, link-local, metadata endpoints
+            if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1')
+                return false;
+            if (hostname.startsWith('10.'))
+                return false;
+            if (hostname.startsWith('172.') && /^172\.(1[6-9]|2\d|3[01])\./.test(hostname))
+                return false;
+            if (hostname.startsWith('192.168.'))
+                return false;
+            if (hostname.startsWith('169.254.'))
+                return false; // AWS metadata
+            if (hostname.endsWith('.internal') || hostname.endsWith('.local'))
+                return false;
+            return true;
+        }
+        catch {
+            return false;
+        }
+    }
+    /**
+     * Utility: get nested field value from object using dot notation
+     */
+    getNestedField(obj, path) {
+        const parts = path.split('.');
+        let current = obj;
+        for (const part of parts) {
+            if (current == null || typeof current !== 'object')
+                return undefined;
+            current = current[part];
+        }
+        return current;
+    }
+};
+exports.SchemaValidatorService = SchemaValidatorService;
+exports.SchemaValidatorService = SchemaValidatorService = SchemaValidatorService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [])
+], SchemaValidatorService);
+
+
+/***/ }),
+/* 237 */
+/***/ ((module) => {
+
+module.exports = require("ajv");
+
+/***/ }),
+/* 238 */
+/***/ ((module) => {
+
+module.exports = require("ajv-formats");
+
+/***/ }),
+/* 239 */
+/***/ ((module) => {
+
+module.exports = require("dns");
+
+/***/ }),
+/* 240 */
+/***/ ((module) => {
+
+module.exports = require("util");
+
+/***/ }),
+/* 241 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var ProcessDeduplicationService_1;
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ProcessDeduplicationService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const qdrant_client_service_1 = __webpack_require__(113);
+const embedding_service_1 = __webpack_require__(112);
+const uuid_1 = __webpack_require__(242);
+const COLLECTION_NAME = 'process-leads';
+const EMBEDDING_DIMENSIONS = 1536; // text-embedding-3-small
+const UUID_NAMESPACE = '8b14e2c4-7a3e-4d56-9f1a-1e4c3b2d5f6a'; // fixed namespace for deterministic IDs
+let ProcessDeduplicationService = ProcessDeduplicationService_1 = class ProcessDeduplicationService {
+    constructor(qdrantClient, embeddingService) {
+        this.qdrantClient = qdrantClient;
+        this.embeddingService = embeddingService;
+        this.logger = new common_1.Logger(ProcessDeduplicationService_1.name);
+    }
+    async onModuleInit() {
+        if (!this.qdrantClient.isAvailable()) {
+            this.logger.warn('Qdrant not available — lead deduplication disabled');
+            return;
+        }
+        try {
+            await this.qdrantClient.ensureCollection(COLLECTION_NAME, EMBEDDING_DIMENSIONS);
+            // Create payload index for tenant filtering
+            const client = this.qdrantClient.getClient();
+            await client.createPayloadIndex(COLLECTION_NAME, {
+                field_name: 'tenantId',
+                field_schema: 'keyword',
+            }).catch(() => { });
+            this.logger.log('Process leads collection ready');
+        }
+        catch (err) {
+            this.logger.warn(`Failed to ensure process-leads collection: ${err}`);
+        }
+    }
+    /**
+     * Find existing leads similar to a query (for dedup before search step).
+     * Returns a compact list of known leads for the tenant.
+     */
+    async findKnownLeads(tenantId, limit = 100) {
+        if (!this.qdrantClient.isAvailable())
+            return [];
+        try {
+            const client = this.qdrantClient.getClient();
+            const result = await client.scroll(COLLECTION_NAME, {
+                filter: {
+                    must: [{ key: 'tenantId', match: { value: tenantId } }],
+                },
+                limit,
+                with_payload: true,
+            });
+            return (result.points ?? []).map((p) => p.payload);
+        }
+        catch (err) {
+            this.logger.warn(`Failed to fetch known leads: ${err}`);
+            return [];
+        }
+    }
+    /**
+     * Store approved leads in Qdrant for future deduplication.
+     * Uses company+name as the embedding text for semantic matching.
+     */
+    async storeLeads(leads) {
+        if (!this.qdrantClient.isAvailable() || leads.length === 0)
+            return 0;
+        let stored = 0;
+        const client = this.qdrantClient.getClient();
+        for (const lead of leads) {
+            try {
+                // Create embedding from company + name + location (semantic identity)
+                const embeddingText = [lead.company, lead.name, lead.location].filter(Boolean).join(' — ');
+                const { vector } = await this.embeddingService.embed(embeddingText);
+                if (vector.every(v => v === 0))
+                    continue; // Embedding failed
+                // Deterministic ID from company+name so upsert is idempotent
+                const pointId = (0, uuid_1.v5)(`${lead.tenantId}:${lead.company}:${lead.name}`.toLowerCase(), UUID_NAMESPACE);
+                await client.upsert(COLLECTION_NAME, {
+                    wait: true,
+                    points: [{
+                            id: pointId,
+                            vector,
+                            payload: lead,
+                        }],
+                });
+                stored++;
+            }
+            catch (err) {
+                this.logger.warn(`Failed to store lead ${lead.name} @ ${lead.company}: ${err}`);
+            }
+        }
+        this.logger.log(`Stored ${stored}/${leads.length} leads in Qdrant`);
+        return stored;
+    }
+    /**
+     * Check if a specific lead already exists (by semantic similarity).
+     * Returns true if a very similar lead is found (score > 0.92).
+     */
+    async isDuplicate(tenantId, company, name) {
+        if (!this.qdrantClient.isAvailable())
+            return false;
+        try {
+            const embeddingText = `${company} — ${name}`;
+            const { vector } = await this.embeddingService.embed(embeddingText);
+            if (vector.every(v => v === 0))
+                return false;
+            const client = this.qdrantClient.getClient();
+            const results = await client.search(COLLECTION_NAME, {
+                vector,
+                limit: 1,
+                score_threshold: 0.92, // Very high — only near-exact matches
+                filter: {
+                    must: [{ key: 'tenantId', match: { value: tenantId } }],
+                },
+            });
+            return results.length > 0;
+        }
+        catch {
+            return false;
+        }
+    }
+    /**
+     * Build a deduplication context string for the agent prompt.
+     * Lists known leads compactly so the agent skips them.
+     */
+    async buildDeduplicationContext(tenantId) {
+        const known = await this.findKnownLeads(tenantId);
+        if (known.length === 0)
+            return '';
+        const lines = known.map(l => `- ${l.name} @ ${l.company}${l.location ? ` (${l.location})` : ''}`);
+        return [
+            '## Previously Discovered Contacts (SKIP these specific people)',
+            `We already have ${known.length} contacts in our database. Do NOT include these exact people again:`,
+            '',
+            ...lines,
+            '',
+            'You CAN find OTHER people at the same companies — just not the exact same person.',
+            'Focus on discovering NEW contacts we do not already have.',
+        ].join('\n');
+    }
+    /**
+     * Build dedup context for content processes.
+     * Lists previously created content topics so the agent doesn't repeat them.
+     */
+    async buildContentDeduplicationContext(tenantId) {
+        // Find topics from previous completed content runs
+        const known = await this.findKnownLeads(tenantId); // reuse same collection, filter by type
+        const contentItems = known.filter(l => l.contentType === 'instagram-post');
+        if (contentItems.length === 0)
+            return '';
+        const topics = contentItems.map(l => `- ${l.name}`);
+        return [
+            '## Previously Created Content (do NOT repeat these topics)',
+            `We already posted about these ${contentItems.length} topics:`,
+            '',
+            ...topics,
+            '',
+            'Create DIFFERENT topics. Do not repeat or closely rephrase any of the above.',
+        ].join('\n');
+    }
+};
+exports.ProcessDeduplicationService = ProcessDeduplicationService;
+exports.ProcessDeduplicationService = ProcessDeduplicationService = ProcessDeduplicationService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof qdrant_client_service_1.QdrantClientService !== "undefined" && qdrant_client_service_1.QdrantClientService) === "function" ? _a : Object, typeof (_b = typeof embedding_service_1.EmbeddingService !== "undefined" && embedding_service_1.EmbeddingService) === "function" ? _b : Object])
+], ProcessDeduplicationService);
+
+
+/***/ }),
+/* 242 */
+/***/ ((module) => {
+
+module.exports = require("uuid");
+
+/***/ }),
+/* 243 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var FalImageService_1;
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.FalImageService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const openclaw_client_service_1 = __webpack_require__(139);
+let FalImageService = FalImageService_1 = class FalImageService {
+    constructor(configService, openClaw) {
+        this.configService = configService;
+        this.openClaw = openClaw;
+        this.logger = new common_1.Logger(FalImageService_1.name);
+        this.apiKey = this.configService.get('FAL_KEY', '');
+    }
+    /**
+     * Generate a contextual scene image using text-to-image (schnell).
+     */
+    async generateImage(prompt) {
+        if (!this.apiKey) {
+            return { url: '', width: 0, height: 0, prompt, success: false, error: 'FAL_KEY not configured' };
+        }
+        try {
+            const optimized = await this.optimizePrompt(prompt, null);
+            this.logger.log({ message: 'Generating scene', promptLength: optimized.length });
+            const response = await fetch('https://fal.run/fal-ai/flux/schnell', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Key ${this.apiKey}` },
+                body: JSON.stringify({ prompt: optimized, image_size: { width: 1080, height: 1080 }, num_images: 1 }),
+            });
+            if (!response.ok) {
+                const errText = await response.text();
+                return { url: '', width: 0, height: 0, prompt, success: false, error: `FAL.ai ${response.status}` };
+            }
+            const data = await response.json();
+            const image = data.images?.[0];
+            if (!image?.url)
+                return { url: '', width: 0, height: 0, prompt, success: false, error: 'No image URL' };
+            return { url: image.url, width: image.width ?? 1080, height: image.height ?? 1080, prompt, optimizedPrompt: optimized, success: true };
+        }
+        catch (err) {
+            return { url: '', width: 0, height: 0, prompt, success: false, error: String(err) };
+        }
+    }
+    /**
+     * Composite: Place real sculpture in described scene using Kontext.
+     */
+    async generateComposite(sculptureFileName, sceneDescription) {
+        if (!this.apiKey) {
+            return { url: '', width: 0, height: 0, prompt: sceneDescription, success: false, error: 'FAL_KEY not configured' };
+        }
+        try {
+            const fs = await Promise.resolve().then(() => tslib_1.__importStar(__webpack_require__(9)));
+            const path = await Promise.resolve().then(() => tslib_1.__importStar(__webpack_require__(8)));
+            const filePath = path.join('C:/Users/tanjav/Downloads', sculptureFileName);
+            if (!fs.existsSync(filePath)) {
+                return { url: '', width: 0, height: 0, prompt: sceneDescription, success: false, error: `Photo not found: ${filePath}` };
+            }
+            const imageData = fs.readFileSync(filePath);
+            const ext = path.extname(filePath).toLowerCase();
+            const mime = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png';
+            const dataUri = `data:${mime};base64,${imageData.toString('base64')}`;
+            // Optimize the prompt through LLM reasoning
+            const optimized = await this.optimizePrompt(sceneDescription, sculptureFileName);
+            this.logger.log({ message: 'Kontext composite', sculpture: sculptureFileName, originalLen: sceneDescription.length, optimizedLen: optimized.length });
+            const response = await fetch('https://fal.run/fal-ai/flux-pro/kontext', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Key ${this.apiKey}` },
+                body: JSON.stringify({
+                    prompt: optimized,
+                    image_url: dataUri,
+                    guidance_scale: 4.0,
+                    num_inference_steps: 28,
+                    output_format: 'png',
+                }),
+            });
+            if (!response.ok) {
+                const errText = await response.text();
+                this.logger.error(`Kontext error: ${response.status} ${errText.slice(0, 300)}`);
+                return { url: '', width: 0, height: 0, prompt: sceneDescription, optimizedPrompt: optimized, success: false, error: `Kontext ${response.status}` };
+            }
+            const data = await response.json();
+            const image = data.images?.[0] ?? data.image;
+            if (!image?.url)
+                return { url: '', width: 0, height: 0, prompt: sceneDescription, success: false, error: 'No image URL' };
+            this.logger.log({ message: 'Kontext generated', url: image.url });
+            return { url: image.url, width: image.width ?? 1024, height: image.height ?? 1024, prompt: sceneDescription, optimizedPrompt: optimized, success: true };
+        }
+        catch (err) {
+            return { url: '', width: 0, height: 0, prompt: sceneDescription, success: false, error: String(err) };
+        }
+    }
+    /**
+     * PROMPT OPTIMIZER — the brain between OpenClaw's creative brief and Kontext execution.
+     *
+     * Takes the agent's scene description and REASONS about:
+     * 1. What can Kontext actually do with this sculpture photo?
+     * 2. What would a real photographer set up for this shot?
+     * 3. How to describe it so AI produces a believable result?
+     * 4. What are the pitfalls to avoid?
+     */
+    async optimizePrompt(agentPrompt, sculptureFile) {
+        try {
+            const sculptureDesc = sculptureFile
+                ? this.getSculptureDescription(sculptureFile)
+                : 'an abstract polished metal sculpture on dark marble pedestal';
+            const optimizerPrompt = `You are a world-class art director and AI image prompt engineer. Your job is to transform a creative brief into the PERFECT prompt for the Kontext AI model (FAL.ai flux-pro).
+
+CREATIVE BRIEF: "${agentPrompt}"
+SCULPTURE: ${sculptureDesc}
+
+STEP 1 — ANALYZE THE INTENT:
+What story does this image need to tell? What emotion should the viewer feel? What should they understand about LSA (Luxury Statues Adria) from this single image? Think about what would make someone stop scrolling on Instagram.
+
+STEP 2 — DETERMINE THE SCENE TYPE and reason about what Kontext should do:
+
+IF the brief is about CRAFTSMANSHIP / WORKSHOP / MAKING PROCESS:
+- Transform the sculpture to appear IN-PROGRESS: show it as rough unpolished metal with visible grinding marks, or as a clay/wax master mold, or with only one section mirror-polished while the rest is raw matte metal
+- Add an artisan's weathered hands actively working on it — holding a polishing tool, grinding wheel nearby, metal filings on the work surface
+- Workshop environment: heavy wooden workbench, industrial task lighting, specialized sculpture tools hanging on pegboard, leather apron visible
+- The beauty is in the CONTRAST between the raw and finished sections
+
+IF the brief is about INSTALLATION / DELIVERY / LOGISTICS:
+- Keep the sculpture finished and pristine but show it being HANDLED
+- Add 2 professionals in dark uniforms with white cotton gloves carefully guiding it
+- Show equipment: custom wooden crate lined with grey foam, furniture dolly, laser level with red beam, bubble wrap
+- Environment: the destination space (lobby, penthouse) with the sculpture being positioned, not yet settled
+- Capture the TENSION and PRECISION of the moment
+
+IF the brief is about INTERIOR PLACEMENT / TRANSFORMATION / CLIENT SPACE:
+- Show the sculpture as the HERO of the room — it should command the entire space
+- The room should feel incomplete without it — the sculpture IS the room's identity
+- Specific luxury interior: name materials (Calacatta marble floor, walnut wall panels, brass fixtures)
+- People if present: architect pointing, client gazing in awe, both dressed formally
+- The image should make viewers think "I need this in MY space"
+
+IF the brief is about CERTIFICATION / AUTHENTICITY / LIMITED EDITION:
+- Show the certificate prominently WITH the sculpture — both must be visible
+- Elegant presentation: certificate in a leather portfolio, placed on velvet surface beside the sculpture
+- Add details that signal exclusivity: edition number visible, gold embossing, wax seal
+- Lighting should be warm and intimate, like a private viewing
+
+IF the brief is about DETAIL / MATERIAL / SURFACE:
+- Extreme close-up of the sculpture's surface — fill 80% of the frame with polished metal
+- Show the interplay of reflections, the depth of the chrome/bronze finish
+- A single fingertip in white glove barely touching the surface — for scale and human connection
+- Macro photography feel: f/2.8, razor-thin depth of field
+
+IF the brief is about BRAND / LIFESTYLE / ASPIRATIONAL:
+- Show the sculpture in an impossibly beautiful setting that represents the LSA client's lifestyle
+- Penthouse at golden hour, yacht interior, private jet cabin, wine cellar, rooftop terrace at dusk
+- No people — let the viewer insert themselves into the fantasy
+- The sculpture should feel like it BELONGS there, not placed but PART of the architecture
+
+IF the brief is about something else:
+- Reason from first principles: what would a professional art photographer set up for this specific shot?
+- What lighting would make the metallic surface look its best in this context?
+- What details in the scene would reinforce the story?
+- What would make this image DIFFERENT from a generic product photo?
+
+STEP 3 — WRITE THE KONTEXT PROMPT:
+Based on your reasoning, write ONE focused paragraph (80-120 words) that tells Kontext exactly what to create.
+- First sentence: what happens to/around the sculpture (the key transformation)
+- Then: specific environment details with exact materials and colors
+- Then: lighting — direction, color temperature, quality, how it hits the reflective metal
+- Then: any people — exact description of clothing, pose, position
+- Then: camera angle and photography style
+- Last: mood in one word
+
+RETURN ONLY THE PROMPT PARAGRAPH. No reasoning, no labels, no explanation.`;
+            const result = await this.openClaw.executeAgent(optimizerPrompt, {
+                agentId: 'main',
+                timeoutSeconds: 60,
+            });
+            if (result.success && result.output && result.output.length > 20) {
+                this.logger.log({ message: 'Prompt optimized', originalLen: agentPrompt.length, optimizedLen: result.output.length });
+                return result.output.trim();
+            }
+            // Fallback: use agent prompt with basic Kontext framing
+            this.logger.warn('Prompt optimization failed, using fallback');
+            return this.fallbackPrompt(agentPrompt);
+        }
+        catch (err) {
+            this.logger.warn(`Prompt optimizer error: ${err}`);
+            return this.fallbackPrompt(agentPrompt);
+        }
+    }
+    fallbackPrompt(agentPrompt) {
+        return `${agentPrompt}. Keep this exact sculpture — same shape, same polished metal finish, same marble pedestal. Seamlessly integrate into the scene with matched lighting and realistic shadows. Professional photography.`;
+    }
+    getSculptureDescription(fileName) {
+        const descriptions = {
+            'Eterna Harmonija Statua.png': 'Eterna Harmonia — a dark bronze abstract infinity/figure-8 flowing form with matte chrome finish on cylindrical black marble pedestal, 180cm tall',
+            'Nebeski Uzlazak Statua.png': 'Nebeski Uzlazak — a silver mirror-polished chrome rising flame/wing form with dramatic upward curves on cylindrical black marble pedestal, 180cm tall',
+            'Golden Flux Statue.png': 'Golden Flux — a 24k gold polished double-curve S-shape abstract form with blue reflective accents on light marble pedestal',
+            'Sertifikat.png': 'Official LSA Certificate of Authenticity — dark background with gold text, gold seal, signature, and sculpture photo',
+        };
+        return descriptions[fileName] ?? 'an abstract polished metal sculpture on dark marble pedestal';
+    }
+};
+exports.FalImageService = FalImageService;
+exports.FalImageService = FalImageService = FalImageService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object, typeof (_b = typeof openclaw_client_service_1.OpenClawClientService !== "undefined" && openclaw_client_service_1.OpenClawClientService) === "function" ? _b : Object])
+], FalImageService);
+
+
+/***/ }),
+/* 244 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var ProcessSchedulerService_1;
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ProcessSchedulerService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const cron_parser_1 = __webpack_require__(245);
+const tenant_context_1 = __webpack_require__(10);
+const process_executor_service_1 = __webpack_require__(235);
+let ProcessSchedulerService = ProcessSchedulerService_1 = class ProcessSchedulerService {
+    constructor(prisma, executor) {
+        this.prisma = prisma;
+        this.executor = executor;
+        this.logger = new common_1.Logger(ProcessSchedulerService_1.name);
+        this.scheduled = new Map();
+    }
+    async onModuleInit() {
+        await this.loadScheduledWorkflows();
+    }
+    onModuleDestroy() {
+        this.clearAll();
+    }
+    /**
+     * Load all active workflows with cron schedules and register them
+     */
+    async loadScheduledWorkflows() {
+        const workflows = await this.prisma.processWorkflow.findMany({
+            where: {
+                isActive: true,
+                cronSchedule: { not: null },
+            },
+            select: {
+                id: true,
+                tenantId: true,
+                cronSchedule: true,
+                name: true,
+            },
+        });
+        for (const wf of workflows) {
+            if (wf.cronSchedule) {
+                this.schedule(wf.id, wf.tenantId, wf.cronSchedule);
+            }
+        }
+        this.logger.log(`Loaded ${workflows.length} scheduled workflows`);
+    }
+    /**
+     * Register a workflow for cron-based execution
+     */
+    schedule(workflowId, tenantId, cronSchedule) {
+        // Remove existing schedule if any
+        this.unschedule(workflowId);
+        // Validate cron expression
+        try {
+            cron_parser_1.CronExpressionParser.parse(cronSchedule);
+        }
+        catch (err) {
+            this.logger.error(`Invalid cron expression "${cronSchedule}" for workflow ${workflowId}: ${err}`);
+            return;
+        }
+        // Check immediately on registration, then every 60 seconds (F12: fixes first-minute miss)
+        this.checkAndTrigger(workflowId, tenantId, cronSchedule);
+        const intervalHandle = setInterval(() => {
+            this.checkAndTrigger(workflowId, tenantId, cronSchedule);
+        }, 60_000);
+        this.scheduled.set(workflowId, {
+            workflowId,
+            tenantId,
+            cronSchedule,
+            intervalHandle,
+        });
+        this.logger.log(`Scheduled workflow ${workflowId} with cron "${cronSchedule}"`);
+    }
+    /**
+     * Remove a workflow from cron scheduling
+     */
+    unschedule(workflowId) {
+        const existing = this.scheduled.get(workflowId);
+        if (existing) {
+            clearInterval(existing.intervalHandle);
+            this.scheduled.delete(workflowId);
+            this.logger.log(`Unscheduled workflow ${workflowId}`);
+        }
+    }
+    /**
+     * Clear all scheduled workflows
+     */
+    clearAll() {
+        for (const [, entry] of this.scheduled) {
+            clearInterval(entry.intervalHandle);
+        }
+        this.scheduled.clear();
+    }
+    /**
+     * Check if cron matches current minute and trigger if no active run
+     */
+    async checkAndTrigger(workflowId, tenantId, cronSchedule) {
+        try {
+            const interval = cron_parser_1.CronExpressionParser.parse(cronSchedule);
+            const prev = interval.prev().toDate();
+            const now = new Date();
+            // Check if the previous occurrence was within the last 60 seconds
+            const diffMs = now.getTime() - prev.getTime();
+            if (diffMs > 60_000)
+                return; // Not time yet
+            // Check for active run (overlap protection)
+            const activeRun = await this.prisma.processRun.findFirst({
+                where: {
+                    workflowId,
+                    status: { in: ['RUNNING', 'WAITING_APPROVAL'] },
+                },
+            });
+            if (activeRun) {
+                this.logger.log(`Skipping cron trigger for ${workflowId}: active run exists (${activeRun.id})`);
+                return;
+            }
+            // Trigger new run
+            this.logger.log(`Cron trigger for workflow ${workflowId}`);
+            await this.executor.startRun(workflowId, tenantId);
+        }
+        catch (err) {
+            this.logger.error(`Cron check failed for ${workflowId}: ${err}`);
+        }
+    }
+};
+exports.ProcessSchedulerService = ProcessSchedulerService;
+exports.ProcessSchedulerService = ProcessSchedulerService = ProcessSchedulerService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof process_executor_service_1.ProcessExecutorService !== "undefined" && process_executor_service_1.ProcessExecutorService) === "function" ? _b : Object])
+], ProcessSchedulerService);
+
+
+/***/ }),
+/* 245 */
+/***/ ((module) => {
+
+module.exports = require("cron-parser");
+
+/***/ }),
+/* 246 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ListRunsQueryDto = exports.ApproveStepDto = exports.TriggerRunDto = exports.UpdateStepDto = exports.CreateStepDto = exports.UpdateWorkflowDto = exports.CreateWorkflowDto = void 0;
+const tslib_1 = __webpack_require__(4);
+const class_validator_1 = __webpack_require__(39);
+const class_transformer_1 = __webpack_require__(85);
+/** Valid step types matching Prisma ProcessStepType enum */
+const VALID_STEP_TYPES = ['AUTOMATIC', 'APPROVAL', 'MANUAL'];
+// ── Workflow DTOs ──
+class CreateWorkflowDto {
+}
+exports.CreateWorkflowDto = CreateWorkflowDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(200),
+    tslib_1.__metadata("design:type", String)
+], CreateWorkflowDto.prototype, "name", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(100),
+    (0, class_validator_1.Matches)(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/, { message: 'Slug must be lowercase alphanumeric with hyphens only' }),
+    tslib_1.__metadata("design:type", String)
+], CreateWorkflowDto.prototype, "slug", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateWorkflowDto.prototype, "description", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateWorkflowDto.prototype, "cronSchedule", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateWorkflowDto.prototype, "skillMd", void 0);
+class UpdateWorkflowDto {
+}
+exports.UpdateWorkflowDto = UpdateWorkflowDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(200),
+    tslib_1.__metadata("design:type", String)
+], UpdateWorkflowDto.prototype, "name", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], UpdateWorkflowDto.prototype, "description", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], UpdateWorkflowDto.prototype, "cronSchedule", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], UpdateWorkflowDto.prototype, "skillMd", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    tslib_1.__metadata("design:type", Boolean)
+], UpdateWorkflowDto.prototype, "isActive", void 0);
+// ── Step DTOs ──
+class CreateStepDto {
+}
+exports.CreateStepDto = CreateStepDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    (0, class_transformer_1.Type)(() => Number),
+    tslib_1.__metadata("design:type", Number)
+], CreateStepDto.prototype, "order", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(200),
+    tslib_1.__metadata("design:type", String)
+], CreateStepDto.prototype, "name", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateStepDto.prototype, "description", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsIn)(VALID_STEP_TYPES, { message: 'stepType must be AUTOMATIC, APPROVAL, or MANUAL' }),
+    tslib_1.__metadata("design:type", String)
+], CreateStepDto.prototype, "stepType", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateStepDto.prototype, "agentType", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateStepDto.prototype, "toolSkill", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsObject)(),
+    tslib_1.__metadata("design:type", typeof (_a = typeof Record !== "undefined" && Record) === "function" ? _a : Object)
+], CreateStepDto.prototype, "inputSchema", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsObject)(),
+    tslib_1.__metadata("design:type", typeof (_b = typeof Record !== "undefined" && Record) === "function" ? _b : Object)
+], CreateStepDto.prototype, "outputSchema", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], CreateStepDto.prototype, "skillMdSection", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsObject)(),
+    tslib_1.__metadata("design:type", typeof (_c = typeof Record !== "undefined" && Record) === "function" ? _c : Object)
+], CreateStepDto.prototype, "retryPolicy", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsObject)(),
+    tslib_1.__metadata("design:type", typeof (_d = typeof Record !== "undefined" && Record) === "function" ? _d : Object)
+], CreateStepDto.prototype, "verifyRules", void 0);
+class UpdateStepDto {
+}
+exports.UpdateStepDto = UpdateStepDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    (0, class_transformer_1.Type)(() => Number),
+    tslib_1.__metadata("design:type", Number)
+], UpdateStepDto.prototype, "order", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(200),
+    tslib_1.__metadata("design:type", String)
+], UpdateStepDto.prototype, "name", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], UpdateStepDto.prototype, "description", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)(VALID_STEP_TYPES, { message: 'stepType must be AUTOMATIC, APPROVAL, or MANUAL' }),
+    tslib_1.__metadata("design:type", String)
+], UpdateStepDto.prototype, "stepType", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], UpdateStepDto.prototype, "agentType", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], UpdateStepDto.prototype, "toolSkill", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsObject)(),
+    tslib_1.__metadata("design:type", typeof (_e = typeof Record !== "undefined" && Record) === "function" ? _e : Object)
+], UpdateStepDto.prototype, "inputSchema", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsObject)(),
+    tslib_1.__metadata("design:type", typeof (_f = typeof Record !== "undefined" && Record) === "function" ? _f : Object)
+], UpdateStepDto.prototype, "outputSchema", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], UpdateStepDto.prototype, "skillMdSection", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsObject)(),
+    tslib_1.__metadata("design:type", typeof (_g = typeof Record !== "undefined" && Record) === "function" ? _g : Object)
+], UpdateStepDto.prototype, "retryPolicy", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsObject)(),
+    tslib_1.__metadata("design:type", typeof (_h = typeof Record !== "undefined" && Record) === "function" ? _h : Object)
+], UpdateStepDto.prototype, "verifyRules", void 0);
+// ── Run DTOs ──
+class TriggerRunDto {
+}
+exports.TriggerRunDto = TriggerRunDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsObject)(),
+    tslib_1.__metadata("design:type", typeof (_j = typeof Record !== "undefined" && Record) === "function" ? _j : Object)
+], TriggerRunDto.prototype, "input", void 0);
+class ApproveStepDto {
+}
+exports.ApproveStepDto = ApproveStepDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsBoolean)(),
+    tslib_1.__metadata("design:type", Boolean)
+], ApproveStepDto.prototype, "approved", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsObject)(),
+    tslib_1.__metadata("design:type", typeof (_k = typeof Record !== "undefined" && Record) === "function" ? _k : Object)
+], ApproveStepDto.prototype, "modifiedOutput", void 0);
+// ── Query DTOs ──
+class ListRunsQueryDto {
+}
+exports.ListRunsQueryDto = ListRunsQueryDto;
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    tslib_1.__metadata("design:type", Number)
+], ListRunsQueryDto.prototype, "page", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    (0, class_validator_1.Max)(100),
+    tslib_1.__metadata("design:type", Number)
+], ListRunsQueryDto.prototype, "limit", void 0);
+tslib_1.__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    tslib_1.__metadata("design:type", String)
+], ListRunsQueryDto.prototype, "status", void 0);
+
+
+/***/ }),
+/* 247 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -35730,7 +42999,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 const common_1 = __webpack_require__(1);
 const core_1 = __webpack_require__(2);
 const app_module_1 = __webpack_require__(3);
-const all_exceptions_filter_1 = __webpack_require__(217);
+const all_exceptions_filter_1 = __webpack_require__(247);
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
     const globalPrefix = 'api';

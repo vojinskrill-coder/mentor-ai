@@ -5,10 +5,12 @@ import {
   input,
   output,
   OnInit,
+  OnDestroy,
   ChangeDetectionStrategy,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ConversationService } from '../services/conversation.service';
+import { ChatWebsocketService } from '../services/chat-websocket.service';
 import type { ConceptTreeData, ConceptHierarchyNode, Conversation } from '@mentor-ai/shared/types';
 
 /** Flattened tree row for rendering */
@@ -852,8 +854,10 @@ interface TreeRow {
     }
   `,
 })
-export class ConceptTreeComponent implements OnInit {
+export class ConceptTreeComponent implements OnInit, OnDestroy {
   private readonly conversationService = inject(ConversationService);
+  private readonly wsService = inject(ChatWebsocketService);
+  private readonly wsUnsubFns: Array<() => void> = [];
 
   activeConversationId = input<string | null>(null);
   locked = input(false);
@@ -894,6 +898,16 @@ export class ConceptTreeComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadTree();
+
+    // Auto-refresh tree on bridge events
+    this.wsUnsubFns.push(
+      this.wsService.onBridgeTreeUpdated(() => this.loadTree()),
+      this.wsService.onBridgeTaskComplete(() => this.loadTree()),
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.wsUnsubFns.forEach((unsub) => unsub());
   }
 
   async loadTree(): Promise<void> {

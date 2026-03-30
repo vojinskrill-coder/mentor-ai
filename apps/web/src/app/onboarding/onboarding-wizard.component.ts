@@ -1034,9 +1034,10 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
           @if (isCompletingOnboarding$()) {
             <div class="generating">
               <div class="gen-spinner"></div>
-              <div class="gen-title">Kreiramo vaš Poslovni Mozak...</div>
+              <div class="gen-title">Poslovni mozak analizira vaš biznis...</div>
               <div class="gen-sub">
-                Pripremamo personalizovane zadatke i fokus oblasti za vaše poslovanje
+                AI direktor čita analizu, pretražuje bazu znanja i priprema
+                personalizovane preporuke. Ovo može trajati 2-3 minuta.
               </div>
             </div>
           }
@@ -1436,8 +1437,12 @@ export class OnboardingWizardComponent implements OnInit {
   }
 
   goToChat(): void {
-    // Redirect to maturity dashboard — auto-BASIC initialization runs in background
-    // and the dashboard shows real-time execution progress
-    this.router.navigate(['/maturity']);
+    const convId = this.welcomeConversationId$();
+    if (convId) {
+      // Navigate to chat with the welcome conversation open
+      this.router.navigate(['/chat', convId]);
+    } else {
+      this.router.navigate(['/chat']);
+    }
   }
 }

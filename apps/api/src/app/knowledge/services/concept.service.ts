@@ -368,6 +368,13 @@ export class ConceptService {
     return new Map(concepts.map((c) => [c.id, c]));
   }
 
+  async findTenantConcepts(tenantId: string): Promise<Array<{ id: string }>> {
+    return this.prisma.concept.findMany({
+      where: { tenantId },
+      select: { id: true },
+    });
+  }
+
   /**
    * Creates dynamic relationships between a newly discovered concept
    * and existing concepts using AI classification.

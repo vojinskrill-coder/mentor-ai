@@ -12,6 +12,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../auth/strategies/jwt.strategy';
+import { ConfigService } from '@nestjs/config';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { MaturityEngineService } from './maturity-engine.service';
 import { StalenessDetectorService } from './staleness-detector.service';
@@ -35,7 +36,8 @@ export class MaturityController {
     private readonly engine: MaturityEngineService,
     private readonly staleness: StalenessDetectorService,
     private readonly scheduler: AutonomousSchedulerService,
-    private readonly prisma: PlatformPrismaService
+    private readonly prisma: PlatformPrismaService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -127,6 +129,15 @@ export class MaturityController {
     @CurrentUser() user: CurrentUserPayload,
     @Query('stage') stageParam?: string
   ) {
+    const brainRelayMode = this.configService.get<string>('BRAIN_RELAY_MODE', 'false') === 'true';
+
+    if (brainRelayMode) {
+      // Brain mode: build graph from tasks + proposals + concept relationships
+      const data = await this.buildBrainGraph(user.tenantId);
+      return { data };
+    }
+
+    // Legacy mode: from maturity engine assignments
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: user.tenantId },
       select: { maturityStage: true },
@@ -137,6 +148,140 @@ export class MaturityController {
 
     const data = await this.engine.getGraphData(user.tenantId, stage as MaturityStage);
     return { data };
+  }
+
+  /**
+   * Build graph from tasks, proposals, and concept relationships (brain relay mode).
+   */
+  private async buildBrainGraph(tenantId: string) {
+    // Get concepts from tasks AND proposals
+    const [tasks, proposals] = await Promise.all([
+      this.prisma.note.findMany({
+        where: { tenantId, noteType: 'TASK', conceptId: { not: null } },
+        select: { id: true, conceptId: true, status: true, aiScore: true, title: true },
+      }),
+      this.prisma.brainProposal.findMany({
+        where: { tenantId, relatedConcepts: { isEmpty: false } },
+        select: { id: true, relatedConcepts: true, status: true, title: true, canvasBlock: true },
+      }),
+    ]);
+
+    // Collect all concept IDs from both tasks and proposals
+    const conceptIdSet = new Set<string>();
+    for (const t of tasks) { if (t.conceptId) conceptIdSet.add(t.conceptId); }
+    for (const p of proposals) { for (const cId of p.relatedConcepts) { conceptIdSet.add(cId); } }
+    const conceptIds = [...conceptIdSet];
+
+    if (conceptIds.length === 0) {
+      return { nodes: [], edges: [], activeAgents: [] };
+    }
+
+    // Load concepts
+    const concepts = await this.prisma.concept.findMany({
+      where: { id: { in: conceptIds } },
+      select: { id: true, name: true, category: true, canvasBlock: true },
+    });
+    const conceptMap = new Map(concepts.map(c => [c.id, c]));
+
+    // Build nodes — one per concept, status from task or proposal
+    const taskByConceptId = new Map<string, typeof tasks[0]>();
+    for (const t of tasks) {
+      if (!taskByConceptId.has(t.conceptId!) || t.status !== 'PENDING') {
+        taskByConceptId.set(t.conceptId!, t);
+      }
+    }
+
+    // Map proposal concepts to their proposal info
+    const proposalByConceptId = new Map<string, typeof proposals[0]>();
+    for (const p of proposals) {
+      for (const cId of p.relatedConcepts) {
+        if (!proposalByConceptId.has(cId)) {
+          proposalByConceptId.set(cId, p);
+        }
+      }
+    }
+
+    const nodes = conceptIds.map(cId => {
+      const concept = conceptMap.get(cId);
+      const task = taskByConceptId.get(cId);
+      const proposal = proposalByConceptId.get(cId);
+      // Canvas block from concept, proposal, or inferred
+      const canvasBlock = concept?.canvasBlock ?? proposal?.canvasBlock ?? '';
+      return {
+        id: cId,
+        name: concept?.name ?? cId,
+        category: concept?.category ?? '',
+        status: task?.status ?? (proposal ? 'PENDING' : 'PENDING'),
+        personaType: this.canvasBlockToPersona(canvasBlock),
+        aiScore: task?.aiScore ?? null,
+        noteId: task?.id ?? proposal?.id ?? '',
+      };
+    });
+
+    // Load edges between active concepts
+    const relationships = await this.prisma.conceptRelationship.findMany({
+      where: {
+        sourceConceptId: { in: conceptIds },
+        targetConceptId: { in: conceptIds },
+      },
+      select: { sourceConceptId: true, targetConceptId: true, relationshipType: true },
+    });
+
+    const edgeSet = new Set<string>();
+    const edges: Array<{ source: string; target: string; type: string }> = [];
+    for (const rel of relationships) {
+      const key = `${rel.sourceConceptId}:${rel.targetConceptId}:${rel.relationshipType}`;
+      if (!edgeSet.has(key)) {
+        edgeSet.add(key);
+        edges.push({
+          source: rel.sourceConceptId,
+          target: rel.targetConceptId,
+          type: rel.relationshipType,
+        });
+      }
+    }
+
+    // Active agents: currently executing tasks (from agentExecution or bridge status)
+    const activeExecs = await this.prisma.agentExecution.findMany({
+      where: {
+        tenantId,
+        status: { in: ['PENDING', 'FORMATTING', 'EXECUTING'] },
+      },
+      select: { noteId: true, agentType: true, status: true },
+    });
+
+    const activeAgents = activeExecs
+      .filter(e => {
+        const task = tasks.find(t => t.id === e.noteId);
+        return task?.conceptId;
+      })
+      .map(e => {
+        const task = tasks.find(t => t.id === e.noteId);
+        const concept = task?.conceptId ? conceptMap.get(task.conceptId) : null;
+        return {
+          agentType: e.agentType,
+          conceptId: task?.conceptId ?? '',
+          personaType: this.canvasBlockToPersona(concept?.canvasBlock ?? ''),
+          status: e.status,
+        };
+      });
+
+    return { nodes, edges, activeAgents };
+  }
+
+  private canvasBlockToPersona(canvasBlock: string): string {
+    const map: Record<string, string> = {
+      KEY_PARTNERS: 'OPERATIONS',
+      KEY_ACTIVITIES: 'OPERATIONS',
+      KEY_RESOURCES: 'CTO',
+      VALUE_PROPOSITION: 'CMO',
+      CUSTOMER_RELATIONSHIPS: 'SALES',
+      CHANNELS: 'CMO',
+      CUSTOMER_SEGMENTS: 'SALES',
+      REVENUE_STREAMS: 'CFO',
+      COST_STRUCTURE: 'CFO',
+    };
+    return map[canvasBlock] ?? 'OPERATIONS';
   }
 
   /**

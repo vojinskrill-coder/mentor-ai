@@ -1,0 +1,37 @@
+// OpenClaw Cron Configuration for Brain Heartbeat
+// Add these jobs to the existing cron.jobs array in ~/.openclaw/openclaw.json
+// on the Hetzner server.
+{
+  "jobs": [
+    {
+      "id": "brain-heartbeat",
+      "schedule": "0 */2 * * *",
+      "description": "Brain scan cycle — analyze most stale BMC canvas block, create proposals",
+      "payload": {
+        "message": "HEARTBEAT: Run brain scan cycle.\n1. Use mentor-ai-bridge get_brain_state to find the most stale canvas block.\n2. Use search_concepts and get_context to analyze that block.\n3. If you find something actionable, use create_proposal.\n4. Update brain_state with scan results.\n5. Do NOT execute anything — only propose.",
+        "agentId": "main"
+      },
+      "delivery": { "session": "isolated" }
+    },
+    {
+      "id": "daily-digest",
+      "schedule": "0 18 * * 1-5",
+      "description": "Daily summary of brain activity, proposals, and completed tasks",
+      "payload": {
+        "message": "DIGEST: Summarize today's activity.\n1. Use get_proposals to check pending/approved/rejected counts.\n2. Use get_pending to see outstanding work.\n3. Use get_budget to check spending.\n4. Create a brief summary for the owner.",
+        "agentId": "main"
+      },
+      "delivery": { "session": "isolated" }
+    },
+    {
+      "id": "weekly-retro",
+      "schedule": "0 17 * * 5",
+      "description": "Friday retrospective — review week's proposals and learn from rejections",
+      "payload": {
+        "message": "RETROSPECTIVE: Review this week.\n1. Use get_proposals to find all rejected proposals this week.\n2. Analyze WHY they were rejected (check rejectedReason).\n3. Create memories about rejection patterns.\n4. If any past recommendations contradicted by new data, create a correction proposal.\n5. Summarize learnings.",
+        "agentId": "main"
+      },
+      "delivery": { "session": "isolated" }
+    }
+  ]
+}

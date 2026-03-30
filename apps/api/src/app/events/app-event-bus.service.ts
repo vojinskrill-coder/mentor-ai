@@ -228,6 +228,14 @@ export class AppEventBus {
     await this.eventEmitter.emitAsync(event, payload);
   }
 
+  /**
+   * Subscribe to an event. Returns unsubscribe function for cleanup.
+   */
+  on(event: string, handler: (payload: Record<string, unknown>) => void): () => void {
+    this.eventEmitter.on(event, handler);
+    return () => this.eventEmitter.off(event, handler);
+  }
+
   private extractLogFields(payload: Record<string, unknown>): Record<string, unknown> {
     const fields: Record<string, unknown> = {};
     if (payload['conceptId']) fields['conceptId'] = payload['conceptId'];

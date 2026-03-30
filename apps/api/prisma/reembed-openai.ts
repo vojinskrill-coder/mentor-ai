@@ -127,7 +127,7 @@ async function main(): Promise<void> {
 
   // Step 3: Embed in batches
   console.log(`\n=== Step 3: Generate embeddings (batch size: ${BATCH_SIZE}) ===`);
-  let totalTokens = 0;
+  const totalTokens = 0;
   let embedded = 0;
 
   for (let i = 0; i < concepts.length; i += BATCH_SIZE) {

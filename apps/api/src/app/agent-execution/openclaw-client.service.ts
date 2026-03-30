@@ -329,9 +329,25 @@ export class OpenClawClientService {
       }
     };
 
+    const IDLE_TIMEOUT_MS = 120_000; // 2 min idle timeout between chunks
+
     try {
       while (true) {
-        const { done, value } = await reader.read();
+        // Race between next chunk and idle timeout
+        const readPromise = reader.read();
+        const timeoutPromise = new Promise<{ done: true; value: undefined }>((_, reject) =>
+          setTimeout(() => reject(new Error('SSE idle timeout: no data for 120s')), IDLE_TIMEOUT_MS)
+        );
+
+        let result: ReadableStreamReadResult<Uint8Array>;
+        try {
+          result = await Promise.race([readPromise, timeoutPromise]) as ReadableStreamReadResult<Uint8Array>;
+        } catch (idleErr) {
+          this.logger.warn({ message: 'SSE stream idle timeout', error: (idleErr as Error).message });
+          break;
+        }
+
+        const { done, value } = result;
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });

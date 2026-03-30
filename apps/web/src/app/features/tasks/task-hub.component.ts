@@ -1,23 +1,26 @@
 import { Component, DestroyRef, inject, signal, computed, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
 import { TaskHubService } from './services/task-hub.service';
+import { ProposalService } from './services/proposal.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ExecutionPanelService } from '../../core/services/execution-panel.service';
-import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
+import { ChatWebsocketService } from '../chat/services/chat-websocket.service';
+import type { TaskHubItem, DomainSummary, BrainProposalItem, BridgeAgentStatusPayload } from '@mentor-ai/shared/types';
+import { AgentGraphComponent } from './components/agent-graph.component';
+import { AgentContributionsComponent } from './components/agent-contributions.component';
 
 @Component({
   selector: 'app-task-hub',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, AgentGraphComponent, AgentContributionsComponent],
   styles: [
     `
       :host {
         display: block;
-        height: 100%;
-        overflow-y: auto;
       }
       .page {
         padding: 24px;
@@ -454,6 +457,224 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
         display: inline-block;
       }
       @keyframes spin { to { transform: rotate(360deg); } }
+
+      /* Proposal section inside task card */
+      .proposal-section {
+        margin-top: 8px;
+        padding: 10px 12px;
+        background: rgba(59, 130, 246, 0.06);
+        border: 1px solid rgba(59, 130, 246, 0.15);
+        border-radius: 8px;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      .proposal-label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #3b82f6;
+        margin-bottom: 4px;
+      }
+      .proposal-text {
+        color: #a1a1a1;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .proposal-meta {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 8px;
+        font-size: 12px;
+        color: #666;
+      }
+      .proposal-cost {
+        color: #4ade80;
+        font-weight: 500;
+      }
+      .canvas-pill {
+        display: inline-flex;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: rgba(59, 130, 246, 0.1);
+        color: #60a5fa;
+        font-size: 11px;
+        font-weight: 500;
+      }
+      .proposal-actions {
+        display: flex;
+        gap: 6px;
+        margin-top: 10px;
+      }
+      .btn-pokreni {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 6px 14px;
+        border-radius: 6px;
+        border: none;
+        background: #3b82f6;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .btn-pokreni:hover { background: #2563eb; }
+      .btn-pokreni:disabled { opacity: 0.5; cursor: not-allowed; }
+      .btn-discuss {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 6px 14px;
+        border-radius: 6px;
+        border: 1px solid #2a2a2a;
+        background: transparent;
+        color: #a1a1a1;
+        font-size: 13px;
+        cursor: pointer;
+        transition: border-color 0.15s, color 0.15s;
+      }
+      .btn-discuss:hover { border-color: #3a3a3a; color: #fafafa; }
+      .btn-reject {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 6px;
+        border: 1px solid #2a2a2a;
+        background: transparent;
+        color: #666;
+        font-size: 13px;
+        cursor: pointer;
+        transition: color 0.15s;
+      }
+      .btn-reject:hover { color: #f87171; border-color: rgba(248, 113, 113, 0.3); }
+
+      /* ── Dual panel layout ── */
+      .dual-panels {
+        display: flex;
+        gap: 16px;
+        height: calc(100vh - 220px);
+        min-height: 400px;
+      }
+      .panel {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #2a2a2a;
+        margin-bottom: 12px;
+        flex-shrink: 0;
+      }
+      .panel-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #fafafa;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .panel-count {
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .panel-count.proposals { background: rgba(59,130,246,0.15); color: #3b82f6; }
+      .panel-count.tasks { background: rgba(34,197,94,0.15); color: #4ade80; }
+      .panel-scroll {
+        flex: 1;
+        overflow-y: auto;
+        padding-right: 4px;
+      }
+      .panel-scroll::-webkit-scrollbar { width: 4px; }
+      .panel-scroll::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+      .ai-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        padding: 1px 6px;
+        border-radius: 4px;
+        background: rgba(59,130,246,0.1);
+        color: #60a5fa;
+        font-size: 10px;
+        font-weight: 600;
+      }
+
+      /* ── Global Activity Bar ── */
+      .activity-bar {
+        background: #141414;
+        border: 1px solid #2a2a2a;
+        border-radius: 8px;
+        padding: 10px 14px;
+        margin-bottom: 12px;
+        max-height: 120px;
+        overflow-y: auto;
+      }
+      .activity-bar-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #fafafa;
+      }
+      .activity-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #22c55e;
+        animation: pulse-dot 1.5s infinite;
+      }
+      @keyframes pulse-dot {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
+      }
+      .activity-dot.idle { background: #666; animation: none; }
+      .activity-entry {
+        font-size: 12px;
+        color: #a1a1a1;
+        padding: 2px 0;
+        border-bottom: 1px solid #1a1a1a;
+      }
+      .activity-entry:last-child { border-bottom: none; }
+      .activity-agent {
+        color: #60a5fa;
+        font-weight: 500;
+      }
+      .activity-time {
+        color: #444;
+        font-size: 11px;
+        margin-left: 6px;
+      }
+
+      /* ── Expanded task detail ── */
+      .task-expanded {
+        margin-top: 8px;
+        padding: 12px;
+        background: #141414;
+        border: 1px solid #2a2a2a;
+        border-radius: 8px;
+      }
+      .task-content-preview {
+        font-size: 13px;
+        color: #a1a1a1;
+        line-height: 1.5;
+        max-height: 100px;
+        overflow: hidden;
+        margin-bottom: 8px;
+      }
     `,
   ],
   template: `
@@ -464,23 +685,11 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
           <p class="page-desc">Pregledajte i pratite zadatke sa AI agentima.</p>
         </div>
         <div style="display:flex;gap:8px;">
-          <button class="retry-all-btn"
-                  [disabled]="isRetryingAll()"
-                  (click)="retryAllPending()">
-            @if (isRetryingAll()) {
-              <span class="spinner"></span> Izvršava se...
-            } @else {
-              Pokreni neizvršene
-            }
+          <button class="retry-all-btn" [disabled]="isRetryingAll()" (click)="retryAllPending()">
+            @if (isRetryingAll()) { <span class="spinner"></span> Izvršava se... } @else { Pokreni neizvršene }
           </button>
-          <button class="stop-btn"
-                  [disabled]="isStopping()"
-                  (click)="stopAllAgents()">
-            @if (isStopping()) {
-              Zaustavljam...
-            } @else {
-              Zaustavi agente
-            }
+          <button class="stop-btn" [disabled]="isStopping()" (click)="stopAllAgents()">
+            @if (isStopping()) { Zaustavljam... } @else { Zaustavi agente }
           </button>
         </div>
       </div>
@@ -517,74 +726,167 @@ import type { TaskHubItem, DomainSummary } from '@mentor-ai/shared/types';
           <option value="READY_FOR_REVIEW">Za pregled</option>
           <option value="COMPLETED">Završeno</option>
         </select>
-        @if (isFiltering()) {
-          <div class="filter-loading"></div>
-        }
+        @if (isFiltering()) { <div class="filter-loading"></div> }
       </div>
 
-      @if (isLoading() && !tasks().length) {
-        <div class="task-list">
-          @for (i of skeletonCards; track i) {
-            <div class="skeleton-card">
-              <div class="skel skel-dot"></div>
-              <div class="skel-info">
-                <div class="skel skel-title"></div>
-                <div class="skel skel-meta"></div>
+      <!-- ═══ DUAL PANEL LAYOUT ═══ -->
+      <div class="dual-panels">
+
+        <!-- LEFT: AI Preporučeni zadaci -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">
+              <span class="ai-badge">AI</span> Preporučeni
+            </span>
+            <span class="panel-count proposals">{{ proposals().length }}</span>
+          </div>
+          <div class="panel-scroll">
+            @if (proposals().length === 0 && !isLoading()) {
+              <div class="empty-state" style="padding:24px 0;">
+                <p style="color:#666;font-size:13px;text-align:center;">Mozak još razmišlja... Predlozi će se pojaviti ovde.</p>
               </div>
-            </div>
-          }
-        </div>
-      } @else if (tasks().length > 0) {
-        <div class="task-list" [class.filter-overlay]="true" [class.loading]="isFiltering()">
-          @for (task of tasks(); track task.id) {
-            <div class="task-card" [class.selected]="selectedId() === task.id" (click)="selectTask(task)">
-              @if (task.status === 'COMPLETED') {
-                <svg class="status-icon completed" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              } @else if (task.status === 'READY_FOR_REVIEW') {
-                <svg class="status-icon review" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-              } @else {
-                <svg class="status-icon pending" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              }
-              <div class="task-info">
-                <div class="task-title">{{ task.title }}</div>
-                <div class="task-meta">
-                  @if (task.conceptName) {
-                    <span class="concept-pill">{{ task.conceptName }}</span>
-                  }
-                  @if (task.agentJobs.length > 0) {
-                    <div class="agent-pipeline">
-                      @for (job of task.agentJobs; track job.id) {
-                        <span class="agent-dot" [class]="job.status.toLowerCase()" [title]="job.agentType + ' - ' + job.status"></span>
+            }
+            @for (proposal of proposals(); track proposal.id) {
+              <div class="task-card" [class.selected]="expandedProposalId() === proposal.id">
+                <svg class="status-icon pending" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                <div class="task-info" (click)="toggleProposalExpand(proposal.id)">
+                  <div class="task-title"><span class="ai-badge">AI</span> {{ proposal.title }}</div>
+                  <div class="proposal-meta" style="margin-top:4px;">
+                    <span class="canvas-pill">{{ formatCanvasBlock(proposal.canvasBlock) }}</span>
+                    @if (proposal.estimatedCost) {
+                      <span class="proposal-cost">~{{ proposal.estimatedCost | number:'1.2-2' }}</span>
+                    }
+                    <span>{{ proposal.priority }}</span>
+                    <span style="margin-left:auto;font-size:11px;color:#444;">
+                      {{ expandedProposalId() === proposal.id ? '▲' : '▼' }}
+                    </span>
+                  </div>
+
+                  <!-- Expanded content -->
+                  @if (expandedProposalId() === proposal.id) {
+                    <div class="proposal-section" style="margin-top:8px;">
+                      <div class="proposal-label"><span>Zašto je ovo važno</span></div>
+                      <div style="font-size:13px;color:#ccc;line-height:1.6;white-space:pre-wrap;">{{ proposal.reasoning }}</div>
+
+                      @if (proposal.proposedAction && proposal.proposedAction !== proposal.reasoning) {
+                        <div class="proposal-label" style="margin-top:10px;"><span>Šta treba uraditi</span></div>
+                        <div style="font-size:13px;color:#ccc;line-height:1.6;white-space:pre-wrap;">{{ proposal.proposedAction }}</div>
                       }
+
+                      <div class="proposal-actions" style="margin-top:12px;">
+                        <button class="btn-pokreni" [disabled]="approvingProposalId() === proposal.id" (click)="approveProposal(proposal, $event)">
+                          @if (approvingProposalId() === proposal.id) {
+                            <span class="spinner" style="width:12px;height:12px;"></span> Pokreće se...
+                          } @else {
+                            Pokreni
+                          }
+                        </button>
+                        <button class="btn-discuss" (click)="discussProposal(proposal, $event)">Razgovaraj</button>
+                        <button class="btn-reject" (click)="rejectProposal(proposal, $event)">Odbij</button>
+                      </div>
                     </div>
                   }
                 </div>
               </div>
-              @if (task.aiScore != null) {
-                <span class="score-badge" [class]="getScoreClass(task.aiScore)">{{ task.aiScore }}</span>
+            }
+          </div>
+        </div>
+
+        <!-- RIGHT: Zadaci -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Zadaci</span>
+            <span class="panel-count tasks">{{ tasks().length }}</span>
+          </div>
+          <div class="panel-scroll">
+            @if (isLoading() && !tasks().length) {
+              @for (i of skeletonCards; track i) {
+                <div class="skeleton-card">
+                  <div class="skel skel-dot"></div>
+                  <div class="skel-info"><div class="skel skel-title"></div><div class="skel skel-meta"></div></div>
+                </div>
               }
-              <svg class="task-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-            </div>
-          }
+            } @else if (tasks().length > 0) {
+              @for (task of tasks(); track task.id) {
+                <div class="task-card" [class.selected]="selectedId() === task.id" (click)="selectTask(task)">
+                  @if (task.status === 'COMPLETED') {
+                    <svg class="status-icon completed" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  } @else if (task.status === 'READY_FOR_REVIEW') {
+                    <svg class="status-icon review" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  } @else {
+                    <svg class="status-icon pending" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  }
+                  <div class="task-info">
+                    <div class="task-title">{{ task.title }}</div>
+                    <div class="task-meta">
+                      @if (task.conceptName) {
+                        <span class="concept-pill">{{ task.conceptName }}</span>
+                      }
+                      @if (task.agentJobs.length > 0) {
+                        <div class="agent-pipeline">
+                          @for (job of task.agentJobs; track job.id) {
+                            <span class="agent-dot" [class]="job.status.toLowerCase()" [title]="job.agentType + ' - ' + job.status"></span>
+                          }
+                        </div>
+                      }
+                    </div>
+                  </div>
+                  @if (task.aiScore != null) {
+                    <span class="score-badge" [class]="getScoreClass(task.aiScore)">{{ task.aiScore }}</span>
+                  }
+                  <svg class="task-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                </div>
+                <!-- Expanded detail when selected -->
+                @if (selectedId() === task.id) {
+                  <div class="task-expanded">
+                    @if (task.content) {
+                      <div class="task-content-preview">{{ task.content }}</div>
+                    }
+                    <app-agent-graph [statusEvents]="agentStatusEvents()"></app-agent-graph>
+                    <app-agent-contributions
+                      [enrichments]="task.agentEnrichments"
+                      [noteId]="task.id"
+                      (downloadFile)="onDownloadFile($event)"
+                      (executeAction)="onExecuteAction($event)">
+                    </app-agent-contributions>
+                  </div>
+                }
+              }
+            } @else if (!isLoading() && !error()) {
+              <div class="empty-state">
+                <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                <h3>Još nema zadataka</h3>
+                <p>Odobrite predlog mozga ili započnite razgovor.</p>
+              </div>
+            }
+          </div>
         </div>
-      } @else if (!isLoading() && !error()) {
-        <div class="empty-state">
-          <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-          </svg>
-          <h3>Još nema zadataka</h3>
-          <p>Započnite razgovor da kreirate prvi zadatak. Zadaci se automatski generišu iz vaših razgovora sa AI agentima.</p>
-        </div>
-      }
+
+      </div>
     </div>
   `,
 })
 export class TaskHubComponent implements OnInit, OnDestroy {
   private readonly taskHubService = inject(TaskHubService);
+  private readonly proposalService = inject(ProposalService);
   private readonly toastService = inject(ToastService);
   private readonly execPanel = inject(ExecutionPanelService);
+  private readonly chatWs = inject(ChatWebsocketService);
+  private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
+  readonly proposals = signal<BrainProposalItem[]>([]);
+  readonly agentStatusEvents = signal<BridgeAgentStatusPayload[]>([]);
+  readonly recentStatusEvents = computed(() => this.agentStatusEvents().slice(-10).reverse());
+  readonly hasActiveAgents = computed(() =>
+    this.agentStatusEvents().some(e =>
+      e.status !== 'completed' && e.status !== 'failed'
+    )
+  );
+  readonly expandedProposalId = signal<string | null>(null);
+  readonly approvingProposalId = signal<string | null>(null);
   readonly tasks = signal<TaskHubItem[]>([]);
   readonly domainSummary = signal<DomainSummary[]>([]);
   readonly isLoading = signal(true);
@@ -609,13 +911,17 @@ export class TaskHubComponent implements OnInit, OnDestroy {
 
   private autoRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
+  private unsubBridgeEvents: Array<() => void> = [];
+
   ngOnInit(): void {
     this.loadTasks();
+    this.loadProposals();
 
-    // Auto-refresh every 15s to show real-time agent job statuses
+    // Auto-refresh every 15s — include proposals
     this.autoRefreshInterval = setInterval(() => {
       if (!this.isFiltering()) {
         this.loadTasks();
+        this.loadProposals();
       }
     }, 15_000);
 
@@ -625,12 +931,37 @@ export class TaskHubComponent implements OnInit, OnDestroy {
         this.searchTerm.set(term);
         this.loadTasks(true);
       });
+
+    // Debounce bridge events to coalesce rapid-fire events into single refresh
+    const bridgeRefresh$ = new Subject<void>();
+    bridgeRefresh$
+      .pipe(debounceTime(500), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.loadTasks();
+        this.loadProposals();
+      });
+
+    // Listen for real-time bridge events — all trigger debounced refresh
+    this.unsubBridgeEvents.push(
+      this.chatWs.onProposalNew(() => bridgeRefresh$.next()),
+      this.chatWs.onProposalApproved(() => bridgeRefresh$.next()),
+      this.chatWs.onBridgeTaskCreated(() => bridgeRefresh$.next()),
+      this.chatWs.onBridgeTaskComplete(() => bridgeRefresh$.next()),
+      this.chatWs.onBridgeTaskContribution(() => bridgeRefresh$.next()),
+      this.chatWs.onBridgeAgentStatus((data) => {
+        this.agentStatusEvents.update(events => {
+          const updated = [...events, data];
+          return updated.length > 100 ? updated.slice(-100) : updated; // Keep last 100
+        });
+      }),
+    );
   }
 
   ngOnDestroy(): void {
     if (this.autoRefreshInterval) {
       clearInterval(this.autoRefreshInterval);
     }
+    this.unsubBridgeEvents.forEach((unsub) => unsub());
   }
 
   loadTasks(isFilter = false): void {
@@ -646,7 +977,7 @@ export class TaskHubComponent implements OnInit, OnDestroy {
         status: this.statusFilter() || undefined,
         category: this.activeCategory() || undefined,
         search: this.searchTerm() || undefined,
-        hasJobs: true,
+        hasJobs: false,
         limit: 50,
       })
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -772,11 +1103,9 @@ export class TaskHubComponent implements OnInit, OnDestroy {
             this.isRetryingAll.set(false);
           } else {
             this.toastService.success(`Pokrenuto ${result.totalJobs} zadataka u talasima po 5.`);
-            // Keep button disabled, poll for completion
             const poll = setInterval(() => {
               this.loadTasks();
             }, 10_000);
-            // Auto-stop polling after 30 min
             setTimeout(() => {
               clearInterval(poll);
               this.isRetryingAll.set(false);
@@ -788,5 +1117,101 @@ export class TaskHubComponent implements OnInit, OnDestroy {
           this.toastService.error('Greška pri pokretanju: ' + (err.message || 'Nepoznata greška'));
         },
       });
+  }
+
+  // ── Brain Proposals ──
+
+  loadProposals(): void {
+    this.proposalService.getProposals('pending')
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (proposals) => this.proposals.set(proposals),
+        error: () => { /* Silent — proposals are supplementary */ },
+      });
+  }
+
+  toggleProposalExpand(proposalId: string): void {
+    this.expandedProposalId.set(
+      this.expandedProposalId() === proposalId ? null : proposalId
+    );
+  }
+
+  approveProposal(proposal: BrainProposalItem, event: Event): void {
+    event.stopPropagation();
+    this.approvingProposalId.set(proposal.id);
+    this.proposalService.approveProposal(proposal.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.approvingProposalId.set(null);
+          this.toastService.success(`Pokrenuto: ${proposal.title}`);
+          this.loadProposals();
+          this.loadTasks();
+        },
+        error: () => {
+          this.approvingProposalId.set(null);
+          this.toastService.error('Greška pri odobravanju predloga.');
+        },
+      });
+  }
+
+  discussProposal(proposal: BrainProposalItem, event: Event): void {
+    event.stopPropagation();
+    const conceptId = proposal.relatedConcepts?.[0];
+    this.router.navigate(['/chat'], {
+      queryParams: {
+        ...(conceptId ? { conceptId } : {}),
+        proposalId: proposal.id,
+      },
+    });
+  }
+
+  rejectProposal(proposal: BrainProposalItem, event: Event): void {
+    event.stopPropagation();
+    const reason = prompt('Razlog odbijanja (opciono):');
+    if (reason === null) return; // User clicked Cancel — abort
+    this.proposalService.rejectProposal(proposal.id, reason || undefined)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.toastService.info(`Odbijeno: ${proposal.title}`);
+          this.loadProposals();
+        },
+        error: () => this.toastService.error('Greška pri odbijanju predloga.'),
+      });
+  }
+
+  onDownloadFile(file: { name: string; path: string; mimeType: string }): void {
+    window.open(`/api/v1/notes/files/download?path=${encodeURIComponent(file.path)}`, '_blank');
+  }
+
+  onExecuteAction(event: { noteId: string; agentType: string; actionId: string }): void {
+    this.taskHubService.executeAction(event.noteId, event.agentType, event.actionId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => this.toastService.success('Akcija pokrenuta'),
+        error: () => this.toastService.error('Greška pri pokretanju akcije'),
+      });
+  }
+
+  formatCanvasBlock(block: string): string {
+    const labels: Record<string, string> = {
+      KEY_PARTNERS: 'Partneri',
+      KEY_ACTIVITIES: 'Aktivnosti',
+      KEY_RESOURCES: 'Resursi',
+      VALUE_PROPOSITION: 'Vrednost',
+      CUSTOMER_RELATIONSHIPS: 'Odnosi',
+      CHANNELS: 'Kanali',
+      CUSTOMER_SEGMENTS: 'Segmenti',
+      REVENUE_STREAMS: 'Prihodi',
+      COST_STRUCTURE: 'Troškovi',
+    };
+    return labels[block] ?? block;
+  }
+
+  formatEventTime(ts: string): string {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return d.toLocaleTimeString('sr-Latn', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
 }

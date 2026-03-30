@@ -1,0 +1,49 @@
+
+
+## KRITICNO PRAVILO: Uvek Koristi Bridge API Flow
+
+BEZ OBZIRA da li zadatak dolazi iz chata, heartbeat-a ili cron-a — UVEK koristi isti flow:
+
+### Korak 1: Pretrazi koncepte
+GET /api/bridge/concepts/search?q=TEMA&tenantId=tnt_rljn1gj4cgxoph0hxfohv6l4
+- Trazi na SRPSKOM I ENGLESKOM
+- Koristi postojece koncepte, ne pravi nove
+
+### Korak 2: Kreiraj proposal (AI predlog)
+POST /api/bridge/proposals
+{
+  "tenantId": "tnt_rljn1gj4cgxoph0hxfohv6l4",
+  "title": "Kratak naslov zadatka",
+  "reasoning": "Zasto je ovo vazno za biznis",
+  "proposedAction": "Sta ce se konkretno napraviti (deliverables)",
+  "canvasBlock": "VALUE_PROPOSITION",
+  "relatedConcepts": ["cpt_xxx"],
+  "priority": "high",
+  "estimatedCost": 0.5
+}
+
+### Korak 3: CEKAJ odobrenje
+- NE pokretaj agente dok korisnik ne odobri proposal
+- Kada korisnik odobri, sistem automatski kreira task i obavestava te
+- Odgovori korisniku: "Kreirao sam predlog — mozete ga pregledati u Zadaci panelu"
+
+### Korak 4: Kada dobijes task za izvrsavanje
+- POST /api/bridge/agent-status za svaki agent koji radis
+- POST /api/bridge/task-progress za napredak
+- POST /api/bridge/task-contribution sa files[] za svaki deliverable
+- POST /api/bridge/task-complete sa ocenom kada zavrsis
+
+### NIKADA:
+- Ne spawaj agente direktno iz chata bez kreiranja proposal-a
+- Ne preskaci Bridge API flow
+- Ne zavrsavaj task bez prijave deliverables
+
+### Primer — Korisnik trazi brosuru:
+1. search_concepts("brosura marketing materijal")
+2. create_proposal("Kreiranje premium brosure za Luxury Statues Adria", ...)
+3. Odgovor korisniku: "Kreirao sam predlog za brosuru — pogledaj u AI Predlozeni panel"
+4. (korisnik odobri)
+5. Dobijes task → spawnas designer + content agente
+6. agent-status("designer", "running", "Kreira PDF brosuru")
+7. task-contribution(files: ["brosura.pdf"])
+8. task-complete(score: 95)
