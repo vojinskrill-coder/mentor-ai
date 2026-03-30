@@ -329,14 +329,14 @@ export class OpenClawClientService {
       }
     };
 
-    const IDLE_TIMEOUT_MS = 120_000; // 2 min idle timeout between chunks
+    const IDLE_TIMEOUT_MS = 3_600_000; // 1 hour idle timeout between chunks
 
     try {
       while (true) {
         // Race between next chunk and idle timeout
         const readPromise = reader.read();
         const timeoutPromise = new Promise<{ done: true; value: undefined }>((_, reject) =>
-          setTimeout(() => reject(new Error('SSE idle timeout: no data for 120s')), IDLE_TIMEOUT_MS)
+          setTimeout(() => reject(new Error('SSE idle timeout: no data for 1h')), IDLE_TIMEOUT_MS)
         );
 
         let result: ReadableStreamReadResult<Uint8Array>;
