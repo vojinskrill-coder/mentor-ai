@@ -298,9 +298,10 @@ export class ChatWebsocketService {
       return;
     }
 
-    const wsUrl = environment.apiUrl.replace(/^http/, 'ws');
+    // In production (apiUrl=''), use current origin; in dev, use configured apiUrl
+    const baseUrl = environment.apiUrl || window.location.origin;
 
-    this.socket = io(`${wsUrl}/ws/chat`, {
+    this.socket = io(`${baseUrl}/ws/chat`, {
       auth: { token },
       query: { token },
       transports: ['websocket', 'polling'],
