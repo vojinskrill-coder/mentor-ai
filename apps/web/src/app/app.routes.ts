@@ -114,6 +114,20 @@ export const appRoutes: Route[] = [
           ),
       },
       {
+        path: 'figma',
+        loadComponent: () =>
+          import('./features/figma/figma-connect.component').then(
+            (m) => m.FigmaConnectComponent
+          ),
+      },
+      {
+        path: 'figma-callback',
+        loadComponent: () =>
+          import('./features/figma/figma-connect.component').then(
+            (m) => m.FigmaConnectComponent
+          ),
+      },
+      {
         path: 'process-builder',
         loadComponent: () =>
           import('./features/process-builder/process-builder.component').then(

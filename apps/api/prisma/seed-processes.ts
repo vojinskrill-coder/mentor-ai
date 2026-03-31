@@ -605,12 +605,268 @@ IMPORTANT:
   }
 }
 
+async function seedBrochureGeneration(TENANT_ID: string) {
+  const workflowId = `proc_${createId()}`;
+
+  const workflow = await prisma.processWorkflow.upsert({
+    where: { tenantId_slug: { tenantId: TENANT_ID, slug: 'brochure-generation' } },
+    update: {
+      name: 'Generisanje brosure',
+      description: 'AI kreira brosuru u stilu postojeceg Figma dizajna. 6 koraka: ideja, layout, tekst, slike, preview, export.',
+    },
+    create: {
+      id: workflowId,
+      tenantId: TENANT_ID,
+      name: 'Generisanje brosure',
+      slug: 'brochure-generation',
+      description: 'AI kreira brosuru u stilu postojeceg Figma dizajna. 6 koraka: ideja, layout, tekst, slike, preview, export.',
+      isActive: true,
+    },
+  });
+
+  console.log(`Brochure Generation workflow: ${workflow.id}`);
+
+  // Clean existing steps
+  const existingStepIds = (await prisma.processStep.findMany({ where: { workflowId: workflow.id }, select: { id: true } })).map(s => s.id);
+  if (existingStepIds.length > 0) {
+    await prisma.processStepResult.deleteMany({ where: { stepId: { in: existingStepIds } } });
+    await prisma.processRun.deleteMany({ where: { workflowId: workflow.id } });
+    await prisma.processStep.deleteMany({ where: { workflowId: workflow.id } });
+  }
+
+  const steps = [
+    {
+      order: 1,
+      name: 'Istrazivanje ideja',
+      description: 'OpenClaw istrazuje i predlaze 3-5 ideja za brosuru sa scoring-om',
+      stepType: 'AUTOMATIC' as const,
+      agentType: 'main',
+      toolSkill: 'web_search',
+      skillMdSection: `Use web_search to research what kind of brochure would be most valuable for Luxury Statues Adria right now.
+
+TASK: Propose 3-5 brochure ideas. For each idea provide:
+- Title (e.g., "B2B Katalog za Arhitekte")
+- Target audience — who receives this brochure
+- Purpose — what we achieve with it (lead gen, brand awareness, client education)
+- Format — page count, orientation, size (e.g., "8 pages, A4, portrait")
+- Content outline — what goes on each page (brief)
+- Score 1-10 based on: business impact, audience reach, production feasibility
+- Reasoning — why this brochure should be created NOW
+
+Research competitors' brochures, luxury brand catalogs, architecture firm lookbooks for inspiration.
+Sort by score descending.`,
+      outputSchema: {
+        type: 'object',
+        required: ['ideas'],
+        properties: {
+          ideas: {
+            type: 'array',
+            minItems: 3,
+            maxItems: 5,
+            items: {
+              type: 'object',
+              required: ['title', 'audience', 'purpose', 'format', 'contentOutline', 'score', 'reasoning'],
+              properties: {
+                title: { type: 'string' },
+                audience: { type: 'string' },
+                purpose: { type: 'string' },
+                format: { type: 'string' },
+                contentOutline: { type: 'array', items: { type: 'object', properties: { pageNum: { type: 'integer' }, description: { type: 'string' } } } },
+                score: { type: 'integer', minimum: 1, maximum: 10 },
+                reasoning: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      order: 2,
+      name: 'Odobrenje ideje',
+      description: 'Vlasnik pregleda ideje, modifikuje ih i bira koje da se implementiraju',
+      stepType: 'APPROVAL' as const,
+      agentType: 'none',
+      toolSkill: 'none',
+      skillMdSection: 'Vlasnik pregleda 3-5 ideja za brosuru. Moze da: odobri ideju, modifikuje je (da feedback pa se regenerise), ili odbaci. Bar jedna ideja mora biti odobrena da bi se islo dalje.',
+      outputSchema: {},
+    },
+    {
+      order: 3,
+      name: 'Kreiranje layout-a',
+      description: 'Design Director AI kreira wireframe layout za svaku stranicu na osnovu Brand Design Profila',
+      stepType: 'AUTOMATIC' as const,
+      agentType: 'main',
+      toolSkill: 'design-planning',
+      skillMdSection: `You are a Design Director AI. Your job is to plan the LAYOUT of each brochure page.
+
+INPUT: You receive an approved brochure idea with content outline and a Brand Design Profile (extracted from Figma).
+
+TASK: For each page of the brochure, create a detailed layout specification:
+
+1. Analyze the Brand Design Profile — understand the spacing patterns, font hierarchy, color usage, and how elements are positioned on each page of the reference design.
+
+2. For each page, define:
+   - layoutType: cover, split-60-40, split-40-60, grid-2x2, editorial, product-showcase, cta, back-cover
+   - components: array of content slots, each with:
+     - slotName: unique identifier (e.g., "main-heading", "hero-image", "body-text-1")
+     - type: "text" or "image"
+     - x, y, w, h: position and size as percentage of page (0-100)
+     - For text slots: fontRole (h1/h2/body/caption), maxChars (based on dimensions)
+     - For image slots: aspectRatio, description of what image should show
+
+3. RULES from the Brand Design Profile:
+   - Follow the same margin/padding patterns
+   - Use the same font size hierarchy
+   - Maintain similar text-to-image ratios
+   - Position logo in the same relative position as in the reference
+   - Keep the same overall "feel" — spacious luxury, not cramped
+
+Return JSON with page layouts.`,
+      outputSchema: {
+        type: 'object',
+        required: ['pages'],
+        properties: {
+          pages: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['pageNumber', 'layoutType', 'components'],
+              properties: {
+                pageNumber: { type: 'integer' },
+                pageTitle: { type: 'string' },
+                layoutType: { type: 'string' },
+                components: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    required: ['slotName', 'type', 'x', 'y', 'w', 'h'],
+                    properties: {
+                      slotName: { type: 'string' },
+                      type: { type: 'string', enum: ['text', 'image'] },
+                      x: { type: 'number' },
+                      y: { type: 'number' },
+                      w: { type: 'number' },
+                      h: { type: 'number' },
+                      fontRole: { type: 'string' },
+                      maxChars: { type: 'integer' },
+                      aspectRatio: { type: 'string' },
+                      imageDescription: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      order: 4,
+      name: 'Odobrenje layout-a',
+      description: 'Vlasnik pregleda wireframe layout svake stranice — vidi pozicije slotova bez sadrzaja',
+      stepType: 'APPROVAL' as const,
+      agentType: 'none',
+      toolSkill: 'none',
+      skillMdSection: 'Vlasnik pregleda wireframe layout svake stranice. Vidi prazne slotove sa dimenzijama. Moze da odobri, pomeri elemente (feedback), doda/ukloni stranice. Sve stranice moraju biti odobrene.',
+      outputSchema: {},
+    },
+    {
+      order: 5,
+      name: 'Generisanje sadrzaja',
+      description: 'AI popunjava SVE tekst slotove i generise SVE slike za odobreni layout',
+      stepType: 'AUTOMATIC' as const,
+      agentType: 'main',
+      toolSkill: 'content-writing',
+      skillMdSection: `You receive the approved brochure layout with all pages and slots defined.
+
+TASK 1 — TEKST: For each text slot on each page:
+- Write text that FITS within maxChars limit
+- Follow the brand voice: refined, understated, authoritative (LSA style)
+- fontRole h1 = headline (3-6 words), h2 = subheading (8-15 words), body = paragraph, caption = short label
+- Write in Serbian language
+
+TASK 2 — SLIKE: For each image slot, write an imagePrompt describing the scene.
+- Use our Prompt Optimizer format: describe composition, environment, lighting, mood
+- Reference our sculptures: Eterna Harmonia, Nebeski Uzlazak, Golden Flux
+- Our system will use FAL.ai Kontext to place real sculpture photos in the described scenes
+
+Return JSON with ALL slots filled — both text content and image prompts.`,
+      outputSchema: {
+        type: 'object',
+        required: ['pages'],
+        properties: {
+          pages: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['pageNumber', 'components'],
+              properties: {
+                pageNumber: { type: 'integer' },
+                components: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    required: ['slotName', 'type'],
+                    properties: {
+                      slotName: { type: 'string' },
+                      type: { type: 'string' },
+                      content: { type: 'string', description: 'Text content or image prompt' },
+                      imagePrompt: { type: 'string' },
+                      imageReference: { type: 'string', description: 'Which sculpture to use' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      order: 6,
+      name: 'Pregled i odobrenje sadrzaja',
+      description: 'Vlasnik pregleda svaku komponentu — tekst i slike. Moze da odobri, edituje, ili regenerise svaku posebno.',
+      stepType: 'APPROVAL' as const,
+      agentType: 'none',
+      toolSkill: 'none',
+      skillMdSection: `Vlasnik pregleda popunjeni layout stranica-po-stranica:
+- Svaki tekst slot: odobri, edituj rucno, ili daj feedback za AI regenerisanje
+- Svaki image slot: odobri, uploaduj svoju sliku, ili daj feedback za AI regenerisanje
+- Svaka komponenta ima nezavisan status (pending/approved/rejected)
+- Sve komponente moraju biti odobrene pre exporta
+- Korisnik moze da se vrati na prethodni korak za promenu layout-a`,
+      outputSchema: {},
+    },
+  ];
+
+  for (const step of steps) {
+    await prisma.processStep.create({
+      data: {
+        id: `pstep_${createId()}`,
+        workflowId: workflow.id,
+        order: step.order,
+        name: step.name,
+        description: step.description,
+        stepType: step.stepType,
+        agentType: step.agentType,
+        toolSkill: step.toolSkill,
+        inputSchema: {},
+        outputSchema: step.outputSchema,
+        skillMdSection: step.skillMdSection ?? null,
+        retryPolicy: {},
+      },
+    });
+    console.log(`  Step ${step.order}: ${step.name}`);
+  }
+}
+
 async function main() {
   console.log('Seeding Process Workflows...\n');
 
   const tenantId = await resolveTenantId();
   await seedLeadDiscovery(tenantId);
   await seedContentPipeline(tenantId);
+  await seedBrochureGeneration(tenantId);
 
   console.log('\nDone!');
 }

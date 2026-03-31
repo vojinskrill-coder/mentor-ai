@@ -1162,6 +1162,9 @@ export class TaskHubComponent implements OnInit, OnDestroy {
       queryParams: {
         ...(conceptId ? { conceptId } : {}),
         proposalId: proposal.id,
+        proposalTitle: proposal.title,
+        proposalReasoning: proposal.reasoning?.slice(0, 500),
+        proposalAction: proposal.proposedAction?.slice(0, 500),
       },
     });
   }

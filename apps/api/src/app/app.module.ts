@@ -32,6 +32,7 @@ import { AppEventsModule } from './events/events.module';
 import { OpenClawTenantModule } from './openclaw-tenant/openclaw-tenant.module';
 import { BridgeModule } from './bridge/bridge.module';
 import { ProcessModule } from './process/process.module';
+import { FigmaModule } from './figma/figma.module';
 
 // Serve Angular static files in production (combined deploy)
 const staticPath = join(__dirname, '..', '..', 'web', 'browser');
@@ -80,6 +81,7 @@ const serveStaticImports = existsSync(staticPath)
     OpenClawTenantModule,
     BridgeModule,
     ProcessModule,
+    FigmaModule,
   ],
   controllers: [AppController],
   providers: [AppService],

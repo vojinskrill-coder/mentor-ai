@@ -55,6 +55,7 @@ const events_module_1 = __webpack_require__(231);
 const openclaw_tenant_module_1 = __webpack_require__(151);
 const bridge_module_1 = __webpack_require__(134);
 const process_module_1 = __webpack_require__(233);
+const figma_module_1 = __webpack_require__(247);
 // Serve Angular static files in production (combined deploy)
 const staticPath = (0, path_1.join)(__dirname, '..', '..', 'web', 'browser');
 const serveStaticImports = (0, fs_1.existsSync)(staticPath)
@@ -105,6 +106,7 @@ exports.AppModule = AppModule = tslib_1.__decorate([
             openclaw_tenant_module_1.OpenClawTenantModule,
             bridge_module_1.BridgeModule,
             process_module_1.ProcessModule,
+            figma_module_1.FigmaModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],
@@ -42807,6 +42809,562 @@ tslib_1.__decorate([
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.FigmaModule = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const tenant_context_1 = __webpack_require__(10);
+const figma_controller_1 = __webpack_require__(248);
+const figma_service_1 = __webpack_require__(249);
+let FigmaModule = class FigmaModule {
+};
+exports.FigmaModule = FigmaModule;
+exports.FigmaModule = FigmaModule = tslib_1.__decorate([
+    (0, common_1.Module)({
+        imports: [config_1.ConfigModule, tenant_context_1.TenantModule],
+        controllers: [figma_controller_1.FigmaController],
+        providers: [figma_service_1.FigmaService],
+        exports: [figma_service_1.FigmaService],
+    })
+], FigmaModule);
+
+
+/***/ }),
+/* 248 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.FigmaController = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const jwt_auth_guard_1 = __webpack_require__(47);
+const current_user_decorator_1 = __webpack_require__(49);
+const figma_service_1 = __webpack_require__(249);
+const tenant_context_1 = __webpack_require__(10);
+let FigmaController = class FigmaController {
+    constructor(figmaService, prisma) {
+        this.figmaService = figmaService;
+        this.prisma = prisma;
+    }
+    /** Start Figma OAuth flow — returns auth URL for frontend to redirect to */
+    async startAuth(user, redirectUri) {
+        if (!redirectUri) {
+            throw new common_1.BadRequestException({ type: 'missing_redirect', title: 'Missing redirectUri', status: 400 });
+        }
+        // Validate redirect URI is our own domain
+        const allowed = ['http://localhost:4200', 'https://mentor-ai-app-production.up.railway.app'];
+        const origin = new URL(redirectUri).origin;
+        if (!allowed.includes(origin)) {
+            throw new common_1.BadRequestException({ type: 'invalid_redirect', title: 'Redirect URI not allowed', status: 400 });
+        }
+        const state = Buffer.from(JSON.stringify({ tenantId: user.tenantId, ts: Date.now() })).toString('base64');
+        const authUrl = this.figmaService.getAuthUrl(redirectUri, state);
+        return { data: { authUrl } };
+    }
+    /** Figma OAuth callback — frontend sends code + redirectUri in body */
+    async handleCallback(user, body) {
+        if (!body.code)
+            throw new common_1.BadRequestException({ type: 'missing_code', title: 'Missing auth code', status: 400 });
+        const tokens = await this.figmaService.exchangeCode(body.code, body.redirectUri);
+        await this.figmaService.saveConnection(user.tenantId, tokens);
+        return { data: { connected: true } };
+    }
+    /** Check Figma connection status */
+    async getStatus(user) {
+        const conn = await this.prisma.figmaConnection.findUnique({
+            where: { tenantId: user.tenantId },
+            select: { figmaEmail: true, figmaUserId: true, expiresAt: true },
+        });
+        return { data: { connected: !!conn, email: conn?.figmaEmail } };
+    }
+    /** Extract design profile from a Figma file */
+    async extractDesignProfile(user, fileKey) {
+        if (!fileKey)
+            throw new common_1.BadRequestException({ type: 'missing_file_key', title: 'Missing Figma file key', status: 400 });
+        const accessToken = await this.figmaService.getAccessToken(user.tenantId);
+        if (!accessToken)
+            throw new common_1.BadRequestException({ type: 'not_connected', title: 'Figma not connected', status: 400 });
+        // Read the file
+        const fileData = await this.figmaService.readFile(accessToken, fileKey);
+        const fileName = fileData.name ?? fileKey;
+        // Extract tokens
+        const tokens = this.figmaService.extractDesignTokens(fileData);
+        // Save profile
+        const profileId = await this.figmaService.saveDesignProfile(user.tenantId, fileKey, fileName, tokens);
+        return {
+            data: {
+                profileId,
+                fileName,
+                summary: {
+                    colors: Object.keys(tokens.colors).length,
+                    typography: tokens.typography.length,
+                    spacing: tokens.spacing.length,
+                    pages: tokens.layoutPatterns.length,
+                    components: tokens.layoutPatterns.reduce((sum, p) => sum + p.components.length, 0),
+                },
+                tokens,
+            },
+        };
+    }
+    /** List saved design profiles */
+    async listProfiles(user) {
+        const profiles = await this.prisma.brandDesignProfile.findMany({
+            where: { tenantId: user.tenantId },
+            orderBy: { createdAt: 'desc' },
+        });
+        return { data: profiles };
+    }
+};
+exports.FigmaController = FigmaController;
+tslib_1.__decorate([
+    (0, common_1.Get)('auth'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Query)('redirectUri')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], FigmaController.prototype, "startAuth", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('callback'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], FigmaController.prototype, "handleCallback", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('status'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], FigmaController.prototype, "getStatus", null);
+tslib_1.__decorate([
+    (0, common_1.Post)('extract'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Query)('fileKey')),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, String]),
+    tslib_1.__metadata("design:returntype", Promise)
+], FigmaController.prototype, "extractDesignProfile", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('profiles'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], FigmaController.prototype, "listProfiles", null);
+exports.FigmaController = FigmaController = tslib_1.__decorate([
+    (0, common_1.Controller)('v1/figma'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof figma_service_1.FigmaService !== "undefined" && figma_service_1.FigmaService) === "function" ? _a : Object, typeof (_b = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _b : Object])
+], FigmaController);
+
+
+/***/ }),
+/* 249 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var FigmaService_1;
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.FigmaService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const config_1 = __webpack_require__(5);
+const tenant_context_1 = __webpack_require__(10);
+const cuid2_1 = __webpack_require__(33);
+let FigmaService = FigmaService_1 = class FigmaService {
+    constructor(configService, prisma) {
+        this.configService = configService;
+        this.prisma = prisma;
+        this.logger = new common_1.Logger(FigmaService_1.name);
+        this.clientId = this.configService.get('FIGMA_CLIENT_ID', '');
+        this.clientSecret = this.configService.get('FIGMA_CLIENT_SECRET', '');
+    }
+    /**
+     * Generate Figma OAuth authorization URL
+     */
+    getAuthUrl(redirectUri, state) {
+        const params = [
+            `client_id=${encodeURIComponent(this.clientId)}`,
+            `redirect_uri=${encodeURIComponent(redirectUri)}`,
+            `scope=files:read,file_variables:read,file_variables:write,file_comments:write,file_dev_resources:read,file_dev_resources:write,webhooks:write,library_analytics:read`,
+            `state=${encodeURIComponent(state)}`,
+            `response_type=code`,
+        ].join('&');
+        return `https://www.figma.com/oauth?${params}`;
+    }
+    /**
+     * Exchange auth code for access token
+     */
+    async exchangeCode(code, redirectUri) {
+        const res = await fetch('https://api.figma.com/v1/oauth/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                client_id: this.clientId,
+                client_secret: this.clientSecret,
+                redirect_uri: redirectUri,
+                code,
+                grant_type: 'authorization_code',
+            }),
+        });
+        if (!res.ok) {
+            const err = await res.text();
+            throw new Error(`Figma token exchange failed: ${res.status} ${err}`);
+        }
+        return res.json();
+    }
+    /**
+     * Save Figma connection for a tenant
+     */
+    async saveConnection(tenantId, tokens) {
+        // Get user info
+        const userRes = await fetch('https://api.figma.com/v1/me', {
+            headers: { 'Authorization': `Bearer ${tokens.access_token}` },
+        });
+        const user = userRes.ok ? (await userRes.json()) : null;
+        await this.prisma.figmaConnection.upsert({
+            where: { tenantId },
+            update: {
+                accessToken: tokens.access_token,
+                refreshToken: tokens.refresh_token ?? null,
+                expiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : null,
+                figmaUserId: user?.id ?? null,
+                figmaEmail: user?.email ?? null,
+            },
+            create: {
+                id: `fcon_${(0, cuid2_1.createId)()}`,
+                tenantId,
+                accessToken: tokens.access_token,
+                refreshToken: tokens.refresh_token ?? null,
+                expiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : null,
+                figmaUserId: user?.id ?? null,
+                figmaEmail: user?.email ?? null,
+            },
+        });
+        this.logger.log({ message: 'Figma connected', tenantId, email: user?.email });
+    }
+    /**
+     * Get access token for a tenant (auto-refresh if expired)
+     */
+    async getAccessToken(tenantId) {
+        const conn = await this.prisma.figmaConnection.findUnique({ where: { tenantId } });
+        if (!conn)
+            return null;
+        // Check expiry and refresh if needed
+        if (conn.expiresAt && conn.expiresAt < new Date() && conn.refreshToken) {
+            const refreshed = await this.refreshToken(conn.refreshToken);
+            await this.prisma.figmaConnection.update({
+                where: { tenantId },
+                data: {
+                    accessToken: refreshed.access_token,
+                    refreshToken: refreshed.refresh_token ?? conn.refreshToken,
+                    expiresAt: new Date(Date.now() + refreshed.expires_in * 1000),
+                },
+            });
+            return refreshed.access_token;
+        }
+        return conn.accessToken;
+    }
+    async refreshToken(refreshToken) {
+        const res = await fetch('https://api.figma.com/v1/oauth/refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                client_id: this.clientId,
+                client_secret: this.clientSecret,
+                refresh_token: refreshToken,
+            }),
+        });
+        if (!res.ok)
+            throw new Error('Figma token refresh failed');
+        return res.json();
+    }
+    /**
+     * Read a Figma file and extract ALL design information
+     */
+    async readFile(accessToken, fileKey) {
+        const res = await fetch(`https://api.figma.com/v1/files/${fileKey}`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        if (!res.ok) {
+            const err = await res.text();
+            throw new Error(`Figma file read failed: ${res.status} ${err}`);
+        }
+        return res.json();
+    }
+    /**
+     * Extract design tokens and layout patterns from a Figma file
+     */
+    extractDesignTokens(fileData) {
+        const tokens = {
+            colors: {},
+            typography: [],
+            spacing: [],
+            grids: [],
+            effects: [],
+            layoutPatterns: [],
+        };
+        const typographySet = new Set();
+        const spacingSet = new Set();
+        // Process each page as a layout pattern
+        const pages = fileData.document?.children ?? [];
+        for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
+            const page = pages[pageIdx];
+            if (!page)
+                continue;
+            // Find top-level frames (each is a "page" of the brochure)
+            const frames = (page.children ?? []).filter((c) => c.type === 'FRAME');
+            for (const frame of frames) {
+                const pageWidth = frame.absoluteBoundingBox?.width ?? 1;
+                const pageHeight = frame.absoluteBoundingBox?.height ?? 1;
+                const pageX = frame.absoluteBoundingBox?.x ?? 0;
+                const pageY = frame.absoluteBoundingBox?.y ?? 0;
+                const layoutPattern = {
+                    pageName: frame.name,
+                    pageIndex: pageIdx,
+                    width: pageWidth,
+                    height: pageHeight,
+                    components: [],
+                };
+                // Walk all children to extract tokens + layout
+                this.walkNode(frame, tokens, typographySet, spacingSet, layoutPattern, pageX, pageY, pageWidth, pageHeight);
+                if (layoutPattern.components.length > 0) {
+                    tokens.layoutPatterns.push(layoutPattern);
+                }
+            }
+        }
+        // Deduplicate and sort
+        tokens.spacing = [...spacingSet].sort((a, b) => a - b);
+        tokens.typography = this.deduplicateTypography(tokens.typography);
+        // Auto-assign roles to typography by size
+        this.assignTypographyRoles(tokens.typography);
+        this.logger.log({
+            message: 'Design tokens extracted',
+            colors: Object.keys(tokens.colors).length,
+            typography: tokens.typography.length,
+            spacing: tokens.spacing.length,
+            pages: tokens.layoutPatterns.length,
+        });
+        return tokens;
+    }
+    walkNode(node, tokens, typographySet, spacingSet, layoutPattern, pageX, pageY, pageW, pageH) {
+        // Extract colors from fills
+        if (node.fills) {
+            for (const fill of node.fills) {
+                if (fill.type === 'SOLID' && fill.color && fill.visible !== false) {
+                    const hex = this.rgbaToHex(fill.color.r, fill.color.g, fill.color.b);
+                    if (!tokens.colors[hex])
+                        tokens.colors[hex] = { hex, usage: [] };
+                    if (tokens.colors[hex].usage.length < 5) {
+                        tokens.colors[hex].usage.push(node.name);
+                    }
+                }
+            }
+        }
+        // Extract typography from text nodes
+        if (node.type === 'TEXT' && node.style) {
+            const s = node.style;
+            const key = `${s.fontFamily}-${s.fontWeight}-${Math.round(s.fontSize)}`;
+            if (!typographySet.has(key)) {
+                typographySet.add(key);
+                tokens.typography.push({
+                    name: node.name,
+                    fontFamily: s.fontFamily ?? 'sans-serif',
+                    fontWeight: s.fontWeight ?? 400,
+                    fontSize: s.fontSize ?? 16,
+                    lineHeight: s.lineHeightPx ?? null,
+                    letterSpacing: s.letterSpacing ?? 0,
+                    role: '', // assigned later
+                });
+            }
+        }
+        // Extract spacing from auto-layout
+        if (node.layoutMode) {
+            if (node.itemSpacing != null)
+                spacingSet.add(Math.round(node.itemSpacing));
+            if (node.paddingTop != null)
+                spacingSet.add(Math.round(node.paddingTop));
+            if (node.paddingRight != null)
+                spacingSet.add(Math.round(node.paddingRight));
+            if (node.paddingBottom != null)
+                spacingSet.add(Math.round(node.paddingBottom));
+            if (node.paddingLeft != null)
+                spacingSet.add(Math.round(node.paddingLeft));
+        }
+        // Extract layout grids
+        if (node.layoutGrids) {
+            for (const grid of node.layoutGrids) {
+                tokens.grids.push({
+                    pattern: grid.pattern,
+                    count: grid.count ?? 0,
+                    gutterSize: grid.gutterSize ?? 0,
+                    offset: grid.offset ?? 0,
+                });
+            }
+        }
+        // Extract effects
+        if (node.effects) {
+            for (const effect of node.effects) {
+                if (effect.visible !== false) {
+                    tokens.effects.push({
+                        type: effect.type,
+                        color: effect.color ? this.rgbaToHex(effect.color.r, effect.color.g, effect.color.b) : '',
+                        radius: effect.radius ?? 0,
+                    });
+                }
+            }
+        }
+        // Add to layout pattern (direct children of page frame)
+        const box = node.absoluteBoundingBox;
+        if (box && node.type !== 'DOCUMENT' && node.type !== 'CANVAS') {
+            const relX = ((box.x - pageX) / pageW) * 100;
+            const relY = ((box.y - pageY) / pageH) * 100;
+            const relW = (box.width / pageW) * 100;
+            const relH = (box.height / pageH) * 100;
+            // Only add significant elements (>2% of page)
+            if (relW > 2 && relH > 2) {
+                const comp = {
+                    name: node.name,
+                    type: node.type === 'TEXT' ? 'text' : node.fills?.some((f) => f.type === 'IMAGE') ? 'image' : node.type === 'FRAME' || node.type === 'GROUP' ? 'frame' : 'shape',
+                    x: Math.round(relX * 10) / 10,
+                    y: Math.round(relY * 10) / 10,
+                    w: Math.round(relW * 10) / 10,
+                    h: Math.round(relH * 10) / 10,
+                };
+                if (node.type === 'TEXT') {
+                    comp.fontSize = node.style?.fontSize;
+                    comp.fontFamily = node.style?.fontFamily;
+                    comp.textContent = node.characters?.slice(0, 100);
+                }
+                if (node.fills?.some((f) => f.type === 'IMAGE')) {
+                    comp.hasImageFill = true;
+                }
+                layoutPattern.components.push(comp);
+            }
+        }
+        // Recurse into children
+        if (node.children) {
+            for (const child of node.children) {
+                this.walkNode(child, tokens, typographySet, spacingSet, layoutPattern, pageX, pageY, pageW, pageH);
+            }
+        }
+    }
+    deduplicateTypography(typography) {
+        const seen = new Map();
+        for (const t of typography) {
+            const key = `${t.fontFamily}-${t.fontWeight}-${Math.round(t.fontSize)}`;
+            if (!seen.has(key))
+                seen.set(key, t);
+        }
+        return [...seen.values()].sort((a, b) => b.fontSize - a.fontSize);
+    }
+    assignTypographyRoles(typography) {
+        // Sort by size descending, assign roles
+        const sorted = [...typography].sort((a, b) => b.fontSize - a.fontSize);
+        const roles = ['h1', 'h2', 'h3', 'subtitle', 'body', 'caption', 'fine-print'];
+        for (let i = 0; i < sorted.length && i < roles.length; i++) {
+            const t = typography.find(tt => tt === sorted[i]);
+            if (t)
+                t.role = roles[i] ?? `text-${i}`;
+        }
+    }
+    /**
+     * Generate CSS custom properties from extracted tokens
+     */
+    generateCss(tokens) {
+        const lines = [':root {'];
+        // Colors
+        const colorEntries = Object.entries(tokens.colors);
+        if (colorEntries.length > 0) {
+            lines.push('  /* Colors */');
+            // Sort by most used
+            const sorted = colorEntries.sort((a, b) => b[1].usage.length - a[1].usage.length);
+            const colorNames = ['primary', 'secondary', 'background', 'surface', 'text', 'accent', 'muted'];
+            sorted.forEach(([hex, data], i) => {
+                const name = colorNames[i] ?? `color-${i}`;
+                lines.push(`  --color-${name}: ${hex};`);
+            });
+        }
+        // Typography
+        if (tokens.typography.length > 0) {
+            lines.push('  /* Typography */');
+            const families = [...new Set(tokens.typography.map(t => t.fontFamily))];
+            families.forEach((f, i) => lines.push(`  --font-${i === 0 ? 'heading' : 'body'}: '${f}', sans-serif;`));
+            for (const t of tokens.typography) {
+                if (t.role) {
+                    lines.push(`  --font-size-${t.role}: ${t.fontSize}px;`);
+                    lines.push(`  --font-weight-${t.role}: ${t.fontWeight};`);
+                }
+            }
+        }
+        // Spacing
+        if (tokens.spacing.length > 0) {
+            lines.push('  /* Spacing */');
+            const names = ['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl'];
+            tokens.spacing.slice(0, 8).forEach((s, i) => {
+                lines.push(`  --spacing-${names[i] ?? i}: ${s}px;`);
+            });
+        }
+        // Grids
+        if (tokens.grids.length > 0) {
+            const grid = tokens.grids[0];
+            lines.push('  /* Grid */');
+            lines.push(`  --grid-columns: ${grid.count};`);
+            lines.push(`  --grid-gutter: ${grid.gutterSize}px;`);
+            lines.push(`  --grid-margin: ${grid.offset}px;`);
+        }
+        lines.push('}');
+        return lines.join('\n');
+    }
+    /**
+     * Save extracted profile to database
+     */
+    async saveDesignProfile(tenantId, fileKey, fileName, tokens) {
+        const css = this.generateCss(tokens);
+        const id = `bdp_${(0, cuid2_1.createId)()}`;
+        await this.prisma.brandDesignProfile.create({
+            data: {
+                id,
+                tenantId,
+                name: fileName || `Design Profile — ${fileKey}`,
+                figmaFileKey: fileKey,
+                figmaFileName: fileName,
+                colors: tokens.colors,
+                typography: tokens.typography,
+                spacing: tokens.spacing,
+                grids: tokens.grids,
+                effects: tokens.effects,
+                layoutPatterns: tokens.layoutPatterns,
+                pageCount: tokens.layoutPatterns.length,
+                tokensCss: css,
+            },
+        });
+        return id;
+    }
+    rgbaToHex(r, g, b) {
+        const to255 = (v) => Math.round(v * 255);
+        return `#${[r, g, b].map(v => to255(v).toString(16).padStart(2, '0')).join('')}`;
+    }
+};
+exports.FigmaService = FigmaService;
+exports.FigmaService = FigmaService = FigmaService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object, typeof (_b = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _b : Object])
+], FigmaService);
+
+
+/***/ }),
+/* 250 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
 var AllExceptionsFilter_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.AllExceptionsFilter = void 0;
@@ -42999,7 +43557,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 const common_1 = __webpack_require__(1);
 const core_1 = __webpack_require__(2);
 const app_module_1 = __webpack_require__(3);
-const all_exceptions_filter_1 = __webpack_require__(247);
+const all_exceptions_filter_1 = __webpack_require__(250);
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
     const globalPrefix = 'api';

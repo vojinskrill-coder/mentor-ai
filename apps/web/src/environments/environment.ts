@@ -9,7 +9,7 @@ export const environment = {
   brainRelayMode: true, // When true, tasks execute via OpenClaw brain instead of old pipeline
   google: {
     clientId:
-      '723199480172-346msdc1rhff92r50attqd9dl78snhva.apps.googleusercontent.com',
+      '437825281484-96v5si7k5ghkqvoq8mo5kbhfkv16pbol.apps.googleusercontent.com',
     redirectUri: 'http://localhost:4200/callback',
   },
 };

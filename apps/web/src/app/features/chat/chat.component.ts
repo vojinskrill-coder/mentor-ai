@@ -3271,6 +3271,12 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           setTimeout(() => this.featureTour?.launchTour(), 1000);
         }
 
+        // Open chat with proposal context — create new conversation with proposal details
+        if (queryParams['proposalId']) {
+          this.openProposalChat(queryParams['proposalId'], queryParams['conceptId']);
+          return;
+        }
+
         // Now load conversation — yoloPending is already set
         if (params['conversationId']) {
           this.loadConversation(params['conversationId']);
@@ -3399,6 +3405,37 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       this.activeConversation$.set(null);
       this.isLoadingConversation$.set(false);
       this.showError('Greška pri učitavanju konverzacije');
+    }
+  }
+
+  async openProposalChat(proposalId: string, conceptId?: string): Promise<void> {
+    try {
+      // Get proposal details from query params (passed by task-hub)
+      const params = this.route.snapshot.queryParams;
+      const title = params['proposalTitle'] || 'AI Predlog';
+      const reasoning = params['proposalReasoning'] || '';
+      const action = params['proposalAction'] || '';
+
+      // Create new conversation for discussing this proposal (no concept needed)
+      const conversation = await this.conversationService.createConversation(
+        `${title} — Razgovor`,
+      );
+      await this.loadConversation(conversation.id);
+      this.router.navigate(['/chat', conversation.id], { replaceUrl: true });
+
+      // Send proposal context as first message
+      const parts = [
+        `Razgovarajmo o ovom AI predlogu pre nego što ga pokrenemo:`,
+        ``,
+        `**${title}**`,
+      ];
+      if (reasoning) parts.push(``, `**Obrazloženje:** ${reasoning}`);
+      if (action) parts.push(``, `**Predložena akcija:** ${action}`);
+      parts.push(``, `Šta misliš o ovom predlogu? Da li su pretpostavke tačne? Treba li nešto promeniti?`);
+
+      setTimeout(() => this.sendMessage(parts.join('\n')), 500);
+    } catch (err) {
+      this.showError('Greška pri otvaranju razgovora o predlogu');
     }
   }
 

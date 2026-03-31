@@ -159,6 +159,9 @@ model Tenant {
   processRuns      ProcessRun[]      // Process execution runs
   approvedLeads    ApprovedLead[]    // Saved approved leads
   approvedContent  ApprovedContent[] // Saved approved content
+  figmaConnection  FigmaConnection?  // Figma OAuth connection
+  brandProfiles    BrandDesignProfile[] // Extracted brand design profiles
+  brochureProjects BrochureProject[] // Brochure generation projects
 
   @@map("tenant")
 }
@@ -1048,5 +1051,142 @@ model ApprovedContent {
   @@index([tenantId])
   @@index([runId])
   @@map("approved_content")
+}
+
+// ── Figma Brochure Generation ──
+
+// Figma OAuth connection per tenant
+model FigmaConnection {
+  id            String   @id @map("id")
+  tenantId      String   @unique @map("tenant_id")
+  accessToken   String   @map("access_token")
+  refreshToken  String?  @map("refresh_token")
+  expiresAt     DateTime? @map("expires_at")
+  figmaUserId   String?  @map("figma_user_id")
+  figmaEmail    String?  @map("figma_email")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  @@map("figma_connections")
+}
+
+// Extracted brand design profile from a Figma file
+model BrandDesignProfile {
+  id            String   @id @map("id")
+  tenantId      String   @map("tenant_id")
+  name          String
+  figmaFileKey  String   @map("figma_file_key")
+  figmaFileName String?  @map("figma_file_name")
+
+  // Extracted tokens
+  colors        Json     // { primary: "#c9a96e", background: "#1a1a1a", ... }
+  typography    Json     // [{ role: "h1", fontFamily, fontSize, fontWeight, ... }]
+  spacing       Json     // [8, 16, 24, 32, 48, ...]
+  grids         Json     // [{ pattern, count, gutterSize, offset }]
+  effects       Json     // [{ type, color, offset, radius }]
+
+  // Layout patterns — spatial relationships learned from the file
+  layoutPatterns Json    @map("layout_patterns") // [{ pageType, components: [{ type, x%, y%, w%, h% }] }]
+  pageCount     Int      @map("page_count")
+
+  // Raw CSS tokens for template engine
+  tokensCss     String?  @db.Text @map("tokens_css")
+
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  brochures     BrochureProject[]
+
+  @@index([tenantId])
+  @@map("brand_design_profiles")
+}
+
+// A brochure generation project
+model BrochureProject {
+  id              String   @id @map("id")
+  tenantId        String   @map("tenant_id")
+  brandProfileId  String   @map("brand_profile_id")
+  title           String
+  description     String?  @db.Text
+  targetAudience  String?  @map("target_audience")
+  goals           String?  @db.Text
+  status          String   @default("ideation") // ideation, layout, content_text, content_images, preview, exported
+  score           Int?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  brandProfile    BrandDesignProfile @relation(fields: [brandProfileId], references: [id])
+  pages           BrochurePage[]
+  ideas           BrochureIdea[]
+
+  @@index([tenantId])
+  @@map("brochure_projects")
+}
+
+// Brochure idea (Step 1 — multiple ideas, user selects)
+model BrochureIdea {
+  id          String   @id @map("id")
+  projectId   String   @map("project_id")
+  title       String
+  audience    String?
+  purpose     String?  @db.Text
+  format      String?  // "8 pages, A4, portrait"
+  score       Int?
+  reasoning   String?  @db.Text
+  status      String   @default("pending") // pending, approved, rejected, modified
+  feedback    String?  @db.Text
+  version     Int      @default(1)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  project     BrochureProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("brochure_ideas")
+}
+
+// Individual page in a brochure
+model BrochurePage {
+  id          String   @id @map("id")
+  projectId   String   @map("project_id")
+  pageNumber  Int      @map("page_number")
+  layoutType  String   @map("layout_type") // cover, split, grid, editorial, product, cta, back-cover
+  layoutJson  Json     @map("layout_json") // { width, height, components: [{ slot, x, y, w, h, type }] }
+  status      String   @default("pending") // pending, approved, rejected
+  feedback    String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  project     BrochureProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  components  BrochureComponent[]
+
+  @@index([projectId])
+  @@map("brochure_pages")
+}
+
+// Individual component (text slot or image slot) on a page
+model BrochureComponent {
+  id          String   @id @map("id")
+  pageId      String   @map("page_id")
+  slotName    String   @map("slot_name") // "hero-image", "main-heading", "body-text"
+  type        String   // text, image, logo, accent
+  content     String?  @db.Text // actual text or image URL
+  status      String   @default("pending") // pending, approved, rejected, regenerating
+  feedback    String?  @db.Text
+  version     Int      @default(1)
+  maxChars    Int?     @map("max_chars")
+  fontSize    Float?   @map("font_size")
+  fontRole    String?  @map("font_role") // h1, h2, body, caption
+  dimensions  Json?    // { width, height, aspectRatio }
+  position    Json?    // { x, y, w, h } in percentage of page
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  page        BrochurePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([pageId])
+  @@map("brochure_components")
 }
 
