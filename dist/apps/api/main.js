@@ -56,6 +56,7 @@ const openclaw_tenant_module_1 = __webpack_require__(151);
 const bridge_module_1 = __webpack_require__(134);
 const process_module_1 = __webpack_require__(233);
 const figma_module_1 = __webpack_require__(247);
+const brochure_module_1 = __webpack_require__(250);
 // Serve Angular static files in production (combined deploy)
 const staticPath = (0, path_1.join)(__dirname, '..', '..', 'web', 'browser');
 const serveStaticImports = (0, fs_1.existsSync)(staticPath)
@@ -107,6 +108,7 @@ exports.AppModule = AppModule = tslib_1.__decorate([
             bridge_module_1.BridgeModule,
             process_module_1.ProcessModule,
             figma_module_1.FigmaModule,
+            brochure_module_1.BrochureModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],
@@ -42856,7 +42858,13 @@ let FigmaController = class FigmaController {
         }
         // Validate redirect URI is our own domain
         const allowed = ['http://localhost:4200', 'https://mentor-ai-app-production.up.railway.app'];
-        const origin = new URL(redirectUri).origin;
+        let origin;
+        try {
+            origin = new URL(redirectUri).origin;
+        }
+        catch {
+            throw new common_1.BadRequestException({ type: 'invalid_redirect', title: 'Invalid redirect URI format', status: 400 });
+        }
         if (!allowed.includes(origin)) {
             throw new common_1.BadRequestException({ type: 'invalid_redirect', title: 'Redirect URI not allowed', status: 400 });
         }
@@ -42874,19 +42882,20 @@ let FigmaController = class FigmaController {
     }
     /** Check Figma connection status */
     async getStatus(user) {
+        const token = await this.figmaService.getAnyToken(user.tenantId);
         const conn = await this.prisma.figmaConnection.findUnique({
             where: { tenantId: user.tenantId },
             select: { figmaEmail: true, figmaUserId: true, expiresAt: true },
         });
-        return { data: { connected: !!conn, email: conn?.figmaEmail } };
+        return { data: { connected: !!token, email: conn?.figmaEmail ?? (token ? 'Personal Token' : null), method: token?.startsWith('figd_') ? 'personal_token' : conn ? 'oauth' : 'none' } };
     }
     /** Extract design profile from a Figma file */
     async extractDesignProfile(user, fileKey) {
         if (!fileKey)
             throw new common_1.BadRequestException({ type: 'missing_file_key', title: 'Missing Figma file key', status: 400 });
-        const accessToken = await this.figmaService.getAccessToken(user.tenantId);
+        const accessToken = await this.figmaService.getAnyToken(user.tenantId);
         if (!accessToken)
-            throw new common_1.BadRequestException({ type: 'not_connected', title: 'Figma not connected', status: 400 });
+            throw new common_1.BadRequestException({ type: 'not_connected', title: 'Figma not connected. Set FIGMA_PERSONAL_TOKEN or connect via OAuth.', status: 400 });
         // Read the file
         const fileData = await this.figmaService.readFile(accessToken, fileKey);
         const fileName = fileData.name ?? fileKey;
@@ -42985,6 +42994,17 @@ let FigmaService = FigmaService_1 = class FigmaService {
         this.logger = new common_1.Logger(FigmaService_1.name);
         this.clientId = this.configService.get('FIGMA_CLIENT_ID', '');
         this.clientSecret = this.configService.get('FIGMA_CLIENT_SECRET', '');
+        this.personalToken = this.configService.get('FIGMA_PERSONAL_TOKEN', '');
+    }
+    /**
+     * Get the best available token — personal token or tenant OAuth token
+     */
+    async getAnyToken(tenantId) {
+        if (this.personalToken)
+            return this.personalToken;
+        if (tenantId)
+            return this.getAccessToken(tenantId);
+        return null;
     }
     /**
      * Generate Figma OAuth authorization URL
@@ -43090,9 +43110,12 @@ let FigmaService = FigmaService_1 = class FigmaService {
      * Read a Figma file and extract ALL design information
      */
     async readFile(accessToken, fileKey) {
-        const res = await fetch(`https://api.figma.com/v1/files/${fileKey}`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        // Personal tokens use X-Figma-Token, OAuth tokens use Authorization: Bearer
+        const isPersonalToken = accessToken.startsWith('figd_');
+        const headers = isPersonalToken
+            ? { 'X-Figma-Token': accessToken }
+            : { 'Authorization': `Bearer ${accessToken}` };
+        const res = await fetch(`https://api.figma.com/v1/files/${fileKey}`, { headers });
         if (!res.ok) {
             const err = await res.text();
             throw new Error(`Figma file read failed: ${res.status} ${err}`);
@@ -43365,6 +43388,355 @@ exports.FigmaService = FigmaService = FigmaService_1 = tslib_1.__decorate([
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BrochureModule = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const tenant_context_1 = __webpack_require__(10);
+const brochure_renderer_service_1 = __webpack_require__(251);
+const brochure_controller_1 = __webpack_require__(252);
+let BrochureModule = class BrochureModule {
+};
+exports.BrochureModule = BrochureModule;
+exports.BrochureModule = BrochureModule = tslib_1.__decorate([
+    (0, common_1.Module)({
+        imports: [tenant_context_1.TenantModule],
+        controllers: [brochure_controller_1.BrochureController],
+        providers: [brochure_renderer_service_1.BrochureRendererService],
+        exports: [brochure_renderer_service_1.BrochureRendererService],
+    })
+], BrochureModule);
+
+
+/***/ }),
+/* 251 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var BrochureRendererService_1;
+var _a;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BrochureRendererService = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const tenant_context_1 = __webpack_require__(10);
+const fs = tslib_1.__importStar(__webpack_require__(9));
+const path = tslib_1.__importStar(__webpack_require__(8));
+let BrochureRendererService = BrochureRendererService_1 = class BrochureRendererService {
+    constructor(prisma) {
+        this.prisma = prisma;
+        this.logger = new common_1.Logger(BrochureRendererService_1.name);
+    }
+    /**
+     * Generate complete HTML document for a brochure from pages + brand profile
+     */
+    async renderHtml(pages, brandProfileId) {
+        const profile = await this.prisma.brandDesignProfile.findUnique({
+            where: { id: brandProfileId },
+        });
+        if (!profile)
+            throw new Error(`Brand profile not found: ${brandProfileId}`);
+        const tokens = {
+            colors: profile.colors,
+            typography: profile.typography,
+            tokensCss: profile.tokensCss ?? '',
+        };
+        const pagesHtml = pages.map(page => this.renderPage(page, tokens)).join('\n');
+        return `<!DOCTYPE html>
+<html lang="sr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400;1,700&family=Montserrat:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&display=swap" rel="stylesheet">
+  <style>
+    ${tokens.tokensCss}
+
+    @page { size: A4 landscape; margin: 0; }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-body, 'Montserrat', sans-serif);
+      background: var(--color-background, #0D0D0D);
+      color: var(--color-text-body, #B0B0B0);
+    }
+
+    .brochure-page {
+      width: 297mm;
+      height: 210mm;
+      position: relative;
+      overflow: hidden;
+      background: var(--color-background, #0D0D0D);
+      page-break-after: always;
+    }
+
+    .slot {
+      position: absolute;
+      overflow: hidden;
+    }
+
+    .slot-text {
+      padding: 2mm;
+    }
+
+    .slot-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .slot-image {
+      background: var(--color-surface-dark, #1A1A1A);
+    }
+
+    /* Typography roles */
+    .font-h1 {
+      font-family: var(--font-heading, 'Playfair Display', serif);
+      font-size: var(--font-size-h1, 42px);
+      font-weight: var(--font-weight-h1, 400);
+      color: var(--color-primary, #C9A96E);
+      font-style: italic;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      line-height: 1.15;
+    }
+
+    .font-h2 {
+      font-family: var(--font-heading, 'Playfair Display', serif);
+      font-size: var(--font-size-h2, 28px);
+      color: var(--color-text-primary, #FFFFFF);
+      font-style: italic;
+      line-height: 1.2;
+    }
+
+    .font-subtitle {
+      font-family: var(--font-body, 'Montserrat', sans-serif);
+      font-size: var(--font-size-subtitle, 16px);
+      font-weight: 300;
+      color: var(--color-text-primary, #FFFFFF);
+      font-style: italic;
+      line-height: 1.4;
+    }
+
+    .font-body {
+      font-family: var(--font-body, 'Montserrat', sans-serif);
+      font-size: var(--font-size-body, 11px);
+      font-weight: 300;
+      color: var(--color-text-body, #B0B0B0);
+      line-height: 1.7;
+    }
+
+    .font-caption {
+      font-family: var(--font-body, 'Montserrat', sans-serif);
+      font-size: var(--font-size-caption, 9px);
+      color: var(--color-text-muted, #808080);
+      line-height: 1.5;
+    }
+
+    .font-quote {
+      font-family: var(--font-body, 'Montserrat', sans-serif);
+      font-size: 10px;
+      font-weight: 300;
+      color: var(--color-text-muted, #808080);
+      font-style: italic;
+      line-height: 1.6;
+    }
+
+    .font-numberedItem {
+      font-family: var(--font-body, 'Montserrat', sans-serif);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-primary, #C9A96E);
+    }
+
+    /* Print styles */
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .brochure-page { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+${pagesHtml}
+</body>
+</html>`;
+    }
+    /**
+     * Render a single page
+     */
+    renderPage(page, tokens) {
+        const components = page.components.map(comp => {
+            const style = `left:${comp.x}%;top:${comp.y}%;width:${comp.w}%;height:${comp.h}%;`;
+            if (comp.type === 'text') {
+                const fontClass = comp.fontRole ? `font-${comp.fontRole}` : 'font-body';
+                const content = comp.content ?? '';
+                return `<div class="slot slot-text ${fontClass}" style="${style}">${this.escapeHtml(content)}</div>`;
+            }
+            if (comp.type === 'image' && comp.imageUrl) {
+                return `<div class="slot slot-image" style="${style}"><img src="${comp.imageUrl}" alt="${comp.slotName}"></div>`;
+            }
+            // Empty image placeholder
+            return `<div class="slot slot-image" style="${style};display:flex;align-items:center;justify-content:center;">
+        <span style="color:#6B7280;font-size:10px;">${comp.slotName}</span>
+      </div>`;
+        }).join('\n      ');
+        return `  <div class="brochure-page" data-page="${page.pageNumber}" data-layout="${page.layoutType}">
+      ${components}
+  </div>`;
+    }
+    /**
+     * Generate PDF from HTML using Puppeteer
+     */
+    async renderPdf(html, outputPath) {
+        let puppeteer;
+        try {
+            puppeteer = __webpack_require__(224);
+        }
+        catch {
+            this.logger.error('Puppeteer not installed — cannot generate PDF');
+            throw new Error('Puppeteer not available. Install with: npm install puppeteer');
+        }
+        const browser = await puppeteer.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        });
+        try {
+            const page = await browser.newPage();
+            await page.setContent(html, { waitUntil: 'networkidle0', timeout: 60000 });
+            await page.pdf({
+                path: outputPath,
+                width: '297mm',
+                height: '210mm',
+                printBackground: true,
+                preferCSSPageSize: true,
+                margin: { top: 0, right: 0, bottom: 0, left: 0 },
+            });
+            this.logger.log({ message: 'PDF generated', path: outputPath });
+            return outputPath;
+        }
+        finally {
+            await browser.close();
+        }
+    }
+    /**
+     * Full pipeline: brand profile + pages → HTML → PDF
+     */
+    async generateBrochure(brandProfileId, pages, outputDir) {
+        const html = await this.renderHtml(pages, brandProfileId);
+        const htmlPath = path.join(outputDir, `brochure-${Date.now()}.html`);
+        const pdfPath = path.join(outputDir, `brochure-${Date.now()}.pdf`);
+        fs.writeFileSync(htmlPath, html, 'utf-8');
+        this.logger.log({ message: 'HTML generated', path: htmlPath });
+        try {
+            await this.renderPdf(html, pdfPath);
+        }
+        catch (err) {
+            this.logger.warn(`PDF generation failed: ${err}. HTML is still available.`);
+        }
+        return { htmlPath, pdfPath };
+    }
+    escapeHtml(text) {
+        return text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\n/g, '<br>');
+    }
+};
+exports.BrochureRendererService = BrochureRendererService;
+exports.BrochureRendererService = BrochureRendererService = BrochureRendererService_1 = tslib_1.__decorate([
+    (0, common_1.Injectable)(),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object])
+], BrochureRendererService);
+
+
+/***/ }),
+/* 252 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BrochureController = void 0;
+const tslib_1 = __webpack_require__(4);
+const common_1 = __webpack_require__(1);
+const jwt_auth_guard_1 = __webpack_require__(47);
+const current_user_decorator_1 = __webpack_require__(49);
+const tenant_context_1 = __webpack_require__(10);
+const brochure_renderer_service_1 = __webpack_require__(251);
+let BrochureController = class BrochureController {
+    constructor(prisma, renderer) {
+        this.prisma = prisma;
+        this.renderer = renderer;
+    }
+    /** Generate HTML preview from brand profile + page specs */
+    async generatePreview(user, body) {
+        const html = await this.renderer.renderHtml(body.pages, body.brandProfileId);
+        return { data: { html } };
+    }
+    /** List brochure projects for tenant */
+    async listProjects(user) {
+        const projects = await this.prisma.brochureProject.findMany({
+            where: { tenantId: user.tenantId },
+            include: { pages: { include: { components: true }, orderBy: { pageNumber: 'asc' } } },
+            orderBy: { createdAt: 'desc' },
+        });
+        return { data: projects };
+    }
+    /** Get single brochure project with all pages and components */
+    async getProject(id, user) {
+        const project = await this.prisma.brochureProject.findUnique({
+            where: { id },
+            include: {
+                pages: {
+                    include: { components: { orderBy: { slotName: 'asc' } } },
+                    orderBy: { pageNumber: 'asc' },
+                },
+                brandProfile: true,
+            },
+        });
+        if (!project || project.tenantId !== user.tenantId) {
+            return { data: null };
+        }
+        return { data: project };
+    }
+};
+exports.BrochureController = BrochureController;
+tslib_1.__decorate([
+    (0, common_1.Post)('preview'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__param(1, (0, common_1.Body)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BrochureController.prototype, "generatePreview", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('projects'),
+    tslib_1.__param(0, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BrochureController.prototype, "listProjects", null);
+tslib_1.__decorate([
+    (0, common_1.Get)('projects/:id'),
+    tslib_1.__param(0, (0, common_1.Param)('id')),
+    tslib_1.__param(1, (0, current_user_decorator_1.CurrentUser)()),
+    tslib_1.__metadata("design:type", Function),
+    tslib_1.__metadata("design:paramtypes", [String, Object]),
+    tslib_1.__metadata("design:returntype", Promise)
+], BrochureController.prototype, "getProject", null);
+exports.BrochureController = BrochureController = tslib_1.__decorate([
+    (0, common_1.Controller)('v1/brochure'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    tslib_1.__metadata("design:paramtypes", [typeof (_a = typeof tenant_context_1.PlatformPrismaService !== "undefined" && tenant_context_1.PlatformPrismaService) === "function" ? _a : Object, typeof (_b = typeof brochure_renderer_service_1.BrochureRendererService !== "undefined" && brochure_renderer_service_1.BrochureRendererService) === "function" ? _b : Object])
+], BrochureController);
+
+
+/***/ }),
+/* 253 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
 var AllExceptionsFilter_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.AllExceptionsFilter = void 0;
@@ -43557,7 +43929,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 const common_1 = __webpack_require__(1);
 const core_1 = __webpack_require__(2);
 const app_module_1 = __webpack_require__(3);
-const all_exceptions_filter_1 = __webpack_require__(250);
+const all_exceptions_filter_1 = __webpack_require__(253);
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
     const globalPrefix = 'api';
