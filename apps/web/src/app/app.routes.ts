@@ -121,6 +121,13 @@ export const appRoutes: Route[] = [
           ),
       },
       {
+        path: 'brochure-generator',
+        loadComponent: () =>
+          import('./features/brochure/brochure-generator.component').then(
+            (m) => m.BrochureGeneratorComponent
+          ),
+      },
+      {
         path: 'figma-callback',
         loadComponent: () =>
           import('./features/figma/figma-connect.component').then(
