@@ -4,6 +4,7 @@ import { ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { environment } from '../../../environments/environment';
+import { BrochurePageViewerComponent, PageLayout, PageComponent } from '../brochure/components/brochure-page-viewer.component';
 
 @Component({
   selector: 'app-figma-connect',
@@ -98,7 +99,7 @@ import { environment } from '../../../environments/environment';
       <div class="section">
         <h2 class="section-title">Sacuvani profili</h2>
         @for (profile of profiles(); track profile.id) {
-          <div class="profile-card">
+          <div class="profile-card" [class.active]="selectedProfile()?.id === profile.id" (click)="selectProfile(profile)">
             <span class="profile-name">{{ profile.name }}</span>
             <span class="profile-meta">{{ profile.pageCount }} stranica</span>
             <span class="profile-date">{{ profile.createdAt | date:'d. MMM yyyy' }}</span>
@@ -108,6 +109,48 @@ import { environment } from '../../../environments/environment';
           <div class="empty">Nema sacuvanih profila. Analiziraj Figma fajl iznad.</div>
         }
       </div>
+
+      <!-- Layout preview when profile selected -->
+      @if (selectedProfile()) {
+        <div class="section">
+          <h2 class="section-title">Layout paterni — {{ selectedProfile()!.name }}</h2>
+          <div class="layout-preview-grid">
+            @for (page of getProfileLayouts(); track page.pageName; let i = $index) {
+              <div class="layout-card">
+                <app-brochure-page-viewer
+                  [page]="toPageLayout(page, i)"
+                  [mode]="'wireframe'"
+                  (componentSelected)="onComponentClicked($event)"
+                />
+                <div class="layout-info">
+                  <span class="layout-name">{{ page.pageName }}</span>
+                  <span class="layout-desc">{{ page.description }}</span>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+
+        @if (clickedComponent()) {
+          <div class="component-detail">
+            <h3 class="section-title">Komponenta: {{ clickedComponent()!.slotName }}</h3>
+            <div class="detail-grid">
+              <div class="detail-item"><span class="dl">Tip</span><span>{{ clickedComponent()!.type }}</span></div>
+              <div class="detail-item"><span class="dl">Pozicija</span><span>{{ clickedComponent()!.x }}%, {{ clickedComponent()!.y }}%</span></div>
+              <div class="detail-item"><span class="dl">Dimenzije</span><span>{{ clickedComponent()!.w }}% x {{ clickedComponent()!.h }}%</span></div>
+              @if (clickedComponent()!.fontRole) {
+                <div class="detail-item"><span class="dl">Font uloga</span><span>{{ clickedComponent()!.fontRole }}</span></div>
+              }
+              @if (clickedComponent()!.maxChars) {
+                <div class="detail-item"><span class="dl">Max karaktera</span><span>{{ clickedComponent()!.maxChars }}</span></div>
+              }
+              @if (clickedComponent()!.imageDescription) {
+                <div class="detail-item"><span class="dl">Opis slike</span><span>{{ clickedComponent()!.imageDescription }}</span></div>
+              }
+            </div>
+          </div>
+        }
+      }
     </div>
   `,
   styles: [`
@@ -172,16 +215,34 @@ import { environment } from '../../../environments/environment';
     .page-name { color: #6B7280; font-size: 10px; max-width: 120px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     .profile-card {
-      display: flex; align-items: center; gap: 12px; padding: 12px;
+      display: flex; align-items: center; gap: 12px; padding: 12px; cursor: pointer;
       background: #1A1A1A; border: 1px solid #2A2A2A; border-radius: 8px; margin-bottom: 8px;
+      transition: border-color 0.15s;
     }
+    .profile-card:hover { border-color: #3B82F6; }
+    .profile-card.active { border-color: #C9A96E; background: #1A1A2A; }
     .profile-name { color: #FAFAFA; font-weight: 500; flex: 1; }
     .profile-meta { color: #C9A96E; font-size: 12px; }
     .profile-date { color: #6B7280; font-size: 11px; }
 
+    .layout-preview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 16px; }
+    .layout-card { display: flex; flex-direction: column; gap: 8px; }
+    .layout-info { display: flex; flex-direction: column; gap: 2px; }
+    .layout-name { color: #FAFAFA; font-size: 12px; font-weight: 500; }
+    .layout-desc { color: #6B7280; font-size: 11px; }
+
+    .component-detail {
+      background: #1A1A1A; border: 1px solid #C9A96E40; border-radius: 8px;
+      padding: 16px; margin-top: 16px;
+    }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .detail-item { display: flex; flex-direction: column; gap: 2px; }
+    .dl { color: #6B7280; font-size: 10px; text-transform: uppercase; font-weight: 600; }
+    .detail-item span:last-child { color: #FAFAFA; font-size: 13px; }
+
     .empty { color: #6B7280; font-size: 13px; padding: 20px; text-align: center; }
   `],
-  imports: [FormsModule, DatePipe],
+  imports: [FormsModule, DatePipe, BrochurePageViewerComponent],
 })
 export class FigmaConnectComponent implements OnInit {
   private readonly http = inject(HttpClient);
@@ -194,6 +255,8 @@ export class FigmaConnectComponent implements OnInit {
   extracting = signal(false);
   extractionResult = signal<any>(null);
   profiles = signal<any[]>([]);
+  selectedProfile = signal<any>(null);
+  clickedComponent = signal<PageComponent | null>(null);
 
   Math = Math; // expose to template
 
@@ -269,6 +332,38 @@ export class FigmaConnectComponent implements OnInit {
 
   getLayoutPatterns(): any[] {
     return this.extractionResult()?.tokens?.layoutPatterns ?? [];
+  }
+
+  selectProfile(profile: any): void {
+    this.selectedProfile.set(this.selectedProfile()?.id === profile.id ? null : profile);
+    this.clickedComponent.set(null);
+  }
+
+  getProfileLayouts(): any[] {
+    return this.selectedProfile()?.layoutPatterns ?? [];
+  }
+
+  toPageLayout(pattern: any, index: number): PageLayout {
+    return {
+      pageNumber: index + 1,
+      pageTitle: pattern.pageName,
+      layoutType: pattern.description?.slice(0, 30) ?? 'spread',
+      components: (pattern.components ?? []).map((c: any) => ({
+        slotName: c.name,
+        type: c.type === 'image' || c.hasImageFill ? 'image' : 'text',
+        x: c.x,
+        y: c.y,
+        w: c.w,
+        h: c.h,
+        fontRole: c.fontRole,
+        maxChars: c.maxChars,
+        imageDescription: c.imageDescription,
+      })),
+    };
+  }
+
+  onComponentClicked(comp: PageComponent): void {
+    this.clickedComponent.set(comp);
   }
 
   private extractFileKey(url: string): string | null {
