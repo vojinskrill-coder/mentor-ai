@@ -17,6 +17,9 @@ import { BrochurePageViewerComponent, PageLayout, PageComponent } from './compon
             <button class="btn-generate" [disabled]="generating()" (click)="generatePreview()">
               @if (generating()) { Generisem... } @else { Generisi preview }
             </button>
+            @if (generationStatus()) {
+              <span class="generation-status">{{ generationStatus() }}</span>
+            }
           }
           @if (previewHtml()) {
             <button class="btn-pdf" (click)="downloadPdf()">Preuzmi PDF</button>
@@ -54,6 +57,22 @@ import { BrochurePageViewerComponent, PageLayout, PageComponent } from './compon
               <span class="field-label">Broj stranica</span>
               <input type="number" class="field-input" [(ngModel)]="pageCount" min="4" max="24" />
             </label>
+          </div>
+
+          <!-- Logo upload -->
+          <div class="logo-upload">
+            <span class="field-label">Logo kompanije</span>
+            <div class="upload-row">
+              @if (logoUrl()) {
+                <img [src]="logoUrl()" class="logo-preview" alt="Logo" />
+                <button class="btn-remove" (click)="logoUrl.set('')">Ukloni</button>
+              } @else {
+                <label class="upload-btn">
+                  Uploaduj logo
+                  <input type="file" accept="image/*" (change)="onLogoUpload($event)" hidden />
+                </label>
+              }
+            </div>
           </div>
         </div>
 
@@ -152,6 +171,18 @@ import { BrochurePageViewerComponent, PageLayout, PageComponent } from './compon
     .panel-title { color: #C9A96E; font-size: 14px; margin: 0 0 8px; }
     .panel-info { display: flex; flex-direction: column; gap: 4px; color: #9CA3AF; font-size: 12px; }
 
+    .logo-upload { margin-top: 12px; }
+    .upload-row { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+    .logo-preview { height: 48px; max-width: 200px; object-fit: contain; background: #242424; border-radius: 6px; padding: 4px; }
+    .upload-btn {
+      padding: 8px 16px; background: #242424; border: 1px dashed #2A2A2A;
+      border-radius: 6px; color: #3B82F6; cursor: pointer; font-size: 13px;
+    }
+    .upload-btn:hover { border-color: #3B82F6; }
+    .btn-remove { background: none; border: none; color: #ef4444; cursor: pointer; font-size: 12px; }
+
+    .generation-status { color: #C9A96E; font-size: 13px; margin-top: 8px; }
+
     .empty { color: #6B7280; text-align: center; padding: 40px; }
   `],
 })
@@ -165,9 +196,11 @@ export class BrochureGeneratorComponent implements OnInit {
   targetAudience = 'Arhitekte, interijor dizajneri';
   pageCount = 8;
   generating = signal(false);
+  generationStatus = signal('');
   previewPages = signal<PageLayout[]>([]);
   previewHtml = signal<string>('');
   selectedSlot = signal<PageComponent | null>(null);
+  logoUrl = signal('');
 
   ngOnInit(): void {
     this.http.get<{ data: any[] }>(`${this.apiBase}/v1/figma/profiles`).subscribe({
@@ -215,56 +248,106 @@ export class BrochureGeneratorComponent implements OnInit {
     if (!profile) return;
 
     this.generating.set(true);
+    this.generationStatus.set('Generisem tekst pomocu AI...');
 
-    const pages = this.previewPages().map(p => ({
+    // Step 1: Ask AI to generate text for all slots
+    this.http.post<{ data: any }>(`${this.apiBase}/v1/brochure/generate-content`, {
+      brandProfileId: profile.id,
+      title: this.brochureTitle,
+      targetAudience: this.targetAudience,
+      logoUrl: this.logoUrl(),
+      pages: this.previewPages().map(p => ({
+        pageNumber: p.pageNumber,
+        pageTitle: p.pageTitle,
+        layoutType: p.layoutType,
+        components: p.components.map(c => ({
+          slotName: c.slotName,
+          type: c.type,
+          x: c.x, y: c.y, w: c.w, h: c.h,
+          fontRole: c.fontRole,
+          maxChars: c.maxChars,
+          imageDescription: c.imageDescription,
+        })),
+      })),
+    }).subscribe({
+      next: (res) => {
+        // Update pages with AI-generated content
+        const generated = res.data.pages ?? [];
+        const updated = this.previewPages().map(page => {
+          const genPage = generated.find((g: any) => g.pageNumber === page.pageNumber);
+          if (!genPage) return page;
+          return {
+            ...page,
+            components: page.components.map(comp => {
+              const genComp = genPage.components?.find((g: any) => g.slotName === comp.slotName);
+              if (!genComp) return comp;
+              return {
+                ...comp,
+                content: genComp.content ?? comp.content,
+                imageUrl: genComp.imageUrl ?? comp.imageUrl,
+                status: 'pending' as const,
+              };
+            }),
+          };
+        });
+        this.previewPages.set(updated);
+        this.generationStatus.set('Renderujem HTML...');
+
+        // Step 2: Render HTML
+        this.renderHtml(profile.id, updated);
+      },
+      error: (err) => {
+        this.generating.set(false);
+        this.generationStatus.set('Greska: ' + (err?.error?.detail ?? 'Nepoznata greska'));
+      },
+    });
+  }
+
+  private renderHtml(profileId: string, pages: PageLayout[]): void {
+    const apiPages = pages.map(p => ({
       pageNumber: p.pageNumber,
       layoutType: p.layoutType,
       components: p.components.map(c => ({
         slotName: c.slotName,
         type: c.type,
-        x: c.x,
-        y: c.y,
-        w: c.w,
-        h: c.h,
+        x: c.x, y: c.y, w: c.w, h: c.h,
         fontRole: c.fontRole,
-        content: c.type === 'text' ? this.generatePlaceholder(c) : undefined,
-        imageUrl: c.type === 'image' ? undefined : undefined,
+        content: c.content,
+        imageUrl: c.imageUrl,
       })),
     }));
 
     this.http.post<{ data: { html: string } }>(`${this.apiBase}/v1/brochure/preview`, {
-      brandProfileId: profile.id,
-      pages,
+      brandProfileId: profileId,
+      pages: apiPages,
     }).subscribe({
       next: (res) => {
         this.previewHtml.set(res.data.html);
         this.generating.set(false);
+        this.generationStatus.set('Gotovo!');
       },
-      error: () => this.generating.set(false),
+      error: () => {
+        this.generating.set(false);
+        this.generationStatus.set('Greska pri renderovanju');
+      },
     });
   }
 
   downloadPdf(): void {
-    // For now, open HTML in new tab — PDF needs Puppeteer on server
     const blob = new Blob([this.previewHtml()], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');
   }
 
-  onSlotClicked(comp: PageComponent): void {
-    this.selectedSlot.set(comp);
+  onLogoUpload(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => this.logoUrl.set(reader.result as string);
+    reader.readAsDataURL(file);
   }
 
-  private generatePlaceholder(comp: PageComponent): string {
-    const maxChars = comp.maxChars ?? 100;
-    switch (comp.fontRole) {
-      case 'h1': return this.brochureTitle.slice(0, maxChars);
-      case 'h2': return 'Skulpture koje definisu prostor';
-      case 'subtitle': return 'Jedinstvene prostorne statue za savremene enterijere';
-      case 'body': return 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam.'.slice(0, maxChars);
-      case 'quote': return '"Nasa misija je da kreiramo umetnost koja je trajna i ambiciozna."';
-      case 'caption': return 'Luxury Statues Adria';
-      default: return comp.slotName;
-    }
+  onSlotClicked(comp: PageComponent): void {
+    this.selectedSlot.set(comp);
   }
 }
