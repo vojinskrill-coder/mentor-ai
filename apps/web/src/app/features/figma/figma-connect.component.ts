@@ -63,7 +63,7 @@ import { environment } from '../../../environments/environment';
           <!-- Typography -->
           <div class="subsection">
             <h3 class="subsection-title">Tipografija</h3>
-            @for (font of getTypography(); track font.role) {
+            @for (font of getTypography(); track font.fontFamily + font.fontSize) {
               <div class="type-sample" [style.font-family]="font.fontFamily" [style.font-size.px]="Math.min(font.fontSize, 32)" [style.font-weight]="font.fontWeight">
                 {{ font.role }} — {{ font.fontFamily }} {{ font.fontWeight }} ({{ font.fontSize }}px)
               </div>
@@ -236,7 +236,10 @@ export class FigmaConnectComponent implements OnInit {
 
   extractProfile(): void {
     const fileKey = this.extractFileKey(this.figmaUrl);
-    if (!fileKey) return;
+    if (!fileKey) {
+      alert('Neispravan Figma URL. Koristi format: https://www.figma.com/design/FILE_KEY/...');
+      return;
+    }
 
     this.extracting.set(true);
     this.http.post<{ data: any }>(`${this.apiBase}/extract?fileKey=${fileKey}`, {}).subscribe({

@@ -13,12 +13,13 @@ async function main() {
   if (!tenant) { console.log('No tenant found'); return; }
   console.log(`Tenant: ${tenant.name} (${tenant.id})`);
 
+  // Delete existing profile for this file to avoid duplicates
+  await prisma.brandDesignProfile.deleteMany({ where: { tenantId: tenant.id, figmaFileKey: 'sTjPUTmhrfvcKVdfMawdTa' } });
+
   const profileId = `bdp_${createId()}`;
 
-  await prisma.brandDesignProfile.upsert({
-    where: { id: profileId },
-    update: {},
-    create: {
+  await prisma.brandDesignProfile.create({
+    data: {
       id: profileId,
       tenantId: tenant.id,
       name: 'Luxury Statues Adria — Main Brochure',

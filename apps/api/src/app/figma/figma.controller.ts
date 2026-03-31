@@ -26,7 +26,10 @@ export class FigmaController {
     }
     // Validate redirect URI is our own domain
     const allowed = ['http://localhost:4200', 'https://mentor-ai-app-production.up.railway.app'];
-    const origin = new URL(redirectUri).origin;
+    let origin: string;
+    try { origin = new URL(redirectUri).origin; } catch {
+      throw new BadRequestException({ type: 'invalid_redirect', title: 'Invalid redirect URI format', status: 400 });
+    }
     if (!allowed.includes(origin)) {
       throw new BadRequestException({ type: 'invalid_redirect', title: 'Redirect URI not allowed', status: 400 });
     }
