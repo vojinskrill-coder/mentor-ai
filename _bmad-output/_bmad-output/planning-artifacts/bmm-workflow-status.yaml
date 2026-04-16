@@ -1,0 +1,96 @@
+# Workflow Status - Mentor AI
+# This tracks progress through BMM methodology Analysis, Planning, and Solutioning phases.
+# Implementation phase is tracked separately in sprint-status.yaml
+
+# STATUS DEFINITIONS:
+# ==================
+# Initial Status (before completion):
+#   - required: Must be completed to progress
+#   - optional: Can be completed but not required
+#   - recommended: Strongly suggested but not required
+#   - conditional: Required only if certain conditions met (e.g., if_has_ui)
+#
+# Completion Status:
+#   - {file-path}: File created/found (e.g., "docs/product-brief.md")
+#   - skipped: Optional/conditional workflow that was skipped
+
+generated: "2026-02-03"
+project: "Mentor AI"
+selected_track: "method"
+field_type: "greenfield"
+workflow_path: "method-greenfield.yaml"
+
+# Workflow Status
+workflow_status:
+  # Phase 1: Analysis (Optional)
+  brainstorm-project:
+    agent: "analyst"
+    command: "/bmad:bmm:workflows:brainstorming"
+    status: "_bmad-output/analysis/brainstorming-session-2026-02-03.md"
+    note: "Completed - 100 ideas, 4-phase analysis, tech stack selected"
+
+  research:
+    agent: "analyst"
+    command: "/bmad:bmm:workflows:research"
+    status: "optional"
+    note: "Can be run if additional research needed"
+
+  product-brief:
+    agent: "analyst"
+    command: "/bmad:bmm:workflows:create-product-brief"
+    status: "_bmad-output/planning-artifacts/product-brief-Mentor AI-2026-02-03.md"
+    completed: "2026-02-04"
+    note: "Completed - Comprehensive product brief with vision, users, metrics, MVP scope, and future vision"
+
+  # Phase 2: Planning (Required)
+  prd:
+    agent: "pm"
+    command: "/bmad:bmm:workflows:prd"
+    status: "required"
+    note: "Required - Product Requirements Document"
+
+  create-ux-design:
+    agent: "ux-designer"
+    command: "/bmad:bmm:workflows:create-ux-design"
+    status: "conditional"
+    note: "Required for Mentor AI (has UI) - cutting-edge dark mode, minimalist Obsidian-inspired"
+
+  # Phase 3: Solutioning (Required)
+  create-architecture:
+    agent: "architect"
+    command: "/bmad:bmm:workflows:create-architecture"
+    status: "required"
+    note: "System architecture - Local LLM, Qdrant, React+Next.js, FastAPI"
+
+  create-epics-and-stories:
+    agent: "pm"
+    command: "/bmad:bmm:workflows:create-epics-and-stories"
+    status: "required"
+    note: "Break down into implementable stories"
+
+  test-design:
+    agent: "tea"
+    command: "/bmad:bmm:workflows:testarch-test-design"
+    status: "optional"
+    note: "Testability assessment"
+
+  implementation-readiness:
+    agent: "architect"
+    command: "/bmad:bmm:workflows:check-implementation-readiness"
+    status: "required"
+    note: "Gate check - validates all planning artifacts"
+
+  # Phase 4: Implementation (Required)
+  sprint-planning:
+    agent: "sm"
+    command: "/bmad:bmm:workflows:sprint-planning"
+    status: "required"
+    note: "Creates sprint-status.yaml for implementation tracking"
+
+# Project-specific notes
+notes:
+  - "Product: Mentor AI - Business Digital Brain for Entrepreneurs"
+  - "Target: 10X acceleration for entrepreneurs becoming creative generalists"
+  - "Tech: Local LLM (Llama 3.1), Qdrant, BGE-M3, Whisper+Azure TTS, React+Next.js, FastAPI"
+  - "MVP: Text + Voice + Images, English + Serbian, Dark mode Obsidian-inspired UI"
+  - "Development: 80% BMAD-generated code with human review"

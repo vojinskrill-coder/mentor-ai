@@ -1,0 +1,24 @@
+{
+  "parent": {"type": "page_id", "page_id": "3d010376-90df-4ac5-b73b-f037bbb280fa"},
+  "is_inline": false,
+  "icon": {"type": "emoji", "emoji": "📝"},
+  "title": [{"type": "text", "text": {"content": "Neuron OS Content Hub"}}],
+  "properties": {
+    "Topic": {"title": {}},
+    "Caption": {"rich_text": {}},
+    "Hook Line": {"rich_text": {}},
+    "Hashtags": {"rich_text": {}},
+    "Score": {"number": {"format": "number"}},
+    "Status": {"select": {"options": [{"name": "Approved", "color": "green"}, {"name": "Posted", "color": "blue"}, {"name": "Scheduled", "color": "yellow"}, {"name": "Archived", "color": "gray"}]}},
+    "Content Type": {"select": {"options": [{"name": "single-image", "color": "purple"}, {"name": "carousel", "color": "pink"}, {"name": "reel-cover", "color": "orange"}, {"name": "story", "color": "red"}]}},
+    "Image Type": {"select": {"options": [{"name": "real", "color": "green"}, {"name": "composite", "color": "blue"}]}},
+    "Image URL": {"url": {}},
+    "Image Prompt": {"rich_text": {}},
+    "Image Reference": {"rich_text": {}},
+    "Call To Action": {"rich_text": {}},
+    "Visual Style": {"rich_text": {}},
+    "Suggested Day": {"rich_text": {}},
+    "Reasoning": {"rich_text": {}},
+    "Why It Works": {"rich_text": {}}
+  }
+}

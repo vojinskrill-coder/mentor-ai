@@ -1,0 +1,20 @@
+{
+  "parent": {"database_id": "33678197-7202-8115-92bf-e7d591ca9d82"},
+  "properties": {
+    "Topic": {"title": [{"text": {"content": "Test Post - Luxury Sculpture in Morning Light"}}]},
+    "Caption": {"rich_text": [{"text": {"content": "Svaki komad prica svoju pricu. Eterna Harmonia u jutarnjem svetlu, gde se bronza i beskonacnost spajaju. #LuxuryArt #SculptureDesign"}}]},
+    "Hook Line": {"rich_text": [{"text": {"content": "Svaki komad prica svoju pricu."}}]},
+    "Hashtags": {"rich_text": [{"text": {"content": "LuxuryArt, SculptureDesign, InteriorDesign, MonumentalArt, BronzeSculpture, LSA"}}]},
+    "Score": {"number": 9},
+    "Status": {"select": {"name": "Approved"}},
+    "Content Type": {"select": {"name": "single-image"}},
+    "Image Type": {"select": {"name": "composite"}},
+    "Image Reference": {"rich_text": [{"text": {"content": "Eterna Harmonia"}}]},
+    "Image Prompt": {"rich_text": [{"text": {"content": "Elegant bronze infinity sculpture in a luxury hotel lobby with morning light streaming through floor-to-ceiling windows"}}]},
+    "Call To Action": {"rich_text": [{"text": {"content": "DM za konsultaciju"}}]},
+    "Visual Style": {"rich_text": [{"text": {"content": "Warm, editorial, luxury hotel aesthetic"}}]},
+    "Suggested Day": {"rich_text": [{"text": {"content": "Tuesday 10:00"}}]},
+    "Reasoning": {"rich_text": [{"text": {"content": "High engagement expected due to luxury hotel context and morning light aesthetic"}}]},
+    "Why It Works": {"rich_text": [{"text": {"content": "Combines product showcase with aspirational lifestyle imagery"}}]}
+  }
+}

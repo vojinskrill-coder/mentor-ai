@@ -1,0 +1,1668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mentor AI - Design Direction Mockups</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #0D0D0D;
+            --bg-surface: #1A1A1A;
+            --bg-elevated: #242424;
+            --border-subtle: #2A2A2A;
+            --border-default: #3A3A3A;
+            --text-primary: #FAFAFA;
+            --text-secondary: #A1A1A1;
+            --text-muted: #6B6B6B;
+            --persona-cfo: #3B82F6;
+            --persona-cmo: #8B5CF6;
+            --persona-cto: #10B981;
+            --persona-ops: #F59E0B;
+            --persona-legal: #EF4444;
+            --persona-creative: #EC4899;
+            --success: #22C55E;
+            --warning: #EAB308;
+            --error: #EF4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg-base);
+            color: var(--text-primary);
+            line-height: 1.5;
+        }
+
+        /* Navigation */
+        .nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 1000;
+        }
+
+        .nav h1 {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 4px;
+        }
+
+        .nav-tab {
+            padding: 8px 16px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: 6px;
+            font-size: 13px;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+
+        .nav-tab:hover {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+        }
+
+        .nav-tab.active {
+            background: var(--persona-cfo);
+            color: white;
+        }
+
+        /* Main Content */
+        .main {
+            margin-top: 60px;
+            padding: 24px;
+        }
+
+        .mockup-container {
+            display: none;
+        }
+
+        .mockup-container.active {
+            display: block;
+        }
+
+        .mockup-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .mockup-description {
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+            max-width: 800px;
+        }
+
+        /* Direction 1: Classic Three-Panel */
+        .direction-1 {
+            display: grid;
+            grid-template-columns: 280px 1fr 360px;
+            gap: 1px;
+            background: var(--border-subtle);
+            border-radius: 12px;
+            overflow: hidden;
+            height: 600px;
+        }
+
+        .sidebar {
+            background: var(--bg-surface);
+            padding: 16px;
+            overflow-y: auto;
+        }
+
+        .sidebar-header {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+
+        .concept-item {
+            padding: 10px 12px;
+            border-radius: 6px;
+            margin-bottom: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .concept-item:hover {
+            background: var(--bg-elevated);
+        }
+
+        .concept-item.active {
+            background: var(--bg-elevated);
+            border-left: 2px solid var(--persona-cfo);
+        }
+
+        .concept-name {
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .concept-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .concept-status {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .concept-status.complete { background: var(--success); }
+        .concept-status.progress { background: var(--warning); }
+        .concept-status.pending { background: var(--text-muted); }
+
+        .chat-panel {
+            background: var(--bg-base);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .chat-context {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .context-badge {
+            background: var(--bg-elevated);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .context-strength {
+            color: var(--success);
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .message {
+            margin-bottom: 20px;
+        }
+
+        .message-user {
+            text-align: right;
+        }
+
+        .message-user .message-content {
+            background: var(--persona-cfo);
+            color: white;
+            display: inline-block;
+            padding: 12px 16px;
+            border-radius: 16px 16px 4px 16px;
+            max-width: 70%;
+        }
+
+        .message-ai {
+            background: var(--bg-surface);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .ai-header {
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .ai-persona {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .persona-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .persona-cfo { background: rgba(59, 130, 246, 0.2); }
+
+        .persona-name {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .confidence-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+        }
+
+        .confidence-high { color: var(--success); }
+        .confidence-medium { color: var(--warning); }
+
+        .ai-content {
+            padding: 16px;
+            font-size: 15px;
+            line-height: 1.6;
+        }
+
+        .concept-link {
+            color: var(--persona-cfo);
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .concept-link:hover {
+            text-decoration: underline;
+        }
+
+        .ai-footer {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .ai-improve {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .ai-improve strong {
+            color: var(--warning);
+        }
+
+        .ai-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .ai-action-btn {
+            background: var(--bg-elevated);
+            border: none;
+            padding: 6px 10px;
+            border-radius: 6px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .ai-action-btn:hover {
+            background: var(--border-default);
+            color: var(--text-primary);
+        }
+
+        .chat-input-area {
+            padding: 16px 20px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .chat-input-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--bg-surface);
+            border-radius: 12px;
+            padding: 12px 16px;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .chat-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-size: 15px;
+            font-family: inherit;
+            outline: none;
+        }
+
+        .chat-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .input-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .input-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px;
+            font-size: 18px;
+        }
+
+        .input-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .input-btn.primary {
+            background: var(--persona-cfo);
+            color: white;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+
+        .knowledge-panel {
+            background: var(--bg-surface);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .panel-tab {
+            flex: 1;
+            padding: 12px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 13px;
+            font-family: inherit;
+            border-bottom: 2px solid transparent;
+        }
+
+        .panel-tab.active {
+            color: var(--text-primary);
+            border-bottom-color: var(--persona-cfo);
+        }
+
+        .graph-container {
+            flex: 1;
+            position: relative;
+            background: var(--bg-base);
+        }
+
+        .graph-placeholder {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .graph-nodes {
+            position: relative;
+            width: 300px;
+            height: 300px;
+        }
+
+        .graph-node {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .graph-node:hover {
+            transform: scale(1.5);
+        }
+
+        .graph-node::after {
+            content: attr(data-label);
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 11px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .graph-node:hover::after {
+            opacity: 1;
+        }
+
+        .graph-node.focus {
+            box-shadow: 0 0 0 3px rgba(255,255,255,0.3), 0 0 20px currentColor;
+        }
+
+        .graph-node.focus::after {
+            opacity: 1;
+            color: var(--text-primary);
+        }
+
+        .graph-connection {
+            position: absolute;
+            height: 1px;
+            background: var(--border-subtle);
+            transform-origin: left center;
+        }
+
+        /* Direction 2: Chat-Centric Minimal */
+        .direction-2 {
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--bg-surface);
+            border-radius: 12px;
+            height: 600px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .minimal-header {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .minimal-logo {
+            font-weight: 700;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .minimal-nav {
+            display: flex;
+            gap: 16px;
+        }
+
+        .minimal-nav-item {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .minimal-nav-item:hover,
+        .minimal-nav-item.active {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+        }
+
+        .minimal-chat {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        .minimal-input-area {
+            padding: 20px 24px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .persona-selector {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .persona-chip {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            border: 1px solid var(--border-subtle);
+            background: transparent;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+        }
+
+        .persona-chip:hover {
+            border-color: var(--border-default);
+        }
+
+        .persona-chip.active {
+            border-color: var(--persona-cfo);
+            background: rgba(59, 130, 246, 0.1);
+            color: var(--persona-cfo);
+        }
+
+        /* Direction 3: Dashboard First */
+        .direction-3 {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 24px;
+            height: 600px;
+        }
+
+        .dashboard-main {
+            background: var(--bg-surface);
+            border-radius: 12px;
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        .dashboard-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .dashboard-title {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .dashboard-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .metric-card {
+            background: var(--bg-elevated);
+            border-radius: 10px;
+            padding: 16px;
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .metric-change {
+            font-size: 12px;
+            color: var(--success);
+            margin-top: 4px;
+        }
+
+        .recent-section {
+            margin-top: 24px;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-secondary);
+        }
+
+        .activity-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .activity-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-elevated);
+            border-radius: 8px;
+        }
+
+        .activity-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .activity-content {
+            flex: 1;
+        }
+
+        .activity-title {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .activity-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .dashboard-chat {
+            background: var(--bg-surface);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Direction 4: Command Palette Focus */
+        .direction-4 {
+            background: var(--bg-surface);
+            border-radius: 12px;
+            height: 600px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .command-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding-top: 100px;
+        }
+
+        .command-palette {
+            width: 600px;
+            background: var(--bg-surface);
+            border-radius: 12px;
+            border: 1px solid var(--border-subtle);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+
+        .command-input-wrapper {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .command-input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-size: 18px;
+            font-family: inherit;
+            outline: none;
+        }
+
+        .command-results {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .command-section {
+            padding: 8px 0;
+        }
+
+        .command-section-title {
+            padding: 8px 16px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .command-item {
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+        }
+
+        .command-item:hover,
+        .command-item.selected {
+            background: var(--bg-elevated);
+        }
+
+        .command-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .command-text {
+            flex: 1;
+        }
+
+        .command-title {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .command-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .command-shortcut {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-base);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        /* Direction 5: Split View */
+        .direction-5 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1px;
+            background: var(--border-subtle);
+            border-radius: 12px;
+            overflow: hidden;
+            height: 600px;
+        }
+
+        .split-panel {
+            background: var(--bg-surface);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .split-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .split-content {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+        }
+
+        .concept-detail {
+            padding: 20px;
+        }
+
+        .concept-detail-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .concept-detail-meta {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .concept-detail-body {
+            font-size: 15px;
+            line-height: 1.7;
+            color: var(--text-secondary);
+        }
+
+        .concept-detail-body p {
+            margin-bottom: 16px;
+        }
+
+        .related-concepts {
+            margin-top: 24px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .related-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .related-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .related-item {
+            padding: 6px 12px;
+            background: var(--bg-elevated);
+            border-radius: 6px;
+            font-size: 13px;
+            color: var(--persona-cfo);
+            cursor: pointer;
+        }
+
+        /* Direction 6: Full Graph */
+        .direction-6 {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 1px;
+            background: var(--border-subtle);
+            border-radius: 12px;
+            overflow: hidden;
+            height: 600px;
+        }
+
+        .graph-sidebar {
+            background: var(--bg-surface);
+            padding: 16px;
+        }
+
+        .graph-search {
+            width: 100%;
+            background: var(--bg-base);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 10px 12px;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-family: inherit;
+            margin-bottom: 16px;
+        }
+
+        .graph-filters {
+            margin-bottom: 16px;
+        }
+
+        .filter-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .filter-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .filter-chip {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            cursor: pointer;
+            border: 1px solid var(--border-subtle);
+            background: transparent;
+            color: var(--text-secondary);
+        }
+
+        .filter-chip.active {
+            border-color: currentColor;
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .filter-chip.cfo { color: var(--persona-cfo); }
+        .filter-chip.cmo { color: var(--persona-cmo); }
+        .filter-chip.cto { color: var(--persona-cto); }
+
+        .graph-main {
+            background: var(--bg-base);
+            position: relative;
+        }
+
+        .full-graph {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .graph-visual {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        .large-node {
+            position: absolute;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .large-node:hover {
+            transform: scale(1.2);
+        }
+
+        .large-node .label {
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-top: 8px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        .graph-zoom-controls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .zoom-btn {
+            width: 36px;
+            height: 36px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .zoom-btn:hover {
+            background: var(--bg-elevated);
+        }
+
+        /* Comparison Section */
+        .comparison-section {
+            margin-top: 48px;
+            padding: 24px;
+            background: var(--bg-surface);
+            border-radius: 12px;
+        }
+
+        .comparison-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 24px;
+        }
+
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .comparison-card {
+            background: var(--bg-elevated);
+            border-radius: 10px;
+            padding: 20px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .comparison-card:hover {
+            border-color: var(--border-default);
+        }
+
+        .comparison-card.selected {
+            border-color: var(--persona-cfo);
+        }
+
+        .comparison-card h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .comparison-card p {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .comparison-features {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .feature-tag {
+            padding: 4px 8px;
+            background: var(--bg-base);
+            border-radius: 4px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <h1>Mentor AI - Design Directions</h1>
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showDirection(1)">1. Classic</button>
+            <button class="nav-tab" onclick="showDirection(2)">2. Minimal</button>
+            <button class="nav-tab" onclick="showDirection(3)">3. Dashboard</button>
+            <button class="nav-tab" onclick="showDirection(4)">4. Command</button>
+            <button class="nav-tab" onclick="showDirection(5)">5. Split</button>
+            <button class="nav-tab" onclick="showDirection(6)">6. Graph</button>
+        </div>
+    </nav>
+
+    <main class="main">
+        <!-- Direction 1: Classic Three-Panel -->
+        <div class="mockup-container active" id="direction-1">
+            <h2 class="mockup-title">Direction 1: Classic Three-Panel</h2>
+            <p class="mockup-description">Traditional Obsidian-inspired layout with sidebar concepts, central chat, and right knowledge panel. Familiar to power users, maximizes information density.</p>
+
+            <div class="direction-1">
+                <div class="sidebar">
+                    <div class="sidebar-header">Concepts</div>
+                    <div class="concept-item active">
+                        <div class="concept-name"><span class="concept-status complete"></span>Pricing Strategy</div>
+                        <div class="concept-meta">4/6 tasks · $9,200 result</div>
+                    </div>
+                    <div class="concept-item">
+                        <div class="concept-name"><span class="concept-status progress"></span>Manufacturing Economics</div>
+                        <div class="concept-meta">2/5 tasks · In progress</div>
+                    </div>
+                    <div class="concept-item">
+                        <div class="concept-name"><span class="concept-status pending"></span>Value-Based Pricing</div>
+                        <div class="concept-meta">Recommended next</div>
+                    </div>
+                    <div class="concept-item">
+                        <div class="concept-name"><span class="concept-status complete"></span>Market Analysis</div>
+                        <div class="concept-meta">3/3 tasks · Complete</div>
+                    </div>
+                    <div class="concept-item">
+                        <div class="concept-name"><span class="concept-status pending"></span>Competitive Positioning</div>
+                        <div class="concept-meta">Not started</div>
+                    </div>
+                    <div style="margin-top: 24px;">
+                        <div class="sidebar-header">Clients</div>
+                        <div class="concept-item">
+                            <div class="concept-name">TechCorp Inc.</div>
+                            <div class="concept-meta">Last: 2 hours ago</div>
+                        </div>
+                        <div class="concept-item">
+                            <div class="concept-name">StartupXYZ</div>
+                            <div class="concept-meta">Last: Yesterday</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chat-panel">
+                    <div class="chat-header">
+                        <div class="chat-context">
+                            <span class="context-badge">TechCorp Inc.</span>
+                            <span class="context-badge context-strength">Context: Strong</span>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="ai-action-btn">CFO</button>
+                        </div>
+                    </div>
+
+                    <div class="chat-messages">
+                        <div class="message message-user">
+                            <div class="message-content">What should I price my new packaging service at?</div>
+                        </div>
+
+                        <div class="message message-ai">
+                            <div class="ai-header">
+                                <div class="ai-persona">
+                                    <div class="persona-icon persona-cfo">💼</div>
+                                    <span class="persona-name">CFO</span>
+                                </div>
+                                <div class="confidence-badge confidence-high">
+                                    <span>85% confident</span>
+                                </div>
+                            </div>
+                            <div class="ai-content">
+                                Based on your <a class="concept-link">[[Manufacturing Economics]]</a> context and current market rates, I recommend pricing at <strong>$9,200 per unit</strong>.
+                                <br><br>
+                                This aligns with <a class="concept-link">[[Value-Based Pricing]]</a> principles - you're not competing on cost, you're competing on the premium experience you deliver.
+                                <br><br>
+                                Your margins at this price point: <strong>42%</strong> gross, assuming the production costs you shared last week.
+                            </div>
+                            <div class="ai-footer">
+                                <div class="ai-improve">💡 <strong>To improve:</strong> Provide Q2 production costs for refined margin calc</div>
+                                <div class="ai-actions">
+                                    <button class="ai-action-btn">🔊</button>
+                                    <button class="ai-action-btn">📋</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chat-input-area">
+                        <div class="chat-input-wrapper">
+                            <input type="text" class="chat-input" placeholder="Ask anything... (/ for context)">
+                            <div class="input-actions">
+                                <button class="input-btn">🎤</button>
+                                <button class="input-btn primary">→</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="knowledge-panel">
+                    <div class="panel-tabs">
+                        <button class="panel-tab active">Graph</button>
+                        <button class="panel-tab">Details</button>
+                        <button class="panel-tab">Sources</button>
+                    </div>
+                    <div class="graph-container">
+                        <div class="graph-placeholder">
+                            <div class="graph-nodes">
+                                <div class="graph-node focus" style="left: 140px; top: 130px; background: var(--persona-cfo);" data-label="Pricing Strategy"></div>
+                                <div class="graph-node" style="left: 80px; top: 80px; background: var(--persona-cfo);" data-label="Manufacturing Economics"></div>
+                                <div class="graph-node" style="left: 200px; top: 90px; background: var(--persona-cfo);" data-label="Value-Based Pricing"></div>
+                                <div class="graph-node" style="left: 60px; top: 180px; background: var(--persona-cmo);" data-label="Market Analysis"></div>
+                                <div class="graph-node" style="left: 220px; top: 170px; background: var(--persona-cmo);" data-label="Competitive Positioning"></div>
+                                <div class="graph-node" style="left: 140px; top: 220px; background: var(--persona-cto);" data-label="Cost Optimization"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Direction 2: Chat-Centric Minimal -->
+        <div class="mockup-container" id="direction-2">
+            <h2 class="mockup-title">Direction 2: Chat-Centric Minimal</h2>
+            <p class="mockup-description">Clean, focused chat interface with minimal chrome. Graph and concepts accessible via navigation, not always visible. Ideal for users who primarily execute tasks.</p>
+
+            <div class="direction-2">
+                <div class="minimal-header">
+                    <div class="minimal-logo">
+                        <span>🧠</span>
+                        <span>Mentor AI</span>
+                    </div>
+                    <div class="minimal-nav">
+                        <a href="#" class="minimal-nav-item active">Chat</a>
+                        <a href="#" class="minimal-nav-item">Knowledge</a>
+                        <a href="#" class="minimal-nav-item">Dashboard</a>
+                        <a href="#" class="minimal-nav-item">Settings</a>
+                    </div>
+                </div>
+
+                <div class="minimal-chat">
+                    <div class="message message-user" style="margin-bottom: 24px;">
+                        <div class="message-content">What should I price my new packaging service at?</div>
+                    </div>
+
+                    <div class="message message-ai">
+                        <div class="ai-header">
+                            <div class="ai-persona">
+                                <div class="persona-icon persona-cfo">💼</div>
+                                <span class="persona-name">CFO</span>
+                            </div>
+                            <div class="confidence-badge confidence-high">85% confident</div>
+                        </div>
+                        <div class="ai-content">
+                            Based on your <a class="concept-link">[[Manufacturing Economics]]</a> context and current market rates, I recommend pricing at <strong>$9,200 per unit</strong>.
+                            <br><br>
+                            This aligns with <a class="concept-link">[[Value-Based Pricing]]</a> principles we discussed for TechCorp.
+                        </div>
+                        <div class="ai-footer">
+                            <div class="ai-improve">💡 <strong>To improve:</strong> Provide Q2 production costs</div>
+                            <div class="ai-actions">
+                                <button class="ai-action-btn">🔊</button>
+                                <button class="ai-action-btn">📋</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="minimal-input-area">
+                    <div class="persona-selector">
+                        <button class="persona-chip active" style="border-color: var(--persona-cfo); color: var(--persona-cfo);">💼 CFO</button>
+                        <button class="persona-chip">📈 CMO</button>
+                        <button class="persona-chip">⚙️ CTO</button>
+                        <button class="persona-chip">📋 Operations</button>
+                        <button class="persona-chip">⚖️ Legal</button>
+                        <button class="persona-chip">🎨 Creative</button>
+                    </div>
+                    <div class="chat-input-wrapper">
+                        <input type="text" class="chat-input" placeholder="Ask anything... (/ for context, Cmd+K for commands)">
+                        <div class="input-actions">
+                            <button class="input-btn">🎤</button>
+                            <button class="input-btn primary">→</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Direction 3: Dashboard First -->
+        <div class="mockup-container" id="direction-3">
+            <h2 class="mockup-title">Direction 3: Dashboard First</h2>
+            <p class="mockup-description">Business owner perspective with ROI metrics prominent. Chat as sidebar companion. Best for users who want to see impact and track progress.</p>
+
+            <div class="direction-3">
+                <div class="dashboard-main">
+                    <div class="dashboard-header">
+                        <div class="dashboard-title">Welcome back, Alex</div>
+                        <div class="dashboard-actions">
+                            <button class="ai-action-btn">This Week</button>
+                            <button class="ai-action-btn">Export</button>
+                        </div>
+                    </div>
+
+                    <div class="metric-grid">
+                        <div class="metric-card">
+                            <div class="metric-label">Tasks Completed</div>
+                            <div class="metric-value">127</div>
+                            <div class="metric-change">↑ 23% from last week</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Time Saved</div>
+                            <div class="metric-value">42h</div>
+                            <div class="metric-change">↑ 18% from last week</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Value Created</div>
+                            <div class="metric-value">$24K</div>
+                            <div class="metric-change">↑ 31% from last week</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Concepts Used</div>
+                            <div class="metric-value">89</div>
+                            <div class="metric-change">of 600 total</div>
+                        </div>
+                    </div>
+
+                    <div class="recent-section">
+                        <div class="section-title">Recent Activity</div>
+                        <div class="activity-list">
+                            <div class="activity-item">
+                                <div class="activity-icon persona-cfo">💼</div>
+                                <div class="activity-content">
+                                    <div class="activity-title">Pricing Strategy for TechCorp</div>
+                                    <div class="activity-meta">CFO · 2 hours ago · $9,200 recommendation</div>
+                                </div>
+                            </div>
+                            <div class="activity-item">
+                                <div class="activity-icon" style="background: rgba(139, 92, 246, 0.2);">📈</div>
+                                <div class="activity-content">
+                                    <div class="activity-title">Q2 Marketing Campaign Analysis</div>
+                                    <div class="activity-meta">CMO · Yesterday · 3 recommendations</div>
+                                </div>
+                            </div>
+                            <div class="activity-item">
+                                <div class="activity-icon" style="background: rgba(16, 185, 129, 0.2);">⚙️</div>
+                                <div class="activity-content">
+                                    <div class="activity-title">Tech Stack Evaluation</div>
+                                    <div class="activity-meta">CTO · 2 days ago · Angular recommended</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-chat">
+                    <div class="chat-header" style="padding: 16px;">
+                        <span style="font-weight: 600;">Quick Chat</span>
+                        <button class="ai-action-btn">Expand</button>
+                    </div>
+                    <div class="chat-messages" style="flex: 1;">
+                        <div class="message message-ai" style="font-size: 14px;">
+                            <div class="ai-header">
+                                <div class="ai-persona">
+                                    <div class="persona-icon persona-cfo" style="width: 24px; height: 24px; font-size: 12px;">💼</div>
+                                    <span class="persona-name" style="font-size: 13px;">CFO</span>
+                                </div>
+                            </div>
+                            <div class="ai-content" style="font-size: 14px; padding: 12px;">
+                                Good morning! Based on yesterday's activity, you might want to follow up on the <a class="concept-link">[[Value-Based Pricing]]</a> discussion.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat-input-area" style="padding: 12px;">
+                        <div class="chat-input-wrapper">
+                            <input type="text" class="chat-input" placeholder="Quick question...">
+                            <button class="input-btn primary">→</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Direction 4: Command Palette Focus -->
+        <div class="mockup-container" id="direction-4">
+            <h2 class="mockup-title">Direction 4: Command Palette Focus</h2>
+            <p class="mockup-description">Power-user oriented with command palette as primary navigation. Linear-inspired, keyboard-first. Best for users who want speed over exploration.</p>
+
+            <div class="direction-4">
+                <div class="command-overlay">
+                    <div class="command-palette">
+                        <div class="command-input-wrapper">
+                            <input type="text" class="command-input" placeholder="Ask anything or search concepts..." value="pricing strategy">
+                        </div>
+                        <div class="command-results">
+                            <div class="command-section">
+                                <div class="command-section-title">Concepts</div>
+                                <div class="command-item selected">
+                                    <div class="command-icon persona-cfo">💼</div>
+                                    <div class="command-text">
+                                        <div class="command-title">Pricing Strategy</div>
+                                        <div class="command-desc">4/6 tasks complete · $9,200 result</div>
+                                    </div>
+                                    <div class="command-shortcut">Enter</div>
+                                </div>
+                                <div class="command-item">
+                                    <div class="command-icon persona-cfo">💼</div>
+                                    <div class="command-text">
+                                        <div class="command-title">Value-Based Pricing</div>
+                                        <div class="command-desc">Premium pricing methodology</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="command-section">
+                                <div class="command-section-title">Actions</div>
+                                <div class="command-item">
+                                    <div class="command-icon" style="background: var(--bg-elevated);">💬</div>
+                                    <div class="command-text">
+                                        <div class="command-title">Ask CFO about pricing strategy</div>
+                                        <div class="command-desc">Start a conversation with context</div>
+                                    </div>
+                                    <div class="command-shortcut">⌘ Enter</div>
+                                </div>
+                                <div class="command-item">
+                                    <div class="command-icon" style="background: var(--bg-elevated);">🔍</div>
+                                    <div class="command-text">
+                                        <div class="command-title">View in knowledge graph</div>
+                                        <div class="command-desc">See connections and related concepts</div>
+                                    </div>
+                                    <div class="command-shortcut">⌘ G</div>
+                                </div>
+                            </div>
+                            <div class="command-section">
+                                <div class="command-section-title">Recent</div>
+                                <div class="command-item">
+                                    <div class="command-icon" style="background: var(--bg-elevated);">🕐</div>
+                                    <div class="command-text">
+                                        <div class="command-title">TechCorp pricing discussion</div>
+                                        <div class="command-desc">2 hours ago · CFO</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Direction 5: Split View -->
+        <div class="mockup-container" id="direction-5">
+            <h2 class="mockup-title">Direction 5: Split View</h2>
+            <p class="mockup-description">Equal emphasis on chat and concept detail. Learn while you execute. Best for users who want to understand the "why" behind recommendations.</p>
+
+            <div class="direction-5">
+                <div class="split-panel">
+                    <div class="split-header">
+                        <span>💬</span>
+                        <span>Chat with CFO</span>
+                    </div>
+                    <div class="split-content">
+                        <div class="message message-user" style="margin-bottom: 20px;">
+                            <div class="message-content">What should I price my new packaging service at?</div>
+                        </div>
+
+                        <div class="message message-ai">
+                            <div class="ai-header">
+                                <div class="ai-persona">
+                                    <div class="persona-icon persona-cfo">💼</div>
+                                    <span class="persona-name">CFO</span>
+                                </div>
+                                <div class="confidence-badge confidence-high">85%</div>
+                            </div>
+                            <div class="ai-content">
+                                Based on your <a class="concept-link">[[Manufacturing Economics]]</a> context, I recommend <strong>$9,200 per unit</strong>.
+                                <br><br>
+                                Click the concept link to learn more about the methodology behind this recommendation.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat-input-area" style="padding: 12px;">
+                        <div class="chat-input-wrapper">
+                            <input type="text" class="chat-input" placeholder="Follow up...">
+                            <button class="input-btn primary">→</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="split-panel" style="background: var(--bg-base);">
+                    <div class="split-header" style="background: var(--bg-surface);">
+                        <span>📖</span>
+                        <span>Manufacturing Economics</span>
+                    </div>
+                    <div class="concept-detail">
+                        <div class="concept-detail-title">Manufacturing Economics</div>
+                        <div class="concept-detail-meta">
+                            <span>💼 Finance</span>
+                            <span>·</span>
+                            <span>Used 47 times</span>
+                            <span>·</span>
+                            <span>$24K value created</span>
+                        </div>
+                        <div class="concept-detail-body">
+                            <p>Manufacturing economics examines the cost structures, production efficiencies, and economic factors that influence manufacturing decisions and pricing strategies.</p>
+                            <p>Key principles include understanding fixed vs variable costs, economies of scale, and the relationship between production volume and unit costs.</p>
+                        </div>
+                        <div class="related-concepts">
+                            <div class="related-title">Connected Concepts</div>
+                            <div class="related-list">
+                                <span class="related-item">[[Pricing Strategy]]</span>
+                                <span class="related-item">[[Cost Optimization]]</span>
+                                <span class="related-item">[[Value-Based Pricing]]</span>
+                                <span class="related-item">[[Supply Chain]]</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Direction 6: Full Graph -->
+        <div class="mockup-container" id="direction-6">
+            <h2 class="mockup-title">Direction 6: Graph-Centric</h2>
+            <p class="mockup-description">Knowledge graph as hero feature. Explore connections visually, chat contextually. Best for users who want to discover and explore the 600 concepts.</p>
+
+            <div class="direction-6">
+                <div class="graph-sidebar">
+                    <input type="text" class="graph-search" placeholder="Search concepts...">
+
+                    <div class="graph-filters">
+                        <div class="filter-title">Filter by Department</div>
+                        <div class="filter-options">
+                            <button class="filter-chip active cfo">Finance</button>
+                            <button class="filter-chip cmo">Marketing</button>
+                            <button class="filter-chip cto">Technical</button>
+                            <button class="filter-chip">Operations</button>
+                            <button class="filter-chip">Legal</button>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 24px;">
+                        <div class="sidebar-header">Focused: Pricing Strategy</div>
+                        <div style="font-size: 14px; color: var(--text-secondary); margin-top: 8px;">
+                            12 connected concepts<br>
+                            4/6 tasks complete<br>
+                            Last used: 2 hours ago
+                        </div>
+
+                        <div style="margin-top: 16px; padding: 12px; background: var(--bg-elevated); border-radius: 8px;">
+                            <div style="font-size: 13px; font-weight: 500; margin-bottom: 8px;">Quick Chat</div>
+                            <div class="chat-input-wrapper" style="padding: 8px 12px;">
+                                <input type="text" class="chat-input" placeholder="Ask about this concept..." style="font-size: 13px;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="graph-main">
+                    <div class="full-graph">
+                        <div class="graph-visual">
+                            <!-- Simulated graph nodes -->
+                            <div class="large-node" style="left: 45%; top: 40%; width: 24px; height: 24px; background: var(--persona-cfo); box-shadow: 0 0 20px var(--persona-cfo);">
+                                <span class="label">Pricing Strategy</span>
+                            </div>
+                            <div class="large-node" style="left: 30%; top: 25%; width: 16px; height: 16px; background: var(--persona-cfo);">
+                                <span class="label">Manufacturing Economics</span>
+                            </div>
+                            <div class="large-node" style="left: 60%; top: 28%; width: 16px; height: 16px; background: var(--persona-cfo);">
+                                <span class="label">Value-Based Pricing</span>
+                            </div>
+                            <div class="large-node" style="left: 25%; top: 50%; width: 12px; height: 12px; background: var(--persona-cmo);">
+                                <span class="label">Market Analysis</span>
+                            </div>
+                            <div class="large-node" style="left: 65%; top: 55%; width: 12px; height: 12px; background: var(--persona-cmo);">
+                                <span class="label">Competitive Positioning</span>
+                            </div>
+                            <div class="large-node" style="left: 40%; top: 65%; width: 10px; height: 10px; background: var(--persona-cto);">
+                                <span class="label">Cost Optimization</span>
+                            </div>
+                            <div class="large-node" style="left: 55%; top: 70%; width: 10px; height: 10px; background: var(--persona-ops);">
+                                <span class="label">Supply Chain</span>
+                            </div>
+                            <div class="large-node" style="left: 20%; top: 70%; width: 8px; height: 8px; background: var(--persona-cfo);"></div>
+                            <div class="large-node" style="left: 75%; top: 40%; width: 8px; height: 8px; background: var(--persona-cmo);"></div>
+                            <div class="large-node" style="left: 15%; top: 35%; width: 8px; height: 8px; background: var(--persona-cto);"></div>
+                        </div>
+                    </div>
+                    <div class="graph-zoom-controls">
+                        <button class="zoom-btn">+</button>
+                        <button class="zoom-btn">−</button>
+                        <button class="zoom-btn">⌂</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comparison Section -->
+        <div class="comparison-section">
+            <h2 class="comparison-title">Compare Directions</h2>
+            <div class="comparison-grid">
+                <div class="comparison-card selected">
+                    <h3>1. Classic Three-Panel</h3>
+                    <p>Obsidian-inspired layout with maximum information density</p>
+                    <div class="comparison-features">
+                        <span class="feature-tag">Power Users</span>
+                        <span class="feature-tag">All-in-One</span>
+                        <span class="feature-tag">Familiar</span>
+                    </div>
+                </div>
+                <div class="comparison-card">
+                    <h3>2. Chat-Centric Minimal</h3>
+                    <p>Clean focus on conversation with minimal distractions</p>
+                    <div class="comparison-features">
+                        <span class="feature-tag">Simplicity</span>
+                        <span class="feature-tag">Task Focus</span>
+                        <span class="feature-tag">Mobile-Friendly</span>
+                    </div>
+                </div>
+                <div class="comparison-card">
+                    <h3>3. Dashboard First</h3>
+                    <p>ROI metrics and activity tracking as primary view</p>
+                    <div class="comparison-features">
+                        <span class="feature-tag">Business Owners</span>
+                        <span class="feature-tag">ROI Tracking</span>
+                        <span class="feature-tag">Overview</span>
+                    </div>
+                </div>
+                <div class="comparison-card">
+                    <h3>4. Command Palette</h3>
+                    <p>Keyboard-first navigation for speed users</p>
+                    <div class="comparison-features">
+                        <span class="feature-tag">Keyboard First</span>
+                        <span class="feature-tag">Speed</span>
+                        <span class="feature-tag">Linear-Style</span>
+                    </div>
+                </div>
+                <div class="comparison-card">
+                    <h3>5. Split View</h3>
+                    <p>Learn and execute simultaneously</p>
+                    <div class="comparison-features">
+                        <span class="feature-tag">Learning</span>
+                        <span class="feature-tag">Context</span>
+                        <span class="feature-tag">Documentation</span>
+                    </div>
+                </div>
+                <div class="comparison-card">
+                    <h3>6. Graph-Centric</h3>
+                    <p>Knowledge graph as the hero feature</p>
+                    <div class="comparison-features">
+                        <span class="feature-tag">Exploration</span>
+                        <span class="feature-tag">Visual</span>
+                        <span class="feature-tag">Discovery</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function showDirection(num) {
+            // Hide all mockups
+            document.querySelectorAll('.mockup-container').forEach(el => {
+                el.classList.remove('active');
+            });
+
+            // Show selected mockup
+            document.getElementById('direction-' + num).classList.add('active');
+
+            // Update tabs
+            document.querySelectorAll('.nav-tab').forEach((tab, i) => {
+                tab.classList.remove('active');
+                if (i === num - 1) tab.classList.add('active');
+            });
+        }
+    </script>
+</body>
+</html>

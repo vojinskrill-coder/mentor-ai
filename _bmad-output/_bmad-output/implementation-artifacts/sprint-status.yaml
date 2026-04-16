@@ -1,0 +1,167 @@
+# generated: 2026-02-04
+# project: Mentor AI
+# project_key: mentor-ai
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2026-02-04
+project: Mentor AI
+project_key: mentor-ai
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  # Epic 1: Foundation & Authentication
+  epic-1: in-progress
+  1-1-initialize-nx-monorepo-with-core-infrastructure: done
+  1-2-multi-tenant-database-foundation: done
+  1-3-design-system-setup-with-spartan-ui: done
+  1-4-health-check-endpoints: done
+  1-5-user-registration-and-tenant-creation: review
+  1-6-google-oauth-authentication-with-2fa: review
+  1-7-team-member-invitation: review
+  1-8-team-member-removal: done
+  1-9-backup-owner-designation: review
+  1-10-user-data-export: done
+  1-11-tenant-deletion-request: done
+  1-12-llm-provider-configuration: done
+  1-13-spartan-ui-removal-tech-debt: ready-for-dev
+  epic-1-retrospective: optional
+
+  # Epic 2: AI Conversation & Task Execution
+  epic-2: in-progress
+  2-1-basic-text-conversation-interface: done
+  2-2-ai-gateway-service-with-streaming: done
+  2-3-sub-5-minute-first-value-quick-win: review
+  2-3a-onboarding-note-save: done  # Critical fix for AC3 - saves generated output as note
+  2-4-department-persona-task-execution: done
+  2-5-confidence-scores-on-ai-outputs: done
+  2-6-business-concept-citations: done
+  2-7-persistent-memory-across-conversations: done
+  2-8-user-feedback-on-ai-outputs: backlog
+  2-9-department-guardrails: backlog
+  2-10-unified-business-partner-mode: backlog
+  2-11-recursive-workflow-detection: backlog
+  2-12-voice-commands-stt-tts: backlog
+  2-13-dynamic-concept-relationship-creation: done
+  2-14-universal-web-search-in-task-execution: done
+  2-15-ai-driven-concept-discovery-and-creation: done
+  2-16-workflow-output-visibility-and-yolo-feedback: done
+  2-17-universal-web-search-and-discovery-chat: in-progress
+  epic-2-retrospective: optional
+
+  # Epic 3: Knowledge Base & Business Concepts
+  epic-3: in-progress
+  3-1-business-concepts-data-model-and-seeding: done
+  3-2-autonomous-business-brain-workflow-engine: done
+  3-3-business-brain-ux-intelligence-refinements: done
+  3-4-tree-hierarchy-chat-fix-task-dedup-comments: done
+  3-10-yolo-concept-prioritization-50-limit: done
+  3-11-chat-quota-web-sources-ai-task-execution: done
+  3-12-task-execution-web-search-dedup-fixes: done
+  3-13-application-aware-task-creation-and-navigation: ready-for-dev
+  3-5-concept-engagement-tracking: backlog
+  3-6-business-brain-pdf-upload: backlog
+  3-7-pdf-sanitization-and-security: backlog
+  3-8-business-brain-versioning: backlog
+  3-9-sensitive-data-filtering-in-ai-outputs: backlog
+  epic-3-retrospective: optional
+
+  # Epic 4: Client & Project Context Management
+  epic-4: backlog
+  4-1-client-profile-creation-and-management: backlog
+  4-2-project-profile-creation: backlog
+  4-3-auto-apply-client-project-context: backlog
+  4-4-save-task-outputs-as-structured-notes: backlog
+  4-5-search-notes-within-workspace: backlog
+  4-6-edit-saved-notes: backlog
+  4-7-filter-notes-by-department-guardrails: backlog
+  epic-4-retrospective: optional
+
+  # Epic 5: Team Collaboration & Tenant Administration
+  epic-5: backlog
+  5-1-team-adoption-dashboard: backlog
+  5-2-roi-calculator: backlog
+  5-3-department-guardrails-configuration: backlog
+  5-4-team-member-task-and-conversation-history: backlog
+  5-5-aggregate-team-metrics-dashboard: backlog
+  5-6-visible-value-metrics-tracking: backlog
+  epic-5-retrospective: optional
+
+  # Epic 6: Integrations & Data Export
+  epic-6: backlog
+  6-1-hubspot-oauth-connection: backlog
+  6-2-google-analytics-oauth-connection: backlog
+  6-3-figma-oauth-connection: backlog
+  6-4-oauth-token-auto-refresh: backlog
+  6-5-integration-disconnect-and-revoke: backlog
+  6-6-native-export-functionality: backlog
+  6-7-integration-health-dashboard: backlog
+  6-8-integration-failure-notifications: backlog
+  epic-6-retrospective: optional
+
+  # Epic 7: Platform Administration
+  epic-7: backlog
+  7-1-tenant-invitation-system: backlog
+  7-2-tenant-activation-and-deactivation: backlog
+  7-3-platform-usage-analytics-dashboard: backlog
+  7-4-tenant-configuration-management: backlog
+  7-5-system-health-dashboard: backlog
+  7-6-platform-audit-logs: backlog
+  7-7-emergency-tenant-access: backlog
+  7-8-custom-branding-per-tenant: backlog
+  epic-7-retrospective: optional
+
+  # Epic 8: Subscription & Billing Management
+  epic-8: backlog
+  8-1-subscription-tier-display: backlog
+  8-2-stripe-checkout-integration: backlog
+  8-3-plan-upgrade-and-downgrade: backlog
+  8-4-subscription-cancellation: backlog
+  8-5-invoice-history-and-receipts: backlog
+  8-6-payment-method-management: backlog
+  8-7-usage-metering-dashboard: backlog
+  8-8-overage-handling: backlog
+  8-9-stripe-webhook-processing: backlog
+  8-10-billing-notifications: backlog
+  epic-8-retrospective: optional
+
+  # Epic 9: Security, Compliance & Data Protection
+  epic-9: backlog
+  9-1-user-activity-audit-trail: backlog
+  9-2-gdpr-data-export-right-to-access: backlog
+  9-3-account-deletion-right-to-erasure: backlog
+  9-4-data-retention-policies: backlog
+  9-5-consent-management: backlog
+  9-6-security-event-logging: backlog
+  9-7-data-encryption-at-rest: backlog
+  epic-9-retrospective: optional
