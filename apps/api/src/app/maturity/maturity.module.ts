@@ -5,6 +5,7 @@ import { AiGatewayModule } from '../ai-gateway/ai-gateway.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { AgentExecutionModule } from '../agent-execution/agent-execution.module';
 import { KnowledgeModule } from '../knowledge/knowledge.module';
+import { EnrichmentQueueModule } from '../enrichment-queue/enrichment-queue.module';
 import { MaturityEngineService } from './maturity-engine.service';
 import { StageClassifierService } from './stage-classifier.service';
 import { StalenessDetectorService } from './staleness-detector.service';
@@ -28,6 +29,7 @@ import { MaturityController } from './maturity.controller';
     forwardRef(() => WorkflowModule), // circular: WorkflowModule imports MaturityModule
     AgentExecutionModule,
     KnowledgeModule,
+    EnrichmentQueueModule,
   ],
   controllers: [MaturityController],
   providers: [

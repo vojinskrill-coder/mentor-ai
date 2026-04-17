@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject, Optional, forwardRef } from '@nestjs/common';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import {
   TenantStatus as PrismaTenantStatus,
@@ -44,6 +44,7 @@ import { BusinessProfileService } from '../openclaw-tenant/business-profile.serv
 import { SoulGeneratorService } from '../openclaw-tenant/soul-generator.service';
 import { OpenClawTenantService } from '../openclaw-tenant/openclaw-tenant.service';
 import { OpenClawClientService } from '../agent-execution/openclaw-client.service';
+import { OnboardingOrchestratorService } from '../onboarding-orchestrator/onboarding-orchestrator.service';
 
 /**
  * Service for managing the onboarding quick win flow.
@@ -74,6 +75,7 @@ export class OnboardingService {
     private readonly openClawClient: OpenClawClientService,
     @Inject(forwardRef(() => BridgeService))
     private readonly bridgeService: BridgeService,
+    @Optional() private readonly orchestrator?: OnboardingOrchestratorService,
   ) {}
 
   /**
@@ -1068,6 +1070,16 @@ Create a personalized Business Brain with exactly 10 prioritized tasks.`;
             error: err instanceof Error ? err.message : 'Unknown',
           });
         });
+
+      // Finalize onboarding via orchestrator (DB-backed enrichment pipeline)
+      if (this.orchestrator) {
+        try {
+          const conceptCount = taskIds.length;
+          await this.orchestrator.finalizeOnboarding(tenantId, conceptCount);
+        } catch (e) {
+          this.logger.warn({ message: 'Orchestrator finalization failed (non-blocking)', error: (e as Error).message });
+        }
+      }
 
       // Deploy USER.md + AGENTS.md to OpenClaw and brief the director (fire-and-forget)
       this.briefOpenClawDirector(tenantId, userId, generatedOutput, taskIds, executionMode)

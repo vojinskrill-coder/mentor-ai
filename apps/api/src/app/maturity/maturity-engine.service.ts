@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, Inject, Optional, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
@@ -22,6 +22,7 @@ import {
   DEPARTMENT_CATEGORY_MAP,
   FOUNDATION_CATEGORIES,
 } from '../knowledge/config/department-categories';
+import { EnrichmentQueueService } from '../enrichment-queue/enrichment-queue.service';
 
 /** Maps PersonaType to Department for category resolution */
 const PERSONA_TO_DEPARTMENT: Record<PersonaType, Department> = {
@@ -66,6 +67,7 @@ export class MaturityEngineService {
     private readonly crossPersonaIntelligence: CrossPersonaIntelligenceService,
     private readonly appEventBus: AppEventBus,
     private readonly configService: ConfigService,
+    @Optional() private readonly enrichmentQueue?: EnrichmentQueueService,
   ) {
     // Run up to 2 tasks in parallel within each wave.
     // Each task has 2-4 agent jobs → 2 tasks = max ~8 concurrent OpenClaw calls.
@@ -147,6 +149,21 @@ export class MaturityEngineService {
 
       // Create Note TASK records for all PENDING assignments (bridges gap with Brain tree)
       const noteCount = await this.createNotesForPendingAssignments(tenantId, stage, userId);
+
+      // Populate enrichment queue for the new DB-backed pipeline
+      if (this.enrichmentQueue) {
+        try {
+          const pendingAssignments = await this.prisma.stageConceptAssignment.findMany({
+            where: { tenantId, stage, status: StageConceptStatus.PENDING },
+            select: { conceptId: true },
+          });
+          const conceptIds = pendingAssignments.map(a => a.conceptId);
+          await this.enrichmentQueue.enqueueBatch(tenantId, conceptIds);
+          this.logger.log({ message: 'Enrichment queue populated', tenantId, count: conceptIds.length });
+        } catch (e) {
+          this.logger.warn({ message: 'Failed to populate enrichment queue (non-blocking)', error: (e as Error).message });
+        }
+      }
 
       // Re-count after reconciliation
       const finalCount = await this.prisma.stageConceptAssignment.count({

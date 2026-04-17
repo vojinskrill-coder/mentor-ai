@@ -3,6 +3,7 @@ import { TenantModule } from '@mentor-ai/shared/tenant-context';
 import { AuthModule } from '../auth/auth.module';
 import { LlmConfigModule } from '../llm-config/llm-config.module';
 import { AiGatewayModule } from '../ai-gateway/ai-gateway.module';
+import { VaultStorageModule } from '../vault-storage/vault-storage.module';
 import { KnowledgeController } from './knowledge.controller';
 import { ConceptService } from './services/concept.service';
 import { ConceptSeedService } from './services/concept-seed.service';
@@ -27,7 +28,7 @@ import { DepartmentGuard } from './guards/department.guard';
  * Story 3.2: Added BrainSeedingService + BusinessContextService.
  */
 @Module({
-  imports: [TenantModule, AuthModule, LlmConfigModule, AiGatewayModule],
+  imports: [TenantModule, AuthModule, LlmConfigModule, AiGatewayModule, VaultStorageModule],
   controllers: [KnowledgeController],
   providers: [
     ConceptService,
