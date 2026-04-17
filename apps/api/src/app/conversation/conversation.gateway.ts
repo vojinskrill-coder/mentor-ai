@@ -1772,10 +1772,10 @@ RULES:
 
     const taskUserPrompt = `KORISNIK: ${userMessage}
 
-AI ODGOVOR: ${aiResponse.length > 2000 ? aiResponse.substring(0, 2000) + '...' : aiResponse}
+AI RESPONSE: ${aiResponse.length > 2000 ? aiResponse.substring(0, 2000) + '...' : aiResponse}
 
-Odgovori SAMO sa validnim JSON nizom: [{"title":"...","content":"..."}]
-Ako nema zadataka: []`;
+Respond ONLY with a valid JSON array: [{"title":"...","content":"..."}]
+If no tasks: []`;
 
     try {
       let taskResponseContent = '';
@@ -2067,7 +2067,7 @@ Ako nema zadataka: []`;
     // Build concept context from matched concepts
     let conceptContext = '';
     if (relevantConcepts && relevantConcepts.length > 0) {
-      conceptContext = '\n\nPOVEZANI POSLOVNI KONCEPTI:\n';
+      conceptContext = '\n\nRELATED BUSINESS CONCEPTS:\n';
       for (const c of relevantConcepts.slice(0, 5)) {
         conceptContext += `- ${c.conceptName} (${c.category}): ${c.definition}\n`;
       }
@@ -2095,14 +2095,14 @@ CRITICAL:
 - Minimum 3, maximum 8 tasks
 - Write EXCLUSIVELY in English`;
 
-    const extractUserPrompt = `KORISNIKOV ZAHTEV:
+    const extractUserPrompt = `USER REQUEST:
 ${userMessage}
 
-AI ODGOVOR:
+AI RESPONSE:
 ${aiResponse}${conversationContext}${conceptContext}
 
-Odgovori SAMO sa validnim JSON nizom:
-[{"title":"...","content":"...","conceptMatch":"naziv koncepta ili null"}]`;
+Respond ONLY with a valid JSON array:
+[{"title":"...","content":"...","conceptMatch":"concept name or null"}]`;
 
     try {
       let extractedContent = '';
@@ -2319,7 +2319,7 @@ Odgovori SAMO sa validnim JSON nizom:
 
       // Send chat message listing created tasks
       const taskList = createdTasks.map((t, i) => `${i + 1}. **${t.title}**`).join('\n');
-      const taskMsg = `Kreirao sam ${createdTasks.length} zadatak${createdTasks.length > 1 ? 'a' : ''}:\n\n${taskList}\n\nPokrecem automatsko izvrsavanje. Rezultati ce biti dostupni u panelu zadataka.`;
+      const taskMsg = `Created ${createdTasks.length} task${createdTasks.length > 1 ? 's' : ''}:\n\n${taskList}\n\nStarting automatic execution. Results will be available in the tasks panel.`;
       try {
         await this.conversationService.addMessage(tenantId, conversationId, MessageRole.ASSISTANT, taskMsg);
         client.emit('chat:message-chunk', { content: taskMsg, index: 0 });
@@ -2759,7 +2759,7 @@ Odgovori SAMO sa validnim JSON nizom:
     // Block old pipeline in brain relay mode
     if (this.configService.get<string>('BRAIN_RELAY_MODE', 'false') === 'true') {
       client.emit('workflow:error', {
-        message: 'Brain relay mode aktivan — koristite novi UI za pokretanje zadataka.',
+        message: 'Brain relay mode active — use the new UI to start tasks.',
         conversationId: payload.conversationId,
       });
       return;
@@ -2771,7 +2771,7 @@ Odgovori SAMO sa validnim JSON nizom:
     try {
       if (!payload.taskIds?.length) {
         client.emit('workflow:error', {
-          message: 'Nema izabranih zadataka',
+          message: 'No selected tasks',
           conversationId: payload.conversationId,
         });
         return;
