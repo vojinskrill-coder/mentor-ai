@@ -706,7 +706,7 @@ export class BridgeService {
       '',
       taskList,
       '',
-      'Prati proceduru iz SOUL.md: delegiraj agentima, prati status, prijavi deliverables, zatvori task.',
+      'Follow the procedure from SOUL.md: delegate to agents, track status, report deliverables, close task.',
       'Every deliverable must be a file (.xlsx, .pdf, .pptx, .png) or URL — never .md.',
       `TenantId: ${tenantId}`,
     ].join('\n');
@@ -810,7 +810,7 @@ export class BridgeService {
     const taskList = pendingTasks.map(t => `- ${t.id}: ${t.title}`).join('\n');
 
     const followUp = [
-      'FINALIZACIJA: Proveri status ovih zadataka i prijavi rezultate.',
+      'FINALIZATION: Check the status of these tasks and report results.',
       '',
       taskList,
       '',
@@ -1110,7 +1110,7 @@ export class BridgeService {
 
   private agentLabel(agentType: string): string {
     const labels: Record<string, string> = {
-      direktor: 'Director', research: 'Research', financial: 'Finance',
+      director: 'Director', research: 'Research', financial: 'Finance',
       content: 'Content', marketing: 'Marketing', sales: 'Sales',
       designer: 'Design', dev: 'Development', web_search: 'Web Search',
     };
