@@ -321,14 +321,14 @@ export class BridgeService {
           'KORISTIS OVE AGENTE (sessions_spawn):',
           '- research: brave-search, tavily, browser-automation za istrazivanje',
           '- content: seo-content-writer, content-creator, ghost-cms za pisanje sadrzaja',
-          '- financial: fin-cog, excel-xlsx, financial-analyst za Excel fajlove i analize',
+          '- financial: fin-cog, excel-xlsx, financial-analyst for Excel files and analyses',
           '- marketing: marketing-strategy-pmm, simplified-social-media za strategije',
           '- sales: apollo, cold-email, campaign-orchestrator za lead generaciju',
           '- designer: generate-presentation za prezentacije, fal-generate za slike',
           '- dev: write, exec za kod (landing page, email template, skripte)',
           '',
           'ZA SVAKI FAJL KOJI NAPRAVIS:',
-          '1. Sacuvaj ga u workspace: write fajl u deliverables/',
+          '1. Save it to workspace: write file to deliverables/',
           '2. Prijavi ga kroz POST /api/bridge/task-contribution sa files[] poljem:',
           `   {"name":"ime.xlsx","displayName":"Opis","path":"/root/.openclaw/workspace/deliverables/${noteId}/ime.xlsx","mimeType":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","size":1000}`,
           '',
@@ -336,7 +336,7 @@ export class BridgeService {
           'Koristi curl komande iz mentor-ai-bridge SKILL.md za:',
           `- POST /api/bridge/agent-status — prijavi koji agent radi (tenantId="${proposal.tenantId}", taskId="${noteId}")`,
           `- POST /api/bridge/task-progress — prijavi napredak (noteId="${noteId}", percent 0-100)`,
-          `- POST /api/bridge/task-contribution — dodaj rezultat agenta sa output-om i fajlovima`,
+          `- POST /api/bridge/task-contribution — add agent result with output and files`,
           `- POST /api/bridge/task-complete — zavrsi zadatak (noteId="${noteId}", score 1-100)`,
         ].join('\n');
 
@@ -350,7 +350,7 @@ export class BridgeService {
               taskId: noteId,
               agent: tool.includes('search') ? 'research' : 'direktor',
               status: status === 'start' ? 'running' : 'completed',
-              message: status === 'start' ? `${tool}${query ? ': ' + query.substring(0, 80) : ''}` : `Završio: ${tool}`,
+              message: status === 'start' ? `${tool}${query ? ': ' + query.substring(0, 80) : ''}` : `Completed: ${tool}`,
               timestamp: new Date().toISOString(),
             });
           },
@@ -358,7 +358,7 @@ export class BridgeService {
             this.eventBus.emit(BRIDGE_EVENTS.AGENT_STATUS, {
               tenantId: proposal.tenantId,
               taskId: noteId,
-              agent: 'direktor',
+              agent: 'director',
               status: 'running',
               message: phase,
               timestamp: new Date().toISOString(),
@@ -612,7 +612,7 @@ export class BridgeService {
             tenantId: dto.tenantId,
             noteId: dto.noteId,
             agentType: 'auto-scan',
-            summary: `${newFiles.length} fajl(ova) pronađeno na disku`,
+            summary: `${newFiles.length} file(s) found on disk`,
             files: newFiles.map(f => ({ name: f.name, path: f.path, mimeType: f.mimeType })),
           } as any);
         }
@@ -627,16 +627,16 @@ export class BridgeService {
       select: { agentEnrichments: true, title: true },
     });
 
-    let fullContent = `# ${note?.title ?? 'Zadatak'}\n\n`;
+    let fullContent = `# ${note?.title ?? 'Task'}\n\n`;
     const enrichments = (note?.agentEnrichments as Record<string, any>) ?? {};
 
     for (const [agentType, entry] of Object.entries(enrichments)) {
       if (entry.result || entry.summary) {
         fullContent += `## ${this.agentLabel(agentType)}\n\n`;
-        if (entry.summary) fullContent += `**Rezime:** ${entry.summary}\n\n`;
+        if (entry.summary) fullContent += `**Summary:** ${entry.summary}\n\n`;
         if (entry.result) fullContent += `${entry.result}\n\n`;
         if (entry.files?.length) {
-          fullContent += '**Fajlovi:**\n';
+          fullContent += '**Files:**\n';
           for (const f of entry.files) {
             fullContent += `- ${f.displayName || f.name}\n`;
           }
@@ -694,20 +694,20 @@ export class BridgeService {
 
     // Build execution message for the director
     const taskList = tasks.map((t, i) => [
-      `### Zadatak ${i + 1}: ${t.title}`,
+      `### Task ${i + 1}: ${t.title}`,
       `NoteId: ${t.id}`,
       t.conceptId ? `ConceptId: ${t.conceptId}` : '',
       t.content ? `Opis: ${t.content.substring(0, 500)}` : '',
-      t.expectedOutcome ? `Očekivani rezultat: ${t.expectedOutcome}` : '',
+      t.expectedOutcome ? `Expected outcome: ${t.expectedOutcome}` : '',
     ].filter(Boolean).join('\n')).join('\n\n');
 
     const message = [
-      `IZVRŠAVANJE ${tasks.length} ZADATAKA`,
+      `EXECUTING ${tasks.length} TASKS`,
       '',
       taskList,
       '',
       'Prati proceduru iz SOUL.md: delegiraj agentima, prati status, prijavi deliverables, zatvori task.',
-      'Svaki deliverable mora biti fajl (.xlsx, .pdf, .pptx, .png) ili URL — nikad .md.',
+      'Every deliverable must be a file (.xlsx, .pdf, .pptx, .png) or URL — never .md.',
       `TenantId: ${tenantId}`,
     ].join('\n');
 
@@ -716,9 +716,9 @@ export class BridgeService {
       this.eventBus.emit(BRIDGE_EVENTS.AGENT_STATUS, {
         tenantId,
         taskId: task.id,
-        agent: 'direktor',
+        agent: 'director',
         status: 'running',
-        message: `Primljeno za izvršavanje: ${task.title}`,
+        message: `Received for execution: ${task.title}`,
         timestamp: new Date().toISOString(),
       });
     }
@@ -737,11 +737,11 @@ export class BridgeService {
         this.eventBus.emit(BRIDGE_EVENTS.AGENT_STATUS, {
           tenantId,
           taskId: tasks[0]?.id ?? sessionId,
-          agent: tool.includes('search') ? 'research' : tool.includes('exec') ? 'dev' : 'direktor',
+          agent: tool.includes('search') ? 'research' : tool.includes('exec') ? 'dev' : 'director',
           status: status === 'start' ? 'running' : 'completed',
           message: status === 'start'
             ? `${tool}${query ? ': ' + query.substring(0, 100) : ''}`
-            : `Završio: ${tool}`,
+            : `Completed: ${tool}`,
           timestamp: new Date().toISOString(),
         });
       },
@@ -760,9 +760,9 @@ export class BridgeService {
       this.eventBus.emit(BRIDGE_EVENTS.AGENT_STATUS, {
         tenantId,
         taskId: tasks[0]?.id ?? sessionId,
-        agent: 'direktor',
+        agent: 'director',
         status: result.success ? 'completed' : 'failed',
-        message: result.success ? 'Izvršavanje završeno' : (result.error ?? 'Greška'),
+        message: result.success ? 'Execution completed' : (result.error ?? 'Error'),
         timestamp: new Date().toISOString(),
       });
 
@@ -815,11 +815,11 @@ export class BridgeService {
       taskList,
       '',
       'Za svaki zadatak:',
-      '1. Proveri da li su sub-agenti završili (ls deliverables/{noteId}/)',
-      '2. Za svaki fajl koji postoji, prijavi ga kroz task-contribution',
-      '3. Zatvori zadatak sa task-complete i ocenom',
+      '1. Check if sub-agents have finished (ls deliverables/{noteId}/)',
+      '2. For each file that exists, report it through task-contribution',
+      '3. Close the task with task-complete and a score',
       '',
-      'Ako agenti još rade, sačekaj ih i prijavi kad završe.',
+      'If agents are still working, wait for them and report when done.',
       `TenantId: ${tenantId}`,
     ].join('\n');
 
@@ -1110,9 +1110,9 @@ export class BridgeService {
 
   private agentLabel(agentType: string): string {
     const labels: Record<string, string> = {
-      direktor: 'Direktor', research: 'Istraživanje', financial: 'Finansije',
-      content: 'Sadržaj', marketing: 'Marketing', sales: 'Prodaja',
-      designer: 'Dizajn', dev: 'Razvoj', web_search: 'Web Pretraga',
+      direktor: 'Director', research: 'Research', financial: 'Finance',
+      content: 'Content', marketing: 'Marketing', sales: 'Sales',
+      designer: 'Design', dev: 'Development', web_search: 'Web Search',
     };
     return labels[agentType] ?? agentType;
   }

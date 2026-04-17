@@ -87,11 +87,11 @@ KRITICNO — UZEMLJENJE:
 - Ako imas prethodno iskustvo i memoriju o ovoj kompaniji — iskoristi to znanje. Nadogradi na postojece nalaze.
 - Ako je ovo tvoj prvi zadatak — koristi dostavljene podatke iz web istrazivanja.
 
-KRITICNO — FORMAT:
-- NE KORISTI write, edit, bash ili bilo koji file tool. NE PISI fajlove.
-- Samo VRATI TEKST kao svoj odgovor — to je tvoj output.
-- Profesionalan Markdown (## zaglavlja, tabele, **bold** za kljucne vrednosti, > za izvore sa URL-ovima).
-- SVE na srpskom jeziku. NE objesnjavaj sta ces raditi — odmah pisi rezultat.
+CRITICAL — FORMAT:
+- DO NOT USE write, edit, bash or any file tool. DO NOT WRITE files.
+- Only RETURN TEXT as your response — that is your output.
+- Professional Markdown (## headings, tables, **bold** for key values, > for sources with URLs).
+- ALL in English. DO NOT explain what you will do — write the result immediately.
 
 KRITICNO — SLIKE:
 - Za generisanje slika OBAVEZNO koristi exec tool: FAL_IMAGE_SIZE=<size> fal-generate "<prompt>". Velicine: landscape_16_9 (web), square_hd (social), landscape_4_3 (prezentacije), portrait_4_3 (stories).

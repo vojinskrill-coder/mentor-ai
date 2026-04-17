@@ -229,7 +229,7 @@ export class HeadlessExecutorService {
       this.wsHolder.emitToTenant(tenantId, 'task:ai-workflow-start', {
         taskId,
         conversationId: convId,
-        message: 'Pripremam kontekst za izvršavanje...',
+        message: 'Preparing context for execution...',
         auto: true,
       });
 
@@ -252,12 +252,12 @@ export class HeadlessExecutorService {
             tenantId, taskNote.conceptId, conceptAssignment.stage as any,
           );
           if (prereqs.prerequisiteOutputs.length > 0) {
-            prerequisiteContext = '\n\n--- REZULTATI PRETHODNO ZAVRSENIH KONCEPATA ---';
+            prerequisiteContext = '\n\n--- RESULTS FROM PREVIOUSLY COMPLETED CONCEPTS ---';
             for (const po of prereqs.prerequisiteOutputs) {
               prerequisiteContext += `\n### ${po.conceptName}\n${po.outputSummary}`;
             }
-            prerequisiteContext += '\n--- KRAJ PRETHODNOG KONTEKSTA ---';
-            prerequisiteContext += '\nKORISTI ove nalaze kao TEMELJ — ne ponavljaj ih, NADOGRADI na njima.';
+            prerequisiteContext += '\n--- END OF PREVIOUS CONTEXT ---';
+            prerequisiteContext += '\nUSE these findings as a FOUNDATION — do not repeat them, BUILD UPON them.';
           }
         } catch { /* non-blocking */ }
       }
@@ -267,7 +267,7 @@ export class HeadlessExecutorService {
         conversationId: convId,
         stepIndex: 0,
         totalSteps: 1,
-        stepTitle: 'Analiza i sinteza sa prethodnim znanjem',
+        stepTitle: 'Analysis and synthesis with prior knowledge',
         auto: true,
       });
 
@@ -285,19 +285,19 @@ export class HeadlessExecutorService {
             },
           });
           if (concept) {
-            conceptKnowledge = `\n\n--- BAZA ZNANJA ---`;
-            conceptKnowledge += `\nKONCEPT: ${concept.name} (${concept.category})`;
-            conceptKnowledge += `\nDEFINICIJA: ${concept.definition}`;
+            conceptKnowledge = `\n\n--- KNOWLEDGE BASE ---`;
+            conceptKnowledge += `\nCONCEPT: ${concept.name} (${concept.category})`;
+            conceptKnowledge += `\nDEFINITION: ${concept.definition}`;
             if (concept.extendedDescription) {
-              conceptKnowledge += `\nDETALJNO: ${concept.extendedDescription}`;
+              conceptKnowledge += `\nDETAILED: ${concept.extendedDescription}`;
             }
             if (concept.relatedTo.length > 0) {
               const related = concept.relatedTo
                 .map((r) => `${r.targetConcept.name} (${r.relationshipType})`)
                 .join(', ');
-              conceptKnowledge += `\nPOVEZANI KONCEPTI: ${related}`;
+              conceptKnowledge += `\nRELATED CONCEPTS: ${related}`;
             }
-            conceptKnowledge += '\n--- KRAJ BAZE ZNANJA ---';
+            conceptKnowledge += '\n--- END OF KNOWLEDGE BASE ---';
           }
         } catch {
           /* non-blocking */
@@ -326,7 +326,7 @@ export class HeadlessExecutorService {
         try {
           const preCheckResult = await this.executeWithLockRetry(
             () => this.openClawClient.executeAgent(
-              `Šta znaš o konceptu "${taskNote!.title}" za kompaniju ${cachedTenantData?.name || 'Unknown'}? Koji aspekti su već pokriveni iz prethodnih koncepata? Šta treba NOVO istražiti? Odgovori kratko, u 200-300 reči.`,
+              `What do you know about the concept "${taskNote!.title}" for the company ${cachedTenantData?.name || 'Unknown'}? Which aspects have already been covered from previous concepts? What needs to be newly researched? Answer briefly, in 200-300 words.`,
               { agentId: 'main', tenantProfile: tenantId, timeoutSeconds: 60 }
             ),
             'pre-check-main',
@@ -357,28 +357,28 @@ export class HeadlessExecutorService {
         });
       }
 
-      const prompt = `Ti si vrhunski poslovni stručnjak. Napravi NACRT analize koji će biti obogaćen istraživanjem AI agenata.
+      const prompt = `You are a top-tier business expert. Create a DRAFT analysis that will be enriched by AI agent research.
 
-ZADATAK: ${taskNote.title}
-${taskNote.content ? `OPIS ZADATKA: ${taskNote.content}` : ''}
-${taskNote.expectedOutcome ? `OČEKIVANI REZULTAT: ${taskNote.expectedOutcome}` : ''}
+TASK: ${taskNote.title}
+${taskNote.content ? `TASK DESCRIPTION: ${taskNote.content}` : ''}
+${taskNote.expectedOutcome ? `EXPECTED OUTCOME: ${taskNote.expectedOutcome}` : ''}
 ${prerequisiteContext}${crossPersonaContext}${conceptKnowledge}
-${mainPreCheckContext ? `\n--- ŠTA JE VEĆ POZNATO (iz poslovnog mozga) ---\n${mainPreCheckContext}\n--- KRAJ POZNATOG ---` : ''}
+${mainPreCheckContext ? `\n--- WHAT IS ALREADY KNOWN (from the business brain) ---\n${mainPreCheckContext}\n--- END OF KNOWN ---` : ''}
 
-KRITIČNO — UZEMLJENJE NA KONCEPT:
-- Tvoj zadatak je ISKLJUČIVO analiza koncepta navedenog u BAZI ZNANJA iznad.
-- SVAKI deo dokumenta MORA biti direktno vezan za taj koncept i njegovu definiciju.
-- NIKADA ne izmišljaj koncepte, termine ili podatke koji ne postoje u bazi znanja ili izvorima.
-- Ako nešto ne znaš — napiši "[POTREBNO ISTRAŽITI]" umesto da izmišljaš.
-- NE širi se na teme koje nisu direktno povezane sa zadatim konceptom.
+CRITICAL — GROUNDING ON CONCEPT:
+- Your task is EXCLUSIVELY to analyze the concept listed in the KNOWLEDGE BASE above.
+- EVERY part of the document MUST be directly tied to that concept and its definition.
+- NEVER invent concepts, terms, or data that do not exist in the knowledge base or sources.
+- If you don't know something — write "[NEEDS RESEARCH]" instead of fabricating.
+- DO NOT expand to topics not directly related to the assigned concept.
 
-OVO JE NACRT — biće obogaćen istraživanjem agenata:
-1. Strukturiraj analizu sa ## zaglavljima, tabelama
-2. Identifikuj KLJUČNE TEME za istraživanje — označi ih sa "[ISTRAŽITI]"
-3. Koristi podatke iz prethodnih koncepata i poznatog konteksta
-4. 300-800 reči — fokusiraj se na strukturu i analizu, ne na dužinu
-5. Odgovaraj ISKLJUČIVO na srpskom jeziku
-6. Format: Markdown (## zaglavlja, tabele, **bold**, > za izvore)`;
+THIS IS A DRAFT — it will be enriched by agent research:
+1. Structure the analysis with ## headings, tables
+2. Identify KEY TOPICS for research — mark them with "[RESEARCH]"
+3. Use data from previous concepts and known context
+4. 300-800 words — focus on structure and analysis, not length
+5. Respond EXCLUSIVELY in English
+6. Format: Markdown (## headings, tables, **bold**, > for sources)`;
 
       this.logger.log({
         message: 'Headless: synthesizing with enriched context',
@@ -402,7 +402,7 @@ OVO JE NACRT — biće obogaćen istraživanjem agenata:
         conversationId: convId,
         stepIndex: 0,
         totalSteps: 1,
-        stepTitle: 'Analiza i sinteza sa prethodnim znanjem',
+        stepTitle: 'Analysis and synthesis with prior knowledge',
         auto: true,
       });
 
@@ -481,7 +481,7 @@ OVO JE NACRT — biće obogaćen istraživanjem agenata:
         for (const job of completedJobs.filter((j) => j.agentOutput)) {
           const output = job.agentOutput!;
           if (output.length <= SUMMARY_THRESHOLD) {
-            agentParts.push(`### ${job.agentType.toUpperCase()} istraživanje\n${output}`);
+            agentParts.push(`### ${job.agentType.toUpperCase()} research\n${output}`);
           } else {
             // Summarize long outputs via LLM to preserve key findings
             try {
@@ -491,11 +491,11 @@ OVO JE NACRT — biće obogaćen istraživanjem agenata:
                 { tenantId, userId, conversationId: convId, businessContext: bizContext, useFallback: true },
                 (chunk: string) => { summary += chunk; },
               );
-              agentParts.push(`### ${job.agentType.toUpperCase()} istraživanje (sumirano)\n${summary}`);
+              agentParts.push(`### ${job.agentType.toUpperCase()} research (summarized)\n${summary}`);
               this.logger.log({ message: `Headless: summarized ${job.agentType} output`, taskId, original: output.length, summarized: summary.length });
             } catch {
               // Fallback to first 3000 chars if summarization fails
-              agentParts.push(`### ${job.agentType.toUpperCase()} istraživanje\n${output.substring(0, SUMMARY_THRESHOLD)}`);
+              agentParts.push(`### ${job.agentType.toUpperCase()} research\n${output.substring(0, SUMMARY_THRESHOLD)}`);
             }
           }
         }
@@ -504,71 +504,71 @@ OVO JE NACRT — biće obogaćen istraživanjem agenata:
 
         let tenantInfo = '';
         if (cachedTenantData) {
-          tenantInfo = `KOMPANIJA: ${cachedTenantData.name}${cachedTenantData.industry ? ` | INDUSTRIJA: ${cachedTenantData.industry}` : ''}`;
+          tenantInfo = `COMPANY: ${cachedTenantData.name}${cachedTenantData.industry ? ` | INDUSTRY: ${cachedTenantData.industry}` : ''}`;
         }
 
-        const consolidationPrompt = `Ti si senior poslovni stručnjak. Napravi FINALNI dokument i OCENI ga.
+        const consolidationPrompt = `You are a senior business expert. Create the FINAL document and SCORE it.
 
 ${tenantInfo}
-KONCEPT: ${currentNote?.title ?? taskNote.title}
+CONCEPT: ${currentNote?.title ?? taskNote.title}
 
-1. NACRT ANALIZE:
+1. DRAFT ANALYSIS:
 ${currentNote?.userReport ?? fullContent}
 
-${agentFindings.length > 0 ? `2. REZULTATI ISTRAŽIVANJA AGENATA:\n${agentFindings}` : '(Nema rezultata istraživanja agenata)'}
+${agentFindings.length > 0 ? `2. AGENT RESEARCH RESULTS:\n${agentFindings}` : '(No agent research results)'}
 
-ZADATAK — DVE STVARI:
+TASK — TWO THINGS:
 
-A) NAPRAVI IZUZETAN FINALNI DOKUMENT (4000-5000 reci) koji:
+A) CREATE AN OUTSTANDING FINAL DOCUMENT (4000-5000 words) that:
 
-STRUKTURA I FORMATIRANJE:
-- Koristi jasnu hijerarhiju: # naslov, ## sekcije, ### podsekcije
-- Svaka sekcija mora imati tabele sa konkretnim podacima, brojevima, metrikama
-- Koristi **bold** za kljucne vrednosti, brojke i zakljucke
-- Koristi > blockquote za kljucne uvide i preporuke
-- Koristi bullet liste za akcione stavke
-- Koristi horizontalne linije (---) za razdvajanje glavnih sekcija
+STRUCTURE AND FORMATTING:
+- Use a clear hierarchy: # title, ## sections, ### subsections
+- Each section must have tables with concrete data, numbers, metrics
+- Use **bold** for key values, numbers, and conclusions
+- Use > blockquote for key insights and recommendations
+- Use bullet lists for action items
+- Use horizontal rules (---) to separate major sections
 
-SADRZAJ I KVALITET:
-- Integriši SVE nalaze iz nacrta i SVIH agentskih istrazivanja — ne preskaci nijedan nalaz
-- Daj prednost KONKRETNIM podacima sa izvorima nad generickim analizama
-- Svaki podatak, benchmark ili statistika MORA imati izvor: ([Naziv](URL))
-- Ukljuci detaljne tabele sa uporednim analizama, metrikama, benchmarkovima
-- Za svaku preporuku daj KONKRETAN akcioni plan sa odgovornom osobom/timom i rokom
-- Ukljuci sekciju "Finansijski Uticaj" sa konkretnim projekcijama
-- Ukljuci sekciju "Rizici i Mitigacija" sa tabelom rizika
-- Ukljuci sekciju "KPI-jevi i Merenje Uspeha" sa konkretnim ciljnim vrednostima
-- Ukljuci sekciju "Sledeci Koraci" sa vremenskim okvirom (nedelja/mesec)
-- Ukljuci sekciju "Izvori" na kraju sa svim koriscenim URL-ovima
+CONTENT AND QUALITY:
+- Integrate ALL findings from the draft and ALL agent research — do not skip any finding
+- Prioritize CONCRETE data with sources over generic analyses
+- Every data point, benchmark, or statistic MUST have a source: ([Name](URL))
+- Include detailed tables with comparative analyses, metrics, benchmarks
+- For each recommendation provide a CONCRETE action plan with responsible person/team and deadline
+- Include a "Financial Impact" section with concrete projections
+- Include a "Risks and Mitigation" section with a risk table
+- Include a "KPIs and Success Measurement" section with concrete target values
+- Include a "Next Steps" section with a time frame (week/month)
+- Include a "Sources" section at the end with all used URLs
 
-SLIKE:
-- OBAVEZNO SACUVAJ SVE slike (![opis](url)) iz agentskih nalaza
-- Kopiraj ih TACNO kako su — ne menjaj URL-ove
-- Postavi ih na odgovarajuca mesta u dokumentu gde su kontekstualno relevantne
+IMAGES:
+- MUST PRESERVE ALL images (![description](url)) from agent findings
+- Copy them EXACTLY as they are — do not change URLs
+- Place them in appropriate locations in the document where they are contextually relevant
 
-PRAVILA:
-- Pisi na SRPSKOM jeziku
-- NIKADA ne izmisljaj podatke — ako podatak nije dostupan, napravi razumnu procenu i navedi pretpostavku
-- NIKADA ne pisi "[POTREBNO ISTRAZITI]" ili "[POTREBNO DODATNO ISTRAZITI]" — svi podaci su vec istrazeni
-- NE ponavljaj iste informacije iz razlicitih agenata — sintetizuj ih u jedinstven zakljucak
-- Dokument mora biti PROFESIONALAN, spreman za prezentaciju C-level menadzerima
-- 4000-5000 reci — budi temeljit, detaljan i sveobuhvatan
-- NIKADA ne pisi programski kod (JavaScript, Python, itd.) — samo tekst, tabele i markdown
-- Za slike koristi ISKLJUCIVO markdown format: ![opis slike](url) — NIKADA ne pisi fal-generate komande ili kod
-- NIKADA ne pisi FAL_IMAGE_SIZE, fal-generate, require("fal-ai") ili bilo kakav kod za generisanje slika
+RULES:
+- Write in English
+- NEVER fabricate data — if data is unavailable, make a reasonable estimate and state the assumption
+- NEVER write "[NEEDS RESEARCH]" or "[NEEDS FURTHER RESEARCH]" — all data has already been researched
+- DO NOT repeat the same information from different agents — synthesize them into a single conclusion
+- Document must be PROFESSIONAL, ready for presentation to C-level executives
+- 4000-5000 words — be thorough, detailed, and comprehensive
+- NEVER write programming code (JavaScript, Python, etc.) — only text, tables, and markdown
+- For images use EXCLUSIVELY markdown format: ![image description](url) — NEVER write fal-generate commands or code
+- NEVER write FAL_IMAGE_SIZE, fal-generate, require("fal-ai") or any image generation code
 
-B) NA KRAJU DOKUMENTA OCENI po 5 kriterijuma (svaki 1-10):
+B) AT THE END OF THE DOCUMENT SCORE by 5 criteria (each 1-10):
 ---
 EVALUACIJA:
 - Primenljivost: X/10
-- Specifičnost: X/10
+- Specificnost: X/10
 - Kompletnost: X/10
 - Relevantnost: X/10
 - Kvalitet: X/10
 OCENA: X/10
 ---
 
-Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
+Respond EXCLUSIVELY in English.`;
 
         let consolidated = '';
         await this.aiGateway.streamCompletionWithContext(

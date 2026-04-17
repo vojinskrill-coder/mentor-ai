@@ -27,51 +27,51 @@ import { AppEventBus, APP_EVENTS } from '../events/app-event-bus.service';
 
 const MAX_RECURSION_DEPTH = 10;
 
-const WORKFLOW_GENERATION_SYSTEM_PROMPT = `Ti si iskusan dizajner poslovnih radnih tokova za srpska preduzeća. Kreiraj strukturirane, sekvencijalne radne tokove gde svaki korak PROIZVODI konkretan poslovni dokument.
+const WORKFLOW_GENERATION_SYSTEM_PROMPT = `You are an experienced business workflow designer. Create structured, sequential workflows where each step PRODUCES a concrete business document.
 
-Svaki radni tok mora:
-1. Početi sa dijagnostikom/procenom pre strateških preporuka — NIKADA ne preskoči analizu trenutnog stanja
-2. Uključiti promptove koji instruiraju AI da IZVRŠI posao i PROIZVEDE rezultate — NE da objašnjava korisniku
-3. Svaki korak proizvodi upotrebljiv izlaz (analizu, plan, matricu, strategiju, profil, itd.)
-4. Koristiti odgovarajući departmanski okvir kada je departmentTag specificiran
-5. Biti SPECIFIČAN za datu kompaniju i industriju — NE generički
+Every workflow must:
+1. Start with diagnostics/assessment before strategic recommendations — NEVER skip analysis of the current state
+2. Include prompts that instruct the AI to EXECUTE the work and PRODUCE results — NOT to explain to the user
+3. Each step produces a usable output (analysis, plan, matrix, strategy, profile, etc.)
+4. Use the appropriate departmental framework when departmentTag is specified
+5. Be SPECIFIC to the given company and industry — NOT generic
 
-KORIŠĆENJE KONCEPATA:
-- Svaki korak MORA primeniti {{conceptName}} kao analitički okvir — ne objašnjavati ga
-- Ako koncept ima PREREQUISITE koncepte, raniji koraci moraju primeniti te temelje pre glavnog koncepta
-- Ako koncept ima RELATED koncepte, koristiti ih za dopunsku analizu gde je relevantno
-- NIKADA ne nabrajaj definicije koncepata — PRIMENI ih na konkretno poslovanje
+CONCEPT USAGE:
+- Each step MUST apply {{conceptName}} as an analytical framework — not explain it
+- If the concept has PREREQUISITE concepts, earlier steps must apply those foundations before the main concept
+- If the concept has RELATED concepts, use them for supplementary analysis where relevant
+- NEVER list concept definitions — APPLY them to the concrete business
 
-SEKVENCIJALNO GRAĐENJE:
-- Korak 2 MORA koristiti nalaze iz koraka 1 — ne sme generisati nezavisnu analizu
-- Korak 3 MORA sintetizovati nalaze iz koraka 1 i 2 u konkretan plan
-- promptTemplate svakog koraka (osim prvog) MORA sadržati instrukciju: "Na osnovu prethodno urađene analize, ..."
-- NIKADA ne ponavljaj analizu koja je već urađena u prethodnom koraku
+SEQUENTIAL BUILDING:
+- Step 2 MUST use findings from step 1 — must not generate an independent analysis
+- Step 3 MUST synthesize findings from steps 1 and 2 into a concrete plan
+- promptTemplate of each step (except the first) MUST contain the instruction: "Based on the previously completed analysis, ..."
+- NEVER repeat analysis that was already done in a previous step
 
-KVALITET OUTPUTA:
-- Svaki nalaz mora imati obrazloženje — ne samo tvrdnju
-- Preporuke moraju biti prioritizovane — ne lista jednako važnih stavki
-- Svaki dokument mora završiti sa KONKRETNIM sledećim koracima
-- Koristiti tabele za uporedne analize i numeričke podatke
-- Format: čist markdown sa ## sekcijama, tabelama, > callout blokovima
+OUTPUT QUALITY:
+- Every finding must have a rationale — not just a claim
+- Recommendations must be prioritized — not a list of equally important items
+- Every document must end with CONCRETE next steps
+- Use tables for comparative analyses and numerical data
+- Format: clean markdown with ## sections, tables, > callout blocks
 
-KRITIČNO za promptTemplate polje:
-- Prompt MORA instruirati AI da URADI posao, NE da objašnjava korisniku kako da ga uradi
-- Prompt je INTERNI — korisnik ga NIKADA ne vidi. Korisnik vidi samo proizveden dokument.
-- UVEK koristi imperativne glagole: "Izvrši", "Kreiraj", "Analiziraj", "Razvij", "Mapiraj", "Proizvedi"
-- NIKADA ne koristi: "Objasnite", "Razmotrite", "Trebalo bi da", "Preporučuje se"
-- UVEK koristi placeholder {{businessContext}} za ime kompanije i industrije
-- UVEK koristi placeholder {{conceptName}} za naziv koncepta
-- SVAKI prompt MORA tražiti minimum 800 reči izlaza sa strukturiranim zaglavljima i konkretnim primerima
+CRITICAL for the promptTemplate field:
+- Prompt MUST instruct the AI to DO the work, NOT to explain to the user how to do it
+- Prompt is INTERNAL — the user NEVER sees it. The user only sees the produced document.
+- ALWAYS use imperative verbs: "Execute", "Create", "Analyze", "Develop", "Map", "Produce"
+- NEVER use: "Explain", "Consider", "You should", "It is recommended"
+- ALWAYS use placeholder {{businessContext}} for company name and industry
+- ALWAYS use placeholder {{conceptName}} for the concept name
+- EVERY prompt MUST request minimum 800 words of output with structured headings and concrete examples
 
-Primer DOBAR promptTemplate:
-"Izvrši kompletnu SWOT analizu za {{businessContext}} koristeći {{conceptName}} framework. Proizvedi strukturiranu matricu sa minimum 5 stavki po kategoriji. Za svaku stavku napiši: nalaz, dokaz/obrazloženje, preporuka za akciju. Koristi tabele gde je moguće. Minimum 1000 reči."
+Example GOOD promptTemplate:
+"Execute a complete SWOT analysis for {{businessContext}} using the {{conceptName}} framework. Produce a structured matrix with minimum 5 items per category. For each item write: finding, evidence/rationale, action recommendation. Use tables where possible. Minimum 1000 words."
 
-Primer LOŠ promptTemplate:
-"Objasnite šta je SWOT analiza i kako je primeniti na poslovanje"
+Example BAD promptTemplate:
+"Explain what SWOT analysis is and how to apply it to a business"
 
-VAŽNO: Sav tekst MORA biti na SRPSKOM JEZIKU.
-Vrati SAMO validan JSON niz bez markdown formatiranja.`;
+IMPORTANT: All text MUST be in English.
+Return ONLY valid JSON array without markdown formatting.`;
 
 /**
  * Callbacks provided by the gateway for plan execution.
@@ -247,7 +247,7 @@ export class WorkflowService {
     });
 
     // Load concept name if available
-    let conceptName = 'Poslovni zadatak';
+    let conceptName = 'Business task';
     let conceptContext = '';
     if (task.conceptId) {
       try {
@@ -271,9 +271,9 @@ export class WorkflowService {
         });
         if (messages.length > 0) {
           conversationContext =
-            '\n\nKONVERZACIJA KORISNIKA (ovo je kontekst iz kojeg je nastao zadatak):';
+            '\n\nUSER CONVERSATION (this is the context from which the task originated):';
           for (const msg of messages.reverse()) {
-            const role = msg.role === 'USER' ? 'KORISNIK' : 'AI';
+            const role = msg.role === 'USER' ? 'USER' : 'AI';
             const content =
               msg.content.length > 1000 ? msg.content.substring(0, 1000) + '...' : msg.content;
             conversationContext += `\n${role}: ${content}`;
@@ -284,39 +284,39 @@ export class WorkflowService {
       }
     }
 
-    const prompt = `Generiši radni tok za IZVRŠAVANJE konkretnog poslovnog zadatka.
+    const prompt = `Generate a workflow for EXECUTING a specific business task.
 
-ZADATAK: ${task.title}
-${task.content ? `OPIS ZADATKA: ${task.content}` : ''}${conceptContext}${conversationContext}
+TASK: ${task.title}
+${task.content ? `TASK DESCRIPTION: ${task.content}` : ''}${conceptContext}${conversationContext}
 
-ANALIZA KONVERZACIJE:
-- Pročitaj konverzaciju i identifikuj ŠTA korisnik već zna o ovom problemu
-- Ne generiši korake za stvari koje su već diskutovane ili rešene
-- Referencirati konkretne probleme, proizvode ili situacije koje je korisnik pomenuo
-- promptTemplate MORA koristiti specifičnosti iz konverzacije
+CONVERSATION ANALYSIS:
+- Read the conversation and identify WHAT the user already knows about this problem
+- Do not generate steps for things that have already been discussed or resolved
+- Reference specific problems, products, or situations the user mentioned
+- promptTemplate MUST use specifics from the conversation
 
-KONCEPT KAO OKVIR:
-- Ako je task povezan sa konceptom, koristiti koncept kao ANALITIČKI OKVIR za strukturiranje koraka
-- Ne objašnjavati koncept — primeniti ga na konkretnu situaciju korisnika
+CONCEPT AS FRAMEWORK:
+- If the task is linked to a concept, use the concept as an ANALYTICAL FRAMEWORK for structuring steps
+- Do not explain the concept — apply it to the user's specific situation
 
-SEKVENCIJALNO GRAĐENJE:
-- Korak 2 MORA koristiti nalaze iz koraka 1 — promptTemplate mora sadržati "Na osnovu prethodno urađene analize, ..."
-- Korak 3 MORA sintetizovati nalaze iz koraka 1 i 2 u konkretan plan
-- NIKADA ne ponavljaj analizu koja je već urađena u prethodnom koraku
+SEQUENTIAL BUILDING:
+- Step 2 MUST use findings from step 1 — promptTemplate must contain "Based on the previously completed analysis, ..."
+- Step 3 MUST synthesize findings from steps 1 and 2 into a concrete plan
+- NEVER repeat analysis that was already done in a previous step
 
-KRITIČNO: Koraci MORAJU biti direktno povezani sa ZADATKOM iznad i sa KONVERZACIJOM korisnika.
-NE generiši generičke korake za koncept. Generiši korake koji rešavaju KONKRETAN problem korisnika.
+CRITICAL: Steps MUST be directly related to the TASK above and to the USER'S CONVERSATION.
+DO NOT generate generic steps for a concept. Generate steps that solve the user's SPECIFIC problem.
 
-Vrati JSON niz koraka. Svaki korak mora imati:
-- stepNumber (celobrojna vrednost počevši od 1)
-- title (koncizan naslov akcije, max 60 karaktera, na srpskom)
-- description (šta ovaj korak postiže, max 200 karaktera, na srpskom)
-- promptTemplate (INTERNI prompt koji instruiše AI da IZVRŠI korak. Koristi {{conceptName}} i {{businessContext}} placeholdere. Akcioni glagoli: "Izvrši", "Kreiraj", "Analiziraj". NIKADA "Objasnite" ili "Trebalo bi".)
-- expectedOutcome (konkretan deliverable, max 100 karaktera, na srpskom)
-- estimatedMinutes (celobrojna vrednost)
-- departmentTag (opciono: "CFO", "CMO", "CTO", "OPERATIONS", "LEGAL", "CREATIVE")
+Return a JSON array of steps. Each step must have:
+- stepNumber (integer starting from 1)
+- title (concise action title, max 60 characters, in English)
+- description (what this step achieves, max 200 characters, in English)
+- promptTemplate (INTERNAL prompt that instructs the AI to EXECUTE the step. Use {{conceptName}} and {{businessContext}} placeholders. Action verbs: "Execute", "Create", "Analyze". NEVER "Explain" or "You should".)
+- expectedOutcome (concrete deliverable, max 100 characters, in English)
+- estimatedMinutes (integer)
+- departmentTag (optional: "CFO", "CMO", "CTO", "OPERATIONS", "LEGAL", "CREATIVE")
 
-Generiši tačno 3 koraka. Poredaj logički prema zadatku.`;
+Generate exactly 3 steps. Order logically according to the task.`;
 
     // Pre-generation prompt quality check
     let finalWorkflowPrompt = prompt;
@@ -389,43 +389,43 @@ Generiši tačno 3 koraka. Poredaj logički prema zadatku.`;
     tenant?: { name: string | null; industry: string | null; description: string | null } | null,
     relatedConcepts?: string[]
   ): string {
-    let prompt = `Generiši radni tok za IZVRŠAVANJE poslovne analize i PROIZVODNJU konkretnih rezultata koristeći koncept "${name}".
+    let prompt = `Generate a workflow for EXECUTING a business analysis and PRODUCING concrete results using the concept "${name}".
 
---- KONCEPT ---
-Naziv: ${name}
-Definicija: ${definition}
-${extendedDescription ? `Prošireni opis: ${extendedDescription}` : ''}
-${prerequisites.length > 0 ? `Preduslovi (koncept se gradi na njima): ${prerequisites.join(', ')}` : 'Nema preduslova — ovo je fundamentalni koncept.'}
-${relatedConcepts && relatedConcepts.length > 0 ? `Povezani koncepti: ${relatedConcepts.join(', ')}` : ''}
-${departmentTags.length > 0 ? `Relevantni departmani: ${departmentTags.join(', ')}` : ''}`;
+--- CONCEPT ---
+Name: ${name}
+Definition: ${definition}
+${extendedDescription ? `Extended description: ${extendedDescription}` : ''}
+${prerequisites.length > 0 ? `Prerequisites (concept builds on these): ${prerequisites.join(', ')}` : 'No prerequisites — this is a fundamental concept.'}
+${relatedConcepts && relatedConcepts.length > 0 ? `Related concepts: ${relatedConcepts.join(', ')}` : ''}
+${departmentTags.length > 0 ? `Relevant departments: ${departmentTags.join(', ')}` : ''}`;
 
     if (tenant) {
       prompt += `
 
---- POSLOVNI KONTEKST ---
-Kompanija: ${tenant.name ?? 'Nepoznata'}
-Industrija: ${tenant.industry ?? 'Opšta'}
-${tenant.description ? `Opis: ${tenant.description}` : ''}
-KRITIČNO: Koraci MORAJU biti prilagođeni ovoj kompaniji i industriji. NE generiši generičke korake.`;
+--- BUSINESS CONTEXT ---
+Company: ${tenant.name ?? 'Unknown'}
+Industry: ${tenant.industry ?? 'General'}
+${tenant.description ? `Description: ${tenant.description}` : ''}
+CRITICAL: Steps MUST be tailored to this company and industry. DO NOT generate generic steps.`;
     }
 
     prompt += `
 
---- FORMAT ODGOVORA ---
-Vrati JSON niz koraka. Svaki korak mora imati:
-- stepNumber (celobrojna vrednost počevši od 1)
-- title (koncizan naslov akcije, max 60 karaktera, na srpskom, akcioni glagol: "Analizirajte...", "Kreirajte...", "Mapirajte...")
-- description (šta ovaj korak postiže i ZAŠTO je važan, max 200 karaktera, na srpskom)
-- promptTemplate (INTERNI prompt koji instruiše AI da IZVRŠI korak i PROIZVEDE konkretan dokument. Mora sadržati {{conceptName}} i {{businessContext}} placeholdere. Zahtevaj minimum 800 reči izlaza, strukturu sa zaglavljima, tabele gde je moguće, konkretne primere i preporuke.)
-- expectedOutcome (konkretan deliverable koji klijent može odmah koristiti, max 100 karaktera, na srpskom)
-- estimatedMinutes (celobrojna vrednost, realna procena)
-- departmentTag (opciono: "CFO", "CMO", "CTO", "OPERATIONS", "LEGAL", "CREATIVE")
+--- RESPONSE FORMAT ---
+Return a JSON array of steps. Each step must have:
+- stepNumber (integer starting from 1)
+- title (concise action title, max 60 characters, in English, action verb: "Analyze...", "Create...", "Map...")
+- description (what this step achieves and WHY it is important, max 200 characters, in English)
+- promptTemplate (INTERNAL prompt that instructs the AI to EXECUTE the step and PRODUCE a concrete document. Must contain {{conceptName}} and {{businessContext}} placeholders. Request minimum 800 words of output, structured headings, tables where possible, concrete examples and recommendations.)
+- expectedOutcome (concrete deliverable the client can use immediately, max 100 characters, in English)
+- estimatedMinutes (integer, realistic estimate)
+- departmentTag (optional: "CFO", "CMO", "CTO", "OPERATIONS", "LEGAL", "CREATIVE")
 
-Generiši 3-4 koraka. Redosled:
-1. Dijagnostika/analiza trenutnog stanja
-2. Strateško planiranje i akcioni plan
-3. Implementacioni plan sa KPI merenjem
-4. (opciono, samo za složene teme) Istraživanje tržišta/konkurencije`;
+Generate 3-4 steps. Order:
+1. Diagnostics/analysis of current state
+2. Strategic planning and action plan
+3. Implementation plan with KPI measurement
+4. (optional, only for complex topics) Market/competition research`;
 
     return prompt;
   }
@@ -448,7 +448,7 @@ Generiši 3-4 koraka. Redosled:
         description: (step.description as string) || '',
         promptTemplate:
           (step.promptTemplate as string) ||
-          `Izvrši sveobuhvatnu analizu koncepta "{{conceptName}}" primenjenu na {{businessContext}}. Proizvedi strukturiran dokument sa konkretnim nalazima, tabelarnim prikazom i akcionim preporukama. Minimum 800 reči.`,
+          `Execute a comprehensive analysis of the concept "{{conceptName}}" applied to {{businessContext}}. Produce a structured document with concrete findings, tabular presentation, and actionable recommendations. Minimum 800 words.`,
         expectedOutcome: (step.expectedOutcome as string) || '',
         estimatedMinutes: (step.estimatedMinutes as number) ?? 5,
         departmentTag: (step.departmentTag as string) || undefined,
@@ -461,11 +461,11 @@ Generiši 3-4 koraka. Redosled:
       return [
         {
           stepNumber: 1,
-          title: 'Analizirajte trenutno stanje',
-          description: 'Dijagnostika i analiza primenom ovog koncepta na konkretno poslovanje',
+          title: 'Analyze current state',
+          description: 'Diagnostics and analysis by applying this concept to the concrete business',
           promptTemplate:
-            'Izvrši detaljnu analizu koncepta "{{conceptName}}" primenjenu na {{businessContext}}. Dijagnostikuj trenutno stanje, identifikuj ključne oblasti za poboljšanje. Proizvedi strukturiran dokument sa zaglavljima, tabelama i konkretnim preporukama za akciju. Minimum 1000 reči.',
-          expectedOutcome: 'Kompletan analitički izveštaj sa akcionim preporukama',
+            'Execute a detailed analysis of the concept "{{conceptName}}" applied to {{businessContext}}. Diagnose the current state, identify key areas for improvement. Produce a structured document with headings, tables, and concrete actionable recommendations. Minimum 1000 words.',
+          expectedOutcome: 'Complete analytical report with actionable recommendations',
           estimatedMinutes: 10,
         },
       ];
@@ -606,7 +606,7 @@ Generiši 3-4 koraka. Redosled:
 
     if (conceptIds.length === 0) {
       throw new Error(
-        'Nema relevantnih koncepata za odabrane zadatke. Proverite da li su koncepti učitani u bazu znanja.'
+        'No relevant concepts found for the selected tasks. Check whether concepts are loaded in the knowledge base.'
       );
     }
 
@@ -746,7 +746,7 @@ Generiši 3-4 koraka. Redosled:
       // If user provided input, inject it as context for this step
       if (userInput) {
         completedSummaries.push({
-          title: 'Korisnički odgovor',
+          title: 'User response',
           conceptName: step.conceptName,
           summary: userInput,
         });
@@ -986,24 +986,24 @@ Generiši 3-4 koraka. Redosled:
     // 2. Load ALL matched concepts and build rich knowledge block
     const loadedConcepts: import('@mentor-ai/shared/types').ConceptWithRelations[] = [];
     const citationCandidates: import('@mentor-ai/shared/types').ConceptMatch[] = [];
-    let conceptKnowledge = '\n\n--- BAZA ZNANJA (koristi ovo za izradu zadatka) ---';
+    let conceptKnowledge = '\n\n--- KNOWLEDGE BASE (use this for task execution) ---';
 
     for (const conceptId of conceptIdsToLoad) {
       try {
         const concept = await this.conceptService.findById(conceptId);
         loadedConcepts.push(concept);
 
-        conceptKnowledge += `\n\nKONCEPT: ${concept.name} (${concept.category})`;
-        conceptKnowledge += `\nDEFINICIJA: ${concept.definition}`;
+        conceptKnowledge += `\n\nCONCEPT: ${concept.name} (${concept.category})`;
+        conceptKnowledge += `\nDEFINITION: ${concept.definition}`;
         if (concept.extendedDescription) {
-          conceptKnowledge += `\nDETALJNO ZNANJE: ${concept.extendedDescription}`;
+          conceptKnowledge += `\nDETAILED KNOWLEDGE: ${concept.extendedDescription}`;
         }
         if (concept.relatedConcepts && concept.relatedConcepts.length > 0) {
           const related = concept.relatedConcepts
             .slice(0, 5)
             .map((r) => `${r.concept.name} (${r.relationshipType})`)
             .join(', ');
-          conceptKnowledge += `\nPOVEZANI KONCEPTI: ${related}`;
+          conceptKnowledge += `\nRELATED CONCEPTS: ${related}`;
         }
 
         citationCandidates.push({
@@ -1017,7 +1017,7 @@ Generiši 3-4 koraka. Redosled:
         // Concept not found — skip
       }
     }
-    conceptKnowledge += '\n--- KRAJ BAZE ZNANJA ---';
+    conceptKnowledge += '\n--- END OF KNOWLEDGE BASE ---';
 
     // 3. Load business context (use cachedContext when available to avoid per-step DB lookups)
     const tenant =
@@ -1029,10 +1029,10 @@ Generiši 3-4 koraka. Redosled:
           });
     let businessInfo = '';
     if (tenant) {
-      businessInfo = `\n\n--- POSLOVNI KONTEKST ---\nKompanija: ${tenant.name}`;
-      if (tenant.industry) businessInfo += `\nIndustrija: ${tenant.industry}`;
-      if (tenant.description) businessInfo += `\nOpis: ${tenant.description}`;
-      businessInfo += '\n--- KRAJ POSLOVNOG KONTEKSTA ---';
+      businessInfo = `\n\n--- BUSINESS CONTEXT ---\nCompany: ${tenant.name}`;
+      if (tenant.industry) businessInfo += `\nIndustry: ${tenant.industry}`;
+      if (tenant.description) businessInfo += `\nDescription: ${tenant.description}`;
+      businessInfo += '\n--- END OF BUSINESS CONTEXT ---';
     }
 
     // 3.2 Story 3.2: Load tenant-wide Business Brain context (all memories)
@@ -1063,15 +1063,15 @@ Generiši 3-4 koraka. Redosled:
         });
         if (recentMessages.length > 0) {
           conversationContext =
-            '\n\n--- KONTEKST KONVERZACIJE (korisnikov zahtev koji je pokrenuo ovaj zadatak) ---';
+            '\n\n--- CONVERSATION CONTEXT (user request that triggered this task) ---';
           for (const msg of recentMessages.reverse()) {
-            const role = msg.role === 'USER' ? 'KORISNIK' : 'AI';
+            const role = msg.role === 'USER' ? 'USER' : 'AI';
             // Truncate long messages to keep prompt focused
             const content =
               msg.content.length > 500 ? msg.content.substring(0, 500) + '...' : msg.content;
             conversationContext += `\n${role}: ${content}`;
           }
-          conversationContext += '\n--- KRAJ KONTEKSTA KONVERZACIJE ---';
+          conversationContext += '\n--- END OF CONVERSATION CONTEXT ---';
         }
       } catch (err) {
         this.logger.warn({
@@ -1086,12 +1086,12 @@ Generiši 3-4 koraka. Redosled:
     // 3.4 Build task-specific context from originating task
     let taskSpecificContext = '';
     if (step.taskTitle || step.taskContent) {
-      taskSpecificContext = '\n\n--- SPECIFIČAN ZAHTEV KORISNIKA ---';
-      if (step.taskTitle) taskSpecificContext += `\nZADATAK: ${step.taskTitle}`;
-      if (step.taskContent) taskSpecificContext += `\nOPIS: ${step.taskContent}`;
+      taskSpecificContext = '\n\n--- SPECIFIC USER REQUEST ---';
+      if (step.taskTitle) taskSpecificContext += `\nTASK: ${step.taskTitle}`;
+      if (step.taskContent) taskSpecificContext += `\nDESCRIPTION: ${step.taskContent}`;
       taskSpecificContext +=
-        '\nKRITIČNO: Tvoj odgovor MORA biti direktno relevantan za ovaj konkretan zahtev korisnika. Ne pravi generičku analizu — fokusiraj se na ono što je korisnik tražio.';
-      taskSpecificContext += '\n--- KRAJ SPECIFIČNOG ZAHTEVA ---';
+        '\nCRITICAL: Your response MUST be directly relevant to this specific user request. Do not create a generic analysis — focus on what the user asked for.';
+      taskSpecificContext += '\n--- END OF SPECIFIC REQUEST ---';
     }
 
     // 3.5. Web search: enrich with real-time data (always when available)
@@ -1111,81 +1111,81 @@ Generiši 3-4 koraka. Redosled:
     }
 
     // 4. Build ACTIONABLE system prompt with anti-patterns and few-shot examples
-    let systemPromptText = `Ti si iskusan poslovni konsultant koji IZVRŠAVA zadatke za klijenta. NE objašnjavaš koncepte i NE daješ uputstva — ti PROIZVODIŠ konkretan poslovni dokument.
+    let systemPromptText = `You are an experienced business consultant who EXECUTES tasks for the client. You do NOT explain concepts and do NOT give instructions — you PRODUCE a concrete business document.
 
-ZADATAK: ${step.title}
-OČEKIVANI REZULTAT: ${workflowStep.expectedOutcome}
+TASK: ${step.title}
+EXPECTED OUTCOME: ${workflowStep.expectedOutcome}
 
-PRAVILA:
-1. URADI posao — nemoj opisivati kako se radi. Proizvedi gotov dokument.
-2. Koristi ZNANJE O KONCEPTIMA ispod kao analitički okvir, ali ga NE objašnjavaj korisniku
-3. Primeni analizu specifično na OVO poslovanje koristeći POSLOVNI KONTEKST
-4. Proizvedi kompletan, upotrebljiv rezultat koji klijent može odmah koristiti
-5. Kada koristiš znanje iz koncepta, označi ga kao [[Naziv Koncepta]]
-6. Budi konkretan — koristi ime kompanije, industriju i specifičnu situaciju
-7. Strukturiraj sa zaglavljima, tabelama, nabrajanjima i konkretnim preporukama
-8. Odgovaraj ISKLJUČIVO na srpskom jeziku
+RULES:
+1. DO the work — do not describe how it is done. Produce the finished document.
+2. Use CONCEPT KNOWLEDGE below as an analytical framework, but do NOT explain it to the user
+3. Apply the analysis specifically to THIS business using the BUSINESS CONTEXT
+4. Produce a complete, usable result the client can use immediately
+5. When using concept knowledge, mark it as [[Concept Name]]
+6. Be concrete — use the company name, industry, and specific situation
+7. Structure with headings, tables, lists, and concrete recommendations
+8. Respond EXCLUSIVELY in English
 
-KORIŠĆENJE KONCEPATA:
-- Koncepti ispod su tvoj ANALITIČKI OKVIR — ne lekcije za objašnjavanje
-- PRIMENI koncept na konkretno poslovanje: ako je koncept "SWOT Analiza", ne objašnjavaj šta je SWOT — uradi SWOT za ovu kompaniju
-- Ako postoje RELATED koncepti, koristi ih za dopunsku dubinu analize
-- Označi primenjene koncepte sa [[Naziv Koncepta]] da korisnik može pratiti izvor znanja
-- Objasni KAKO koncept menja analizu — ne samo da je primenjen, već ŠTA novo otkriva
+CONCEPT USAGE:
+- Concepts below are your ANALYTICAL FRAMEWORK — not lessons to explain
+- APPLY the concept to the concrete business: if the concept is "SWOT Analysis", do not explain what SWOT is — do the SWOT for this company
+- If there are RELATED concepts, use them for supplementary depth of analysis
+- Mark applied concepts with [[Concept Name]] so the user can trace the knowledge source
+- Explain HOW the concept changes the analysis — not just that it was applied, but WHAT new it reveals
 
-ANALITIČKI STANDARDI:
-- Svaki nalaz MORA imati obrazloženje — ne samo tvrdnju. Umesto "Jak brend" → "Jak brend — jer ima 45 godina tradicije i ekskluzivne ugovore sa 30+ restorana"
-- Kada primenjuješ analitički okvir, završi sa STRATEŠKIM IMPLIKACIJAMA — ne samo nabrajaj stavke
-- Povezuj nalaze — ako analiza pokazuje gap, strategija mora adresirati taj gap
-- Preporuke moraju biti PRIORITIZOVANE — 3 kritične preporuke na vrhu, ostale nakon toga
-- Svaki dokument mora završiti sa KONKRETNIM sledećim koracima: ko, šta, kada
-- Navedi KLJUČNE METRIKE utvrđene u ovoj analizi (npr. trenutna marža, veličina tržišta, konverzija) — ovo su baseline vrednosti za buduće praćenje
-- Označi pod kojim USLOVIMA bi ova analiza trebalo da se ponovo uradi (npr. promena cena konkurencije, novi tržišni igrač, promena regulativa)
+ANALYTICAL STANDARDS:
+- Every finding MUST have a rationale — not just a claim. Instead of "Strong brand" → "Strong brand — because it has 45 years of tradition and exclusive contracts with 30+ restaurants"
+- When applying an analytical framework, finish with STRATEGIC IMPLICATIONS — do not just list items
+- Connect findings — if analysis shows a gap, the strategy must address that gap
+- Recommendations must be PRIORITIZED — 3 critical recommendations at the top, others after
+- Every document must end with CONCRETE next steps: who, what, when
+- State KEY METRICS identified in this analysis (e.g., current margin, market size, conversion) — these are baseline values for future tracking
+- Mark under which CONDITIONS this analysis should be redone (e.g., competitor price change, new market player, regulatory change)
 
-FORMAT OUTPUTA (markdown):
-- Koristi ## za sekcije, ### za podsekcije
-- Koristi > **Ključni uvid:** za najvažnije zaključke
-- Koristi tabele za sve uporedne i numeričke podatke
-- Koristi **bold** za ključne termine
-- Koristi bullet liste za nabrajanje, NE dugačke paragrafe
-- Minimum 800 reči za analitičke dokumente
+OUTPUT FORMAT (markdown):
+- Use ## for sections, ### for subsections
+- Use > **Key Insight:** for the most important conclusions
+- Use tables for all comparative and numerical data
+- Use **bold** for key terms
+- Use bullet lists for enumeration, NOT long paragraphs
+- Minimum 800 words for analytical documents
 
-RAZLIKUJ DVA TIPA ZADATAKA:
-A) DIGITALNI (sadržaj, planovi, analize, mejlovi, kampanje, budžeti, šabloni, procedure):
-   → PROIZVEDI GOTOV REZULTAT. Ne daj instrukcije — URADI posao i prikaži gotov dokument.
-B) FIZIČKI (odlazak negde, naručivanje, pozivi, instalacija, sastanci):
-   → NE simuliraj da si obavio fizičku radnju. Napiši KO treba ŠTA da uradi sa svim detaljima.
-   → Označi sa "⚠ ZAHTEVA LJUDSKU AKCIJU:" ispred svakog koraka koji AI ne može izvršiti.
+DISTINGUISH TWO TYPES OF TASKS:
+A) DIGITAL (content, plans, analyses, emails, campaigns, budgets, templates, procedures):
+   → PRODUCE THE FINISHED RESULT. Do not give instructions — DO the work and present the finished document.
+B) PHYSICAL (going somewhere, ordering, calls, installation, meetings):
+   → DO NOT simulate having completed a physical action. Write WHO needs to do WHAT with all details.
+   → Mark with "⚠ REQUIRES HUMAN ACTION:" before each step that AI cannot execute.
 
-ZABRANJENO (nikada ne radi ovo):
-- NE piši "trebalo bi da analizirate..." ili "preporučuje se da razmotrite..." za digitalne zadatke
-- NE piši "potrebno je da razmotrite..." ili "razmislite o sledećem..."
-- NE objašnjavaj šta je koncept ili framework — PRIMENI ga
-- NE daj generičke savete — daj SPECIFIČNE nalaze za ovu kompaniju
-- NE opisuj korake koje klijent treba da preduzme za digitalni rad — TI ih izvrši i predstavi rezultate
-- NE piši uvode tipa "U ovom dokumentu ćemo..." — odmah počni sa sadržajem
-- NE izmišljaj podatke — ako nemaš konkretan podatak, naznači [POPUNITI: ...]
+FORBIDDEN (never do this):
+- DO NOT write "you should analyze..." or "it is recommended to consider..." for digital tasks
+- DO NOT write "you need to consider..." or "think about the following..."
+- DO NOT explain what a concept or framework is — APPLY it
+- DO NOT give generic advice — give SPECIFIC findings for this company
+- DO NOT describe steps the client should take for digital work — YOU execute them and present results
+- DO NOT write introductions like "In this document we will..." — start with content immediately
+- DO NOT fabricate data — if you don't have a concrete data point, indicate [TO BE FILLED: ...]
 
-PRIMER DOBROG ODGOVORA (SWOT analiza za "LuxVino", luksuzna vina):
+EXAMPLE OF GOOD RESPONSE (SWOT analysis for "LuxVino", luxury wines):
 ---
-## SWOT Analiza — LuxVino
+## SWOT Analysis — LuxVino
 
-### Snage
-1. **Premium pozicioniranje** — ručna berba i ograničena proizvodnja [[Value Proposition]]
-2. **45 godina porodičnog vinogradarstva** — autentičnost brenda
-3. **Ekskluzivni ugovori sa 30+ restorana** — stabilan B2B kanal
+### Strengths
+1. **Premium positioning** — hand-picked harvest and limited production [[Value Proposition]]
+2. **45 years of family winemaking** — brand authenticity
+3. **Exclusive contracts with 30+ restaurants** — stable B2B channel
 
-### Slabosti
-1. **Samo 2% prihoda iz online kanala** — propuštena digitalna publika
+### Weaknesses
+1. **Only 2% of revenue from online channels** — missed digital audience
 ---
 
-PRIMER LOŠEG ODGOVORA (ZABRANJENO):
+EXAMPLE OF BAD RESPONSE (FORBIDDEN):
 ---
-"SWOT analiza je strateški alat koji se koristi za procenu snaga, slabosti, prilika i pretnji.
-Da biste je primenili na vaše poslovanje, trebalo bi da:
-1. Identifikujete vaše ključne snage..."
+"SWOT analysis is a strategic tool used to assess strengths, weaknesses, opportunities, and threats.
+To apply it to your business, you should:
+1. Identify your key strengths..."
 ---
-Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${taskSpecificContext}${conversationContext}${conceptKnowledge}${businessInfo}${brainContext}${webSearchContext}`;
+This is FORBIDDEN because it explains the tool instead of applying it.${taskSpecificContext}${conversationContext}${conceptKnowledge}${businessInfo}${brainContext}${webSearchContext}`;
 
     if (step.departmentTag) {
       const personaPrompt = generateSystemPrompt(step.departmentTag);
@@ -1196,19 +1196,19 @@ Ovo je ZABRANJENO jer objašnjava alat umesto da ga primeni.${taskSpecificContex
 
     // Inject completed step summaries with explicit context-passing instructions
     if (completedSummaries.length > 0) {
-      systemPromptText += '\n\n--- PRETHODNO ZAVRŠENI KORACI ---';
+      systemPromptText += '\n\n--- PREVIOUSLY COMPLETED STEPS ---';
       for (const prev of completedSummaries) {
-        systemPromptText += `\nKORAK: ${prev.title} (${prev.conceptName})`;
-        systemPromptText += `\nREZIME: ${prev.summary}`;
+        systemPromptText += `\nSTEP: ${prev.title} (${prev.conceptName})`;
+        systemPromptText += `\nSUMMARY: ${prev.summary}`;
       }
-      systemPromptText += '\n--- KRAJ ZAVRŠENIH KORAKA ---';
+      systemPromptText += '\n--- END OF COMPLETED STEPS ---';
       systemPromptText += `
-KORIŠĆENJE PRETHODNIH REZULTATA:
-- OBAVEZNO koristi nalaze iz prethodnih koraka — ne ponavljaj analizu koja je već urađena
-- Referencirati konkretne podatke, imena, brojke iz prethodnih koraka
-- Ako prethodni korak identifikuje problem, tvoj korak mora adresirati taj KONKRETNI problem
-- Ako prethodni korak sadrži podatke iz web pretrage, koristi te KONKRETNE izvore i URL-ove
-- NIKADA ne ponavljaj analize ili preporuke iz prethodnih koraka — NADOGRADI na njima`;
+USING PREVIOUS RESULTS:
+- You MUST use findings from previous steps — do not repeat analysis that was already done
+- Reference concrete data, names, numbers from previous steps
+- If a previous step identifies a problem, your step must address that SPECIFIC problem
+- If a previous step contains web search data, use those SPECIFIC sources and URLs
+- NEVER repeat analyses or recommendations from previous steps — BUILD UPON them`;
     }
 
     // 4b. Maturity Engine: inject prerequisite concept outputs as context
@@ -1224,12 +1224,12 @@ KORIŠĆENJE PRETHODNIH REZULTATA:
           tenantForStage.maturityStage as import('@mentor-ai/shared/types').MaturityStage
         );
         if (prereqs.prerequisiteOutputs.length > 0) {
-          systemPromptText += '\n\n--- REZULTATI PREREQUISITE KONCEPATA ---';
+          systemPromptText += '\n\n--- PREREQUISITE CONCEPT RESULTS ---';
           for (const po of prereqs.prerequisiteOutputs) {
             systemPromptText += `\n### ${po.conceptName}\n${po.outputSummary}`;
           }
-          systemPromptText += '\n--- KRAJ PREREQUISITE KONTEKSTA ---';
-          systemPromptText += `\nKORISTI ove nalaze kao TEMELJ — ne ponavljaj ih, NADOGRADI na njima.`;
+          systemPromptText += '\n--- END OF PREREQUISITE CONTEXT ---';
+          systemPromptText += `\nUSE these findings as a FOUNDATION — do not repeat them, BUILD UPON them.`;
         }
       }
     } catch (err) {
@@ -1246,8 +1246,8 @@ KORIŠĆENJE PRETHODNIH REZULTATA:
       .replace(
         /\{\{businessContext\}\}/g,
         tenant
-          ? `za kompaniju "${tenant.name}" u industriji ${tenant.industry ?? 'opšte poslovanje'}`
-          : 'za ovo poslovanje'
+          ? `for the company "${tenant.name}" in the ${tenant.industry ?? 'general business'} industry`
+          : 'for this business'
       );
 
     // 5b. Pre-execution prompt quality check
@@ -1591,7 +1591,7 @@ KORIŠĆENJE PRETHODNIH REZULTATA:
     const noteData = toSeed.map((concept) => ({
       id: `note_${createId()}`,
       title: concept.name,
-      content: `Istraži koncept: ${concept.name}`,
+      content: `Explore concept: ${concept.name}`,
       source: NoteSource.CONVERSATION,
       noteType: NoteType.TASK,
       status: NoteStatus.PENDING,

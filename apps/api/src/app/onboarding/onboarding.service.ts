@@ -406,8 +406,8 @@ export class OnboardingService {
       select: { name: true, industry: true, description: true },
     });
 
-    const companyName = tenant?.name ?? 'Nepoznata kompanija';
-    const industry = tenant?.industry ?? 'Opšta';
+    const companyName = tenant?.name ?? 'Unknown company';
+    const industry = tenant?.industry ?? 'General';
     const companyDescription = tenant?.description ?? '';
 
     // 1. Web search for industry context — trends, competitors, market data
@@ -415,8 +415,8 @@ export class OnboardingService {
     if (this.webSearchService.isAvailable()) {
       try {
         const searchQueries = [
-          `${industry} tržište Srbija trendovi 2025 2026`,
-          `${companyName} ${industry} konkurencija analiza`,
+          `${industry} market trends 2025 2026`,
+          `${companyName} ${industry} competition analysis`,
         ];
         const allResults = await Promise.all(
           searchQueries.map((q) => this.webSearchService.searchAndExtract(q, 3).catch(() => []))
@@ -475,81 +475,81 @@ export class OnboardingService {
       ];
 
       if (allConcepts.length > 0) {
-        conceptContext = '\n\n--- RELEVANTNI POSLOVNI KONCEPTI IZ BAZE ZNANJA ---\n';
+        conceptContext = '\n\n--- RELEVANT BUSINESS CONCEPTS FROM KNOWLEDGE BASE ---\n';
         conceptContext +=
-          'Počni od OSNOVA (Uvod u Poslovanje, Vrednost) pa nadograđuj sa specifičnim konceptima:\n\n';
+          'Start from FOUNDATIONS (Introduction to Business, Value) then build with specific concepts:\n\n';
         conceptContext += allConcepts
           .map((c) => `- **${c.name}** (${c.category}): ${c.definition}`)
           .join('\n');
-        conceptContext += '\n--- KRAJ KONCEPTA ---';
+        conceptContext += '\n--- END OF CONCEPTS ---';
         conceptContext +=
-          '\nKoristi ove koncepte kao osnovu za konkretne preporuke. Poveži svaku preporuku sa relevantnim konceptom.';
+          '\nUse these concepts as a basis for concrete recommendations. Link each recommendation to a relevant concept.';
       }
     } catch {
       // Non-blocking — concepts may not be seeded yet
     }
 
-    const systemPrompt = `Ti si vodeći poslovni konsultant specijalizovan za ${industry} sektor na Balkanu i u regionu.
-Tvoj zadatak je da napraviš DUBOKU, KONTEKSTUALIZOVANU analizu poslovanja koja će vlasniku dati jasnu sliku gde se nalazi i kuda treba da ide.
+    const systemPrompt = `You are a leading business consultant specialized in the ${industry} sector.
+Your task is to create a DEEP, CONTEXTUALIZED business analysis that will give the owner a clear picture of where they stand and where they need to go.
 
-OVO NIJE GENERIČKA ANALIZA. Svaki uvid mora biti specifičan za ovu kompaniju, ovu industriju, ovo tržište.
+THIS IS NOT A GENERIC ANALYSIS. Every insight must be specific to this company, this industry, this market.
 
-STRUKTURA ANALIZE:
+ANALYSIS STRUCTURE:
 
-## 1. Dijagnoza Trenutnog Stanja (300-500 reči)
-- Gde se kompanija ZAISTA nalazi — bez ulepšavanja
-- Koji su ključni pokazatelji zdravlja poslovanja
-- Šta funkcioniše, a šta ne — konkretno, sa primerima iz njihove industrije
+## 1. Current State Diagnosis (300-500 words)
+- Where the company REALLY stands — no sugarcoating
+- What are the key indicators of business health
+- What works and what doesn't — concretely, with examples from their industry
 
-## 2. Analiza Tržišta i Konkurencije (300-500 reči)
-- Kakvo je stanje u ${industry} sektoru — trendovi, prilike, pretnje
-- Ko su glavni konkurenti i kako se ova kompanija pozicionira
-- Koje su tržišne niše neiskorišćene
-- Koristi podatke iz web istraživanja ako su dostupni
+## 2. Market and Competition Analysis (300-500 words)
+- What is the state of the ${industry} sector — trends, opportunities, threats
+- Who are the main competitors and how does this company position itself
+- Which market niches are untapped
+- Use data from web research if available
 
-## 3. Strateške Prednosti (200-300 reči)
-- 3-5 konkretnih prednosti koje kompanija može da iskoristi ODMAH
-- Za svaku prednost: ZAŠTO je to prednost i KAKO je pretvoriti u profit
+## 3. Strategic Advantages (200-300 words)
+- 3-5 concrete advantages the company can leverage IMMEDIATELY
+- For each advantage: WHY it is an advantage and HOW to turn it into profit
 
-## 4. Kritične Ranjivosti (200-300 reči)
-- 2-4 najveća rizika koji mogu da UNIŠTE poslovanje ako se ne reše
-- Za svaki rizik: verovatnoća, uticaj, i prva akcija za mitigaciju
-- Budi direktan — vlasnik treba da zna istinu
+## 4. Critical Vulnerabilities (200-300 words)
+- 2-4 biggest risks that can DESTROY the business if not addressed
+- For each risk: probability, impact, and first mitigation action
+- Be direct — the owner needs to know the truth
 
-## 5. Akcioni Plan — Prvih 90 Dana (500-700 reči)
-- 5-8 KONKRETNIH koraka, poređanih po prioritetu
-- Za svaki korak:
-  * Šta tačno treba da se uradi (ne "poboljšajte marketing" nego "kreirajte landing stranicu za segment X sa ponudom Y")
-  * Ko je odgovoran (koji departman/funkcija)
-  * Očekivani rezultat i KPI za merenje
-  * Vremenski okvir (nedelja 1-2, nedelja 3-4, mesec 2-3)
-  * Povezani poslovni koncept iz baze znanja (ako postoji)
+## 5. Action Plan — First 90 Days (500-700 words)
+- 5-8 CONCRETE steps, ordered by priority
+- For each step:
+  * What exactly needs to be done (not "improve marketing" but "create a landing page for segment X with offer Y")
+  * Who is responsible (which department/function)
+  * Expected result and KPI for measurement
+  * Time frame (week 1-2, week 3-4, month 2-3)
+  * Related business concept from the knowledge base (if applicable)
 
-## 6. Dugoročna Vizija — 12 Meseci (200-300 reči)
-- Gde kompanija može da bude za godinu dana ako prati plan
-- Koji su ključni mejlstoni na tom putu
-- Koja ulaganja su neophodna
+## 6. Long-Term Vision — 12 Months (200-300 words)
+- Where the company can be in a year if it follows the plan
+- What are the key milestones along the way
+- What investments are necessary
 
-PRAVILA:
-- Piši ISKLJUČIVO na srpskom jeziku (latinica)
-- Koristi direktan, profesionalan ton — kao da razgovaraš sa vlasnikom
-- SVAKA preporuka mora biti SPECIFIČNA za ovu kompaniju i industriju
-- NE koristi generičke fraze ("poboljšajte marketing", "investirajte u ljude")
-- Koristi konkretne brojke, procente, i vremenske okvire gde god je moguće
-- Ako imaš podatke iz web istraživanja, citiraj izvore inline u formatu ([Naziv](URL))
-- Ukupna dužina: 1800-2500 reči`;
+RULES:
+- Write EXCLUSIVELY in English
+- Use a direct, professional tone — as if speaking with the owner
+- EVERY recommendation must be SPECIFIC to this company and industry
+- DO NOT use generic phrases ("improve marketing", "invest in people")
+- Use concrete numbers, percentages, and time frames wherever possible
+- If you have data from web research, cite sources inline in format ([Name](URL))
+- Total length: 1800-2500 words`;
 
-    const userPrompt = `KOMPANIJA: ${companyName}
-INDUSTRIJA: ${industry}
-${companyDescription ? `OPIS POSLOVANJA:\n${companyDescription}` : ''}
+    const userPrompt = `COMPANY: ${companyName}
+INDUSTRY: ${industry}
+${companyDescription ? `BUSINESS DESCRIPTION:\n${companyDescription}` : ''}
 
-TRENUTNO STANJE POSLOVANJA: ${businessState}
+CURRENT BUSINESS STATE: ${businessState}
 
-AKTIVNI DEPARTMANI: ${departments.join(', ')}
+ACTIVE DEPARTMENTS: ${departments.join(', ')}
 ${webContext}
 ${conceptContext}
 
-Napravi duboku analizu ovog poslovanja.`;
+Create a deep analysis of this business.`;
 
     const startTime = Date.now();
     let fullOutput = '';
@@ -600,8 +600,8 @@ Napravi duboku analizu ovog poslovanja.`;
       select: { name: true, industry: true, description: true },
     });
 
-    const companyName = tenant?.name ?? 'Nepoznata kompanija';
-    const industry = tenant?.industry ?? 'Opšta';
+    const companyName = tenant?.name ?? 'Unknown company';
+    const industry = tenant?.industry ?? 'General';
     const companyDescription = tenant?.description ?? '';
 
     // 1. Web search — industry best practices, competitor strategies, market opportunities
@@ -609,8 +609,8 @@ Napravi duboku analizu ovog poslovanja.`;
     if (this.webSearchService.isAvailable()) {
       try {
         const searchQueries = [
-          `${industry} najbolje prakse strategija rast Srbija`,
-          `${industry} ${departments[0] ?? ''} zadaci prioriteti akcioni plan`,
+          `${industry} best practices strategy growth`,
+          `${industry} ${departments[0] ?? ''} tasks priorities action plan`,
         ];
         const allResults = await Promise.all(
           searchQueries.map((q) => this.webSearchService.searchAndExtract(q, 3).catch(() => []))
@@ -713,77 +713,77 @@ Napravi duboku analizu ovog poslovanja.`;
           seenIds.add(c.id);
           allConcepts.push({
             name: c.name,
-            category: c.category ?? 'Opšta',
+            category: c.category ?? 'General',
             definition: c.definition ?? '',
           });
         }
       }
 
       if (allConcepts.length > 0) {
-        conceptContext = '\n\n--- BAZA POSLOVNIH KONCEPATA ---\n';
+        conceptContext = '\n\n--- BUSINESS CONCEPTS DATABASE ---\n';
         conceptContext +=
-          'Koncepti su poređani po važnosti: OSNOVE (Uvod u Poslovanje, Vrednost) su temelj na kom se gradi sve ostalo.\n';
-        conceptContext += 'SVAKI zadatak MORA biti vezan za jedan ili više ovih koncepata:\n\n';
+          'Concepts are ordered by importance: FOUNDATIONS (Introduction to Business, Value) are the base on which everything else is built.\n';
+        conceptContext += 'EVERY task MUST be linked to one or more of these concepts:\n\n';
         conceptContext += allConcepts
           .map((c) => `- **${c.name}** (${c.category}): ${c.definition}`)
           .join('\n');
-        conceptContext += '\n--- KRAJ BAZE KONCEPATA ---';
+        conceptContext += '\n--- END OF CONCEPTS DATABASE ---';
       }
     } catch {
       // Non-blocking — concepts may not be seeded yet
     }
 
-    const systemPrompt = `Ti si poslovni strateg koji kreira personalizovani "Poslovni Mozak" — sistem zadataka koji će pokrenuti kompaniju napred.
+    const systemPrompt = `You are a business strategist creating a personalized "Business Brain" — a task system that will move the company forward.
 
-Tvoj zadatak je da kreiraš TAČNO 10 KONKRETNIH, IZVRŠIVIH zadataka prilagođenih OVOJ kompaniji, OVOJ industriji, i OVOM trenutnom stanju.
-NE više od 10 — fokus je na kvalitetu, ne kvantitetu. Svaki zadatak mora biti dovoljno detaljan da se može odmah početi sa radom.
+Your task is to create EXACTLY 10 CONCRETE, ACTIONABLE tasks tailored to THIS company, THIS industry, and THIS current state.
+NO more than 10 — focus is on quality, not quantity. Each task must be detailed enough to start working on immediately.
 
-ZA SVAKI ZADATAK OBAVEZNO NAVEDI:
+FOR EACH TASK YOU MUST SPECIFY:
 
-### [Broj]. [Naslov zadatka — akcioni, jasan]
-- **Koncept:** [Koji poslovni koncept iz baze znanja je osnova ovog zadatka]
-- **Departman:** [Koji departman je odgovoran]
-- **Prioritet:** KRITIČAN / VISOK / SREDNJI
-- **Zašto baš ovo:** [2-3 rečenice — ZAŠTO je ovaj zadatak važan za OVO KONKRETNO poslovanje. Poveži sa trenutnim stanjem, industrijom, izazovima. Ne generičke fraze.]
-- **Šta konkretno treba uraditi:**
-  1. [Korak 1 — specifičan, merljiv]
-  2. [Korak 2 — specifičan, merljiv]
-  3. [Korak 3 — specifičan, merljiv]
-- **Očekivani rezultat:** [Šta će kompanija imati/znati/postići kada se završi]
-- **KPI za merenje:** [Konkretna metrika — broj, procenat, rok]
-- **Vremenski okvir:** [Nedelja 1-2 / Mesec 1 / Mesec 2-3]
-- **Zavisi od:** [Koji prethodni zadaci moraju biti završeni pre ovog — ili "Nezavisan"]
+### [Number]. [Task title — action-oriented, clear]
+- **Concept:** [Which business concept from the knowledge base is the foundation of this task]
+- **Department:** [Which department is responsible]
+- **Priority:** CRITICAL / HIGH / MEDIUM
+- **Why this:** [2-3 sentences — WHY this task is important for THIS SPECIFIC business. Connect with current state, industry, challenges. Not generic phrases.]
+- **What specifically needs to be done:**
+  1. [Step 1 — specific, measurable]
+  2. [Step 2 — specific, measurable]
+  3. [Step 3 — specific, measurable]
+- **Expected result:** [What the company will have/know/achieve when completed]
+- **KPI for measurement:** [Concrete metric — number, percentage, deadline]
+- **Time frame:** [Week 1-2 / Month 1 / Month 2-3]
+- **Depends on:** [Which previous tasks must be completed before this one — or "Independent"]
 
-REDOSLED ZADATAKA:
-- PRVI zadatak MORA biti vezan za koncept "Uvod u Poslovanje" / "Poslovanje" — ovo je TEMELJ na kom se gradi sve ostalo
-- Zatim DIJAGNOSTIČKI zadaci (analiza, mapiranje, audit) — vlasnik prvo mora da RAZUME gde je
-- Zatim STRATEŠKI zadaci (definisanje pozicije, ciljeva, plana)
-- Zatim OPERATIVNI zadaci (implementacija, kreiranje procesa)
-- Na kraju OPTIMIZACIONI zadaci (merenje, poboljšanje, skaliranje)
+TASK ORDER:
+- FIRST task MUST be linked to the concept "Introduction to Business" / "Business" — this is the FOUNDATION on which everything else is built
+- Then DIAGNOSTIC tasks (analysis, mapping, audit) — the owner must first UNDERSTAND where they are
+- Then STRATEGIC tasks (defining position, goals, plan)
+- Then OPERATIONAL tasks (implementation, creating processes)
+- Finally OPTIMIZATION tasks (measurement, improvement, scaling)
 
-GRUPIŠI po departmanima: ${departments.join(', ')}
-Svaki departman treba da ima minimum 2 zadatka.
+GROUP by departments: ${departments.join(', ')}
+Each department should have minimum 2 tasks.
 
-PRAVILA:
-- Piši ISKLJUČIVO na srpskom jeziku (latinica)
-- NE koristi generičke zadatke ("poboljšajte komunikaciju", "investirajte u tim")
-- SVAKI zadatak mora biti toliko specifičan da vlasnik može da počne da radi ODMAH
-- Koristi podatke iz web istraživanja za preporuke zasnovane na tržištu
-- OBAVEZNO poveži svaki zadatak sa konceptom iz baze znanja
-- Ako imaš web podatke, citiraj izvore inline ([Naziv](URL))
-- Ukupna dužina: 2000-3000 reči`;
+RULES:
+- Write EXCLUSIVELY in English
+- DO NOT use generic tasks ("improve communication", "invest in team")
+- EVERY task must be specific enough that the owner can start working on it IMMEDIATELY
+- Use data from web research for market-based recommendations
+- You MUST link each task to a concept from the knowledge base
+- If you have web data, cite sources inline ([Name](URL))
+- Total length: 2000-3000 words`;
 
-    const userPrompt = `KOMPANIJA: ${companyName}
-INDUSTRIJA: ${industry}
-${companyDescription ? `OPIS POSLOVANJA:\n${companyDescription}` : ''}
+    const userPrompt = `COMPANY: ${companyName}
+INDUSTRY: ${industry}
+${companyDescription ? `BUSINESS DESCRIPTION:\n${companyDescription}` : ''}
 
-TRENUTNO STANJE POSLOVANJA: ${businessState}
+CURRENT BUSINESS STATE: ${businessState}
 
-AKTIVNI DEPARTMANI: ${departments.join(', ')}
+ACTIVE DEPARTMENTS: ${departments.join(', ')}
 ${webContext}
 ${conceptContext}
 
-Kreiraj personalizovani Poslovni Mozak sa tačno 10 prioritizovanih zadataka.`;
+Create a personalized Business Brain with exactly 10 prioritized tasks.`;
 
     const startTime = Date.now();
     let fullOutput = '';

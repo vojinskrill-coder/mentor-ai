@@ -71,8 +71,8 @@ describe('AgentPromptService', () => {
     it('should append grounding block to LLM output', async () => {
       const result = await service.formatPrompt(baseParams);
       expect(result).toContain('UZEMLJENJE');
-      expect(result).toContain('NIKADA ne izmišljaj');
-      expect(result).toContain('srpskom jeziku');
+      expect(result).toContain('NEVER');
+      expect(result).toContain('in English');
     });
 
     it('should call onChunk callback', async () => {

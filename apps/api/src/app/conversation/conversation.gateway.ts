@@ -1232,7 +1232,7 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
         }
         enrichedContext += '--- KRAJ BAZE ZNANJA ---\n';
         enrichedContext +=
-          'Primeni ove koncepte u odgovoru. Kada referenciraš koncept, koristi [[Naziv Koncepta]] oznaku.\n';
+          'Apply these concepts in your response. When referencing a concept, use the [[Concept Name]] tag.\n';
       }
 
       // Inject cross-conversation insights (Sprint 2 Epic 2.1)
@@ -1283,7 +1283,7 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
       }
 
       const finalContext = researchBrief
-        ? `${enrichedContext}\n\n--- ISTRAŽIVAČKI BRIEF ---\n${researchBrief}\n--- KRAJ BRIEFA ---\nKoristi brief kao osnovu za stručan odgovor. Ne pominjaj brief — samo daj sveobuhvatan odgovor.`
+        ? `${enrichedContext}\n\n--- RESEARCH BRIEF ---\n${researchBrief}\n--- END OF BRIEF ---\nUse the brief as a basis for an expert response. Do not mention the brief — just give a comprehensive answer.`
         : enrichedContext;
 
       perf.finalContextChars = finalContext.length;
@@ -1434,22 +1434,22 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
       const suggestedActions: SuggestedAction[] = [];
       if (relevantConcepts.length > 0) {
         suggestedActions.push(
-          { type: 'create_tasks', label: 'Kreiraj zadatke', icon: 'tasks' },
-          { type: 'deep_dive', label: 'Istraži dublje', icon: 'explore' }
+          { type: 'create_tasks', label: 'Create tasks', icon: 'tasks' },
+          { type: 'deep_dive', label: 'Explore deeper', icon: 'explore' }
         );
         if (relevantConcepts.length > 1) {
           suggestedActions.push({
             type: 'next_domain',
-            label: 'Sledeći koncept →',
+            label: 'Next concept →',
             icon: 'arrow',
             payload: { conceptId: relevantConcepts[1]?.conceptId },
           });
         }
       } else {
-        suggestedActions.push({ type: 'save_note', label: 'Sačuvaj kao belešku', icon: 'note' });
+        suggestedActions.push({ type: 'save_note', label: 'Save as note', icon: 'note' });
       }
       if (confidence && confidence.score < 0.5) {
-        suggestedActions.push({ type: 'web_search', label: 'Pretraži web', icon: 'web' });
+        suggestedActions.push({ type: 'web_search', label: 'Search web', icon: 'web' });
       }
 
       // Emit completion with confidence + citations metadata
@@ -1673,7 +1673,7 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
                 error: err instanceof Error ? err.message : 'Unknown error',
               });
               client.emit('workflow:error', {
-                message: err instanceof Error ? err.message : 'Automatsko izvršavanje nije uspelo',
+                message: err instanceof Error ? err.message : 'Automatic execution failed',
                 conversationId,
               });
             });
@@ -1735,8 +1735,8 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     if (messageCount < 2) return; // Need at least 1 exchange
 
     // Load tenant for business-specific context
-    let tenantName = 'klijent';
-    let tenantIndustry = 'opšta';
+    let tenantName = 'client';
+    let tenantIndustry = 'general';
     try {
       const tenant = await this.prisma.tenant.findUnique({
         where: { id: tenantId },
@@ -1759,16 +1759,16 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
           .join(', ');
     }
 
-    const taskSystemPrompt = `Ti si poslovni asistent za "${tenantName}" (${tenantIndustry}).
-Iz konverzacije izvuci 1-3 konkretna, izvršiva zadatka. Fokusiraj se na praktične sledeće korake koje korisnik može preduzeti.${conceptHint}
+    const taskSystemPrompt = `You are a business assistant for "${tenantName}" (${tenantIndustry}).
+Extract 1-3 concrete, actionable tasks from the conversation. Focus on practical next steps the user can take.${conceptHint}
 
-PRAVILA:
-- "title": akcioni naslov na srpskom, max 80 karaktera (npr. "Analizirajte mesečne troškove marketinga")
-- "content": konkretan opis šta treba uraditi, zašto, i koji je očekivani rezultat (150-400 karaktera)
-- Zadaci moraju biti SPECIFIČNI za "${tenantName}" — ne generički poslovni saveti
-- Samo izvršive stavke — ne opšte observacije
-- Ako nema smislenih zadataka, vrati prazan niz
-- Piši ISKLJUČIVO na srpskom jeziku`;
+RULES:
+- "title": action-oriented title, max 80 characters (e.g., "Analyze monthly marketing costs")
+- "content": concrete description of what needs to be done, why, and what the expected result is (150-400 characters)
+- Tasks must be SPECIFIC to "${tenantName}" — not generic business advice
+- Only actionable items — not general observations
+- If there are no meaningful tasks, return an empty array
+- Write EXCLUSIVELY in English`;
 
     const taskUserPrompt = `KORISNIK: ${userMessage}
 
@@ -2074,26 +2074,26 @@ Ako nema zadataka: []`;
     }
 
     // LLM extraction with full context
-    const extractSystemPrompt = `Ti si poslovni konsultant koji kreira konkretne, izvršive zadatke za kompaniju "${tenant?.name ?? 'klijent'}" u industriji "${tenant?.industry ?? 'opšta'}".
-${tenant?.description ? `Opis kompanije: ${tenant.description}` : ''}
+    const extractSystemPrompt = `You are a business consultant who creates concrete, actionable tasks for the company "${tenant?.name ?? 'client'}" in the "${tenant?.industry ?? 'general'}" industry.
+${tenant?.description ? `Company description: ${tenant.description}` : ''}
 
-Tvoj posao: Na osnovu onoga što je korisnik TRAŽIO i šta je AI ODGOVORIO, ekstrahuj konkretne poslovne zadatke.
+Your job: Based on what the user ASKED and what the AI RESPONDED, extract concrete business tasks.
 
-PRAVILA ZA SVAKI ZADATAK:
-1. "title" — akcioni naslov na srpskom (glagol + radnja, max 80 karaktera): "Analizirajte...", "Kreirajte...", "Definišite..."
-2. "content" — strukturiran opis sa:
-   - Cilj: šta konkretno treba postići (1-2 rečenice)
-   - Kontekst: zašto je ovo važno za poslovanje (1-2 rečenice)
-   - Koraci: 3-5 konkretnih koraka za realizaciju
-   - Očekivani rezultat: merljiv ishod ili deliverable
-3. "conceptMatch" — ako zadatak odgovara nekom od POVEZANIH POSLOVNIH KONCEPATA, navedi naziv koncepta (tačan match)
+RULES FOR EACH TASK:
+1. "title" — action-oriented title (verb + action, max 80 characters): "Analyze...", "Create...", "Define..."
+2. "content" — structured description with:
+   - Goal: what specifically needs to be achieved (1-2 sentences)
+   - Context: why this is important for the business (1-2 sentences)
+   - Steps: 3-5 concrete steps for implementation
+   - Expected result: measurable outcome or deliverable
+3. "conceptMatch" — if the task matches one of the RELATED BUSINESS CONCEPTS, specify the concept name (exact match)
 
-KRITIČNO:
-- Zadaci MORAJU biti direktno povezani sa onim što je korisnik TRAŽIO u konverzaciji
-- Svaki zadatak mora biti SPECIFIČAN za "${tenant?.name ?? 'ovu kompaniju'}" — ne generički
-- Izdvoji samo izvršive stavke — ne opšte observacije ili savete
-- Minimum 3, maksimum 8 zadataka
-- Piši ISKLJUČIVO na srpskom jeziku`;
+CRITICAL:
+- Tasks MUST be directly related to what the user ASKED in the conversation
+- Each task must be SPECIFIC to "${tenant?.name ?? 'this company'}" — not generic
+- Extract only actionable items — not general observations or advice
+- Minimum 3, maximum 8 tasks
+- Write EXCLUSIVELY in English`;
 
     const extractUserPrompt = `KORISNIKOV ZAHTEV:
 ${userMessage}
@@ -2272,13 +2272,13 @@ Odgovori SAMO sa validnim JSON nizom:
             if (existingConv) continue;
 
             // Look up concept name for the conversation title
-            let crossConceptName = 'Zadatak';
+            let crossConceptName = 'Task';
             try {
               const concept = await this.conceptService.findById(crossConceptId);
               crossConceptName = concept.name;
             } catch {
               const taskForConcept = allTasks.find((t) => t.conceptId === crossConceptId);
-              crossConceptName = taskForConcept?.title ?? 'Zadatak';
+              crossConceptName = taskForConcept?.title ?? 'Task';
             }
 
             await this.conversationService.createConversation(
@@ -2808,7 +2808,7 @@ Odgovori SAMO sa validnim JSON nizom:
 
       if (tasks.length === 0) {
         client.emit('workflow:error', {
-          message: 'Zadaci nisu pronađeni',
+          message: 'Tasks not found',
           conversationId: payload.conversationId,
         });
         return;
@@ -2834,13 +2834,13 @@ Odgovori SAMO sa validnim JSON nizom:
       ];
       for (const conceptId of uniqueConceptIds) {
         // Use actual concept name from DB, fall back to task title
-        let conceptName = 'Zadatak';
+        let conceptName = 'Task';
         try {
           const concept = await this.conceptService.findById(conceptId);
           conceptName = concept.name;
         } catch {
           const taskForConcept = tasks.find((t) => t.conceptId === conceptId);
-          conceptName = taskForConcept?.title ?? 'Zadatak';
+          conceptName = taskForConcept?.title ?? 'Task';
         }
         try {
           const conv = await this.conversationService.createConversation(
@@ -2918,7 +2918,7 @@ Odgovori SAMO sa validnim JSON nizom:
         error: error instanceof Error ? error.message : 'Unknown',
       });
       client.emit('workflow:error', {
-        message: error instanceof Error ? error.message : 'Greška pri pokretanju',
+        message: error instanceof Error ? error.message : 'Error starting execution',
         conversationId: payload.conversationId,
       });
     }
@@ -3231,7 +3231,7 @@ Odgovori SAMO sa validnim JSON nizom:
         batchId,
         taskId: task.id,
         status: 'failed',
-        error: err instanceof Error ? err.message : 'Nepoznata greška',
+        error: err instanceof Error ? err.message : 'Unknown error',
       };
       client.emit('parallel-popuni:task-done', errorPayload);
       throw err; // Let Promise.allSettled catch it
@@ -3305,7 +3305,7 @@ Odgovori SAMO sa validnim JSON nizom:
         } as WorkflowPlanReadyPayload);
       } else {
         client.emit('workflow:error', {
-          message: 'Nije pronađen plan niti zadaci za rekonstrukciju',
+          message: 'No plan or tasks found for reconstruction',
           conversationId: payload.conversationId,
         });
       }
@@ -3357,7 +3357,7 @@ Odgovori SAMO sa validnim JSON nizom:
       for (const conceptId of conceptIds) {
         const conceptName =
           plan.steps.find((s: ExecutionPlanStep) => s.conceptId === conceptId)?.conceptName ??
-          'Zadatak';
+          'Task';
         try {
           const conv = await this.conversationService.createConversation(
             authenticatedClient.tenantId,
@@ -3632,7 +3632,7 @@ Odgovori SAMO sa validnim JSON nizom:
         where: { id: payload.taskId },
       });
       if (!task || task.tenantId !== authenticatedClient.tenantId) {
-        client.emit('task:ai-error', { taskId: payload.taskId, message: 'Zadatak nije pronadjen' });
+        client.emit('task:ai-error', { taskId: payload.taskId, message: 'Task not found' });
         return;
       }
 
@@ -3706,8 +3706,8 @@ Odgovori SAMO sa validnim JSON nizom:
     prebuiltBusinessContext?: string
   ): Promise<{ score: number | null; result: string; conversationId: string | null }> {
     const task = await this.prisma.note.findUnique({ where: { id: taskId } });
-    if (!task || task.tenantId !== tenantId) throw new Error('Zadatak nije pronadjen');
-    if (task.status !== 'COMPLETED' || !task.userReport) throw new Error('Zadatak nema izvestaj');
+    if (!task || task.tenantId !== tenantId) throw new Error('Task not found');
+    if (task.status !== 'COMPLETED' || !task.userReport) throw new Error('Task has no report');
 
     const businessContext = prebuiltBusinessContext ?? (await this.buildBusinessContext(tenantId, userId, { lean: true }));
     let conceptContext = '';
@@ -3718,7 +3718,7 @@ Odgovori SAMO sa validnim JSON nizom:
       } catch { /* */ }
     }
 
-    const prompt = `Ti si senior poslovni konsultant. Optimizuj i oceni rezultat.\n${conceptContext}\n\nZADATAK: ${task.title}\n${task.content ? 'OPIS: ' + task.content : ''}\n${task.expectedOutcome ? 'OCEKIVANI REZULTAT: ' + task.expectedOutcome : ''}\n\nIZLAZ:\n${task.userReport}\n\nNapravi OPTIMIZOVANI REZULTAT pa na kraju:\n---\nEVALUACIJA:\n- Primenljivost: X/10\n- Specificnost: X/10\n- Kompletnost: X/10\n- Relevantnost: X/10\n- Kvalitet: X/10\nOCENA: X/10\n---\nSrpski jezik.`;
+    const prompt = `You are a senior business consultant. Optimize and score the result.\n${conceptContext}\n\nTASK: ${task.title}\n${task.content ? 'DESCRIPTION: ' + task.content : ''}\n${task.expectedOutcome ? 'EXPECTED OUTCOME: ' + task.expectedOutcome : ''}\n\nOUTPUT:\n${task.userReport}\n\nCreate an OPTIMIZED RESULT and at the end:\n---\nEVALUACIJA:\n- Primenljivost: X/10\n- Specificnost: X/10\n- Kompletnost: X/10\n- Relevantnost: X/10\n- Kvalitet: X/10\nOCENA: X/10\n---\nEnglish language.`;
 
     let fullResult = '';
     let chunkIndex = 0;
@@ -3829,7 +3829,7 @@ Odgovori SAMO sa validnim JSON nizom:
         message:
           error instanceof Error
             ? error.message
-            : 'Ocenjivanje rezultata nije uspelo. Pokušajte ponovo.',
+            : 'Scoring the result failed. Please try again.',
       });
     }
   }
@@ -3871,7 +3871,7 @@ Odgovori SAMO sa validnim JSON nizom:
       if (!step) {
         client.emit('task:step-feedback-error', {
           stepId: payload.stepId,
-          message: 'Korak nije pronađen',
+          message: 'Step not found',
         });
         return;
       }
@@ -3880,7 +3880,7 @@ Odgovori SAMO sa validnim JSON nizom:
       if (!step.parentNoteId) {
         client.emit('task:step-feedback-error', {
           stepId: payload.stepId,
-          message: 'Ovaj zadatak nema nadređeni korak',
+          message: 'This task has no parent step',
         });
         return;
       }
@@ -3949,7 +3949,7 @@ Odgovori SAMO sa validnim JSON nizom:
       });
       client.emit('task:step-feedback-error', {
         stepId: payload.stepId,
-        message: error instanceof Error ? error.message : 'Greška pri čuvanju povratne informacije',
+        message: error instanceof Error ? error.message : 'Error saving feedback',
       });
     }
   }
@@ -3964,7 +3964,7 @@ Odgovori SAMO sa validnim JSON nizom:
     @MessageBody() payload: { conversationId: string }
   ): Promise<void> {
     if (this.configService.get<string>('BRAIN_RELAY_MODE', 'false') === 'true') {
-      client.emit('workflow:error', { message: 'Brain relay mode aktivan — YOLO isključen.', conversationId: payload.conversationId });
+      client.emit('workflow:error', { message: 'Brain relay mode active — YOLO disabled.', conversationId: payload.conversationId });
       return;
     }
     const authenticatedClient = client as AuthenticatedSocket;
@@ -3998,7 +3998,7 @@ Odgovori SAMO sa validnim JSON nizom:
       const conceptIds = [...new Set(tasks.filter((t) => t.conceptId).map((t) => t.conceptId!))];
 
       for (const conceptId of conceptIds) {
-        const conceptName = tasks.find((t) => t.conceptId === conceptId)?.title ?? 'Zadatak';
+        const conceptName = tasks.find((t) => t.conceptId === conceptId)?.title ?? 'Task';
         try {
           const conv = await this.conversationService.createConversation(
             authenticatedClient.tenantId,
@@ -4198,7 +4198,7 @@ Odgovori SAMO sa validnim JSON nizom:
     @MessageBody() payload: { conversationId: string; category: string }
   ): Promise<void> {
     if (this.configService.get<string>('BRAIN_RELAY_MODE', 'false') === 'true') {
-      client.emit('workflow:error', { message: 'Brain relay mode aktivan — domain YOLO isključen.', conversationId: payload.conversationId });
+      client.emit('workflow:error', { message: 'Brain relay mode active — domain YOLO disabled.', conversationId: payload.conversationId });
       return;
     }
     const authenticatedClient = client as AuthenticatedSocket;
@@ -4398,7 +4398,7 @@ Odgovori SAMO sa validnim JSON nizom:
     for (const conceptId of conceptIds) {
       const conceptName =
         plan.steps.find((s: ExecutionPlanStep) => s.conceptId === conceptId)?.conceptName ??
-        'Zadatak';
+        'Task';
       try {
         const conv = await this.conversationService.createConversation(
           authenticatedClient.tenantId,
@@ -4636,16 +4636,16 @@ Odgovori SAMO sa validnim JSON nizom:
         }
       }
 
-      const systemPrompt = `Ti si poslovni asistent koji pomaže korisniku da istraži i razume poslovne teme.
-Odgovaraj precizno na srpskom jeziku.
+      const systemPrompt = `You are a business assistant who helps the user explore and understand business topics.
+Respond precisely in English.
 
-FORMATIRANJE (OBAVEZNO):
-- Organizuj odgovor sa ## naslovom za svaku sekciju
-- Koristi **bold** za ključne termine
-- Koristi bullet liste za nabrajanje
-- Koristi tabele za numeričke podatke ili poređenja
-- Koristi callout blokove: > **Ključni uvid:** ... ili > **Rezime:** ...
-- Ako imaš web izvore, citiraj INLINE: ([Naziv](URL))
+FORMATTING (REQUIRED):
+- Organize the response with ## heading for each section
+- Use **bold** for key terms
+- Use bullet lists for enumeration
+- Use tables for numerical data or comparisons
+- Use callout blocks: > **Key Insight:** ... or > **Summary:** ...
+- If you have web sources, cite INLINE: ([Name](URL))
 
 ${businessContext}${brainMemoryContext ? '\n' + brainMemoryContext : ''}${webContext}`;
 
@@ -4712,75 +4712,75 @@ ${businessContext}${brainMemoryContext ? '\n' + brainMemoryContext : ''}${webCon
       }
 
       // Core identity — this is the base system prompt when no persona is set
-      let context = `Ti si poslovni savetnik za kompaniju "${tenant.name}".
-Tvoj cilj: pružaj konkretne, upotrebljive savete prilagođene OVOM poslovanju. Misli kao iskusan konsultant koji poznaje ovu kompaniju iznutra.
+      let context = `You are a business advisor for the company "${tenant.name}".
+Your goal: provide concrete, actionable advice tailored to THIS business. Think like an experienced consultant who knows this company inside out.
 
---- POSLOVNI KONTEKST ---
-Kompanija: ${tenant.name}`;
+--- BUSINESS CONTEXT ---
+Company: ${tenant.name}`;
       if (tenant.industry) {
-        context += `\nIndustrija: ${tenant.industry}`;
+        context += `\nIndustry: ${tenant.industry}`;
       }
       if (tenant.description) {
-        context += `\nOpis: ${tenant.description}`;
+        context += `\nDescription: ${tenant.description}`;
       }
 
       if (onboardingNote?.content) {
         // Truncate very long onboarding notes to keep prompt focused
         const noteContent =
           onboardingNote.content.length > 3000
-            ? onboardingNote.content.substring(0, 3000) + '\n...(skraćeno)'
+            ? onboardingNote.content.substring(0, 3000) + '\n...(truncated)'
             : onboardingNote.content;
-        context += `\n\nPoslovna analiza (iz onboardinga):\n${noteContent}`;
+        context += `\n\nBusiness analysis (from onboarding):\n${noteContent}`;
       }
 
-      context += '\n--- KRAJ POSLOVNOG KONTEKSTA ---';
+      context += '\n--- END OF BUSINESS CONTEXT ---';
 
       // Output quality rules
       context += `
 
---- PRAVILA ZA ODGOVARANJE ---
-1. UVEK personalizuj odgovore za "${tenant.name}" (${tenant.industry ?? 'opšte poslovanje'}) — ne daj generičke savete
-2. Koristi podatke iz POSLOVNOG KONTEKSTA, BAZE ZNANJA i MEMORIJE za konkretne preporuke
-3. Kada koristiš znanje iz koncepta, označi ga kao [[Naziv Koncepta]]
-4. Budi konkretan: umesto "trebalo bi da razmotrite..." reci šta tačno treba uraditi i zašto
-5. Ako imaš web izvore, citiraj INLINE: ([Naziv izvora](URL))
-6. Odgovaraj ISKLJUČIVO na srpskom jeziku
-7. Minimum 300 reči za pitanja koja zahtevaju analizu — ne daj površne odgovore
---- KRAJ PRAVILA ---`;
+--- RESPONSE RULES ---
+1. ALWAYS personalize responses for "${tenant.name}" (${tenant.industry ?? 'general business'}) — do not give generic advice
+2. Use data from BUSINESS CONTEXT, KNOWLEDGE BASE, and MEMORY for concrete recommendations
+3. When using concept knowledge, mark it as [[Concept Name]]
+4. Be concrete: instead of "you should consider..." say what exactly needs to be done and why
+5. If you have web sources, cite INLINE: ([Source Name](URL))
+6. Respond EXCLUSIVELY in English
+7. Minimum 300 words for questions requiring analysis — do not give shallow answers
+--- END OF RULES ---`;
 
       // Formatting rules + capabilities only for interactive chat (not task execution)
       if (!options?.lean) {
         context += `
 
---- FORMATIRANJE (STROGO OBAVEZNO — svaki odgovor MORA koristiti ove formate) ---
-1. SEKCIJE: Organizuj svaki odgovor sa ## naslovom za svaku sekciju.
+--- FORMATTING (STRICTLY REQUIRED — every response MUST use these formats) ---
+1. SECTIONS: Organize every response with ## heading for each section.
 
-2. CALLOUT BLOKOVI (koristi MINIMUM 2 različita tipa po odgovoru):
-> **Ključni uvid:** Ovde ide najvažniji zaključak ili preporuka.
-> **Upozorenje:** Ovde ide rizik, opasnost ili problem.
-> **Metrika:** Relevantni brojevi i KPI za datu oblast.
-> **Rezime:** Kratki zaključak sa konkretnom preporukom.
+2. CALLOUT BLOCKS (use MINIMUM 2 different types per response):
+> **Key Insight:** The most important conclusion or recommendation goes here.
+> **Warning:** Risk, danger, or problem goes here.
+> **Metric:** Relevant numbers and KPIs for the given area.
+> **Summary:** Brief conclusion with a concrete recommendation.
 
-3. TABELE SA BROJEVIMA (OBAVEZNO kad god imaš numeričke podatke):
-| Kategorija | Vrednost | Promena |
-|------------|----------|---------|
-| Primer     | 100.000€ | +15%    |
+3. TABLES WITH NUMBERS (REQUIRED whenever you have numerical data):
+| Category | Value    | Change |
+|----------|----------|--------|
+| Example  | 100,000€ | +15%   |
 
-4. OSTALA PRAVILA:
-- Koristi **bold** za sve ključne termine
-- Koristi bullet liste za nabrajanje, NE dugačke paragrafe
-- NIKADA ne piši odgovor bez bar jednog callout bloka
-- Koristi tabele kada god imaš numeričke podatke ili poređenja
---- KRAJ FORMATIRANJA ---
+4. OTHER RULES:
+- Use **bold** for all key terms
+- Use bullet lists for enumeration, NOT long paragraphs
+- NEVER write a response without at least one callout block
+- Use tables whenever you have numerical data or comparisons
+--- END OF FORMATTING ---
 
---- FUNKCIONALNOSTI APLIKACIJE koje možeš da koristiš ---
-- Kreiranje zadataka: Predloži konkretne zadatke korisniku na osnovu razgovora
-- Pretraga weba: Koristi web pretragu za aktuelne podatke i statistike
-- Poslovni kontekst: Imaš pristup svim memorijama i poslovnom profilu kompanije
-- Radni tokovi: Možeš da generišeš višekoračne planove za složene zadatke
-- Koncepti: Možeš da preporučiš relevantne poslovne koncepte iz baze znanja
-Kada korisnik pita šta možeš ili traži pomoć, pomeni ove funkcionalnosti.
---- KRAJ FUNKCIONALNOSTI ---`;
+--- APPLICATION FEATURES you can use ---
+- Task creation: Suggest concrete tasks to the user based on the conversation
+- Web search: Use web search for current data and statistics
+- Business context: You have access to all memories and the company's business profile
+- Workflows: You can generate multi-step plans for complex tasks
+- Concepts: You can recommend relevant business concepts from the knowledge base
+When the user asks what you can do or needs help, mention these features.
+--- END OF FEATURES ---`;
       }
 
       this.logger.log({
@@ -4888,21 +4888,21 @@ Kada korisnik pita šta možeš ili traži pomoć, pomeni ove funkcionalnosti.
       }
 
       // Internal LLM call to synthesize research brief
-      const briefPrompt = `Na osnovu korisničkog pitanja i prikupljenih podataka, napravi ISTRAŽIVAČKI BRIEF (500-800 reči).
+      const briefPrompt = `Based on the user's question and collected data, create a RESEARCH BRIEF (500-800 words).
 
-KORISNIČKO PITANJE: ${userQuery}
+USER QUESTION: ${userQuery}
 
-BAZA ZNANJA:
-${conceptKnowledge || '(nema koncepata)'}
+KNOWLEDGE BASE:
+${conceptKnowledge || '(no concepts)'}
 
-WEB ISTRAŽIVANJE:
-${webKnowledge || '(nema web rezultata)'}
+WEB RESEARCH:
+${webKnowledge || '(no web results)'}
 
-FORMAT BRIEFA:
-1. KLJUČNA PITANJA: Koji su glavni aspekti korisničkog pitanja?
-2. NALAZI: Za svaki aspekt — šta govore podaci iz baze i weba?
-3. PRAZNINE: Koje informacije nedostaju?
-4. STRUKTURA ODGOVORA: Predloži logičan raspored sekcija za finalni odgovor
+BRIEF FORMAT:
+1. KEY QUESTIONS: What are the main aspects of the user's question?
+2. FINDINGS: For each aspect — what do the data from the knowledge base and web say?
+3. GAPS: What information is missing?
+4. RESPONSE STRUCTURE: Suggest a logical arrangement of sections for the final answer
 5. KONKRETNI PODACI: Navedi sve brojke, statistike, primere iz izvora`;
 
       const briefMessages = [{ role: 'user' as const, content: briefPrompt }];
