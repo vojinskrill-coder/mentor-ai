@@ -1,0 +1,99 @@
+# Neuron OS Agent Registry
+# Defines all OpenClaw agents and their configurations
+
+agents:
+  - id: main
+    name: Main Business Brain
+    description: Primary orchestrator agent for tenant business analysis
+    soulTemplate: SOUL.template.md
+    skills:
+      - mentor-ai-bridge
+    guardrails:
+      maxTokensPerCall: 4096
+      maxRetriesPerStep: 5
+      requireValidation: true
+      requireSelfCorrection: true
+
+  - id: research
+    name: Research Agent
+    description: Deep research and analysis specialist
+    soulTemplate: SOUL.template.md
+    skills:
+      - mentor-ai-bridge
+    guardrails:
+      maxTokensPerCall: 4096
+      maxRetriesPerStep: 3
+      requireValidation: true
+      requireSelfCorrection: true
+
+  - id: content
+    name: Content Agent
+    description: Content creation and enrichment specialist
+    soulTemplate: SOUL.template.md
+    skills:
+      - mentor-ai-bridge
+    guardrails:
+      maxTokensPerCall: 4096
+      maxRetriesPerStep: 5
+      requireValidation: true
+      requireSelfCorrection: true
+
+  - id: marketing
+    name: Marketing Agent
+    description: Marketing strategy and campaign specialist
+    soulTemplate: SOUL.template.md
+    skills:
+      - mentor-ai-bridge
+    guardrails:
+      maxTokensPerCall: 4096
+      maxRetriesPerStep: 3
+      requireValidation: true
+      requireSelfCorrection: true
+
+  - id: financial
+    name: Financial Agent
+    description: Financial analysis and planning specialist
+    soulTemplate: SOUL.template.md
+    skills:
+      - mentor-ai-bridge
+    guardrails:
+      maxTokensPerCall: 4096
+      maxRetriesPerStep: 3
+      requireValidation: true
+      requireSelfCorrection: true
+
+  - id: sales
+    name: Sales Agent
+    description: Sales strategy and pipeline specialist
+    soulTemplate: SOUL.template.md
+    skills:
+      - mentor-ai-bridge
+    guardrails:
+      maxTokensPerCall: 4096
+      maxRetriesPerStep: 3
+      requireValidation: true
+      requireSelfCorrection: true
+
+  - id: designer
+    name: Designer Agent
+    description: Design and branding specialist
+    soulTemplate: SOUL.template.md
+    skills:
+      - mentor-ai-bridge
+    guardrails:
+      maxTokensPerCall: 4096
+      maxRetriesPerStep: 3
+      requireValidation: true
+      requireSelfCorrection: true
+
+  - id: dev
+    name: Development Agent
+    description: Technical implementation and code specialist
+    soulTemplate: SOUL.template.md
+    skills:
+      - mentor-ai-bridge
+    guardrails:
+      maxTokensPerCall: 4096
+      maxRetriesPerStep: 5
+      requireValidation: true
+      requireSelfCorrection: true

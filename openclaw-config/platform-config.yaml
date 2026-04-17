@@ -1,0 +1,49 @@
+# Neuron OS Platform Configuration
+# Environment variables use ${ENV_VAR:default} syntax
+
+relay:
+  host: ${OPENCLAW_RELAY_HOST:91.98.231.87}
+  port: ${OPENCLAW_RELAY_PORT:3100}
+  authToken: ${OPENCLAW_RELAY_AUTH_TOKEN:}
+  timeout: ${OPENCLAW_RELAY_TIMEOUT:30000}
+
+vault:
+  basePath: ${VAULT_BASE_PATH:/root/.openclaw/workspace}
+  tenantPath: ${VAULT_TENANT_PATH:/root/.openclaw/workspace/tenants/{{tenantId}}}
+  sshHost: ${VAULT_SSH_HOST:91.98.231.87}
+  sshPort: ${VAULT_SSH_PORT:22}
+  sshUser: ${VAULT_SSH_USER:root}
+  sshKeyPath: ${VAULT_SSH_KEY_PATH:~/.ssh/id_rsa}
+  mode: ${VAULT_MODE:ssh}
+
+qdrant:
+  url: ${QDRANT_URL:http://localhost:6333}
+  apiKey: ${QDRANT_API_KEY:}
+  collectionName: ${QDRANT_COLLECTION:mentor-ai-concepts}
+  embeddingDimension: 1536
+
+enrichment:
+  maxConcurrentJobs: ${ENRICHMENT_MAX_CONCURRENT:3}
+  maxRetries: ${ENRICHMENT_MAX_RETRIES:5}
+  retryDelayMs: ${ENRICHMENT_RETRY_DELAY:5000}
+  zombieTimeoutMs: ${ENRICHMENT_ZOMBIE_TIMEOUT:300000}
+  batchSize: ${ENRICHMENT_BATCH_SIZE:10}
+  minWords: ${ENRICHMENT_MIN_WORDS:50}
+  minChars: ${ENRICHMENT_MIN_CHARS:200}
+  requireDiacritics: ${ENRICHMENT_REQUIRE_DIACRITICS:true}
+  requireFrontmatter: ${ENRICHMENT_REQUIRE_FRONTMATTER:true}
+  requireSources: ${ENRICHMENT_REQUIRE_SOURCES:true}
+
+timeouts:
+  relayCallMs: ${TIMEOUT_RELAY_CALL:30000}
+  vaultWriteMs: ${TIMEOUT_VAULT_WRITE:15000}
+  vaultReadMs: ${TIMEOUT_VAULT_READ:10000}
+  enrichmentStepMs: ${TIMEOUT_ENRICHMENT_STEP:120000}
+  validationMs: ${TIMEOUT_VALIDATION:10000}
+  correctionMs: ${TIMEOUT_CORRECTION:60000}
+
+guardrails:
+  maxTokensPerCall: ${GUARDRAILS_MAX_TOKENS:4096}
+  maxRetriesPerStep: ${GUARDRAILS_MAX_RETRIES:5}
+  requireValidation: true
+  requireSelfCorrection: true
