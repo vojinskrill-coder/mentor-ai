@@ -1,0 +1,17 @@
+# SHA-256 baseline of OpenClaw config files (verified against Hetzner 91.98.231.87 on 2026-04-06)
+# Format: <hash>  <relative path from openclaw-config/>
+
+# 9 agent SOULs
+b9d3cbc957ac0a9a8faa0480397290836c3ea46b2d4886c8d9b787f7450168ec  agents/content/SOUL.md
+b3d4625845160a3ec68b34b77dd3b90ca96610ac43295cce2d05a64316892a0a  agents/designer/SOUL.md
+91a77da52f06524e6ad939e2f13df13bfa22ff35f65bd62371e8b89774ecae22  agents/dev/SOUL.md
+c938bcfed9f98062bc9a1c6ceb423221e6577ddc78e07b8bd49a013632c02fcc  agents/financial/SOUL.md
+3449c0ec8cb7649b06575fcf779becb5a50e2a88482700ba87907bac965c5901  agents/main/SOUL.md
+d8961d28349a549ff15b1270ae0a871a71983bf242f3d8aa591f6a00fcfe0b6f  agents/marketing/SOUL.md
+7672db8032b186f2fd7539ee6732b623d38bf59483c8f341e9a875840a043cbf  agents/research/SOUL.md
+0862c1bcc16727a9615ea9af567743b1a83d9b10fb45c14a7e61796eb3780e37  agents/sales/SOUL.md
+11bd006816d358120261e5755bcd142c7cd12c9ca605d4b965e8b5b90ff3eb97  agents/web-search/SOUL.md
+
+# Toolkit instruction files (referenced from main SOUL for MCP / n8n / process workflows)
+cca523ee901615ce4ba23c209aa8c23758601602f6c64c221e323bdeac586108  toolkits/nocodb.md
+964e4df6e4470d5836e368d832f7a61af30246db8639c9232763b47be4651be1  toolkits/notion.md

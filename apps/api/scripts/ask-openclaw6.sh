@@ -1,0 +1,10 @@
+#!/bin/bash
+curl -s -X POST "http://91.98.231.87:3100/execute" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" \
+  -d '{
+    "message": "Final alignment check before we build. Here is the Karpathy LLM Wiki gist we based our design on:\n\nhttps://gist.github.com/karpathy/1dd0294ef9567971c1e4348a90d69285\n\nThe key principles from Karpathy:\n1. LLM has a wiki it can read AND write to\n2. Three layers: raw (immutable inputs), wiki (living knowledge the LLM maintains), instructions (how to operate)\n3. The wiki is the LLMs extended memory — it reads before responding, writes after learning\n4. Skills and procedures are stored as wiki pages the LLM can reference\n5. The LLM maintains an index for fast lookup\n6. Knowledge grows through use — conversations crystallize back into wiki\n\nOur implementation adds:\n- Per-tenant vault isolation (each tenant gets their own wiki)\n- Qdrant as semantic index over the wiki (vectors for discovery, files for precision)\n- Knowledge lifecycle tiers (working/episodic/semantic/procedural)\n- Onboarding auto-creates the vault structure + seeds initial concepts\n- Maturity engine orchestrates systematic enrichment of all concepts\n\nQuestions:\n1. Does our vault structure (raw/, wiki/concepts/, skills/, instructions/, index.md, SCHEMA.md, log.md) fully align with Karpathys pattern? Anything missing?\n2. For the onboarding flow: when a new tenant registers, we create the vault on your filesystem, write SCHEMA.md + tenant-config.md + bootstrap.md, seed index.md with concept slugs. Is that sufficient for you to start operating on a new tenant immediately?\n3. How should we handle the transition — right now content is in PostgreSQL. We need to migrate to vault files. Should we do this as part of onboarding (create vault, write files) and keep PostgreSQL as read-only backup?\n4. Is there anything from Karpathys original pattern that we are NOT implementing that we should?",
+    "agentId": "main",
+    "sessionId": "karpathy-alignment-001",
+    "timeoutSeconds": 180
+  }' --max-time 210

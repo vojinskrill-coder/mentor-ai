@@ -1,0 +1,12 @@
+const fs = require('fs');
+const path = require('path');
+const curr = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src', 'app', 'knowledge', 'data', 'curriculum.json'), 'utf-8'));
+const serbian = curr.filter(n => /[čćšžđ]/i.test(n.label));
+console.log('Labels with Serbian chars:', serbian.length);
+for (const n of serbian.slice(0, 15)) console.log('  ', n.id, '|', n.label);
+const roots = curr.filter(n => !n.parentId);
+console.log('\nRoot nodes:');
+for (const r of roots) console.log('  ', r.label);
+console.log('\nSample leaf nodes:');
+const leaves = curr.filter(n => n.parentId).slice(0, 10);
+for (const l of leaves) console.log('  ', l.label);
