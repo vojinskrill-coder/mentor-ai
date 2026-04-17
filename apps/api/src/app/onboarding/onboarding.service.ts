@@ -1658,49 +1658,49 @@ Create a personalized Business Brain with exactly 10 prioritized tasks.`;
     const conceptDescriptions = topTasks
       .map((m, i) => {
         const prereqs = prereqMap.get(m.conceptId) ?? [];
-        return `${i + 1}. Koncept: "${m.conceptName}" | Kategorija: ${m.category} | Definicija: ${m.definition}${prereqs.length > 0 ? ` | Preduslovi: ${prereqs.join(', ')}` : ''}`;
+        return `${i + 1}. Concept: "${m.conceptName}" | Category: ${m.category} | Definition: ${m.definition}${prereqs.length > 0 ? ` | Prerequisites: ${prereqs.join(', ')}` : ''}`;
       })
       .join('\n');
 
-    const taskEnrichmentSystemPrompt = `Ti si srpski poslovni konsultant koji kreira akcione zadatke.
+    const taskEnrichmentSystemPrompt = `You are a business consultant who creates actionable tasks.
 
-Za SVAKI koncept napiši strukturirani zadatak u sledećem formatu:
+For EACH concept, write a structured task in the following format:
 
----ZADATAK: {redni broj}---
-NASLOV: {akcioni naslov na srpskom — glagol + konkretna radnja, max 60 karaktera}
-SADRŽAJ:
-## Cilj
-{1-2 rečenice: šta konkretno treba postići za "${tenant.name}" u industriji "${tenant.industry}"}
+---TASK: {ordinal number}---
+TITLE: {action-oriented title — verb + concrete action, max 60 characters}
+CONTENT:
+## Goal
+{1-2 sentences: what specifically needs to be achieved for "${tenant.name}" in the "${tenant.industry}" industry}
 
-## Zašto je ovo važno
-{2-3 rečenice: poslovna vrednost, šta se gubi ako se ne uradi}
+## Why this is important
+{2-3 sentences: business value, what is lost if not done}
 
-## Koraci za realizaciju
-1. {Konkretan korak sa opisom — ne generički}
-2. {Konkretan korak sa opisom}
-3. {Konkretan korak sa opisom}
-4. {Konkretan korak sa opisom}
-5. {Konkretan korak sa opisom}
+## Steps for implementation
+1. {Concrete step with description — not generic}
+2. {Concrete step with description}
+3. {Concrete step with description}
+4. {Concrete step with description}
+5. {Concrete step with description}
 
-## Očekivani rezultat
-{1-2 rečenice: merljiv ishod, KPI ili deliverable}
+## Expected result
+{1-2 sentences: measurable outcome, KPI or deliverable}
 
-## Vremenski okvir
-{Predloženi rok: 1 nedelja / 2 nedelje / 1 mesec}
----KRAJ ZADATKA---
+## Time frame
+{Suggested deadline: 1 week / 2 weeks / 1 month}
+---END TASK---
 
-PRAVILA:
-- Svaki naslov MORA biti akcioni glagol na srpskom: "Analizirajte...", "Definišite...", "Kreirajte...", "Mapriajte...", "Razvijte...", "Optimizujte...", "Uspostavite..."
-- Koraci moraju biti SPECIFIČNI za "${tenant.name}" i "${tenant.industry}" — ne generički
-- Ako koncept ima preduslove, pomeni ih u sekciji "Zašto je ovo važno"
-- ${tenant.description ? `Kontekst kompanije: ${tenant.description}` : ''}
-- Piši ISKLJUČIVO na srpskom jeziku
-- TAČNO ${topTasks.length} zadataka, ni više ni manje`;
+RULES:
+- Every title MUST be an action verb: "Analyze...", "Define...", "Create...", "Map...", "Develop...", "Optimize...", "Establish..."
+- Steps must be SPECIFIC to "${tenant.name}" and "${tenant.industry}" — not generic
+- If the concept has prerequisites, mention them in the "Why this is important" section
+- ${tenant.description ? `Company context: ${tenant.description}` : ''}
+- Write EXCLUSIVELY in English
+- EXACTLY ${topTasks.length} tasks, no more no less`;
 
-    const taskEnrichmentUserPrompt = `Koncepti za koje treba kreirati zadatke:
+    const taskEnrichmentUserPrompt = `Concepts for which tasks need to be created:
 ${conceptDescriptions}
 
-Generiši strukturirane zadatke.`;
+Generate structured tasks.`;
 
     let enrichedContent = '';
     try {
@@ -1759,37 +1759,37 @@ Generiši strukturirane zadatke.`;
       .map((m, i) => {
         const parsed = parsedTasks[i];
         const title = parsed?.title ?? this.buildActionTitle(m.conceptName);
-        return `${i + 1}. "${title}" — Koncept: ${m.conceptName}, Definicija: ${m.definition}`;
+        return `${i + 1}. "${title}" — Concept: ${m.conceptName}, Definition: ${m.definition}`;
       })
       .join('\n');
 
     // Generate narrative welcome message via LLM
-    const welcomeSystemPrompt = `Ti si poslovni savetnik koji upoznaje klijenta sa personalizovanim akcionim planom.
+    const welcomeSystemPrompt = `You are a business advisor introducing the client to a personalized action plan.
 
-Napiši dobrodošlicu koja:
-1. Pozdravi klijenta po imenu kompanije i rezimira njihov profil (2-3 rečenice)
-2. Objasni strategiju: ZAŠTO ovih ${topTasks.length} zadataka, koji je krajnji cilj
-3. Za SVAKI zadatak objasni ZAŠTO je važan za NJIHOVO poslovanje (ne samo naziv — poslovnu vrednost)
-4. Objasni REDOSLED — zašto počinjemo sa zadatkom #1, kako svaki naredni nadograđuje prethodni
-5. Na kraju jasno predloži prvi korak
+Write a welcome message that:
+1. Greets the client by company name and summarizes their profile (2-3 sentences)
+2. Explains the strategy: WHY these ${topTasks.length} tasks, what is the ultimate goal
+3. For EACH task explains WHY it is important for THEIR business (not just the name — business value)
+4. Explains the ORDER — why we start with task #1, how each subsequent one builds on the previous
+5. At the end clearly suggest the first step
 
-PRAVILA:
-- NE koristi [[Naziv Koncepta]] oznake
-- NE nabraja korake kao suvu listu — objasni poslovnu logiku iza svakog
-- Koristi ime kompanije "${tenant.name}" i industrije "${tenant.industry}"
-- Piši toplo ali profesionalno, kao iskusan konsultant
-- Na kraju dodaj: odgovorite "da" za sve zadatke, "pokreni 1, 3, 5" za izbor, ili "pokreni prvi" za samo prvi
-- Piši ISKLJUČIVO na srpskom jeziku
-- Između 500 i 800 reči — dovoljno detalja za kontekst`;
+RULES:
+- DO NOT use [[Concept Name]] tags
+- DO NOT list steps as a dry list — explain the business logic behind each
+- Use the company name "${tenant.name}" and industry "${tenant.industry}"
+- Write warmly but professionally, like an experienced consultant
+- At the end add: reply "yes" for all tasks, "run 1, 3, 5" for selection, or "run first" for just the first
+- Write EXCLUSIVELY in English
+- Between 500 and 800 words — enough detail for context`;
 
-    const welcomeUserPrompt = `Kompanija: ${tenant.name ?? 'Nepoznata'}
-Industrija: ${tenant.industry ?? 'Opšta'}
-${tenant.description ? `Opis: ${tenant.description}` : ''}
+    const welcomeUserPrompt = `Company: ${tenant.name ?? 'Unknown'}
+Industry: ${tenant.industry ?? 'General'}
+${tenant.description ? `Description: ${tenant.description}` : ''}
 
-Pripremljeni zadaci (po redosledu):
+Prepared tasks (in order):
 ${conceptSummaries}
 
-Napiši personalizovanu dobrodošlicu.`;
+Write a personalized welcome.`;
 
     let welcomeMsg = '';
     try {
