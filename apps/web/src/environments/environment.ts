@@ -4,7 +4,7 @@
 export const environment = {
   production: false,
   apiUrl: 'http://localhost:3000',
-  appName: 'Mentor AI',
+  appName: 'Neuron OS',
   version: '0.0.1',
   brainRelayMode: true, // When true, tasks execute via OpenClaw brain instead of old pipeline
   google: {

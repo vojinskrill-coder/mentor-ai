@@ -4,6 +4,8 @@ import {
   signal,
   input,
   output,
+  effect,
+  ElementRef,
   OnInit,
   OnDestroy,
   ChangeDetectionStrategy,
@@ -11,6 +13,8 @@ import {
 import { CommonModule } from '@angular/common';
 import { ConversationService } from '../services/conversation.service';
 import { ChatWebsocketService } from '../services/chat-websocket.service';
+import { BrainTreeRefreshService } from '../services/brain-tree-refresh.service';
+import { PageLoadingService } from '../../../core/services/page-loading.service';
 import type { ConceptTreeData, ConceptHierarchyNode, Conversation } from '@mentor-ai/shared/types';
 
 /** Flattened tree row for rendering */
@@ -39,8 +43,8 @@ interface TreeRow {
         top: 0;
         z-index: 2;
         padding: 8px;
-        background: #0d0d0d;
-        border-bottom: 1px solid #2a2a2a;
+        background: #0D1117;
+        border-bottom: 1px solid #21262D;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -61,17 +65,17 @@ interface TreeRow {
       }
       .search-input {
         width: 100%;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 6px;
         padding: 8px 10px 8px 30px;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 12px;
         font-family: inherit;
       }
       .search-input:focus {
         outline: none;
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .search-input::placeholder {
         color: #707070;
@@ -88,7 +92,7 @@ interface TreeRow {
         flex-shrink: 0;
       }
       .search-clear:hover {
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .search-clear svg {
         width: 14px;
@@ -127,8 +131,8 @@ interface TreeRow {
         text-align: left;
       }
       .tree-node:hover {
-        background: #1a1a1a;
-        color: #fafafa;
+        background: #161B22;
+        color: #E6EDF3;
       }
       .tree-node.root-node {
         font-size: 12px;
@@ -179,7 +183,7 @@ interface TreeRow {
         opacity: 1;
       }
       .add-btn:hover {
-        color: #3b82f6;
+        color: #58A6FF;
       }
       .view-btn:hover {
         color: #10b981;
@@ -198,11 +202,11 @@ interface TreeRow {
         color: inherit;
       }
       .conversation-item:hover {
-        background: #1a1a1a;
+        background: #161B22;
       }
       .conversation-item.active {
-        background: #1a1a1a;
-        border-left: 2px solid #3b82f6;
+        background: #161B22;
+        border-left: 2px solid #58A6FF;
       }
 
       .conv-title {
@@ -213,7 +217,7 @@ interface TreeRow {
         text-overflow: ellipsis;
       }
       .conversation-item.active .conv-title {
-        color: #fafafa;
+        color: #E6EDF3;
       }
 
       .conv-meta {
@@ -224,7 +228,7 @@ interface TreeRow {
 
       .general-section {
         margin-top: 4px;
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid #21262D;
         padding-top: 4px;
       }
 
@@ -261,18 +265,18 @@ interface TreeRow {
         color: inherit;
       }
       .general-item:hover {
-        background: #1a1a1a;
+        background: #161B22;
       }
       .general-item.active {
-        background: #1a1a1a;
-        border-left: 2px solid #3b82f6;
+        background: #161B22;
+        border-left: 2px solid #58A6FF;
       }
       .general-item.active .conv-title {
-        color: #fafafa;
+        color: #E6EDF3;
       }
 
       .skeleton {
-        background: linear-gradient(90deg, #1a1a1a 25%, #242424 50%, #1a1a1a 75%);
+        background: linear-gradient(90deg, #161B22 25%, #1C2128 50%, #161B22 75%);
         background-size: 200% 100%;
         animation: shimmer 1.5s infinite;
         height: 14px;
@@ -292,8 +296,39 @@ interface TreeRow {
         width: 8px;
         height: 8px;
         border-radius: 50%;
-        background: #3b82f6;
+        background: #58A6FF;
         flex-shrink: 0;
+      }
+
+      /* Pulsing blue dot — brain is waiting for the user's first reply in a
+         freshly opened proposal/concept discussion. Cleared when the user
+         sends their first manual message. */
+      .awaiting-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: #3B82F6;
+        box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+        flex-shrink: 0;
+        animation: awaiting-pulse 1.6s ease-in-out infinite;
+      }
+      @keyframes awaiting-pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.6);
+          transform: scale(1);
+        }
+        70% {
+          box-shadow: 0 0 0 6px rgba(59, 130, 246, 0);
+          transform: scale(1.05);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+          transform: scale(1);
+        }
+      }
+      .conversation-item.awaiting-first-msg {
+        background: rgba(59, 130, 246, 0.06);
+        border-left: 2px solid #3B82F6;
       }
 
       .status-dot {
@@ -306,7 +341,7 @@ interface TreeRow {
         background: #10b981;
       }
       .status-dot.pending {
-        background: #f59e0b;
+        background: #D29922;
       }
 
       .attribution {
@@ -324,7 +359,7 @@ interface TreeRow {
         cursor: pointer;
       }
       .node-label.clickable:hover {
-        color: #3b82f6;
+        color: #58A6FF;
       }
 
       .tree-item-loading {
@@ -335,8 +370,8 @@ interface TreeRow {
         display: inline-block;
         width: 12px;
         height: 12px;
-        border: 2px solid #2a2a2a;
-        border-top-color: #3b82f6;
+        border: 2px solid #21262D;
+        border-top-color: #58A6FF;
         border-radius: 50%;
         animation: shimmer-spin 0.8s linear infinite;
         flex-shrink: 0;
@@ -355,7 +390,7 @@ interface TreeRow {
         width: 48px;
         height: 48px;
         margin: 0 auto 12px;
-        background: #1a1a1a;
+        background: #161B22;
         border-radius: 50%;
         display: flex;
         align-items: center;
@@ -380,7 +415,7 @@ interface TreeRow {
         opacity: 1;
       }
       .conv-actions-btn:hover {
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .conv-actions-btn svg {
         width: 14px;
@@ -391,8 +426,8 @@ interface TreeRow {
       .ctx-menu {
         position: fixed;
         z-index: 100;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 8px;
         padding: 4px;
         min-width: 140px;
@@ -414,13 +449,13 @@ interface TreeRow {
         text-align: left;
       }
       .ctx-menu-item:hover {
-        background: #242424;
+        background: #1C2128;
       }
       .ctx-menu-item.danger {
-        color: #ef4444;
+        color: #F85149;
       }
       .ctx-menu-item.danger:hover {
-        background: rgba(239, 68, 68, 0.1);
+        background: rgba(248, 81, 73, 0.1);
       }
       .ctx-menu-item svg {
         width: 16px;
@@ -436,11 +471,11 @@ interface TreeRow {
       /* Inline rename input */
       .rename-input {
         width: 100%;
-        background: #0d0d0d;
-        border: 1px solid #3b82f6;
+        background: #0D1117;
+        border: 1px solid #58A6FF;
         border-radius: 4px;
         padding: 4px 8px;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 12px;
         font-family: inherit;
       }
@@ -459,8 +494,8 @@ interface TreeRow {
         justify-content: center;
       }
       .confirm-dialog {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 12px;
         padding: 24px;
         max-width: 360px;
@@ -469,7 +504,7 @@ interface TreeRow {
       .confirm-title {
         font-size: 15px;
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
         margin-bottom: 8px;
       }
       .confirm-message {
@@ -493,15 +528,15 @@ interface TreeRow {
         font-weight: 500;
       }
       .confirm-btn.cancel {
-        background: #242424;
+        background: #1C2128;
         color: #a1a1a1;
       }
       .confirm-btn.cancel:hover {
-        background: #2a2a2a;
-        color: #fafafa;
+        background: #21262D;
+        color: #E6EDF3;
       }
       .confirm-btn.danger {
-        background: #ef4444;
+        background: #F85149;
         color: white;
       }
       .confirm-btn.danger:hover {
@@ -522,15 +557,15 @@ interface TreeRow {
         </svg>
         <input
           class="search-input"
-          placeholder="Pretraži koncepte..."
+          placeholder="Search concepts..."
           [value]="searchQuery()"
           (input)="onSearchInput($event)"
           role="searchbox"
-          aria-label="Pretraži koncepte"
+          aria-label="Search concepts"
         />
       </div>
       @if (searchQuery()) {
-        <button class="search-clear" (click)="clearSearch()" title="Obriši pretragu">
+        <button class="search-clear" (click)="clearSearch()" title="Clear search">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
@@ -543,7 +578,7 @@ interface TreeRow {
       }
     </div>
 
-    <div class="tree-container" [class.locked]="locked()" role="tree" aria-label="Stablo koncepata">
+    <div class="tree-container" [class.locked]="locked()" role="tree" aria-label="Concept tree">
       @if (isLoading$()) {
         <div style="padding: 0 12px;">
           @for (i of [1, 2, 3]; track i) {
@@ -568,9 +603,9 @@ interface TreeRow {
               [attr.aria-label]="
                 row.node!.label +
                 (row.node!.status === 'completed'
-                  ? ' — završeno'
+                  ? ' — completed'
                   : row.node!.status === 'pending'
-                    ? ' — na čekanju'
+                    ? ' — pending'
                     : '')
               "
             >
@@ -594,7 +629,7 @@ interface TreeRow {
                   class="status-dot"
                   [class.completed]="row.node!.status === 'completed'"
                   [class.pending]="row.node!.status === 'pending'"
-                  [title]="row.node!.status === 'completed' ? 'Završeno' : 'Na čekanju'"
+                  [title]="row.node!.status === 'completed' ? 'Completed' : 'Pending'"
                 ></span>
               }
               <span class="node-label clickable" (click)="onNodeClick($event, row.node!)">{{
@@ -615,7 +650,7 @@ interface TreeRow {
                 <button
                   class="view-btn"
                   (click)="onViewLinkedConversation($event, row.node!.linkedConversationId!)"
-                  title="Pogledaj"
+                  title="View"
                 >
                   <svg
                     fill="none"
@@ -641,7 +676,7 @@ interface TreeRow {
                 <button
                   class="view-btn"
                   (click)="onViewConversation($event, row.node!)"
-                  title="Pogledaj"
+                  title="View"
                 >
                   <svg
                     fill="none"
@@ -668,7 +703,7 @@ interface TreeRow {
                 <button
                   class="add-btn"
                   (click)="onNewChat($event, row.node!.curriculumId, row.node!.label)"
-                  title="Istraži"
+                  title="Explore"
                 >
                   <svg
                     fill="none"
@@ -691,12 +726,16 @@ interface TreeRow {
             <button
               class="conversation-item"
               [class.active]="activeConversationId() === row.conversation!.id"
+              [class.awaiting-first-msg]="awaitingFirstMessageConvId() === row.conversation!.id"
               [class.tree-item-loading]="loadingItemId() === row.conversation!.id"
               [style.padding-left.px]="4 + row.depth * 14"
+              [attr.data-conv-id]="row.conversation!.id"
               (click)="onConversationSelect(row.conversation!.id)"
             >
               <div style="display: flex; align-items: center; gap: 6px;">
-                @if (loadingItemId() === row.conversation!.id) {
+                @if (awaitingFirstMessageConvId() === row.conversation!.id) {
+                  <span class="awaiting-dot" title="Brain is waiting for your reply"></span>
+                } @else if (loadingItemId() === row.conversation!.id) {
                   <span class="tree-item-spinner"></span>
                 } @else if (newConversationIds().has(row.conversation!.id)) {
                   <span class="new-badge"></span>
@@ -713,13 +752,13 @@ interface TreeRow {
                   />
                 } @else {
                   <div class="conv-title" style="flex: 1;">
-                    {{ row.conversation!.title || 'Bez naslova' }}
+                    {{ row.conversation!.title || 'Untitled' }}
                   </div>
                 }
                 <button
                   class="conv-actions-btn"
                   (click)="openContextMenu($event, row.conversation!)"
-                  title="Opcije"
+                  title="Options"
                 >
                   <svg fill="currentColor" viewBox="0 0 20 20">
                     <path
@@ -735,7 +774,7 @@ interface TreeRow {
 
         <!-- Search no results -->
         @if (searchQuery() && flatRows().length === 0) {
-          <div class="search-no-results">Nema rezultata za "{{ searchQuery() }}"</div>
+          <div class="search-no-results">No results for "{{ searchQuery() }}"</div>
         }
 
         <!-- General (uncategorized) Section -->
@@ -757,7 +796,7 @@ interface TreeRow {
                   d="M9 5l7 7-7 7"
                 />
               </svg>
-              Opšte
+              General
               <span class="node-count">{{ treeData$()!.uncategorized.length }}</span>
             </button>
 
@@ -766,9 +805,14 @@ interface TreeRow {
                 <button
                   class="general-item"
                   [class.active]="activeConversationId() === conv.id"
+                  [class.awaiting-first-msg]="awaitingFirstMessageConvId() === conv.id"
+                  [attr.data-conv-id]="conv.id"
                   (click)="onConversationSelect(conv.id)"
                 >
-                  <div class="conv-title">{{ conv.title || 'Konverzacija bez naslova' }}</div>
+                  @if (awaitingFirstMessageConvId() === conv.id) {
+                    <span class="awaiting-dot" title="Brain is waiting for your reply"></span>
+                  }
+                  <div class="conv-title">{{ conv.title || 'Untitled conversation' }}</div>
                   <div class="conv-meta">{{ formatDate(conv.updatedAt) }}</div>
                 </button>
               }
@@ -798,9 +842,9 @@ interface TreeRow {
                 />
               </svg>
             </div>
-            <p style="font-size: 13px; color: #9e9e9e;">Još nema konverzacija</p>
+            <p style="font-size: 13px; color: #9e9e9e;">No conversations yet</p>
             <p style="font-size: 11px; color: #9e9e9e; margin-top: 4px;">
-              Započnite novu konverzaciju iznad
+              Start a new conversation above
             </p>
           </div>
         }
@@ -820,7 +864,7 @@ interface TreeRow {
               d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
             />
           </svg>
-          Preimenuj
+          Rename
         </button>
         <button class="ctx-menu-item danger" (click)="startDelete()">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -831,7 +875,7 @@ interface TreeRow {
               d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
             />
           </svg>
-          Obrisi
+          Delete
         </button>
       </div>
     }
@@ -840,14 +884,14 @@ interface TreeRow {
     @if (deletingConvId()) {
       <div class="confirm-backdrop" (click)="cancelDelete()">
         <div class="confirm-dialog" (click)="$event.stopPropagation()">
-          <div class="confirm-title">Brisanje konverzacije</div>
+          <div class="confirm-title">Delete conversation</div>
           <div class="confirm-message">
-            Da li ste sigurni da zelite da obrisete ovu konverzaciju? Ova akcija se ne moze
-            poništiti.
+            Are you sure you want to delete this conversation? This action cannot be
+            undone.
           </div>
           <div class="confirm-buttons">
-            <button class="confirm-btn cancel" (click)="cancelDelete()">Otkaži</button>
-            <button class="confirm-btn danger" (click)="confirmDelete()">Obrisi</button>
+            <button class="confirm-btn cancel" (click)="cancelDelete()">Cancel</button>
+            <button class="confirm-btn danger" (click)="confirmDelete()">Delete</button>
           </div>
         </div>
       </div>
@@ -857,12 +901,62 @@ interface TreeRow {
 export class ConceptTreeComponent implements OnInit, OnDestroy {
   private readonly conversationService = inject(ConversationService);
   private readonly wsService = inject(ChatWebsocketService);
+  private readonly treeRefresh = inject(BrainTreeRefreshService);
+  private readonly pageLoading = inject(PageLoadingService);
+  private readonly elementRef = inject(ElementRef<HTMLElement>);
   private readonly wsUnsubFns: Array<() => void> = [];
+  private lastRefreshCounter = -1;
+
+  constructor() {
+    // Auto-scroll the active conversation row into view whenever the active
+    // conversation changes or the tree is rebuilt. Triggered when the user
+    // clicks Discuss on a proposal — the matching row in the tree comes
+    // smoothly into focus so the owner can see where they are in the brain.
+    effect(() => {
+      const id = this.activeConversationId();
+      // Watch flatRows so we re-run after the tree finishes rebuilding
+      this.flatRows();
+      if (!id) return;
+      // Defer to next paint so the DOM has the rendered row
+      queueMicrotask(() => {
+        const root = this.elementRef.nativeElement as HTMLElement;
+        const target = root.querySelector(`[data-conv-id="${id}"]`) as HTMLElement | null;
+        if (target) {
+          target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+      });
+    });
+
+    // Architecture: subscribe to the app-wide tree refresh signal. Anyone who
+    // mutates tree-relevant data (creates a conversation, completes a task,
+    // etc.) just calls treeRefresh.request() — the tree reloads automatically.
+    // No ViewChild coupling, no timing dependency on ngAfterViewInit.
+    effect(() => {
+      const counter = this.treeRefresh.counter();
+      // Skip the very first read (initial state) — first load is handled by
+      // ngOnInit. Only respond to subsequent bumps.
+      if (this.lastRefreshCounter < 0) {
+        this.lastRefreshCounter = counter;
+        return;
+      }
+      if (counter !== this.lastRefreshCounter) {
+        this.lastRefreshCounter = counter;
+        this.loadTree();
+      }
+    });
+  }
 
   activeConversationId = input<string | null>(null);
   locked = input(false);
   newConversationIds = input<Set<string>>(new Set());
   loadingItemId = input<string | null>(null);
+  /**
+   * Conversation ID that is waiting for the user's FIRST manual message.
+   * When set, the matching conversation row in the tree shows a pulsing
+   * blue dot indicator. Cleared by the chat component when the user sends
+   * their first real input.
+   */
+  awaitingFirstMessageConvId = input<string | null>(null);
   conversationSelected = output<string>();
   newChatRequested = output<{ conceptId: string; conceptName: string }>();
   conceptSelected = output<{
@@ -896,6 +990,8 @@ export class ConceptTreeComponent implements OnInit, OnDestroy {
 
   conversationDeleted = output<string>();
 
+  private isInitialLoad = true;
+
   ngOnInit(): void {
     this.loadTree();
 
@@ -912,6 +1008,7 @@ export class ConceptTreeComponent implements OnInit, OnDestroy {
 
   async loadTree(): Promise<void> {
     this.isLoading$.set(true);
+    if (this.isInitialLoad) this.pageLoading.start();
     try {
       const data = await this.conversationService.getBrainTree();
       this.treeData$.set(data);
@@ -924,6 +1021,10 @@ export class ConceptTreeComponent implements OnInit, OnDestroy {
       // Tree will show empty
     } finally {
       this.isLoading$.set(false);
+      if (this.isInitialLoad) {
+        this.pageLoading.stop();
+        this.isInitialLoad = false;
+      }
     }
   }
 
@@ -1080,7 +1181,7 @@ export class ConceptTreeComponent implements OnInit, OnDestroy {
     const days = Math.floor(diff / 86400000);
     if (minutes < 1) return 'Upravo';
     if (minutes < 60) return `pre ${minutes} min`;
-    if (hours < 24) return `pre ${hours} č`;
+    if (hours < 24) return `${hours}h ago`;
     if (days < 7) return `pre ${days} d`;
     return date.toLocaleDateString('sr-Latn');
   }

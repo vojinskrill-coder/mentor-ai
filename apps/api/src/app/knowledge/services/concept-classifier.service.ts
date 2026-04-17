@@ -8,12 +8,14 @@ import { ConceptMatchingService, ConceptMatchingOptions } from './concept-matchi
  * Result of LLM-based concept classification.
  */
 export interface ConceptClassificationResult {
-  /** Best matching category keyword (Serbian) */
+  /** Best matching category keyword */
   category: string;
   /** Confidence score 0.0-1.0 */
   confidence: number;
   /** Optional: specific concept name if the LLM identified one */
   suggestedConceptName?: string;
+  /** True if classification was a fallback (LLM failed, used standard matching) */
+  usedFallback?: boolean;
 }
 
 /** Context for LLM billing */
@@ -29,25 +31,25 @@ export interface ClassificationContext {
  * both "6. Prodaja" (numbered Obsidian) and "Prodaja" (AI-discovered) formats.
  */
 const CATEGORY_KEYWORDS: Record<string, string> = {
-  Prodaja: 'Prodajni proces, prodajni plan, tehnike prodaje, pregovaranje, zatvaranje posla',
-  Marketing: 'Brending, pozicioniranje, marketing strategija, oglašavanje, promocija',
+  Prodaja: 'Sales process, sales plan, sales techniques, negotiation, closing deals',
+  Marketing: 'Branding, positioning, marketing strategy, advertising, promotion',
   'Digitalni Marketing':
-    'Online marketing, SEO, društvene mreže, email marketing, content marketing',
-  Vrednost: 'Kreiranje vrednosti, vrednosna ponuda, oblici vrednosti, percepcija vrednosti',
-  'Određivanje Cene': 'Cenovne strategije, cenovna elastičnost, pricing modeli, popusti',
-  Finansije: 'Finansijsko upravljanje, budžet, investicije, tok novca, finansijska analiza',
-  Operacije: 'Operativno upravljanje, procesi, proizvodnja, lanac snabdevanja, logistika',
-  Menadžment: 'Upravljanje timom, organizacija, delegiranje, donošenje odluka',
-  'Poslovni Modeli': 'Modeli poslovanja, monetizacija, skaliranje, kanali distribucije',
-  Strategija: 'Poslovna strategija, konkurentska prednost, strateško planiranje, analiza tržišta',
-  Tehnologija: 'IT sistemi, softver, automatizacija, digitalna transformacija',
-  Preduzetništvo: 'Startup, pokretanje biznisa, validacija ideje, inovativno poslovanje',
-  'Odnosi sa Klijentima': 'CRM, zadovoljstvo kupaca, lojalnost, korisnička podrška',
-  'Ljudski Resursi': 'Zapošljavanje, obuka, razvoj zaposlenih, organizaciona kultura',
-  Liderstvo: 'Vođenje, vizija, motivacija tima, lični razvoj lidera',
-  'Kognitivne Sklonosti': 'Psihologija odlučivanja, pristrasnosti, heuristike, ponašanje kupaca',
-  Sistemi: 'Poslovni sistemi, automatizacija procesa, IT infrastruktura',
-  'Upravljanje Podacima': 'Analitika, podaci, izveštavanje, business intelligence',
+    'Online marketing, SEO, social media, email marketing, content marketing',
+  Vrednost: 'Value creation, value proposition, forms of value, value perception',
+  'Određivanje Cene': 'Pricing strategies, price elasticity, pricing models, discounts',
+  Finansije: 'Financial management, budget, investments, cash flow, financial analysis',
+  Operacije: 'Operations management, processes, manufacturing, supply chain, logistics',
+  Menadžment: 'Team management, organization, delegation, decision-making',
+  'Poslovni Modeli': 'Business models, monetization, scaling, distribution channels',
+  Strategija: 'Business strategy, competitive advantage, strategic planning, market analysis',
+  Tehnologija: 'IT systems, software, automation, digital transformation',
+  Preduzetništvo: 'Startup, launching a business, idea validation, innovative business',
+  'Odnosi sa Klijentima': 'CRM, customer satisfaction, loyalty, customer support',
+  'Ljudski Resursi': 'Hiring, training, employee development, organizational culture',
+  Liderstvo: 'Leadership, vision, team motivation, personal leader development',
+  'Kognitivne Sklonosti': 'Decision psychology, biases, heuristics, buyer behavior',
+  Sistemi: 'Business systems, process automation, IT infrastructure',
+  'Upravljanje Podacima': 'Analytics, data, reporting, business intelligence',
 };
 
 /**
@@ -55,37 +57,69 @@ const CATEGORY_KEYWORDS: Record<string, string> = {
  */
 const ALL_CATEGORY_KEYWORDS = Object.keys(CATEGORY_KEYWORDS);
 
-/**
- * System prompt for the classifier LLM. Serbian, concise, structured JSON output.
- */
-const CLASSIFIER_SYSTEM_PROMPT = `Ti si klasifikator poslovnih tema za srpski biznis alat. Odredi JEDNU kategoriju za razgovor korisnika.
+/** Max retries for transient LLM errors */
+const CLASSIFIER_MAX_RETRIES = 1;
+const CLASSIFIER_BASE_BACKOFF_MS = 2000;
 
-KATEGORIJE:
+/**
+ * Determines if an LLM error is transient (worth retrying).
+ */
+function isTransientLlmError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    // Rate limits, server errors, network issues
+    if (msg.includes('429') || msg.includes('rate limit')) return true;
+    if (msg.includes('500') || msg.includes('502') || msg.includes('503') || msg.includes('504')) return true;
+    if (msg.includes('econnreset') || msg.includes('etimedout') || msg.includes('timeout')) return true;
+    if (msg.includes('service unavailable') || msg.includes('server error')) return true;
+  }
+  return false;
+}
+
+/**
+ * Exponential backoff: min(baseMs * 2^attempt, maxMs) ± 25% jitter
+ */
+function classifierBackoff(attempt: number, baseMs = CLASSIFIER_BASE_BACKOFF_MS, maxMs = 8000): number {
+  const delay = Math.min(baseMs * Math.pow(2, attempt), maxMs);
+  const jitter = delay * 0.25 * (Math.random() * 2 - 1);
+  return Math.max(0, delay + jitter);
+}
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * System prompt for the classifier LLM. Concise, structured JSON output.
+ */
+const CLASSIFIER_SYSTEM_PROMPT = `You are a business topic classifier for a business intelligence tool. Determine ONE category for the user's conversation.
+
+CATEGORIES:
 ${Object.entries(CATEGORY_KEYWORDS)
   .map(([cat, desc]) => `- "${cat}": ${desc}`)
   .join('\n')}
 
-PRAVILA:
-1. Fokus na NAMERU korisnika, ne na pojedinačne reči u poruci
-2. Ako korisnik traži PLAN/ANALIZU/STRATEGIJU za neku oblast, kategorija je DOMEN te oblasti
-3. Ako nije jasno, biraj NAJSPECIFIČNIJU kategoriju za zahtev
+RULES:
+1. Focus on the user's INTENT, not individual words in the message
+2. If the user asks for a PLAN/ANALYSIS/STRATEGY for a domain, the category is that DOMAIN
+3. If unclear, choose the MOST SPECIFIC category for the request
 
-OBAVEZNA PRAVILA ZA RAZREŠAVANJE (strogo poštuj):
-- "Prodajni plan" / "Prodajna strategija" / "Prodajni proces" → Prodaja (NIKAD Marketing ili Strategija)
-- "Marketing strategija" / "Marketing plan" / "Marketing kampanja" → Marketing (NIKAD Strategija)
-- "Kreiranje sadržaja" / "Content marketing" / "Pisanje blogova" → Digitalni Marketing (NIKAD Vrednost)
-- "Analiza konkurencije" / "Konkurentska analiza" → Strategija (NIKAD Marketing)
-- "Cena proizvoda" / "Cenovna strategija" / "Popusti" → Određivanje Cene (NIKAD Prodaja)
-- "Finansijski izveštaj" / "Budžet" / "ROI analiza" → Finansije
-- "Poslovni model" / "Monetizacija" → Poslovni Modeli (NIKAD Strategija)
-- "Zapošljavanje" / "Obuka zaposlenih" → Ljudski Resursi (NIKAD Menadžment)
-- "SEO" / "Društvene mreže" / "Email marketing" → Digitalni Marketing (NIKAD Marketing)
-- Ako sadrži reč "prodaj" u bilo kom obliku → verovatno Prodaja
+MANDATORY RESOLUTION RULES (strictly follow):
+- "Sales plan" / "Sales strategy" / "Sales process" → Prodaja (NEVER Marketing or Strategija)
+- "Marketing strategy" / "Marketing plan" / "Marketing campaign" → Marketing (NEVER Strategija)
+- "Content creation" / "Content marketing" / "Writing blogs" → Digitalni Marketing (NEVER Vrednost)
+- "Competitive analysis" / "Competition analysis" → Strategija (NEVER Marketing)
+- "Product price" / "Pricing strategy" / "Discounts" → Odredjivanje Cene (NEVER Prodaja)
+- "Financial report" / "Budget" / "ROI analysis" → Finansije
+- "Business model" / "Monetization" → Poslovni Modeli (NEVER Strategija)
+- "Hiring" / "Employee training" → Ljudski Resursi (NEVER Menadzment)
+- "SEO" / "Social media" / "Email marketing" → Digitalni Marketing (NEVER Marketing)
+- If contains the word "sales" in any form → probably Prodaja
 
-VRATI ISKLJUČIVO VALIDAN JSON (bez markdown, bez objašnjenja):
-{"category": "ime kategorije", "confidence": 0.0-1.0, "conceptName": "opciono: konkretan koncept ako prepoznaješ"}
+RETURN EXCLUSIVELY VALID JSON (no markdown, no explanations):
+{"category": "category name", "confidence": 0.0-1.0, "conceptName": "optional: specific concept if you recognize one"}
 
-Odgovor MORA biti manji od 100 tokena.`;
+Response MUST be under 100 tokens.`;
 
 /**
  * Service that uses a fast LLM call to classify user intent into a business category,
@@ -121,9 +155,11 @@ export class ConceptClassifierService {
     const classification = await this.classifyWithLlm(userMessage, aiResponse, context);
 
     if (!classification || classification.confidence < 0.4) {
-      this.logger.debug({
-        message: 'LLM classification failed or low confidence, using standard matching',
-        classification,
+      this.logger.warn({
+        message: 'LLM classification failed or low confidence — falling back to standard concept matching',
+        hadClassification: !!classification,
+        confidence: classification?.confidence ?? null,
+        usedFallback: true,
       });
       return this.conceptMatchingService.findRelevantConcepts(
         `${userMessage}\n${aiResponse}`,
@@ -174,6 +210,7 @@ export class ConceptClassifierService {
 
   /**
    * Calls the fast/cheap LLM to classify the conversation into a category.
+   * Retries once on transient errors (rate limits, server errors, timeouts) with 2s backoff.
    * Returns null on any failure (non-blocking).
    */
   private async classifyWithLlm(
@@ -181,36 +218,79 @@ export class ConceptClassifierService {
     aiResponse: string,
     context: ClassificationContext
   ): Promise<ConceptClassificationResult | null> {
-    const userContent = `PORUKA KORISNIKA:\n"""${userMessage}"""\n\nODGOVOR AI (skraćen):\n"""${aiResponse.substring(0, 500)}"""`;
+    const userContent = `USER MESSAGE:\n"""${userMessage}"""\n\nAI RESPONSE (truncated):\n"""${aiResponse.substring(0, 500)}"""`;
 
-    let responseContent = '';
-    try {
-      await this.aiGatewayService.streamCompletionWithContext(
-        [
-          { role: 'system', content: CLASSIFIER_SYSTEM_PROMPT } as ChatMessage,
-          { role: 'user', content: userContent } as ChatMessage,
-        ],
-        {
-          tenantId: context.tenantId,
-          userId: context.userId,
-          conversationId: context.conversationId,
-          skipRateLimit: true,
-          skipQuotaCheck: true,
-          useFallback: true,
-        },
-        (chunk: string) => {
-          responseContent += chunk;
+    let lastError: unknown = null;
+
+    for (let attempt = 0; attempt <= CLASSIFIER_MAX_RETRIES; attempt++) {
+      let responseContent = '';
+      try {
+        await this.aiGatewayService.streamCompletionWithContext(
+          [
+            { role: 'system', content: CLASSIFIER_SYSTEM_PROMPT } as ChatMessage,
+            { role: 'user', content: userContent } as ChatMessage,
+          ],
+          {
+            tenantId: context.tenantId,
+            userId: context.userId,
+            conversationId: context.conversationId,
+            skipRateLimit: true,
+            skipQuotaCheck: true,
+            useFallback: true,
+          },
+          (chunk: string) => {
+            responseContent += chunk;
+          }
+        );
+
+        const result = this.parseClassifierResponse(responseContent);
+        if (result) {
+          return result;
         }
-      );
-    } catch (err) {
-      this.logger.warn({
-        message: 'Classifier LLM call failed, will fall back to standard matching',
-        error: err instanceof Error ? err.message : 'Unknown',
-      });
-      return null;
+
+        // Parse failed but no exception — don't retry parse failures
+        this.logger.warn({
+          message: 'Classifier LLM returned unparseable response',
+          attempt,
+          responsePreview: responseContent.substring(0, 200),
+          errorType: 'PARSE_FAILURE',
+        });
+        return null;
+      } catch (err) {
+        lastError = err;
+
+        const errorType = isTransientLlmError(err) ? 'TRANSIENT' : 'FATAL';
+
+        if (errorType === 'TRANSIENT' && attempt < CLASSIFIER_MAX_RETRIES) {
+          const backoff = classifierBackoff(attempt);
+          this.logger.warn({
+            message: `Classifier LLM transient error, retrying (attempt ${attempt + 1}/${CLASSIFIER_MAX_RETRIES})`,
+            error: err instanceof Error ? err.message : 'Unknown',
+            errorType,
+            backoffMs: Math.round(backoff),
+          });
+          await sleepMs(backoff);
+          continue;
+        }
+
+        // Fatal or retries exhausted
+        this.logger.error({
+          message: 'Classifier LLM call failed — falling back to standard matching',
+          error: err instanceof Error ? err.message : 'Unknown',
+          errorType,
+          attempt,
+          maxRetries: CLASSIFIER_MAX_RETRIES,
+        });
+        return null;
+      }
     }
 
-    return this.parseClassifierResponse(responseContent);
+    // Should not reach here, but safety net
+    this.logger.error({
+      message: 'Classifier LLM retries exhausted',
+      error: lastError instanceof Error ? lastError.message : 'Unknown',
+    });
+    return null;
   }
 
   /**

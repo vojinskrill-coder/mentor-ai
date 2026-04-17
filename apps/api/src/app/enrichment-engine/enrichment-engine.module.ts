@@ -1,19 +1,12 @@
 import { Module } from '@nestjs/common';
+import { EnrichmentQueueModule } from '../enrichment-queue/enrichment-queue.module';
+import { VaultStorageModule } from '../vault-storage/vault-storage.module';
 import { EnrichmentExecutorService } from './enrichment-executor.service';
 import { GuardrailValidationService } from './guardrail-validation.service';
 import { QueueProcessorService } from './queue-processor.service';
-import { EnrichmentQueueModule } from '../enrichment-queue/enrichment-queue.module';
-import { ContentValidationModule } from '../content-validation/content-validation.module';
-import { VaultStorageModule } from '../vault-storage/vault-storage.module';
-import { PlatformConfigModule } from '../platform-config/platform-config.module';
 
 @Module({
-  imports: [
-    EnrichmentQueueModule,
-    ContentValidationModule,
-    VaultStorageModule,
-    PlatformConfigModule,
-  ],
+  imports: [EnrichmentQueueModule, VaultStorageModule],
   providers: [
     EnrichmentExecutorService,
     GuardrailValidationService,

@@ -70,8 +70,8 @@ export class ConceptSeedService {
 
       for (const conceptData of seedData.concepts) {
         try {
-          const existingConcept = await this.prisma.concept.findUnique({
-            where: { slug: conceptData.slug },
+          const existingConcept = await this.prisma.concept.findFirst({
+            where: { slug: conceptData.slug, tenantId: null },
           });
 
           if (existingConcept) {

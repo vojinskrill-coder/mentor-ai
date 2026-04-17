@@ -19,10 +19,10 @@ import { AuthService } from '../core/auth/auth.service';
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #0d0d0d;
+        background: #0D1117;
         padding: 16px;
         font-family: 'Inter', system-ui, sans-serif;
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .container {
         width: 100%;
@@ -36,7 +36,7 @@ import { AuthService } from '../core/auth/auth.service';
         width: 48px;
         height: 48px;
         margin: 0 auto 16px;
-        color: #3b82f6;
+        color: #58A6FF;
       }
       .header h1 {
         font-size: 24px;
@@ -76,19 +76,19 @@ import { AuthService } from '../core/auth/auth.service';
       .code-input {
         width: 100%;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
-        background: #1a1a1a;
+        border: 1px solid #21262D;
+        background: #161B22;
         padding: 14px;
         text-align: center;
         font-size: 28px;
         letter-spacing: 0.5em;
         font-family: monospace;
-        color: #fafafa;
+        color: #E6EDF3;
         outline: none;
         transition: border-color 0.2s;
       }
       .code-input:focus {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .code-input:disabled {
         opacity: 0.5;
@@ -107,7 +107,7 @@ import { AuthService } from '../core/auth/auth.service';
         gap: 8px;
         margin-top: 24px;
         padding: 12px;
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
         border: none;
         border-radius: 8px;
@@ -144,7 +144,7 @@ import { AuthService } from '../core/auth/auth.service';
         text-align: center;
         margin-top: 16px;
         font-size: 13px;
-        color: #3b82f6;
+        color: #58A6FF;
         background: none;
         border: none;
         cursor: pointer;
@@ -154,8 +154,8 @@ import { AuthService } from '../core/auth/auth.service';
         text-decoration: underline;
       }
       .recovery-card {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 12px;
         padding: 20px;
         margin-top: 16px;
@@ -168,18 +168,18 @@ import { AuthService } from '../core/auth/auth.service';
       .recovery-input {
         width: 100%;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
-        background: #0d0d0d;
+        border: 1px solid #21262D;
+        background: #0D1117;
         padding: 10px;
         text-align: center;
         font-family: monospace;
         text-transform: uppercase;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 15px;
         outline: none;
       }
       .recovery-input:focus {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .cancel-btn {
         width: 100%;
@@ -193,7 +193,7 @@ import { AuthService } from '../core/auth/auth.service';
         padding: 8px;
       }
       .cancel-btn:hover {
-        color: #fafafa;
+        color: #E6EDF3;
       }
     `,
   ],

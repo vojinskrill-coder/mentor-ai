@@ -30,35 +30,35 @@ export class MemoryExtractionService {
   private readonly DEDUP_THRESHOLD = 0.9;
 
   /** Extraction prompt template */
-  private readonly EXTRACTION_PROMPT = `Analiziraj sledeći razgovor i ekstrahuj ključne poslovne činjenice koje treba zapamtiti.
-Vrati JSON niz ekstrahovanih memorija sa sledećom strukturom:
+  private readonly EXTRACTION_PROMPT = `Analyze the following conversation and extract key business facts that should be remembered.
+Return a JSON array of extracted memories with the following structure:
 { "type": "CLIENT_CONTEXT" | "PROJECT_CONTEXT" | "USER_PREFERENCE" | "FACTUAL_STATEMENT",
-  "content": "konkretna činjenica na srpskom jeziku",
-  "subject": "naziv klijenta/projekta/koncepta ako je primenjivo",
+  "content": "specific fact in English",
+  "subject": "client/project/concept name if applicable",
   "confidence": 0.0-1.0 }
 
-Fokusiraj se na:
-- Poslovne odluke i strateške pravce (investicije, ekspanzija, pivotiranje)
-- Tržišne podatke (konkurencija, ciljno tržište, cene, trendovi)
-- Klijente i partnere (imena, industrija, veličina, budžet, specifični zahtevi)
-- Projekte i rokove (timeline, budžet, zahtevi, milestones, KPI)
-- Prioritete i preferencije vlasnika (stil komunikacije, fokus oblasti, radni model)
-- Finansijske podatke (prihodi, troškovi, marže, targeti)
-- Probleme i izazove koje je korisnik eksplicitno naveo
-- Resurse i kapacitete (tim, tehnologija, infrastruktura)
+Focus on:
+- Business decisions and strategic directions (investments, expansion, pivoting)
+- Market data (competition, target market, pricing, trends)
+- Clients and partners (names, industry, size, budget, specific requirements)
+- Projects and deadlines (timeline, budget, requirements, milestones, KPIs)
+- Owner priorities and preferences (communication style, focus areas, work model)
+- Financial data (revenue, costs, margins, targets)
+- Problems and challenges the user explicitly stated
+- Resources and capacity (team, technology, infrastructure)
 
-Pravila:
-- Ekstrahuj SAMO činjenične informacije, ne mišljenja ili spekulacije AI-a
-- Budi specifičan i koncizan — svaka memorija max 2 rečenice
-- Subject treba da bude naziv klijenta, projekta ili poslovnog koncepta
-- Confidence 0.9+ za eksplicitne izjave korisnika, 0.7-0.8 za implicirane činjenice
-- NE ekstrahuj generičke poslovne savete — samo činjenice specifične za OVO poslovanje
-- Piši content na srpskom jeziku
+Rules:
+- Extract ONLY factual information, not AI opinions or speculation
+- Be specific and concise — each memory max 2 sentences
+- Subject should be the name of the client, project or business concept
+- Confidence 0.9+ for explicit user statements, 0.7-0.8 for implied facts
+- Do NOT extract generic business advice — only facts specific to THIS business
+- Write content in English
 
-Razgovor:
+Conversation:
 {messages}
 
-Ekstrahovane memorije (SAMO JSON niz, bez dodatnog teksta):`;
+Extracted memories (ONLY JSON array, no additional text):`;
 
   constructor(
     private readonly memoryService: MemoryService,
@@ -99,7 +99,7 @@ Ekstrahovane memorije (SAMO JSON niz, bez dodatnog teksta):`;
 
       // Story 3.3: Add concept context for better tagging
       if (options?.conceptName) {
-        prompt += `\n\nKontekst: Ovaj razgovor se odnosi na poslovni koncept "${options.conceptName}". Koristi ovo kao subject za ekstrahovane memorije kada je relevantno.`;
+        prompt += `\n\nContext: This conversation relates to the business concept "${options.conceptName}". Use this as the subject for extracted memories when relevant.`;
       }
 
       // Call LLM for extraction
@@ -134,11 +134,14 @@ Ekstrahovane memorije (SAMO JSON niz, bez dodatnog teksta):`;
           });
 
           // Generate embedding for semantic search (async, non-blocking)
+          // departmentTags derived from the memory type/subject context
+          // (user department is set at query time via buildContext filter)
           this.memoryEmbeddingService
             .generateAndStoreEmbedding(tenantId, saved.id, saved.content, {
               userId,
               type: saved.type,
               subject: saved.subject,
+              departmentTags: [], // Empty = visible to all departments (filtered at query time by user role)
             })
             .catch((error) => {
               this.logger.warn({
@@ -244,7 +247,7 @@ Ekstrahovane memorije (SAMO JSON niz, bez dodatnog teksta):`;
             {
               role: 'system',
               content:
-                'Ti si asistent za ekstrakciju poslovnih memorija. Ekstrahuj činjenične informacije iz razgovora i vrati ISKLJUČIVO JSON.',
+                'You are an assistant for extracting business memories. Extract factual information from conversations and return EXCLUSIVELY JSON.',
             },
             {
               role: 'user',
@@ -400,7 +403,7 @@ Ekstrahovane memorije (SAMO JSON niz, bez dodatnog teksta):`;
    */
   private formatMessages(messages: Message[]): string {
     return messages
-      .map((m) => `${m.role === 'USER' ? 'KORISNIK' : 'AI'}: ${m.content}`)
+      .map((m) => `${m.role === 'USER' ? 'USER' : 'AI'}: ${m.content}`)
       .join('\n\n');
   }
 }

@@ -70,7 +70,7 @@ Rules:
 - Do NOT include web_search in your response — agents search on their own
 - Each domain agent instruction should describe WHAT analysis/content to produce AND what to research
 - Reference specific data from the task report
-- Write instructions in English (agents produce Serbian output)
+- Write instructions in English (agents produce English output)
 - Respond ONLY with a JSON array of DOMAIN agents, no other text
 
 Output format:

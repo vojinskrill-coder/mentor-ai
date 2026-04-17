@@ -41,12 +41,12 @@ const DEPARTMENTS = [
         z-index: 10;
         width: 100%;
         max-width: 440px;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 12px;
         padding: 24px;
         box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-        color: #fafafa;
+        color: #E6EDF3;
         font-family: 'Inter', system-ui, sans-serif;
       }
       .dialog-header {
@@ -72,8 +72,8 @@ const DEPARTMENTS = [
         cursor: pointer;
       }
       .close-btn:hover {
-        background: #242424;
-        color: #fafafa;
+        background: #1C2128;
+        color: #E6EDF3;
       }
       .close-btn svg {
         width: 20px;
@@ -101,17 +101,17 @@ const DEPARTMENTS = [
       .field-input {
         width: 100%;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
-        background: #0d0d0d;
+        border: 1px solid #21262D;
+        background: #0D1117;
         padding: 10px 12px;
         font-size: 14px;
-        color: #fafafa;
+        color: #E6EDF3;
         outline: none;
         font-family: inherit;
         transition: border-color 0.2s;
       }
       .field-input:focus {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .field-input::placeholder {
         color: #707070;
@@ -124,8 +124,8 @@ const DEPARTMENTS = [
         padding-right: 32px;
       }
       select.field-input option {
-        background: #1a1a1a;
-        color: #fafafa;
+        background: #161B22;
+        color: #E6EDF3;
       }
       .field-error {
         font-size: 12px;
@@ -140,8 +140,8 @@ const DEPARTMENTS = [
 
       .role-display {
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
-        background: #242424;
+        border: 1px solid #21262D;
+        background: #1C2128;
         padding: 10px 12px;
         font-size: 14px;
         color: #9e9e9e;
@@ -156,16 +156,16 @@ const DEPARTMENTS = [
       .cancel-btn {
         padding: 10px 20px;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
-        background: #242424;
-        color: #fafafa;
+        border: 1px solid #21262D;
+        background: #1C2128;
+        color: #E6EDF3;
         font-size: 14px;
         font-weight: 500;
         cursor: pointer;
         font-family: inherit;
       }
       .cancel-btn:hover {
-        background: #2a2a2a;
+        background: #21262D;
       }
       .submit-btn {
         display: inline-flex;
@@ -174,7 +174,7 @@ const DEPARTMENTS = [
         padding: 10px 20px;
         border-radius: 8px;
         border: none;
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
         font-size: 14px;
         font-weight: 500;

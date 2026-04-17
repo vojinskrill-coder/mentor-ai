@@ -42,7 +42,8 @@ export class ConversationService {
     title?: string,
     personaType?: PersonaType,
     conceptId?: string,
-    curriculumId?: string
+    curriculumId?: string,
+    skipAutoTrigger?: boolean,
   ): Promise<Conversation> {
     this.isCreating$.set(true);
     try {
@@ -52,6 +53,7 @@ export class ConversationService {
           personaType,
           conceptId,
           curriculumId,
+          ...(skipAutoTrigger ? { skipAutoTrigger: true } : {}),
         })
       );
       return response.data;

@@ -12,14 +12,69 @@ export interface OpenClawResult {
 }
 
 export interface OpenClawStreamEvent {
-  type: 'status' | 'stdout' | 'tool' | 'result' | 'error';
+  type: 'status' | 'stdout' | 'tool' | 'result' | 'error' | 'jsonl_event';
   data: Record<string, unknown>;
+  sequenceNum?: number;
+}
+
+/**
+ * A raw event captured from the executor's session jsonl file and
+ * forwarded by the relay. These are the MiniMax / OpenClaw structured
+ * events (messages, thinking, tool calls, tool results, sessions_spawn).
+ * See relay/index.mjs `startJsonlTailer` for the emission format.
+ */
+export interface JsonlEvent {
+  runId: string;
+  event: {
+    type: string;            // session | model_change | message | thinking_level_change | custom | ...
+    id?: string;
+    parentId?: string;
+    timestamp?: string;
+    message?: {
+      role?: 'user' | 'assistant';
+      content?: Array<{
+        type: string;        // text | thinking | toolCall | toolResult | ...
+        text?: string;
+        thinking?: string;
+        name?: string;       // tool name for toolCall
+        arguments?: unknown;
+        id?: string;
+        [k: string]: unknown;
+      }>;
+      model?: string;
+      provider?: string;
+      stopReason?: string;
+      usage?: Record<string, unknown>;
+    };
+    [k: string]: unknown;
+  };
 }
 
 export interface OpenClawStreamCallbacks {
   onText?: (text: string) => void;
   onTool?: (tool: string, status: 'start' | 'end', query?: string) => void;
   onStatus?: (phase: string) => void;
+  /**
+   * Fired for every structured event the CLI writes to its session jsonl.
+   * This is the raw event pipe for observability — the dashboard + graph
+   * + activity monitor all feed from this. Use it instead of `onTool` /
+   * `onStatus` when you need thinking blocks, tool arguments, tool
+   * results, or sub-agent spawns.
+   */
+  onJsonlEvent?: (e: JsonlEvent) => void;
+}
+
+/**
+ * Yielded by executeAgentStream() async generator.
+ * Pattern: claude-code's query() yields StreamEvent | Message | ToolUseSummaryMessage
+ */
+export interface AgentStreamEvent {
+  type: 'text' | 'tool_start' | 'tool_end' | 'status' | 'error' | 'complete';
+  data: string;
+  tool?: string;
+  query?: string;
+  result?: OpenClawResult;
+  timestamp: number;
 }
 
 @Injectable()
@@ -54,7 +109,7 @@ export class OpenClawClientService {
     this.relayUrl = this.configService.get<string>('OPENCLAW_RELAY_URL') ?? '';
     this.authToken = this.configService.get<string>('OPENCLAW_AUTH_TOKEN') ?? '';
     this.timeoutSeconds = parseInt(
-      this.configService.get<string>('OPENCLAW_TIMEOUT_SECONDS') ?? '600',
+      this.configService.get<string>('OPENCLAW_TIMEOUT_SECONDS') ?? '3600',
       10
     );
     this.maxRetries = parseInt(
@@ -143,6 +198,18 @@ export class OpenClawClientService {
       onText?: (text: string) => void;
       onTool?: (tool: string, status: 'start' | 'end', query?: string) => void;
       onStatus?: (phase: string) => void;
+      onJsonlEvent?: (e: JsonlEvent) => void;
+      // MiniMax M2.7 native body params — forwarded to relay → CLI
+      thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+      parallelToolCalls?: boolean;
+      toolChoice?: 'auto' | 'required' | 'none';
+      reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+      // When set, the relay tails ALL agent session jsonl files and
+      // forwards only events whose line text contains this noteId.
+      // Critical for sub-session activity tracking — sub-agents spawned
+      // by the main agent write to different jsonl files which would
+      // otherwise be invisible to the backend.
+      noteId?: string;
     }
   ): Promise<OpenClawResult> {
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
@@ -161,7 +228,7 @@ export class OpenClawClientService {
 
       // On retry attempts, suppress streaming callbacks to prevent duplicate partial text
       const effectiveOptions = attempt > 0
-        ? { ...options, onText: undefined, onTool: undefined, onStatus: undefined }
+        ? { ...options, onText: undefined, onTool: undefined, onStatus: undefined, onJsonlEvent: undefined }
         : options;
 
       const result = await this._executeAgentOnce(message, effectiveOptions);
@@ -209,13 +276,26 @@ export class OpenClawClientService {
       onText?: (text: string) => void;
       onTool?: (tool: string, status: 'start' | 'end', query?: string) => void;
       onStatus?: (phase: string) => void;
+      onJsonlEvent?: (e: JsonlEvent) => void;
+      thinking?: string;
+      parallelToolCalls?: boolean;
+      toolChoice?: string;
+      reasoningEffort?: string;
+      noteId?: string;
     }
   ): Promise<OpenClawResult> {
     const agentId = options?.agentId ?? 'main';
     const sessionId = options?.sessionId;
     const tenantProfile = options?.tenantProfile;
     const timeout = options?.timeoutSeconds ?? this.timeoutSeconds;
-    const hasCallbacks = !!(options?.onText || options?.onTool || options?.onStatus);
+    const hasCallbacks = !!(options?.onText || options?.onTool || options?.onStatus || options?.onJsonlEvent);
+    const extraBody = {
+      thinking: options?.thinking,
+      parallelToolCalls: options?.parallelToolCalls,
+      toolChoice: options?.toolChoice,
+      reasoningEffort: options?.reasoningEffort,
+      noteId: options?.noteId,
+    };
 
     // Try SSE streaming first when callbacks are provided
     if (hasCallbacks && this.supportsStreaming) {
@@ -224,7 +304,8 @@ export class OpenClawClientService {
           onText: options?.onText,
           onTool: options?.onTool,
           onStatus: options?.onStatus,
-        }, sessionId, tenantProfile);
+          onJsonlEvent: options?.onJsonlEvent,
+        }, sessionId, tenantProfile, extraBody);
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Unknown error';
         this.logger.warn({
@@ -236,7 +317,7 @@ export class OpenClawClientService {
       }
     }
 
-    return this.executeAgentBlocking(message, agentId, timeout, sessionId, tenantProfile);
+    return this.executeAgentBlocking(message, agentId, timeout, sessionId, tenantProfile, extraBody);
   }
 
   /**
@@ -249,7 +330,8 @@ export class OpenClawClientService {
     timeout: number,
     callbacks: OpenClawStreamCallbacks,
     sessionId?: string,
-    tenantProfile?: string
+    tenantProfile?: string,
+    extraBody?: { thinking?: string; parallelToolCalls?: boolean; toolChoice?: string; reasoningEffort?: string; noteId?: string }
   ): Promise<OpenClawResult> {
     const streamUrl = this.getStreamUrl();
 
@@ -258,16 +340,24 @@ export class OpenClawClientService {
       url: streamUrl,
       agentId,
       sessionId: sessionId || 'default',
+      noteId: extraBody?.noteId || 'none',
       msgLength: message.length,
     });
 
+    // Multi-session tailer keeps the SSE alive for ~30 min after the main
+    // turn ends, so timeout must accommodate the grace period.
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), (timeout + 60) * 1000);
+    const timer = setTimeout(() => controller.abort(), (timeout + 60 + 1800) * 1000);
 
     try {
       const requestBody: Record<string, unknown> = { message, agentId, timeoutSeconds: timeout };
       if (sessionId) requestBody.sessionId = sessionId;
       if (tenantProfile) requestBody.tenantProfile = tenantProfile;
+      if (extraBody?.thinking) requestBody.thinking = extraBody.thinking;
+      if (extraBody?.parallelToolCalls !== undefined) requestBody.parallelToolCalls = extraBody.parallelToolCalls;
+      if (extraBody?.toolChoice) requestBody.toolChoice = extraBody.toolChoice;
+      if (extraBody?.reasoningEffort) requestBody.reasoningEffort = extraBody.reasoningEffort;
+      if (extraBody?.noteId) requestBody.noteId = extraBody.noteId;
 
       const response = await undiciFetch(streamUrl, {
         method: 'POST',
@@ -329,14 +419,17 @@ export class OpenClawClientService {
       }
     };
 
-    const IDLE_TIMEOUT_MS = 3_600_000; // 1 hour idle timeout between chunks
+    // Liveness detection: 90s idle timeout.
+    // Relay sends keepalive comments every 30s, so 90s = 3 missed keepalives = dead connection.
+    // Any SSE frame (including keepalive comments `: keepalive ...`) resets the timer.
+    const IDLE_TIMEOUT_MS = 90_000;
 
     try {
       while (true) {
         // Race between next chunk and idle timeout
         const readPromise = reader.read();
         const timeoutPromise = new Promise<{ done: true; value: undefined }>((_, reject) =>
-          setTimeout(() => reject(new Error('SSE idle timeout: no data for 1h')), IDLE_TIMEOUT_MS)
+          setTimeout(() => reject(new Error('SSE idle timeout: 3 missed keepalives (90s)')), IDLE_TIMEOUT_MS)
         );
 
         let result: ReadableStreamReadResult<Uint8Array>;
@@ -378,6 +471,15 @@ export class OpenClawClientService {
               safeCallback(() => callbacks.onStatus?.(event.data['phase'] as string));
               break;
 
+            case 'jsonl_event':
+              // Structured event captured from the CLI's session jsonl
+              // by the relay's jsonl tailer. This is the rich pipe:
+              // thinking blocks, tool calls with full arguments, tool
+              // results, sub-agent spawns. The bridge service subscribes
+              // via onJsonlEvent and emits agent:status / graph updates.
+              safeCallback(() => callbacks.onJsonlEvent?.(event.data as unknown as JsonlEvent));
+              break;
+
             case 'result':
               finalResult = {
                 success: event.data['success'] as boolean,
@@ -397,6 +499,19 @@ export class OpenClawClientService {
                   durationMs: 0,
                   error: event.data['error'] as string,
                 };
+              }
+              break;
+
+            default:
+              // Handles relay-specific events like 'late_events_done'
+              // from the multi-session tailer (grace period elapsed,
+              // all sub-session events streamed).
+              if (event.type === 'late_events_done') {
+                this.logger.log({
+                  message: 'Late events done',
+                  runId: event.data['runId'],
+                  totalEvents: event.data['totalEvents'],
+                });
               }
               break;
           }
@@ -424,15 +539,23 @@ export class OpenClawClientService {
    * Parse a single SSE message block into an event.
    * Format: "event: <type>\ndata: <json>"
    */
+  /**
+   * Parse a single SSE message block.
+   * Supports optional `id:` field for sequence tracking (claude-code SSE resumption pattern).
+   */
   private parseSSEMessage(raw: string): OpenClawStreamEvent | null {
     let eventType = '';
     let dataStr = '';
+    let sequenceNum: number | undefined;
 
     for (const line of raw.split('\n')) {
       if (line.startsWith('event: ')) {
         eventType = line.substring(7).trim();
       } else if (line.startsWith('data: ')) {
         dataStr = line.substring(6);
+      } else if (line.startsWith('id: ')) {
+        const parsed = parseInt(line.substring(4).trim(), 10);
+        if (!isNaN(parsed)) sequenceNum = parsed;
       }
     }
 
@@ -440,10 +563,116 @@ export class OpenClawClientService {
 
     try {
       const data = JSON.parse(dataStr) as Record<string, unknown>;
-      return { type: eventType as OpenClawStreamEvent['type'], data };
+      return { type: eventType as OpenClawStreamEvent['type'], data, sequenceNum };
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Async generator for agent execution — yields streaming events as they arrive.
+   * Pattern: claude-code's query() async generator + withRetry yielding error events.
+   *
+   * Usage:
+   *   for await (const event of client.executeAgentStream(prompt, opts)) {
+   *     if (event.type === 'text') emitProgress(event.data);
+   *     if (event.type === 'complete') handleResult(event.result);
+   *   }
+   */
+  async *executeAgentStream(
+    message: string,
+    options?: {
+      agentId?: string;
+      sessionId?: string;
+      tenantProfile?: string;
+      timeoutSeconds?: number;
+    }
+  ): AsyncGenerator<AgentStreamEvent, OpenClawResult, undefined> {
+    const startTime = Date.now();
+
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      // Circuit breaker check — yield error event on rejection
+      if (this.isCircuitOpen()) {
+        const error = `Circuit breaker OPEN — rejecting request`;
+        yield { type: 'error', data: error, timestamp: Date.now() };
+
+        if (attempt < this.maxRetries) {
+          const delay = this.backoff(attempt);
+          yield { type: 'status', data: `Retrying in ${Math.round(delay / 1000)}s (circuit breaker)...`, timestamp: Date.now() };
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        return { success: false, output: '', durationMs: Date.now() - startTime, error };
+      }
+
+      yield { type: 'status', data: attempt > 0 ? `Retry attempt ${attempt}/${this.maxRetries}...` : 'Connecting to agent...', timestamp: Date.now() };
+
+      // Wire streaming callbacks that yield events
+      const events: AgentStreamEvent[] = [];
+      const result = await this._executeAgentOnce(message, {
+        ...options,
+        // Only wire callbacks on first attempt to prevent duplicate text (claude-code pattern)
+        onText: attempt === 0 ? (text) => {
+          const evt: AgentStreamEvent = { type: 'text', data: text, timestamp: Date.now() };
+          events.push(evt);
+        } : undefined,
+        onTool: attempt === 0 ? (tool, status, query) => {
+          const evt: AgentStreamEvent = {
+            type: status === 'start' ? 'tool_start' : 'tool_end',
+            data: tool, tool, query, timestamp: Date.now(),
+          };
+          events.push(evt);
+        } : undefined,
+        onStatus: attempt === 0 ? (phase) => {
+          const evt: AgentStreamEvent = { type: 'status', data: phase, timestamp: Date.now() };
+          events.push(evt);
+        } : undefined,
+      });
+
+      // Yield all buffered events from this attempt
+      for (const evt of events) {
+        yield evt;
+      }
+
+      if (result.success) {
+        this.recordSuccess();
+        const completeEvt: AgentStreamEvent = {
+          type: 'complete', data: 'Agent execution completed',
+          result, timestamp: Date.now(),
+        };
+        yield completeEvt;
+        return result;
+      }
+
+      // Retryable check
+      if (this.isRetryableError(result.error) && attempt < this.maxRetries) {
+        this.recordFailure();
+        const delay = this.backoff(attempt);
+        yield {
+          type: 'error',
+          data: `Retryable failure: ${result.error?.substring(0, 100)}. Retrying in ${Math.round(delay / 1000)}s...`,
+          timestamp: Date.now(),
+        };
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+
+      // Non-retryable or exhausted
+      if (this.isRetryableError(result.error)) this.recordFailure();
+      yield { type: 'error', data: result.error ?? 'Agent execution failed', timestamp: Date.now() };
+      return result;
+    }
+
+    return { success: false, output: '', durationMs: Date.now() - startTime, error: 'Exhausted all retry attempts' };
+  }
+
+  /**
+   * Exponential backoff with jitter (claude-code standard: base * 2^n, ±25% jitter, max 30s)
+   */
+  private backoff(attempt: number): number {
+    const exponential = Math.min(this.retryDelayMs * Math.pow(2, attempt), 30_000);
+    const jitter = exponential * 0.25 * (Math.random() * 2 - 1);
+    return Math.round(exponential + jitter);
   }
 
   /** Health check: ping the gateway base URL */
@@ -470,7 +699,8 @@ export class OpenClawClientService {
     agentId: string,
     timeout: number,
     sessionId?: string,
-    tenantProfile?: string
+    tenantProfile?: string,
+    extraBody?: { thinking?: string; parallelToolCalls?: boolean; toolChoice?: string; reasoningEffort?: string }
   ): Promise<OpenClawResult> {
     this.logger.log({
       message: 'Blocking request to OpenClaw relay',
@@ -486,6 +716,10 @@ export class OpenClawClientService {
     const requestBody: Record<string, unknown> = { message, agentId, timeoutSeconds: timeout };
     if (sessionId) requestBody.sessionId = sessionId;
     if (tenantProfile) requestBody.tenantProfile = tenantProfile;
+    if (extraBody?.thinking) requestBody.thinking = extraBody.thinking;
+    if (extraBody?.parallelToolCalls !== undefined) requestBody.parallelToolCalls = extraBody.parallelToolCalls;
+    if (extraBody?.toolChoice) requestBody.toolChoice = extraBody.toolChoice;
+    if (extraBody?.reasoningEffort) requestBody.reasoningEffort = extraBody.reasoningEffort;
 
     try {
       const response = await undiciFetch(this.relayUrl, {

@@ -70,7 +70,7 @@ export function buildPdfHtml(options: PdfBuildOptions): string {
             if (!childContent) return '';
             return `
               <div class="step-section">
-                <h3>Korak ${idx + 1}: ${escapeHtml(child.title)}</h3>
+                <h3>Step ${idx + 1}: ${escapeHtml(child.title)}</h3>
                 <div class="report-content">${renderMarkdownServer(childContent)}</div>
               </div>
             `;
@@ -86,10 +86,10 @@ export function buildPdfHtml(options: PdfBuildOptions): string {
            </div>`
         : '';
 
-      const dateStr = new Date(note.createdAt).toLocaleDateString('sr-Latn');
-      const metaParts = [`Datum: ${dateStr}`];
+      const dateStr = new Date(note.createdAt).toLocaleDateString('en-US');
+      const metaParts = [`Date: ${dateStr}`];
       if (note.expectedOutcome) {
-        metaParts.push(`Očekivani ishod: ${escapeHtml(note.expectedOutcome)}`);
+        metaParts.push(`Expected outcome: ${escapeHtml(note.expectedOutcome)}`);
       }
 
       return `

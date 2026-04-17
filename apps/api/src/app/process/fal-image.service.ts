@@ -36,11 +36,15 @@ export class FalImageService {
       const optimized = await this.optimizePrompt(prompt, null);
       this.logger.log({ message: 'Generating scene', promptLength: optimized.length });
 
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 120000);
       const response = await fetch('https://fal.run/fal-ai/flux/schnell', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Key ${this.apiKey}` },
         body: JSON.stringify({ prompt: optimized, image_size: { width: 1080, height: 1080 }, num_images: 1 }),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
 
       if (!response.ok) {
         const errText = await response.text();
@@ -84,6 +88,8 @@ export class FalImageService {
 
       this.logger.log({ message: 'Kontext composite', sculpture: sculptureFileName, originalLen: sceneDescription.length, optimizedLen: optimized.length });
 
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 120000);
       const response = await fetch('https://fal.run/fal-ai/flux-pro/kontext', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Key ${this.apiKey}` },
@@ -94,7 +100,9 @@ export class FalImageService {
           num_inference_steps: 28,
           output_format: 'png',
         }),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
 
       if (!response.ok) {
         const errText = await response.text();
@@ -193,9 +201,15 @@ Based on your reasoning, write ONE focused paragraph (80-120 words) that tells K
 
 RETURN ONLY THE PROMPT PARAGRAPH. No reasoning, no labels, no explanation.`;
 
+      // Isolated session — must NOT pollute the main agent's chat context.
+      // Without this, prompt optimizer outputs (sculpture descriptions,
+      // Kontext scene paragraphs) leak into the brain's context window
+      // and surface in unrelated chat conversations as "Golden Flux"
+      // hallucinations. Each call gets a unique throwaway session.
       const result = await this.openClaw.executeAgent(optimizerPrompt, {
         agentId: 'main',
-        timeoutSeconds: 60,
+        sessionId: `bg-falopt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        timeoutSeconds: 3600,
       });
 
       if (result.success && result.output && result.output.length > 20) {
@@ -224,5 +238,6 @@ RETURN ONLY THE PROMPT PARAGRAPH. No reasoning, no labels, no explanation.`;
       'Sertifikat.png': 'Official LSA Certificate of Authenticity — dark background with gold text, gold seal, signature, and sculpture photo',
     };
     return descriptions[fileName] ?? 'an abstract polished metal sculpture on dark marble pedestal';
+
   }
 }

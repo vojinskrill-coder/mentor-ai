@@ -20,7 +20,7 @@ type PageState = 'loading' | 'valid' | 'accepting' | 'accepted' | 'error';
         justify-content: center;
         min-height: 100vh;
         padding: 16px;
-        background: #0d0d0d;
+        background: #0D1117;
       }
       .container {
         width: 100%;
@@ -41,8 +41,8 @@ type PageState = 'loading' | 'valid' | 'accepting' | 'accepted' | 'error';
       .spinner {
         width: 40px;
         height: 40px;
-        border: 3px solid #2a2a2a;
-        border-top-color: #3b82f6;
+        border: 3px solid #21262D;
+        border-top-color: #58A6FF;
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
         margin-bottom: 16px;
@@ -54,8 +54,8 @@ type PageState = 'loading' | 'valid' | 'accepting' | 'accepted' | 'error';
 
       /* Card */
       .card {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 12px;
         padding: 32px;
         text-align: center;
@@ -65,7 +65,7 @@ type PageState = 'loading' | 'valid' | 'accepting' | 'accepted' | 'error';
         height: 48px;
         margin: 0 auto 20px;
       }
-      .card-icon.primary { color: #3b82f6; }
+      .card-icon.primary { color: #58A6FF; }
       .card-icon.success { color: #4ade80; }
       .card-icon.error { color: #ef4444; }
 
@@ -82,14 +82,14 @@ type PageState = 'loading' | 'valid' | 'accepting' | 'accepted' | 'error';
       }
       .card-subtitle .tenant-name {
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
       }
 
       /* Details box */
       .details-box {
         padding: 16px;
         border-radius: 8px;
-        background: #242424;
+        background: #1C2128;
         text-align: left;
         margin-bottom: 24px;
       }
@@ -126,7 +126,7 @@ type PageState = 'loading' | 'valid' | 'accepting' | 'accepted' | 'error';
         padding: 12px 16px;
         border-radius: 8px;
         border: none;
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
         font-size: 14px;
         font-weight: 500;
@@ -164,7 +164,7 @@ type PageState = 'loading' | 'valid' | 'accepting' | 'accepted' | 'error';
       @if (state$() === 'loading') {
         <div class="loading-state">
           <div class="spinner"></div>
-          <p class="loading-text">Provera poziva...</p>
+          <p class="loading-text">Verifying invitation...</p>
         </div>
       }
 
@@ -174,32 +174,32 @@ type PageState = 'loading' | 'valid' | 'accepting' | 'accepted' | 'error';
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
           </svg>
-          <h1>Pozvani ste!</h1>
+          <h1>You're invited!</h1>
           <p class="card-subtitle">
-            Pozvani ste da se pridružite timu <span class="tenant-name">{{ invitation$()!.tenantName }}</span>
+            You've been invited to join the team <span class="tenant-name">{{ invitation$()!.tenantName }}</span>
           </p>
 
           <div class="details-box">
             <div class="detail-row">
-              <span class="detail-label">Odeljenje</span>
+              <span class="detail-label">Department</span>
               <span class="detail-value">{{ invitation$()!.department }}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">Uloga</span>
-              <span class="detail-value">Član tima</span>
+              <span class="detail-label">Role</span>
+              <span class="detail-value">Team member</span>
             </div>
           </div>
 
           @if (!isAuthenticated$()) {
-            <p class="auth-hint">Morate se prijaviti da biste prihvatili poziv.</p>
-            <button class="btn-primary" (click)="login()">Prijavite se i prihvatite</button>
+            <p class="auth-hint">You must sign in to accept the invitation.</p>
+            <button class="btn-primary" (click)="login()">Sign in and accept</button>
           } @else {
             <button class="btn-primary" (click)="acceptInvitation()" [disabled]="state$() === 'accepting'">
               @if (state$() === 'accepting') {
                 <span class="btn-spinner"></span>
-                Pridruživanje...
+                Joining...
               } @else {
-                Prihvati i pridruži se
+                Accept and join
               }
             </button>
           }
@@ -211,8 +211,8 @@ type PageState = 'loading' | 'valid' | 'accepting' | 'accepted' | 'error';
           <svg class="card-icon success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <h1>Dobrodošli!</h1>
-          <p class="card-subtitle">Uspešno ste se pridružili timu. Preusmeravanje na kontrolnu tablu...</p>
+          <h1>Welcome!</h1>
+          <p class="card-subtitle">You have successfully joined the team. Redirecting to dashboard...</p>
         </div>
       }
 
@@ -221,9 +221,9 @@ type PageState = 'loading' | 'valid' | 'accepting' | 'accepted' | 'error';
           <svg class="card-icon error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <h1>Nevažeći poziv</h1>
+          <h1>Invalid invitation</h1>
           <p class="card-subtitle">{{ errorMessage$() }}</p>
-          <p class="bottom-text">Zatražite novi poziv od administratora vašeg tima.</p>
+          <p class="bottom-text">Request a new invitation from your team administrator.</p>
         </div>
       }
     </div>
@@ -238,7 +238,7 @@ export class InviteAcceptComponent implements OnInit {
 
   readonly state$ = signal<PageState>('loading');
   readonly invitation$ = signal<ValidateTokenResponse | null>(null);
-  readonly errorMessage$ = signal('Ovaj poziv više nije važeći.');
+  readonly errorMessage$ = signal('This invitation is no longer valid.');
   readonly isAuthenticated$ = this.authService.isAuthenticated$;
 
   private token = '';
@@ -247,7 +247,7 @@ export class InviteAcceptComponent implements OnInit {
     this.token = this.route.snapshot.paramMap.get('token') ?? '';
     if (!this.token) {
       this.state$.set('error');
-      this.errorMessage$.set('Nije obezbeđen token poziva.');
+      this.errorMessage$.set('No invitation token provided.');
       return;
     }
     this.validateToken();
@@ -265,7 +265,7 @@ export class InviteAcceptComponent implements OnInit {
         error: (error: Error) => {
           this.state$.set('error');
           this.errorMessage$.set(
-            error.message || 'Ovaj poziv je istekao. Zatražite novi poziv.'
+            error.message || 'This invitation has expired. Request a new one.'
           );
         },
       });

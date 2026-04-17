@@ -23,9 +23,9 @@ export interface ChatMessagePayload {
         display: block;
       }
       .input-wrapper {
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid #21262D;
         padding: 16px;
-        background: #0d0d0d;
+        background: #0D1117;
       }
       .input-inner {
         width: 100%;
@@ -41,8 +41,8 @@ export interface ChatMessagePayload {
         align-items: center;
         gap: 6px;
         padding: 4px 10px;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 6px;
         font-size: 12px;
         color: #e0e0e0;
@@ -84,20 +84,20 @@ export interface ChatMessagePayload {
         line-height: 1;
       }
       .file-chip-remove:hover {
-        color: #ef4444;
+        color: #F85149;
       }
       .input-row {
         display: flex;
         align-items: flex-end;
         gap: 8px;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 12px;
         padding: 8px;
         transition: border-color 0.2s;
       }
       .input-row:focus-within {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .attach-btn {
         display: flex;
@@ -116,7 +116,7 @@ export interface ChatMessagePayload {
           background 0.15s;
       }
       .attach-btn:hover {
-        color: #fafafa;
+        color: #E6EDF3;
         background: rgba(255, 255, 255, 0.06);
       }
       .attach-btn:disabled {
@@ -136,7 +136,7 @@ export interface ChatMessagePayload {
         background: transparent;
         border: none;
         outline: none;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 15px;
         font-family: inherit;
         line-height: 1.5;
@@ -157,7 +157,7 @@ export interface ChatMessagePayload {
         width: 40px;
         height: 40px;
         min-width: 40px;
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
         border: none;
         border-radius: 8px;
@@ -184,7 +184,7 @@ export interface ChatMessagePayload {
       .hint kbd {
         display: inline-block;
         padding: 1px 6px;
-        background: #242424;
+        background: #1C2128;
         border-radius: 3px;
         font-size: 10px;
         font-family: monospace;
@@ -212,7 +212,7 @@ export interface ChatMessagePayload {
                 <span class="file-chip-icon">{{ getFileIcon(file.type) }}</span>
                 <span class="file-chip-name">{{ file.name }}</span>
                 <span class="file-chip-size">{{ formatSize(file.size) }}</span>
-                <button class="file-chip-remove" (click)="removeFile(i)" title="Ukloni">
+                <button class="file-chip-remove" (click)="removeFile(i)" title="Remove">
                   &#x2715;
                 </button>
               </div>
@@ -224,7 +224,7 @@ export interface ChatMessagePayload {
             class="attach-btn"
             (click)="fileInput.click()"
             [disabled]="disabled() || isUploading()"
-            title="Priloži fajl"
+            title="Attach file"
           >
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -249,7 +249,7 @@ export interface ChatMessagePayload {
               [(ngModel)]="inputValue"
               (keydown)="handleKeydown($event)"
               [disabled]="disabled()"
-              placeholder="Pitajte Mentor AI bilo šta..."
+              placeholder="Ask Neuron OS anything..."
               rows="1"
               (input)="autoResize()"
             ></textarea>
@@ -258,7 +258,7 @@ export interface ChatMessagePayload {
             class="send-btn"
             (click)="send()"
             [disabled]="disabled() || isUploading() || !canSend()"
-            title="Pošalji poruku"
+            title="Send message"
           >
             @if (disabled()) {
               <svg class="spin" fill="none" viewBox="0 0 24 24">
@@ -289,7 +289,7 @@ export interface ChatMessagePayload {
           </button>
         </div>
         <p class="hint">
-          Pritisnite <kbd>Enter</kbd> za slanje, <kbd>Shift+Enter</kbd> za novi red
+          Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for new line
         </p>
       </div>
     </div>
@@ -337,7 +337,7 @@ export class ChatInputComponent {
     const attachmentIds = this.uploadedIds().filter((id): id is string => id !== null);
 
     this.messageSent.emit({
-      content: value || '(fajl priložen)',
+      content: value || '(file attached)',
       attachmentIds,
     });
 

@@ -28,10 +28,10 @@ import { RegistrationService } from '../services/registration.service';
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #0d0d0d;
+        background: #0D1117;
         padding: 16px;
         font-family: 'Inter', system-ui, sans-serif;
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .container {
         width: 100%;
@@ -45,7 +45,7 @@ import { RegistrationService } from '../services/registration.service';
         width: 48px;
         height: 48px;
         margin: 0 auto 16px;
-        color: #3b82f6;
+        color: #58A6FF;
       }
       .header h1 {
         font-size: 28px;
@@ -81,17 +81,17 @@ import { RegistrationService } from '../services/registration.service';
       .field-input {
         width: 100%;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
-        background: #1a1a1a;
+        border: 1px solid #21262D;
+        background: #161B22;
         padding: 10px 12px;
         font-size: 14px;
-        color: #fafafa;
+        color: #E6EDF3;
         outline: none;
         font-family: inherit;
         transition: border-color 0.2s;
       }
       .field-input:focus {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .field-input::placeholder {
         color: #707070;
@@ -117,7 +117,7 @@ import { RegistrationService } from '../services/registration.service';
         justify-content: center;
         gap: 8px;
         padding: 12px;
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
         border: none;
         border-radius: 8px;
@@ -157,7 +157,7 @@ import { RegistrationService } from '../services/registration.service';
         color: #9e9e9e;
       }
       .footer a {
-        color: #3b82f6;
+        color: #58A6FF;
         font-weight: 500;
         text-decoration: none;
         margin-left: 4px;

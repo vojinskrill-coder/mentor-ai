@@ -27,8 +27,8 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
       }
 
       .picker-panel {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 12px;
         width: 480px;
         max-height: 520px;
@@ -39,28 +39,28 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
 
       .picker-header {
         padding: 16px 20px 12px;
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
       }
       .picker-title {
         font-size: 15px;
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
         margin-bottom: 12px;
       }
 
       .search-input {
         width: 100%;
-        background: #0d0d0d;
-        border: 1px solid #2a2a2a;
+        background: #0D1117;
+        border: 1px solid #21262D;
         border-radius: 8px;
         padding: 10px 12px 10px 36px;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 13px;
         font-family: inherit;
       }
       .search-input:focus {
         outline: none;
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .search-input::placeholder {
         color: #707070;
@@ -97,12 +97,12 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
         cursor: pointer;
       }
       .result-item:hover {
-        background: #242424;
+        background: #1C2128;
       }
 
       .result-label {
         font-size: 13px;
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .result-path {
         font-size: 11px;
@@ -112,7 +112,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
 
       .picker-footer {
         padding: 12px 20px;
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid #21262D;
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -120,7 +120,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
 
       .skip-btn {
         background: none;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         border-radius: 6px;
         padding: 8px 16px;
         color: #a1a1a1;
@@ -128,7 +128,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
         cursor: pointer;
       }
       .skip-btn:hover {
-        color: #fafafa;
+        color: #E6EDF3;
         border-color: #707070;
       }
 
@@ -140,7 +140,7 @@ import type { CurriculumNode } from '@mentor-ai/shared/types';
         cursor: pointer;
       }
       .cancel-btn:hover {
-        color: #fafafa;
+        color: #E6EDF3;
       }
 
       .empty-results {

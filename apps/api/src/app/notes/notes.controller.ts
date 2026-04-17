@@ -84,7 +84,13 @@ export class NotesController {
       page: query.page,
       limit: query.limit,
     });
-    return { data: result };
+    return {
+      data: result,
+      // Echo currently-running noteIds so the frontend can show the running
+      // spinner immediately on page load (without waiting for WS events).
+      // Backed by an in-memory Set in BridgeService.
+      runningTaskIds: this.bridgeService.getRunningTaskIds(user.tenantId),
+    };
   }
 
   /**
@@ -129,10 +135,23 @@ export class NotesController {
   async approveProposal(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id') id: string,
+    @Body()
+    body: {
+      updatedAction?: string;
+      expectedDeliverables?: Array<{ type: string; filename: string; description: string }>;
+    },
   ) {
+    // The chat "Confirm plan and run" flow passes both updatedAction and
+    // expectedDeliverables — the manifest locked in during discussion. Pass
+    // both through so bridgeService.updateProposal can persist the locked
+    // manifest onto the new Note.
     return this.bridgeService.updateProposal(id, {
       status: 'approved',
       approvedBy: user.userId,
+      ...(body?.updatedAction ? { proposedAction: body.updatedAction } : {}),
+      ...(body?.expectedDeliverables && body.expectedDeliverables.length > 0
+        ? { expectedDeliverables: body.expectedDeliverables as any }
+        : {}),
     });
   }
 

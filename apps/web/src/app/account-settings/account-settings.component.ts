@@ -35,15 +35,15 @@ import type {
 
       /* Skeleton */
       .skeleton-block {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 12px;
         padding: 24px;
         margin-bottom: 24px;
       }
       .skeleton-line {
         height: 14px;
-        background: #242424;
+        background: #1C2128;
         border-radius: 4px;
         margin-bottom: 12px;
       }
@@ -109,8 +109,8 @@ import type {
 
       /* Section card */
       .section-card {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 12px;
         padding: 24px;
         margin-bottom: 24px;
@@ -130,7 +130,7 @@ import type {
         flex-shrink: 0;
       }
       .section-header .icon-primary {
-        color: #3b82f6;
+        color: #58A6FF;
       }
       .section-header .icon-danger {
         color: #ef4444;
@@ -156,8 +156,8 @@ import type {
         justify-content: space-between;
         padding: 16px;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
-        background: #0d0d0d;
+        border: 1px solid #21262D;
+        background: #0D1117;
       }
       .owner-left {
         display: flex;
@@ -172,7 +172,7 @@ import type {
         align-items: center;
         justify-content: center;
         background: rgba(59, 130, 246, 0.1);
-        color: #3b82f6;
+        color: #58A6FF;
         flex-shrink: 0;
       }
       .owner-avatar svg {
@@ -207,7 +207,7 @@ import type {
         text-align: center;
         padding: 32px 16px;
         border-radius: 8px;
-        border: 1px dashed #2a2a2a;
+        border: 1px dashed #21262D;
       }
       .empty-owner svg {
         width: 40px;
@@ -234,7 +234,7 @@ import type {
         padding: 10px 20px;
         border-radius: 8px;
         border: none;
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
         font-size: 14px;
         font-weight: 500;
@@ -259,16 +259,16 @@ import type {
         gap: 4px;
         padding: 6px 14px;
         border-radius: 6px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         background: transparent;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 13px;
         font-weight: 500;
         cursor: pointer;
         font-family: inherit;
       }
       .btn-outline:hover {
-        background: #242424;
+        background: #1C2128;
       }
       .btn-danger {
         display: inline-flex;
@@ -411,7 +411,7 @@ import type {
   ],
   template: `
     <div class="page-content">
-      <h1 class="page-title">Podešavanja naloga</h1>
+      <h1 class="page-title">Account Settings</h1>
 
       @if (isLoading$()) {
         <!-- Skeleton loading -->
@@ -433,12 +433,12 @@ import type {
                 d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
             <div class="warning-content">
-              <div class="warning-title">Odredite rezervnog vlasnika da sprečite zaključavanje naloga</div>
+              <div class="warning-title">Designate a backup owner to prevent account lockout</div>
               <div class="warning-desc">
-                Vaš radni prostor je aktivan {{ backupOwnerStatus$()?.tenantAgeDays }} dana bez rezervnog vlasnika.
+                Your workspace has been active for {{ backupOwnerStatus$()?.tenantAgeDays }} days without a backup owner.
               </div>
             </div>
-            <button class="warning-btn" (click)="showDesignateDialog$.set(true)">Odredi sada</button>
+            <button class="warning-btn" (click)="showDesignateDialog$.set(true)">Designate now</button>
           </div>
         }
 
@@ -449,11 +449,11 @@ import type {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
             </svg>
-            <h2 class="section-title">Rezervni vlasnik</h2>
+            <h2 class="section-title">Backup Owner</h2>
           </div>
           <p class="section-desc">
-            Rezervni vlasnik može povratiti vaš nalog ako izgubite pristup (npr. izgubljen 2FA uređaj).
-            Može resetovati dvofaktorsku autentifikaciju kako biste se ponovo prijavili.
+            A backup owner can recover your account if you lose access (e.g., lost 2FA device).
+            They can reset two-factor authentication so you can sign in again.
           </p>
 
           @if (backupOwner$()) {
@@ -468,26 +468,26 @@ import type {
                 <div>
                   <div class="owner-name">{{ backupOwner$()!.name || backupOwner$()!.email }}</div>
                   <div class="owner-email">{{ backupOwner$()!.email }}</div>
-                  <div class="owner-date">Određeno {{ formatDate(backupOwner$()!.designatedAt) }}</div>
+                  <div class="owner-date">Designated {{ formatDate(backupOwner$()!.designatedAt) }}</div>
                 </div>
               </div>
               <div class="owner-actions">
                 @if (showRemoveConfirm$()) {
                   <div class="confirm-row">
-                    <span class="confirm-label">Ukloniti rezervnog vlasnika?</span>
+                    <span class="confirm-label">Remove backup owner?</span>
                     <button class="btn-danger" (click)="onRemoveBackupOwner()" [disabled]="isRemoving$()" style="padding: 6px 14px; font-size: 13px;">
-                      {{ isRemoving$() ? 'Uklanjanje...' : 'Potvrdi' }}
+                      {{ isRemoving$() ? 'Removing...' : 'Confirm' }}
                     </button>
-                    <button class="btn-outline" (click)="showRemoveConfirm$.set(false)">Otkaži</button>
+                    <button class="btn-outline" (click)="showRemoveConfirm$.set(false)">Cancel</button>
                   </div>
                 } @else {
-                  <button class="btn-outline" (click)="showDesignateDialog$.set(true)">Promeni</button>
+                  <button class="btn-outline" (click)="showDesignateDialog$.set(true)">Change</button>
                   <button class="btn-danger-outline" (click)="showRemoveConfirm$.set(true)">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width:14px;height:14px;">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6" />
                     </svg>
-                    Ukloni
+                    Remove
                   </button>
                 }
               </div>
@@ -498,14 +498,14 @@ import type {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
-              <div class="empty-owner-title">Nema određenog rezervnog vlasnika</div>
-              <div class="empty-owner-desc">Izaberite člana tima koji može povratiti vaš nalog ako je potrebno.</div>
+              <div class="empty-owner-title">No backup owner designated</div>
+              <div class="empty-owner-desc">Choose a team member who can recover your account if needed.</div>
               <button class="btn-primary" (click)="showDesignateDialog$.set(true)">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                 </svg>
-                Odredi rezervnog vlasnika
+                Designate backup owner
               </button>
             </div>
           }
@@ -522,7 +522,7 @@ import type {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
-            <h2 class="section-title danger">Opasna zona</h2>
+            <h2 class="section-title danger">Danger Zone</h2>
           </div>
 
           @if (deletionStatus$()?.status === 'PENDING_DELETION') {
@@ -533,30 +533,30 @@ import type {
                     d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
                 <div>
-                  <div class="deletion-title">Radni prostor je zakazan za brisanje</div>
+                  <div class="deletion-title">Workspace is scheduled for deletion</div>
                   <div class="deletion-date">
-                    Brisanje će se izvršiti {{ deletionStatus$()?.gracePeriodEndsAt | date:'medium' }}
+                    Deletion will occur {{ deletionStatus$()?.gracePeriodEndsAt | date:'medium' }}
                   </div>
-                  <div class="deletion-hint">Možete otkazati u roku od 7 dana.</div>
+                  <div class="deletion-hint">You can cancel within 7 days.</div>
                 </div>
               </div>
               <div class="deletion-actions">
                 <button class="cancel-delete-btn" (click)="onCancelDeletion()" [disabled]="isCancellingDeletion$()">
-                  {{ isCancellingDeletion$() ? 'Otkazivanje...' : 'Otkaži brisanje' }}
+                  {{ isCancellingDeletion$() ? 'Cancelling...' : 'Cancel deletion' }}
                 </button>
               </div>
             </div>
           } @else {
             <p class="section-desc">
-              Kada obrišete radni prostor, svi podaci će biti trajno uklonjeni u roku od 30 dana.
-              Ova radnja se ne može poništiti nakon 7-dnevnog roka.
+              When you delete a workspace, all data will be permanently removed within 30 days.
+              This action cannot be undone after the 7-day grace period.
             </p>
             <button class="btn-danger" (click)="showDeleteDialog$.set(true)">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
-              Obriši radni prostor
+              Delete workspace
             </button>
           }
 
@@ -635,7 +635,7 @@ export class AccountSettingsComponent implements OnInit {
   onDesignateDialogClose(result: string | false): void {
     this.showDesignateDialog$.set(false);
     if (result) {
-      this.toastService.success('Rezervni vlasnik je određen');
+      this.toastService.success('Backup owner designated');
       this.loadData();
     }
   }
@@ -651,7 +651,7 @@ export class AccountSettingsComponent implements OnInit {
         next: () => {
           this.isRemoving$.set(false);
           this.showRemoveConfirm$.set(false);
-          this.toastService.success('Rezervni vlasnik je uklonjen');
+          this.toastService.success('Backup owner removed');
           this.loadData();
         },
         error: (err: Error) => {
@@ -663,7 +663,7 @@ export class AccountSettingsComponent implements OnInit {
   }
 
   formatDate(dateStr: string): string {
-    return new Date(dateStr).toLocaleDateString('sr-Latn', {
+    return new Date(dateStr).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -681,10 +681,10 @@ export class AccountSettingsComponent implements OnInit {
         next: (response) => {
           this.deletionStatus$.set(response.data);
           this.isCancellingDeletion$.set(false);
-          this.toastService.success('Brisanje je otkazano');
+          this.toastService.success('Deletion cancelled');
         },
         error: (err: Error) => {
-          this.deletionErrorMessage$.set(err.message || 'Greška pri otkazivanju brisanja');
+          this.deletionErrorMessage$.set(err.message || 'Error cancelling deletion');
           this.isCancellingDeletion$.set(false);
         },
       });

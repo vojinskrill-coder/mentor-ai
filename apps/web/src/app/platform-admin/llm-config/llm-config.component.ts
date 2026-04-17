@@ -46,16 +46,16 @@ import { LlmProviderType, type LlmProviderStatus } from '@mentor-ai/shared/types
       .spinner {
         width: 32px;
         height: 32px;
-        border: 3px solid #2a2a2a;
-        border-top-color: #3b82f6;
+        border: 3px solid #21262D;
+        border-top-color: #58A6FF;
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
       }
 
       /* Section Card */
       .section-card {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 12px;
         padding: 24px;
         margin-bottom: 24px;
@@ -85,9 +85,9 @@ import { LlmProviderType, type LlmProviderStatus } from '@mentor-ai/shared/types
         gap: 12px;
         padding: 16px;
         border-radius: 10px;
-        border: 2px solid #2a2a2a;
+        border: 2px solid #21262D;
         background: transparent;
-        color: #fafafa;
+        color: #E6EDF3;
         cursor: pointer;
         text-align: left;
         transition: border-color 0.2s;
@@ -96,7 +96,7 @@ import { LlmProviderType, type LlmProviderStatus } from '@mentor-ai/shared/types
         border-color: rgba(59, 130, 246, 0.5);
       }
       .provider-btn.selected {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
         background: rgba(59, 130, 246, 0.05);
       }
       .provider-icon {
@@ -111,7 +111,7 @@ import { LlmProviderType, type LlmProviderStatus } from '@mentor-ai/shared/types
       .provider-icon svg {
         width: 20px;
         height: 20px;
-        color: #3b82f6;
+        color: #58A6FF;
       }
       .provider-info {
       }
@@ -134,7 +134,7 @@ import { LlmProviderType, type LlmProviderStatus } from '@mentor-ai/shared/types
         font-size: 13px;
         font-weight: 500;
         margin-bottom: 6px;
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .input-wrap {
         position: relative;
@@ -142,17 +142,17 @@ import { LlmProviderType, type LlmProviderStatus } from '@mentor-ai/shared/types
       .form-input {
         width: 100%;
         padding: 10px 12px;
-        background: #0d0d0d;
-        border: 1px solid #2a2a2a;
+        background: #0D1117;
+        border: 1px solid #21262D;
         border-radius: 8px;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 14px;
         font-family: inherit;
         outline: none;
         transition: border-color 0.2s;
       }
       .form-input:focus {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .form-input::placeholder {
         color: #6b6b6b;
@@ -163,10 +163,10 @@ import { LlmProviderType, type LlmProviderStatus } from '@mentor-ai/shared/types
       .form-select {
         width: 100%;
         padding: 10px 12px;
-        background: #0d0d0d;
-        border: 1px solid #2a2a2a;
+        background: #0D1117;
+        border: 1px solid #21262D;
         border-radius: 8px;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 14px;
         font-family: inherit;
         outline: none;
@@ -174,11 +174,11 @@ import { LlmProviderType, type LlmProviderStatus } from '@mentor-ai/shared/types
         cursor: pointer;
       }
       .form-select:focus {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .form-select option {
-        background: #1a1a1a;
-        color: #fafafa;
+        background: #161B22;
+        color: #E6EDF3;
       }
 
       /* Eye toggle */
@@ -196,7 +196,7 @@ import { LlmProviderType, type LlmProviderStatus } from '@mentor-ai/shared/types
         align-items: center;
       }
       .eye-toggle:hover {
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .eye-toggle svg {
         width: 18px;
@@ -224,14 +224,14 @@ import { LlmProviderType, type LlmProviderStatus } from '@mentor-ai/shared/types
       }
       .btn-outline {
         background: transparent;
-        border: 1px solid #2a2a2a;
-        color: #fafafa;
+        border: 1px solid #21262D;
+        color: #E6EDF3;
       }
       .btn-outline:hover:not(:disabled) {
-        background: #242424;
+        background: #1C2128;
       }
       .btn-primary {
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
       }
       .btn-primary:hover:not(:disabled) {
@@ -268,7 +268,7 @@ import { LlmProviderType, type LlmProviderStatus } from '@mentor-ai/shared/types
 
       /* Resource Info */
       .resource-box {
-        background: #242424;
+        background: #1C2128;
         border-radius: 8px;
         padding: 12px 16px;
         margin-top: 12px;
@@ -305,7 +305,7 @@ import { LlmProviderType, type LlmProviderStatus } from '@mentor-ai/shared/types
         cursor: pointer;
       }
       .checkbox-label input[type='checkbox'] {
-        accent-color: #3b82f6;
+        accent-color: #58A6FF;
         width: 16px;
         height: 16px;
         cursor: pointer;

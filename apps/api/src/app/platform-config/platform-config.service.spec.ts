@@ -1,151 +1,181 @@
-import { PlatformConfigService, ConfigurationError } from './platform-config.service';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import { Test, TestingModule } from '@nestjs/testing';
+import {
+  PlatformConfigService,
+  ConfigurationError,
+} from './platform-config.service';
 
-describe('PlatformConfigService', () => {
-  let service: PlatformConfigService;
-  let tmpDir: string;
-  let configFile: string;
-
-  const baseConfig = `
+// Sample yaml that mirrors the real config but with test values baked in
+const TEST_YAML = `
 relay:
-  host: \${RELAY_HOST:localhost}
+  host: \${RELAY_HOST}
   port: \${RELAY_PORT:3100}
-  authToken: \${RELAY_AUTH:defaulttoken}
-  timeout: 30000
+  authToken: \${RELAY_AUTH_TOKEN}
+  timeoutSeconds: \${RELAY_TIMEOUT:600}
 
 vault:
-  basePath: /root/.openclaw/workspace
-  tenantPath: /root/.openclaw/workspace/tenants/{{tenantId}}
-  sshHost: localhost
-  sshPort: 22
-  sshUser: root
-  sshKeyPath: ~/.ssh/id_rsa
-  mode: local
+  storageBackend: \${VAULT_BACKEND:ssh}
+  sshHost: \${VAULT_SSH_HOST}
+  sshUser: \${VAULT_SSH_USER:root}
+  sshKeyPath: \${VAULT_SSH_KEY}
+  basePath: /root/.openclaw-{tenantId}/vault
 
 qdrant:
-  url: http://localhost:6333
-  apiKey: testkey
-  collectionName: test-collection
-  embeddingDimension: 1536
+  host: \${QDRANT_URL}
+  apiKey: \${QDRANT_API_KEY}
+  collectionPrefix: concepts
+  vectorDimension: 1536
 
 enrichment:
-  maxConcurrentJobs: 3
-  maxRetries: 5
-  retryDelayMs: 5000
-  zombieTimeoutMs: 300000
-  batchSize: 10
-  minWords: 50
-  minChars: 200
-  requireDiacritics: true
-  requireFrontmatter: true
-  requireSources: true
+  concurrency: \${ENRICHMENT_CONCURRENCY:1}
+  sessionStrategy: persistent
+  compactionInterval: 20
+  maxRetries: 2
+  guardrails:
+    minWords: 4500
+    minChars: 15000
+    language: english
+    requireSources: true
+    requireFrontmatter: true
 
 timeouts:
-  relayCallMs: 30000
-  vaultWriteMs: 15000
-  vaultReadMs: 10000
-  enrichmentStepMs: 120000
-  validationMs: 10000
-  correctionMs: 60000
-
-guardrails:
-  maxTokensPerCall: 4096
-  maxRetriesPerStep: 5
-  requireValidation: true
-  requireSelfCorrection: true
+  enrichmentTimeout: \${ENRICHMENT_TIMEOUT:600}
+  sshTimeout: \${SSH_TIMEOUT:30}
+  relayTimeout: \${RELAY_TIMEOUT:600}
 `;
 
+const mockReadFileSync = jest.fn();
+
+jest.mock('fs', () => {
+  const actual = jest.requireActual('fs');
+  return {
+    ...actual,
+    readFileSync: (...args: unknown[]) => mockReadFileSync(...args),
+  };
+});
+
+describe('PlatformConfigService', () => {
+  let originalEnv: NodeJS.ProcessEnv;
+
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'platform-config-test-'));
-    configFile = path.join(tmpDir, 'platform-config.yaml');
-    fs.writeFileSync(configFile, baseConfig);
-    service = new PlatformConfigService();
+    originalEnv = { ...process.env };
+    mockReadFileSync.mockReturnValue(TEST_YAML);
+    // Set required env vars that have no defaults
+    process.env['RELAY_HOST'] = 'relay.test.io';
+    process.env['RELAY_AUTH_TOKEN'] = 'tok-abc';
+    process.env['VAULT_SSH_HOST'] = '10.0.0.1';
+    process.env['VAULT_SSH_KEY'] = '/keys/id_rsa';
+    process.env['QDRANT_URL'] = 'http://qdrant:6333';
+    process.env['QDRANT_API_KEY'] = 'qd-key';
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-    delete process.env.RELAY_HOST;
-    delete process.env.RELAY_PORT;
-    delete process.env.RELAY_AUTH;
+    process.env = originalEnv;
+    mockReadFileSync.mockReset();
   });
 
-  it('should load config from yaml file', () => {
-    service.loadConfig(configFile);
-    const relay = service.getRelayConfig();
-    expect(relay.host).toBe('localhost');
+  function createService(): PlatformConfigService {
+    return new PlatformConfigService();
+  }
+
+  // ── env override beats yaml default ─────────────────────────────────────
+
+  it('env override beats yaml default', () => {
+    process.env['RELAY_PORT'] = '9999';
+    const svc = createService();
+    expect(svc.getRelayConfig().port).toBe(9999);
   });
 
-  it('should resolve env var defaults', () => {
-    service.loadConfig(configFile);
-    const relay = service.getRelayConfig();
-    expect(relay.host).toBe('localhost');
-    expect(relay.port).toBe(3100);
-    expect(relay.authToken).toBe('defaulttoken');
+  // ── yaml default used when env not set ──────────────────────────────────
+
+  it('yaml default used when env not set', () => {
+    delete process.env['RELAY_PORT'];
+    const svc = createService();
+    expect(svc.getRelayConfig().port).toBe(3100);
   });
 
-  it('should override defaults with env vars', () => {
-    process.env.RELAY_HOST = 'production-host';
-    process.env.RELAY_PORT = '9999';
-    service.loadConfig(configFile);
-    const relay = service.getRelayConfig();
-    expect(relay.host).toBe('production-host');
-    expect(relay.port).toBe(9999);
+  // ── missing required key throws ConfigurationError ──────────────────────
+
+  it('missing required key throws ConfigurationError', () => {
+    delete process.env['RELAY_HOST'];
+    const svc = createService();
+    expect(() => svc.getRelayConfig()).toThrow(ConfigurationError);
+    expect(() => svc.getRelayConfig()).toThrow('Missing required config key: relay.host');
   });
 
-  it('should throw ConfigurationError on missing file', () => {
-    expect(() => service.loadConfig('/nonexistent/path.yaml')).toThrow(
-      ConfigurationError,
-    );
+  // ── tenantId interpolated in basePath ───────────────────────────────────
+
+  it('tenantId interpolated in vault basePath', () => {
+    const svc = createService();
+    const vault = svc.getVaultConfig('acme-corp');
+    expect(vault.basePath).toBe('/root/.openclaw-acme-corp/vault');
   });
 
-  it('should throw ConfigurationError on missing required env var', () => {
-    const badConfig = `relay:\n  host: \${MISSING_REQUIRED_VAR}`;
-    fs.writeFileSync(configFile, badConfig);
-    expect(() => service.loadConfig(configFile)).toThrow(ConfigurationError);
+  // ── getEnrichmentConfig().guardrails returns all fields ─────────────────
+
+  it('getEnrichmentConfig().guardrails returns all fields', () => {
+    const svc = createService();
+    const enrichment = svc.getEnrichmentConfig();
+    expect(enrichment.guardrails).toEqual({
+      minWords: 4500,
+      minChars: 15000,
+      language: 'english',
+      requireSources: true,
+      requireFrontmatter: true,
+    });
+    expect(enrichment.concurrency).toBe(1);
+    expect(enrichment.sessionStrategy).toBe('persistent');
+    expect(enrichment.compactionInterval).toBe(20);
+    expect(enrichment.maxRetries).toBe(2);
   });
 
-  it('should interpolate tenantId in vault config', () => {
-    service.loadConfig(configFile);
-    const vault = service.getVaultConfig('tenant-123');
-    expect(vault.tenantPath).toContain('tenant-123');
-    expect(vault.tenantPath).not.toContain('{{tenantId}}');
+  // ── getTimeouts() returns all fields ────────────────────────────────────
+
+  it('getTimeouts() returns all fields', () => {
+    const svc = createService();
+    const timeouts = svc.getTimeouts();
+    expect(timeouts).toEqual({
+      enrichmentTimeout: 600,
+      sshTimeout: 30,
+      relayTimeout: 600,
+    });
   });
 
-  it('should return vault config without tenantId interpolation', () => {
-    service.loadConfig(configFile);
-    const vault = service.getVaultConfig();
-    expect(vault.tenantPath).toContain('{{tenantId}}');
+  // ── singleton check via NestJS DI ───────────────────────────────────────
+
+  it('NestJS provides singleton instance', async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [PlatformConfigService],
+    }).compile();
+
+    const a = module.get<PlatformConfigService>(PlatformConfigService);
+    const b = module.get<PlatformConfigService>(PlatformConfigService);
+    expect(a).toBe(b);
   });
 
-  it('should return enrichment config with numeric types', () => {
-    service.loadConfig(configFile);
-    const enrichment = service.getEnrichmentConfig();
-    expect(enrichment.maxConcurrentJobs).toBe(3);
-    expect(enrichment.maxRetries).toBe(5);
-    expect(enrichment.requireDiacritics).toBe(true);
+  // ── graceful fallback when yaml file missing ────────────────────────────
+
+  it('handles missing yaml file gracefully', () => {
+    mockReadFileSync.mockImplementation(() => {
+      throw new Error('ENOENT');
+    });
+    // Config is empty so section lookup fails
+    expect(() => createService().getRelayConfig()).toThrow(ConfigurationError);
   });
 
-  it('should return guardrails config', () => {
-    service.loadConfig(configFile);
-    const guardrails = service.getGuardrailsConfig();
-    expect(guardrails.maxTokensPerCall).toBe(4096);
-    expect(guardrails.requireValidation).toBe(true);
+  // ── vault defaults ─────────────────────────────────────────────────────
+
+  it('vault uses default storageBackend and sshUser', () => {
+    const svc = createService();
+    const vault = svc.getVaultConfig('t1');
+    expect(vault.storageBackend).toBe('ssh');
+    expect(vault.sshUser).toBe('root');
   });
 
-  it('should return timeouts config with numeric types', () => {
-    service.loadConfig(configFile);
-    const timeouts = service.getTimeouts();
-    expect(timeouts.relayCallMs).toBe(30000);
-    expect(timeouts.vaultWriteMs).toBe(15000);
-    expect(timeouts.enrichmentStepMs).toBe(120000);
-  });
+  // ── env override for enrichment concurrency ─────────────────────────────
 
-  it('should be a singleton (same config after multiple accesses)', () => {
-    service.loadConfig(configFile);
-    const relay1 = service.getRelayConfig();
-    const relay2 = service.getRelayConfig();
-    expect(relay1).toEqual(relay2);
+  it('env override for enrichment concurrency', () => {
+    process.env['ENRICHMENT_CONCURRENCY'] = '4';
+    const svc = createService();
+    expect(svc.getEnrichmentConfig().concurrency).toBe(4);
   });
 });

@@ -51,14 +51,14 @@ export interface MemoryCorrectionResult {
         class="dialog-container"
         role="dialog"
         aria-modal="true"
-        [attr.aria-label]="'Ispravi memoriju o ' + (memory()?.subject ?? 'ovoj temi')"
+        [attr.aria-label]="'Correct memory about ' + (memory()?.subject ?? 'this topic')"
       >
         <div class="dialog-header">
-          <h2 class="dialog-title">Ispravi memoriju</h2>
+          <h2 class="dialog-title">Correct memory</h2>
           <button
             type="button"
             class="close-button"
-            aria-label="Zatvori dijalog"
+            aria-label="Close dialog"
             (click)="onCancel()"
           >
             ✕
@@ -82,7 +82,7 @@ export interface MemoryCorrectionResult {
 
             <div class="form-group">
               <label for="original-content" class="form-label">
-                Originalni sadržaj
+                Original content
               </label>
               <div id="original-content" class="original-content">
                 {{ memory()!.content }}
@@ -91,27 +91,27 @@ export interface MemoryCorrectionResult {
 
             <div class="form-group">
               <label for="corrected-content" class="form-label">
-                Ispravljeni sadržaj
+                Corrected content
                 <span class="required">*</span>
               </label>
               <textarea
                 id="corrected-content"
                 class="form-textarea"
                 rows="4"
-                placeholder="Unesite ispravljene informacije..."
+                placeholder="Enter corrected information..."
                 [(ngModel)]="correctedContent"
                 [attr.aria-invalid]="hasError$()"
               ></textarea>
               @if (hasError$()) {
                 <p class="error-text" role="alert">
-                  Molimo unesite ispravljeni sadržaj
+                  Please enter corrected content
                 </p>
               }
             </div>
 
             <p class="info-text">
-              Vaša ispravka će zameniti AI-ekstraktovanu memoriju sa vašim
-              ažuriranim informacijama.
+              Your correction will replace the AI-extracted memory with your
+              updated information.
             </p>
           }
         </div>
@@ -122,7 +122,7 @@ export interface MemoryCorrectionResult {
             class="btn btn-secondary"
             (click)="onCancel()"
           >
-            Otkaži
+            Cancel
           </button>
           <button
             type="button"
@@ -132,9 +132,9 @@ export interface MemoryCorrectionResult {
           >
             @if (isSaving$()) {
               <span class="spinner" aria-hidden="true"></span>
-              Čuvanje...
+              Saving...
             } @else {
-              Sačuvaj ispravku
+              Save correction
             }
           </button>
         </div>
@@ -157,7 +157,7 @@ export interface MemoryCorrectionResult {
       width: 90%;
       max-width: 500px;
       max-height: 90vh;
-      background-color: #1a1a1a;
+      background-color: #161B22;
       border: 1px solid #333;
       border-radius: 0.75rem;
       z-index: 1001;
@@ -203,7 +203,7 @@ export interface MemoryCorrectionResult {
 
     .close-button:focus-visible {
       outline: none;
-      box-shadow: 0 0 0 2px #3b82f6;
+      box-shadow: 0 0 0 2px #58A6FF;
     }
 
     .dialog-content {
@@ -251,7 +251,7 @@ export interface MemoryCorrectionResult {
 
     .original-content {
       padding: 0.75rem;
-      background-color: #0d0d0d;
+      background-color: #0D1117;
       border: 1px solid #262626;
       border-radius: 0.375rem;
       color: #737373;
@@ -262,7 +262,7 @@ export interface MemoryCorrectionResult {
     .form-textarea {
       width: 100%;
       padding: 0.75rem;
-      background-color: #0d0d0d;
+      background-color: #0D1117;
       border: 1px solid #333;
       border-radius: 0.375rem;
       color: #e5e5e5;
@@ -274,8 +274,8 @@ export interface MemoryCorrectionResult {
 
     .form-textarea:focus {
       outline: none;
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 1px #3b82f6;
+      border-color: #58A6FF;
+      box-shadow: 0 0 0 1px #58A6FF;
     }
 
     .form-textarea[aria-invalid="true"] {
@@ -332,8 +332,8 @@ export interface MemoryCorrectionResult {
     }
 
     .btn-primary {
-      background-color: #3b82f6;
-      border: 1px solid #3b82f6;
+      background-color: #58A6FF;
+      border: 1px solid #58A6FF;
       color: white;
     }
 
@@ -344,7 +344,7 @@ export interface MemoryCorrectionResult {
 
     .btn:focus-visible {
       outline: none;
-      box-shadow: 0 0 0 2px #3b82f6;
+      box-shadow: 0 0 0 2px #58A6FF;
     }
 
     .spinner {

@@ -49,6 +49,59 @@ export class BudgetService {
     return spentEur + cost <= limitEur;
   }
 
+  /**
+   * Atomically check budget and reserve estimated cost in a single transaction.
+   * Prevents race conditions where two concurrent requests both pass canSpend()
+   * but together overshoot the budget.
+   */
+  async canSpendAndReserve(tenantId: string, estimatedCost: number): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const budget = await tx.agentDailyBudget.findUnique({
+        where: { tenantId_date: { tenantId, date: today } },
+      });
+
+      const spent = budget ? Number(budget.spentEur) : 0;
+      const limit = budget ? Number(budget.limitEur) : this.dailyLimitEur;
+
+      if (spent + estimatedCost > limit) {
+        this.logger.warn({
+          message: 'Budget reservation rejected',
+          tenantId,
+          estimatedCost,
+          spent,
+          limit,
+        });
+        return false;
+      }
+
+      await tx.agentDailyBudget.upsert({
+        where: { tenantId_date: { tenantId, date: today } },
+        update: {
+          spentEur: { increment: new Decimal(estimatedCost) },
+        },
+        create: {
+          tenantId,
+          date: today,
+          spentEur: new Decimal(estimatedCost),
+          limitEur: new Decimal(this.dailyLimitEur),
+        },
+      });
+
+      this.logger.log({
+        message: 'Budget reserved atomically',
+        tenantId,
+        estimatedCost,
+        newSpent: spent + estimatedCost,
+        limit,
+      });
+
+      return true;
+    });
+  }
+
   async recordSpend(tenantId: string, amountEur: number): Promise<void> {
     const today = new Date();
     today.setHours(0, 0, 0, 0);

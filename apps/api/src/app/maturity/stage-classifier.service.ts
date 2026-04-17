@@ -19,11 +19,11 @@ interface ClassificationResult {
 
 const STAGE_DESCRIPTIONS: Record<MaturityStage, string> = {
   [MaturityStage.BASIC]:
-    'Fondacioni koncepti koje svako poslovanje MORA imati. Pokrij osnove: identitet brenda, ciljno tržište, osnovne finansije, ključne operacije, pravni okvir. Fokus je na izgradnji STABILNE BAZE.',
+    'Foundational concepts every business MUST have. Cover the basics: brand identity, target market, basic finance, key operations, legal framework. Focus is on building a STABLE BASE.',
   [MaturityStage.ADVANCED]:
-    'Napredni koncepti za optimizaciju i rast. Nadogradnja na BASIC: dublja analiza konkurencije, napredne strategije, automatizacija procesa, ekspanzija tržišta. Fokus je na SKALIRANJU I OPTIMIZACIJI.',
+    'Advanced concepts for optimization and growth. Building on BASIC: deeper competitive analysis, advanced strategies, process automation, market expansion. Focus is on SCALING AND OPTIMIZATION.',
   [MaturityStage.AUTONOMOUS]:
-    'Koncepti za monitoring i kontinualno poboljšanje. Sve iz BASIC i ADVANCED je kompletno. Fokus je na AUTOMATIZACIJI I SAMOUPRAVLJANJU: praćenje KPI-jeva, automatski izveštaji, proaktivna optimizacija.',
+    'Concepts for monitoring and continuous improvement. Everything from BASIC and ADVANCED is complete. Focus is on AUTOMATION AND SELF-MANAGEMENT: KPI tracking, automated reports, proactive optimization.',
 };
 
 @Injectable()
@@ -58,26 +58,26 @@ export class StageClassifierService {
     });
 
     const conceptList = availableConcepts
-      .map((c) => `- ID: ${c.id} | Naziv: ${c.name} | Kategorija: ${c.category} | Definicija: ${c.definition}`)
+      .map((c) => `- ID: ${c.id} | Name: ${c.name} | Category: ${c.category} | Definition: ${c.definition}`)
       .join('\n');
 
-    const systemPrompt = `Ti si ${PERSONA_LABELS[personaType]} za "${tenant?.name || 'N/A'}" u industriji "${tenant?.industry || 'N/A'}".
+    const systemPrompt = `You are a ${PERSONA_LABELS[personaType]} for "${tenant?.name || 'N/A'}" in the "${tenant?.industry || 'N/A'}" industry.
 
-Tvoj zadatak: izaberi koji od ponuđenih poslovnih koncepata su relevantni za ${stage} fazu ovog KONKRETNOG poslovanja.
+Your task: select which of the offered business concepts are relevant for the ${stage} phase of THIS SPECIFIC business.
 
 ${STAGE_DESCRIPTIONS[stage]}
 
-PRAVILA:
-- Izaberi SAMO koncepte koji su zaista relevantni za ovu industriju i fazu
-- Sortiraj po prioritetu (priority 1 = najvažniji)
-- Za svaki koncept objasni ZAŠTO je relevantan za OVO poslovanje (rationale)
-- Ne izaberi sve — budi selektivan. Za BASIC: 5-15 koncepata. Za ADVANCED: 3-10. Za AUTONOMOUS: 2-8.
-- Uzmi u obzir poslovni kontekst iz memorija (ako je dostupan)
+RULES:
+- Select ONLY concepts that are truly relevant for this industry and phase
+- Sort by priority (priority 1 = most important)
+- For each concept explain WHY it is relevant for THIS business (rationale)
+- Do not select all — be selective. For BASIC: 5-15 concepts. For ADVANCED: 3-10. For AUTONOMOUS: 2-8.
+- Take into account business context from memories (if available)
 
-OBAVEZNO vrati VALIDAN JSON niz. Ništa drugo, samo JSON:
-[{"conceptId": "cpt_xxx", "priority": 1, "rationale": "Razlog..."}]`;
+You MUST return a VALID JSON array. Nothing else, just JSON:
+[{"conceptId": "cpt_xxx", "priority": 1, "rationale": "Reason..."}]`;
 
-    const userMessage = `Dostupni koncepti za tvoj domen:\n\n${conceptList}\n\nIzaberi relevantne za ${stage} fazu. Vrati SAMO JSON niz.`;
+    const userMessage = `Available concepts for your domain:\n\n${conceptList}\n\nSelect relevant ones for the ${stage} phase. Return ONLY a JSON array.`;
 
     const messages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },

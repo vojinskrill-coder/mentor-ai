@@ -108,7 +108,7 @@ import { MEMORY_TYPE_COLORS, MEMORY_TYPE_LABELS } from '@mentor-ai/shared/types'
     .memory-attribution-container {
       margin: 0.5rem 0;
       border-radius: 0.5rem;
-      background-color: #1a1a1a;
+      background-color: #161B22;
       border: 1px solid #333;
       overflow: hidden;
     }
@@ -141,7 +141,7 @@ import { MEMORY_TYPE_COLORS, MEMORY_TYPE_LABELS } from '@mentor-ai/shared/types'
     }
 
     .attribution-toggle:focus-visible {
-      box-shadow: inset 0 0 0 2px #3b82f6;
+      box-shadow: inset 0 0 0 2px #58A6FF;
     }
 
     .memory-icon {
@@ -183,7 +183,7 @@ import { MEMORY_TYPE_COLORS, MEMORY_TYPE_LABELS } from '@mentor-ai/shared/types'
       padding: 0.75rem;
       margin-top: 0.75rem;
       border-radius: 0.375rem;
-      background-color: #0d0d0d;
+      background-color: #0D1117;
       border: 1px solid #262626;
     }
 
@@ -245,12 +245,12 @@ import { MEMORY_TYPE_COLORS, MEMORY_TYPE_LABELS } from '@mentor-ai/shared/types'
     }
 
     .action-btn:focus-visible {
-      box-shadow: 0 0 0 2px #3b82f6;
+      box-shadow: 0 0 0 2px #58A6FF;
     }
 
     .view-btn:hover {
-      border-color: #3b82f6;
-      color: #3b82f6;
+      border-color: #58A6FF;
+      color: #58A6FF;
     }
 
     .outdated-btn {

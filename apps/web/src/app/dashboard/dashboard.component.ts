@@ -25,9 +25,9 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
 
       /* Welcome Card */
       .welcome-card {
-        background: #1a1a1a;
+        background: #161B22;
         border-radius: 12px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         padding: 24px;
         margin-bottom: 24px;
       }
@@ -65,13 +65,13 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
         opacity: 0.9;
       }
       .action-btn-primary {
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
       }
       .action-btn-secondary {
-        background: #242424;
-        color: #fafafa;
-        border: 1px solid #2a2a2a;
+        background: #1C2128;
+        color: #E6EDF3;
+        border: 1px solid #21262D;
       }
       .action-btn svg {
         width: 20px;
@@ -98,9 +98,9 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
         }
       }
       .persona-card {
-        background: #1a1a1a;
+        background: #161B22;
         border-radius: 12px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         padding: 16px;
         text-align: center;
         transition: transform 0.15s;
@@ -145,9 +145,9 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
         }
       }
       .admin-card {
-        background: #1a1a1a;
+        background: #161B22;
         border-radius: 12px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         padding: 20px;
         display: flex;
         align-items: flex-start;
@@ -157,7 +157,7 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
         transition: border-color 0.2s;
       }
       .admin-card:hover {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .admin-icon {
         width: 40px;
@@ -166,13 +166,13 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
         display: flex;
         align-items: center;
         justify-content: center;
-        background: rgba(59, 130, 246, 0.1);
+        background: rgba(88, 166, 255, 0.1);
         flex-shrink: 0;
       }
       .admin-icon svg {
         width: 20px;
         height: 20px;
-        color: #3b82f6;
+        color: #58A6FF;
       }
       .admin-card-title {
         font-size: 15px;
@@ -190,9 +190,9 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
         margin-bottom: 32px;
       }
       .maturity-card {
-        background: #1a1a1a;
+        background: #161B22;
         border-radius: 12px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         padding: 20px 24px;
         display: flex;
         align-items: center;
@@ -202,7 +202,7 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
         transition: border-color 0.2s;
       }
       .maturity-card:hover {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .maturity-left {
         display: flex;
@@ -248,19 +248,19 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
         border-radius: 9999px;
       }
       .maturity-arrow {
-        color: #888;
+        color: #8B949E;
         font-size: 18px;
       }
     `,
   ],
   template: `
-      <main class="main" role="main" aria-label="Kontrolna tabla">
+      <main class="main" role="main" aria-label="Dashboard">
         <!-- Welcome Card -->
         <div class="welcome-card">
-          <h2>Dobrodošli u Mentor AI</h2>
+          <h2>Welcome to Neuron OS</h2>
           <p>
-            Vaš AI poslovni partner sa ekspertizom u finansijama, marketingu, tehnologiji,
-            operacijama, pravu i kreativnosti.
+            Your AI business partner with expertise in finance, marketing, technology,
+            operations, law, and creativity.
           </p>
           <div class="action-row">
             <a routerLink="/chat" class="action-btn action-btn-primary">
@@ -272,7 +272,7 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
                   d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
                 />
               </svg>
-              Započni razgovor
+              Start conversation
             </a>
             <a
               routerLink="/chat"
@@ -287,18 +287,18 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
                   d="M13 10V3L4 14h7v7l9-11h-7z"
                 />
               </svg>
-              Brzi vodič
+              Quick tour
             </a>
           </div>
         </div>
 
         <!-- Personas -->
-        <h3 class="section-title">Dostupne persone</h3>
+        <h3 class="section-title">Available personas</h3>
         <div class="persona-grid">
           <div class="persona-card">
-            <div class="persona-avatar" style="background-color: #3B82F6;">C</div>
-            <div class="persona-name" style="color: #3B82F6;">CFO</div>
-            <div class="persona-role">Finansije</div>
+            <div class="persona-avatar" style="background-color: #58A6FF;">C</div>
+            <div class="persona-name" style="color: #58A6FF;">CFO</div>
+            <div class="persona-role">Finance</div>
           </div>
           <div class="persona-card">
             <div class="persona-avatar" style="background-color: #8B5CF6;">C</div>
@@ -308,43 +308,43 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
           <div class="persona-card">
             <div class="persona-avatar" style="background-color: #10B981;">C</div>
             <div class="persona-name" style="color: #10B981;">CTO</div>
-            <div class="persona-role">Tehnologija</div>
+            <div class="persona-role">Technology</div>
           </div>
           <div class="persona-card">
             <div class="persona-avatar" style="background-color: #F59E0B;">C</div>
             <div class="persona-name" style="color: #F59E0B;">COO</div>
-            <div class="persona-role">Operacije</div>
+            <div class="persona-role">Operations</div>
           </div>
           <div class="persona-card">
             <div class="persona-avatar" style="background-color: #EF4444;">C</div>
             <div class="persona-name" style="color: #EF4444;">CLO</div>
-            <div class="persona-role">Pravo</div>
+            <div class="persona-role">Legal</div>
           </div>
           <div class="persona-card">
             <div class="persona-avatar" style="background-color: #EC4899;">C</div>
             <div class="persona-name" style="color: #EC4899;">CCO</div>
-            <div class="persona-role">Kreativa</div>
+            <div class="persona-role">Creative</div>
           </div>
           <div class="persona-card">
             <div class="persona-avatar" style="background-color: #06B6D4;">C</div>
             <div class="persona-name" style="color: #06B6D4;">CSO</div>
-            <div class="persona-role">Strategija</div>
+            <div class="persona-role">Strategy</div>
           </div>
           <div class="persona-card">
             <div class="persona-avatar" style="background-color: #F97316;">C</div>
             <div class="persona-name" style="color: #F97316;">CRO</div>
-            <div class="persona-role">Prodaja</div>
+            <div class="persona-role">Sales</div>
           </div>
         </div>
 
         <!-- Maturity Engine Card -->
         <div class="maturity-section">
-          <h3 class="section-title">Razvojni plan</h3>
+          <h3 class="section-title">Development plan</h3>
           <a routerLink="/maturity" class="maturity-card">
             <div class="maturity-left">
               <div class="maturity-icon"
                    [style.background]="maturityData()?.currentStage ? getStageColor(maturityData()!.currentStage!) + '15' : 'rgba(59,130,246,0.1)'">
-                <svg fill="none" [attr.stroke]="maturityData()?.currentStage ? getStageColor(maturityData()!.currentStage!) : '#3b82f6'"
+                <svg fill="none" [attr.stroke]="maturityData()?.currentStage ? getStageColor(maturityData()!.currentStage!) : '#58A6FF'"
                      viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -353,10 +353,10 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
               <div>
                 <div class="maturity-title">Maturity Engine</div>
                 <div class="maturity-subtitle" *ngIf="!maturityData()?.currentStage">
-                  Pokrenite razvojni plan vašeg poslovanja
+                  Launch your business development plan
                 </div>
                 <div class="maturity-subtitle" *ngIf="maturityData()?.progress as p">
-                  {{ p.completed }} od {{ p.totalAssignments }} koncepata završeno
+                  {{ p.completed }} of {{ p.totalAssignments }} concepts completed
                 </div>
               </div>
             </div>
@@ -379,7 +379,7 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
 
         <!-- Admin Section -->
         <div class="admin-section">
-          <h3 class="section-title">Administracija platforme</h3>
+          <h3 class="section-title">Platform administration</h3>
           <div class="admin-grid">
             <a routerLink="/admin/llm-config" class="admin-card">
               <div class="admin-icon">
@@ -399,10 +399,10 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
                 </svg>
               </div>
               <div>
-                <div class="admin-card-title">Konfiguracija AI provajdera</div>
+                <div class="admin-card-title">AI provider configuration</div>
                 <div class="admin-card-desc">
-                  Konfigurišite OpenRouter ili Local Llama kao AI provajder, postavite API ključeve
-                  i izaberite modele.
+                  Configure OpenRouter or Local Llama as your AI provider, set API keys,
+                  and select models.
                 </div>
               </div>
             </a>
@@ -418,9 +418,9 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
                 </svg>
               </div>
               <div>
-                <div class="admin-card-title">Upravljanje timom</div>
+                <div class="admin-card-title">Team management</div>
                 <div class="admin-card-desc">
-                  Pozovite članove tima, upravljajte ulogama i konfigurišite rezervnog vlasnika.
+                  Invite team members, manage roles, and configure a backup owner.
                 </div>
               </div>
             </a>
@@ -436,9 +436,9 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
                 </svg>
               </div>
               <div>
-                <div class="admin-card-title">Podešavanja naloga</div>
+                <div class="admin-card-title">Account settings</div>
                 <div class="admin-card-desc">
-                  Upravljajte podešavanjima radnog prostora, naplatom i preferencama podataka.
+                  Manage workspace settings, billing, and data preferences.
                 </div>
               </div>
             </a>
@@ -454,9 +454,9 @@ import { MaturityDashboardData } from '@mentor-ai/shared/types';
                 </svg>
               </div>
               <div>
-                <div class="admin-card-title">Podešavanja profila</div>
+                <div class="admin-card-title">Profile settings</div>
                 <div class="admin-card-desc">
-                  Ažurirajte profil, preferencije obaveštenja i bezbednosna podešavanja.
+                  Update your profile, notification preferences, and security settings.
                 </div>
               </div>
             </a>
@@ -494,7 +494,7 @@ export class DashboardComponent implements OnInit {
   }
 
   getStageColor(stage: string): string {
-    return this.stageColors[stage] || '#3B82F6';
+    return this.stageColors[stage] || '#58A6FF';
   }
 
   getStageLabel(stage: string): string {

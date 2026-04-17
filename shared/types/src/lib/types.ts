@@ -483,6 +483,17 @@ export interface SendMessageRequest {
 export interface ChatMessageSend {
   conversationId: string;
   content: string;
+  /** Optional attachment IDs to link to this message */
+  attachmentIds?: string[];
+  /**
+   * Optional proposal ID. When the user is discussing an AI Task / proposal,
+   * the frontend passes the proposal ID so the backend can fetch the proposal
+   * and inject its title/reasoning/proposed action into the brain's first
+   * prompt. Without this the brain has zero context on what is being
+   * discussed and either says "no task detected" or hallucinates from
+   * unrelated long-term memory.
+   */
+  proposalId?: string;
 }
 
 /** WebSocket event: Server streams message chunk to client */
@@ -1355,6 +1366,7 @@ export enum NoteStatus {
   PENDING = 'PENDING',
   READY_FOR_REVIEW = 'READY_FOR_REVIEW',
   COMPLETED = 'COMPLETED',
+  INCOMPLETE = 'INCOMPLETE', // Task ran but expected deliverables are missing
 }
 
 /** Note/task item */
@@ -2111,6 +2123,25 @@ export enum BrainProposalPriority {
   LOW = 'low',
 }
 
+/** Allowed deliverable file types — must match ALLOWED_DELIVERABLE_TYPES on the backend */
+export type DeliverableType =
+  | 'xlsx'
+  | 'pdf'
+  | 'pptx'
+  | 'docx'
+  | 'png'
+  | 'jpg'
+  | 'jpeg'
+  | 'csv'
+  | 'svg';
+
+/** A single deliverable the brain commits to producing for a proposal */
+export interface ExpectedDeliverable {
+  type: DeliverableType;
+  filename: string;
+  description: string;
+}
+
 /** Brain proposal item for frontend display */
 export interface BrainProposalItem {
   id: string;
@@ -2126,6 +2157,7 @@ export interface BrainProposalItem {
   executionNoteId: string | null;
   createdAt: string;
   expiresAt: string | null;
+  expectedDeliverables: ExpectedDeliverable[];
 }
 
 /** Status of a single BMC canvas block in the brain's scan cycle */

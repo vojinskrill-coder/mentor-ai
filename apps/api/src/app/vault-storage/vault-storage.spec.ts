@@ -1,164 +1,164 @@
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { LocalVaultStorage } from './local-vault-storage';
+import { SshVaultStorage } from './ssh-vault-storage';
 import { VaultStorageError } from './vault-storage.error';
-import { vaultStorageFactory } from './vault-storage.factory';
-import { PlatformConfigService } from '../platform-config/platform-config.service';
+import { createVaultStorage } from './vault-storage.factory';
 
-describe('LocalVaultStorage', () => {
-  let storage: LocalVaultStorage;
+describe('VaultStorage', () => {
   let tmpDir: string;
+  let storage: LocalVaultStorage;
+  const tenantId = 'test-tenant-001';
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-test-'));
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vault-test-'));
     storage = new LocalVaultStorage(tmpDir);
   });
 
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  it('should write and read a file', async () => {
-    await storage.writeFile('tenant-1', 'test.md', '# Hello');
-    const content = await storage.readFile('tenant-1', 'test.md');
-    expect(content).toBe('# Hello');
+  // ── LocalVaultStorage ──────────────────────────────────────────────
+
+  describe('LocalVaultStorage', () => {
+    it('should write and read a file round-trip', async () => {
+      const content = 'Hello, vault!';
+      await storage.writeFile(tenantId, 'docs/readme.txt', content);
+      const result = await storage.readFile(tenantId, 'docs/readme.txt');
+      expect(result).toBe(content);
+    });
+
+    it('should report fileExists=false before write, true after', async () => {
+      expect(await storage.fileExists(tenantId, 'nope.txt')).toBe(false);
+      await storage.writeFile(tenantId, 'nope.txt', 'now exists');
+      expect(await storage.fileExists(tenantId, 'nope.txt')).toBe(true);
+    });
+
+    it('should list files in a directory', async () => {
+      await storage.writeFile(tenantId, 'wiki/a.md', 'aaa');
+      await storage.writeFile(tenantId, 'wiki/b.md', 'bbb');
+      await storage.writeFile(tenantId, 'wiki/c.md', 'ccc');
+      const files = await storage.listFiles(tenantId, 'wiki');
+      expect(files.sort()).toEqual(['a.md', 'b.md', 'c.md']);
+    });
+
+    it('should return empty array for listFiles on non-existent dir', async () => {
+      const files = await storage.listFiles(tenantId, 'nonexistent');
+      expect(files).toEqual([]);
+    });
+
+    it('should write multiple files via writeFiles', async () => {
+      const fileMap = new Map<string, string>();
+      fileMap.set('batch/one.txt', 'first');
+      fileMap.set('batch/two.txt', 'second');
+      fileMap.set('other/three.txt', 'third');
+
+      await storage.writeFiles(tenantId, fileMap);
+
+      expect(await storage.readFile(tenantId, 'batch/one.txt')).toBe('first');
+      expect(await storage.readFile(tenantId, 'batch/two.txt')).toBe('second');
+      expect(await storage.readFile(tenantId, 'other/three.txt')).toBe('third');
+    });
+
+    it('should create directories', async () => {
+      await storage.createDirectories(tenantId, ['alpha/beta', 'gamma']);
+
+      // Verify by writing files into those dirs
+      await storage.writeFile(tenantId, 'alpha/beta/test.txt', 'ok');
+      expect(await storage.readFile(tenantId, 'alpha/beta/test.txt')).toBe('ok');
+    });
   });
 
-  it('should check file existence', async () => {
-    expect(await storage.fileExists('tenant-1', 'nope.md')).toBe(false);
-    await storage.writeFile('tenant-1', 'exists.md', 'content');
-    expect(await storage.fileExists('tenant-1', 'exists.md')).toBe(true);
+  // ── Path sanitisation ──────────────────────────────────────────────
+
+  describe('path sanitisation', () => {
+    it('should throw VaultStorageError on path traversal (..)', async () => {
+      await expect(storage.readFile(tenantId, '../../secret')).rejects.toThrow(VaultStorageError);
+      await expect(storage.readFile(tenantId, '../../secret')).rejects.toThrow(/Path traversal/);
+    });
+
+    it('should throw VaultStorageError on absolute path', async () => {
+      await expect(storage.readFile(tenantId, '/etc/passwd')).rejects.toThrow(VaultStorageError);
+      await expect(storage.readFile(tenantId, '/etc/passwd')).rejects.toThrow(/Absolute paths/);
+    });
+
+    it('should throw VaultStorageError on traversal in writeFile', async () => {
+      await expect(storage.writeFile(tenantId, '../escape/file.txt', 'bad')).rejects.toThrow(VaultStorageError);
+    });
+
+    it('should throw VaultStorageError on absolute path in writeFiles', async () => {
+      const files = new Map<string, string>();
+      files.set('/tmp/evil.txt', 'bad');
+      await expect(storage.writeFiles(tenantId, files)).rejects.toThrow(VaultStorageError);
+    });
+
+    it('should throw VaultStorageError on traversal in createDirectories', async () => {
+      await expect(storage.createDirectories(tenantId, ['../../root'])).rejects.toThrow(VaultStorageError);
+    });
   });
 
-  it('should list files in directory', async () => {
-    await storage.writeFile('tenant-1', 'dir/a.md', 'a');
-    await storage.writeFile('tenant-1', 'dir/b.md', 'b');
-    const files = await storage.listFiles('tenant-1', 'dir');
-    expect(files.sort()).toEqual(['a.md', 'b.md']);
+  // ── VaultStorageError structure ────────────────────────────────────
+
+  describe('VaultStorageError', () => {
+    it('should carry context fields', () => {
+      const cause = new Error('original');
+      const err = new VaultStorageError('boom', 'tid', '/p', 'read', cause);
+      expect(err.tenantId).toBe('tid');
+      expect(err.path).toBe('/p');
+      expect(err.operation).toBe('read');
+      expect(err.cause).toBe(cause);
+      expect(err).toBeInstanceOf(VaultStorageError);
+      expect(err).toBeInstanceOf(Error);
+    });
   });
 
-  it('should write multiple files', async () => {
-    await storage.writeFiles('tenant-1', [
-      { path: 'f1.md', content: 'file1' },
-      { path: 'f2.md', content: 'file2' },
-    ]);
-    expect(await storage.readFile('tenant-1', 'f1.md')).toBe('file1');
-    expect(await storage.readFile('tenant-1', 'f2.md')).toBe('file2');
-  });
+  // ── VaultStorageFactory ────────────────────────────────────────────
 
-  it('should create directories', async () => {
-    await storage.createDirectories('tenant-1', ['subdir/nested']);
-    const dirPath = path.join(tmpDir, 'tenant-1', 'subdir', 'nested');
-    expect(fs.existsSync(dirPath)).toBe(true);
-  });
+  describe('createVaultStorage', () => {
+    it('should return LocalVaultStorage when backend=local', () => {
+      const vs = createVaultStorage({ storageBackend: 'local' });
+      expect(vs).toBeInstanceOf(LocalVaultStorage);
+    });
 
-  it('should reject path traversal with ..', async () => {
-    await expect(
-      storage.writeFile('tenant-1', '../escape.md', 'bad'),
-    ).rejects.toThrow(VaultStorageError);
-  });
+    it('should return LocalVaultStorage when NODE_ENV=test regardless of config', () => {
+      const original = process.env['NODE_ENV'];
+      try {
+        process.env['NODE_ENV'] = 'test';
+        const vs = createVaultStorage({
+          storageBackend: 'ssh',
+          ssh: { host: '1.2.3.4', username: 'root' },
+        });
+        expect(vs).toBeInstanceOf(LocalVaultStorage);
+      } finally {
+        process.env['NODE_ENV'] = original;
+      }
+    });
 
-  it('should reject absolute paths', async () => {
-    await expect(
-      storage.writeFile('tenant-1', '/etc/passwd', 'bad'),
-    ).rejects.toThrow(VaultStorageError);
-  });
+    it('should return SshVaultStorage when backend=ssh and NODE_ENV is not test', () => {
+      const original = process.env['NODE_ENV'];
+      try {
+        process.env['NODE_ENV'] = 'production';
+        const vs = createVaultStorage({
+          storageBackend: 'ssh',
+          ssh: { host: '1.2.3.4', username: 'root' },
+          basePath: '/root',
+        });
+        expect(vs).toBeInstanceOf(SshVaultStorage);
+      } finally {
+        process.env['NODE_ENV'] = original;
+      }
+    });
 
-  it('should reject Windows absolute paths', async () => {
-    await expect(
-      storage.writeFile('tenant-1', 'C:\\Windows\\bad.md', 'bad'),
-    ).rejects.toThrow(VaultStorageError);
-  });
-
-  it('should throw VaultStorageError on read of nonexistent file', async () => {
-    await expect(
-      storage.readFile('tenant-1', 'missing.md'),
-    ).rejects.toThrow(VaultStorageError);
-  });
-
-  it('should throw VaultStorageError on list of nonexistent dir', async () => {
-    await expect(
-      storage.listFiles('tenant-1', 'nodir'),
-    ).rejects.toThrow(VaultStorageError);
-  });
-
-  it('should create nested directories on write', async () => {
-    await storage.writeFile('tenant-1', 'deep/nested/file.md', 'ok');
-    const content = await storage.readFile('tenant-1', 'deep/nested/file.md');
-    expect(content).toBe('ok');
-  });
-
-  it('should isolate tenants', async () => {
-    await storage.writeFile('tenant-a', 'secret.md', 'secret-a');
-    await storage.writeFile('tenant-b', 'secret.md', 'secret-b');
-    const a = await storage.readFile('tenant-a', 'secret.md');
-    const b = await storage.readFile('tenant-b', 'secret.md');
-    expect(a).toBe('secret-a');
-    expect(b).toBe('secret-b');
-  });
-});
-
-describe('VaultStorageError', () => {
-  it('should capture error details', () => {
-    const cause = new Error('underlying');
-    const err = new VaultStorageError(
-      'test error',
-      'tenant-1',
-      'file.md',
-      'write',
-      cause,
-    );
-    expect(err.name).toBe('VaultStorageError');
-    expect(err.tenantId).toBe('tenant-1');
-    expect(err.path).toBe('file.md');
-    expect(err.operation).toBe('write');
-    expect(err.cause).toBe(cause);
-  });
-});
-
-describe('vaultStorageFactory', () => {
-  it('should return LocalVaultStorage when mode is local', () => {
-    const mockConfig = {
-      getVaultConfig: jest.fn().mockReturnValue({
-        basePath: '/tmp/test',
-        mode: 'local',
-      }),
-    } as unknown as PlatformConfigService;
-    const storage = vaultStorageFactory(mockConfig);
-    expect(storage).toBeDefined();
-    expect(storage.constructor.name).toBe('LocalVaultStorage');
-  });
-
-  it('should return SshVaultStorage when mode is ssh', () => {
-    const originalEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'production';
-    const mockConfig = {
-      getVaultConfig: jest.fn().mockReturnValue({
-        basePath: '/root/.openclaw',
-        mode: 'ssh',
-        sshHost: 'localhost',
-        sshPort: 22,
-        sshUser: 'root',
-        sshKeyPath: '/tmp/key',
-      }),
-    } as unknown as PlatformConfigService;
-    const storage = vaultStorageFactory(mockConfig);
-    expect(storage.constructor.name).toBe('SshVaultStorage');
-    process.env.NODE_ENV = originalEnv;
-  });
-
-  it('should return LocalVaultStorage in test environment', () => {
-    const originalEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'test';
-    const mockConfig = {
-      getVaultConfig: jest.fn().mockReturnValue({
-        basePath: '/tmp/test',
-        mode: 'ssh',
-      }),
-    } as unknown as PlatformConfigService;
-    const storage = vaultStorageFactory(mockConfig);
-    expect(storage.constructor.name).toBe('LocalVaultStorage');
-    process.env.NODE_ENV = originalEnv;
+    it('should throw if backend=ssh but no ssh config provided', () => {
+      const original = process.env['NODE_ENV'];
+      try {
+        process.env['NODE_ENV'] = 'production';
+        expect(() => createVaultStorage({ storageBackend: 'ssh' })).toThrow(/SSH config is required/);
+      } finally {
+        process.env['NODE_ENV'] = original;
+      }
+    });
   });
 });

@@ -69,8 +69,8 @@ export class AppEventHandlers {
         this.enqueueForAgent(agentId, async () => {
           try {
             await this.openClawClient.executeAgent(
-              `KNOWLEDGE UPDATE za ${companyName} - Koncept: ${conceptName}. Zapamti ove nalaze:\n\n${summary}`,
-              { agentId, tenantProfile: tenantId, timeoutSeconds: 180 }
+              `KNOWLEDGE UPDATE for ${companyName} - Concept: ${conceptName}. Remember these findings:\n\n${summary}`,
+              { agentId, tenantProfile: tenantId, timeoutSeconds: 3600 }
             );
             this.logger.log({ message: `Knowledge update: ${agentTypeStr} master`, conceptName });
           } catch (err) {
@@ -85,8 +85,8 @@ export class AppEventHandlers {
       this.enqueueForAgent('main', async () => {
         try {
           await this.openClawClient.executeAgent(
-            `KNOWLEDGE UPDATE za ${companyName}: Koncept "${conceptName}" (${personaType ?? 'UNKNOWN'}) zavrsen. Zapamti:\n${summary.substring(0, 3000)}`,
-            { agentId: 'main', tenantProfile: tenantId, timeoutSeconds: 120 }
+            `KNOWLEDGE UPDATE for ${companyName}: Concept "${conceptName}" (${personaType ?? 'UNKNOWN'}) completed. Remember:\n${summary.substring(0, 3000)}`,
+            { agentId: 'main', tenantProfile: tenantId, timeoutSeconds: 3600 }
           );
           this.logger.log({ message: 'Knowledge update: main', conceptName });
         } catch (err) {

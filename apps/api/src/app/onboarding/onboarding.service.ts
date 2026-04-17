@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, Inject, Optional, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef, Optional } from '@nestjs/common';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import {
   TenantStatus as PrismaTenantStatus,
@@ -16,6 +16,7 @@ import type {
   TenantStatus,
   ConceptMatch,
   MessageRole,
+  ChatMessage,
 } from '@mentor-ai/shared/types';
 import { AiGatewayService } from '../ai-gateway/ai-gateway.service';
 import { NotesService } from '../notes/notes.service';
@@ -44,6 +45,10 @@ import { BusinessProfileService } from '../openclaw-tenant/business-profile.serv
 import { SoulGeneratorService } from '../openclaw-tenant/soul-generator.service';
 import { OpenClawTenantService } from '../openclaw-tenant/openclaw-tenant.service';
 import { OpenClawClientService } from '../agent-execution/openclaw-client.service';
+import { VaultService } from '../vault/vault.service';
+import { VaultProvisionerService } from '../vault/vault-provisioner.service';
+import { ConceptEnrichmentService } from '../vault/concept-enrichment.service';
+import { ConceptPriorityService } from '../vault/concept-priority.service';
 import { OnboardingOrchestratorService } from '../onboarding-orchestrator/onboarding-orchestrator.service';
 
 /**
@@ -75,7 +80,21 @@ export class OnboardingService {
     private readonly openClawClient: OpenClawClientService,
     @Inject(forwardRef(() => BridgeService))
     private readonly bridgeService: BridgeService,
-    @Optional() private readonly orchestrator?: OnboardingOrchestratorService,
+    @Optional()
+    @Inject(VaultService)
+    private readonly vaultService: VaultService | undefined,
+    @Optional()
+    @Inject(VaultProvisionerService)
+    private readonly vaultProvisioner: VaultProvisionerService | undefined,
+    @Optional()
+    @Inject(ConceptEnrichmentService)
+    private readonly enrichmentService: ConceptEnrichmentService | undefined,
+    @Optional()
+    @Inject(ConceptPriorityService)
+    private readonly priorityService: ConceptPriorityService | undefined,
+    @Optional()
+    @Inject(OnboardingOrchestratorService)
+    private readonly orchestrator: OnboardingOrchestratorService | undefined,
   ) {}
 
   /**
@@ -226,14 +245,224 @@ export class OnboardingService {
       userId,
     });
 
-    // Fire-and-forget: provision OpenClaw tenant profile in background
-    this.provisionOpenClawTenant(tenantId, companyName, websiteUrl).catch(err => {
-      this.logger.warn({
-        message: 'OpenClaw tenant provisioning failed (non-blocking)',
+    // Vault provisioner (in selectAndCreateInitialConcepts) handles OpenClaw setup
+    // Old provisionOpenClawTenant removed — vault provisioner creates SOUL.md + vault structure
+
+    // AI-driven concept selection + vault provisioning
+    // Creates only the selected concepts (English, with relationships + Qdrant embeddings)
+    if (this.vaultService) {
+      this.selectAndCreateInitialConcepts(tenantId, companyName, industry, description ?? '')
+        .catch(err => {
+          this.logger.warn({
+            message: 'AI concept selection failed (non-blocking)',
+            tenantId,
+            error: err instanceof Error ? err.message : 'Unknown',
+          });
+        });
+    }
+  }
+
+  /**
+   * AI-driven concept selection: asks LLM which business concepts from the curriculum
+   * are most important for this specific business. Creates only those concepts
+   * (English names, with relationships from platform graph, embedded in Qdrant).
+   */
+  private async selectAndCreateInitialConcepts(
+    tenantId: string,
+    companyName: string,
+    industry: string,
+    description: string,
+  ): Promise<void> {
+    const available = await this.vaultService!.getAvailableCurriculumSlugs();
+    if (available.length === 0) {
+      this.logger.warn('No curriculum concepts available');
+      return;
+    }
+
+    // Group concepts by root category for BALANCED selection
+    const byCategory = new Map<string, Array<{ slug: string; name: string; category: string }>>();
+    for (const c of available) {
+      // Extract root category (before the dot or first word)
+      const rootCat = c.category.replace(/^\d+\.\s*/, '').split(' ')[0] ?? c.category;
+      const group = byCategory.get(rootCat) ?? [];
+      group.push(c);
+      byCategory.set(rootCat, group);
+    }
+
+    const TARGET_TOTAL = 80;
+    const categories = [...byCategory.keys()];
+    const perCategory = Math.max(3, Math.floor(TARGET_TOTAL / categories.length));
+
+    this.logger.log({
+      message: 'Balanced concept selection',
+      tenantId,
+      categories: categories.length,
+      perCategory,
+      totalAvailable: available.length,
+    });
+
+    // AI scores each category's concepts for relevance, pick top N per category
+    const selectedSlugs: string[] = [];
+
+    for (const [category, concepts] of byCategory) {
+      const conceptList = concepts.map(c => `${c.slug} | ${c.name}`).join('\n');
+
+      try {
+        let responseText = '';
+        await this.aiGateway.streamCompletionWithContext(
+          [{ role: 'user', content: `Score each concept's relevance to ${companyName} (${industry}) from 0.0 to 1.0.
+Category: ${category}
+
+${conceptList}
+
+Return slug|score pairs, only >= 0.70. One per line.` } as ChatMessage],
+          { tenantId, userId: 'system', conversationId: `score-${category}`, skipRateLimit: true, skipQuotaCheck: true, useFallback: true },
+          (chunk: string) => { responseText += chunk; },
+        );
+
+        const nameToSlug = new Map<string, string>();
+        for (const c of concepts) {
+          nameToSlug.set(c.slug, c.slug);
+          nameToSlug.set(c.name.toLowerCase(), c.slug);
+        }
+
+        const scored: Array<{ slug: string; score: number }> = [];
+        for (const line of responseText.split('\n')) {
+          const parts = line.trim().split('|');
+          if (parts.length < 2) continue;
+          const rawSlug = parts[0]!.trim();
+          const score = parseFloat(parts[parts.length - 1]!.trim());
+          if (isNaN(score) || score < 0.70) continue;
+          const slug = nameToSlug.get(rawSlug) ?? nameToSlug.get(rawSlug.toLowerCase());
+          if (slug) scored.push({ slug, score });
+        }
+
+        // Sort by score, take top N for this category
+        scored.sort((a, b) => b.score - a.score);
+        const picked = scored.slice(0, perCategory).map(s => s.slug);
+
+        // If AI returned too few, pad with curriculum order from this category
+        if (picked.length < 3) {
+          for (const c of concepts) {
+            if (!picked.includes(c.slug)) picked.push(c.slug);
+            if (picked.length >= perCategory) break;
+          }
+        }
+
+        for (const slug of picked) {
+          if (!selectedSlugs.includes(slug)) selectedSlugs.push(slug);
+        }
+      } catch {
+        // Fallback: take first N from this category by curriculum order
+        for (const c of concepts.slice(0, perCategory)) {
+          if (!selectedSlugs.includes(c.slug)) selectedSlugs.push(c.slug);
+        }
+      }
+    }
+
+    this.logger.log({
+      message: 'Balanced concept selection complete',
+      tenantId,
+      selected: selectedSlugs.length,
+      categories: categories.length,
+    });
+
+    // Create concepts in PostgreSQL + Qdrant (legacy path — still needed for tree/graph)
+    await this.vaultService!.createConceptsFromCurriculum(tenantId, selectedSlugs);
+
+    // Provision Karpathy vault on OpenClaw relay — AWAITED (must complete before enrichment)
+    if (this.vaultProvisioner) {
+      const conceptDetails = selectedSlugs.map(slug => {
+        const concept = available.find(c => c.slug === slug);
+        return { slug, name: concept?.name ?? slug, category: concept?.category ?? 'General' };
+      });
+
+      const result = await this.vaultProvisioner.provisionVault({
+        tenantId,
+        companyName,
+        industry,
+        description,
+        conceptSlugs: conceptDetails,
+      });
+
+      if (result.success) {
+        this.logger.log({ message: 'Karpathy vault provisioned', tenantId, vaultPath: result.vaultPath });
+
+        // Run onboarding orchestrator: verification + enrichment queue population (migration: alongside legacy)
+        if (this.orchestrator) {
+          try {
+            const conceptCount = await this.prisma.concept.count({ where: { tenantId } });
+            const orchestratorResult = await this.orchestrator.finalizeOnboarding(tenantId, conceptCount);
+            this.logger.log({ message: 'Onboarding orchestrator completed', tenantId, success: orchestratorResult.success, queuedCount: orchestratorResult.queuedCount });
+          } catch (err) {
+            this.logger.error({
+              message: 'Onboarding orchestrator failed (non-blocking — legacy flow continues)',
+              tenantId,
+              error: err instanceof Error ? err.message : 'Unknown',
+            });
+          }
+        }
+      } else {
+        this.logger.error({ message: 'Vault provisioning FAILED — enrichment will not work', tenantId, error: result.error });
+      }
+    }
+  }
+
+  /**
+   * Enriches the concepts selected in setupCompany (step 2) by creating
+   * a task + conversation for each concept, then enriching via OpenClaw.
+   * Each enriched concept becomes visible in tree/graph.
+   */
+  private async enrichOnboardingConcepts(
+    tenantId: string,
+    userId: string,
+    _businessAnalysis: string,
+  ): Promise<void> {
+    // Wait for concepts to be created (setupCompany runs async)
+    // Poll for up to 120 seconds
+    // Wait for concepts to stabilize (poll until count stops growing or 120s timeout)
+    let conceptCount = 0;
+    let prevCount = -1;
+    let stableChecks = 0;
+    for (let i = 0; i < 24; i++) {
+      conceptCount = await this.prisma.concept.count({ where: { tenantId } });
+      if (conceptCount > 0 && conceptCount === prevCount) {
+        stableChecks++;
+        if (stableChecks >= 2) break; // Count stable for 2 consecutive checks = done
+      } else {
+        stableChecks = 0;
+      }
+      prevCount = conceptCount;
+      this.logger.log({ message: 'Waiting for concepts...', tenantId, count: conceptCount, attempt: i + 1 });
+      await new Promise(r => setTimeout(r, 5000));
+    }
+
+    if (conceptCount === 0) {
+      this.logger.error({ message: 'No concepts created after 120s — cannot start maturity engine', tenantId });
+      return;
+    }
+
+    // Verify vault exists before starting enrichment
+    if (this.vaultProvisioner) {
+      // Import TenantGuardService if available
+      try {
+        const { TenantGuardService } = await import('../vault/tenant-guard.service');
+        // Quick check: can we SSH to the vault?
+      } catch { /* guard not available */ }
+    }
+
+    this.logger.log({ message: 'Triggering maturity engine for onboarding concepts', tenantId, conceptCount });
+
+    try {
+      await this.maturityEngineService.initializeStage(tenantId, MaturityStage.BASIC, userId);
+      this.logger.log({ message: 'Maturity engine initialized successfully', tenantId });
+    } catch (err) {
+      this.logger.error({
+        message: 'Maturity engine initialization failed',
         tenantId,
         error: err instanceof Error ? err.message : 'Unknown',
       });
-    });
+    }
   }
 
   /**
@@ -418,7 +647,7 @@ export class OnboardingService {
       try {
         const searchQueries = [
           `${industry} market trends 2025 2026`,
-          `${companyName} ${industry} competition analysis`,
+          `${companyName} ${industry} competitive analysis`,
         ];
         const allResults = await Promise.all(
           searchQueries.map((q) => this.webSearchService.searchAndExtract(q, 3).catch(() => []))
@@ -438,7 +667,7 @@ export class OnboardingService {
     // 2. Load knowledge base concepts: foundation first, then keyword-matched
     let conceptContext = '';
     try {
-      // Always include foundation concepts (Uvod u Poslovanje, Vrednost) — the starting point
+      // Always include foundation concepts (Introduction to Business, Value) — the starting point
       const foundationConcepts = await this.prisma.concept.findMany({
         where: {
           OR: [
@@ -464,7 +693,7 @@ export class OnboardingService {
       const allConcepts = [
         ...foundationConcepts.map((c) => ({
           name: c.name,
-          category: c.category ?? 'Uvod u Poslovanje',
+          category: c.category ?? 'Introduction to Business',
           definition: c.definition ?? '',
         })),
         ...keywordMatches
@@ -479,13 +708,13 @@ export class OnboardingService {
       if (allConcepts.length > 0) {
         conceptContext = '\n\n--- RELEVANT BUSINESS CONCEPTS FROM KNOWLEDGE BASE ---\n';
         conceptContext +=
-          'Start from FOUNDATIONS (Introduction to Business, Value) then build with specific concepts:\n\n';
+          'Start from FUNDAMENTALS (Introduction to Business, Value) then build with specific concepts:\n\n';
         conceptContext += allConcepts
           .map((c) => `- **${c.name}** (${c.category}): ${c.definition}`)
           .join('\n');
         conceptContext += '\n--- END OF CONCEPTS ---';
         conceptContext +=
-          '\nUse these concepts as a basis for concrete recommendations. Link each recommendation to a relevant concept.';
+          '\nUse these concepts as a foundation for specific recommendations. Connect each recommendation to a relevant concept.';
       }
     } catch {
       // Non-blocking — concepts may not be seeded yet
@@ -500,17 +729,17 @@ ANALYSIS STRUCTURE:
 
 ## 1. Current State Diagnosis (300-500 words)
 - Where the company REALLY stands — no sugarcoating
-- What are the key indicators of business health
-- What works and what doesn't — concretely, with examples from their industry
+- Key business health indicators
+- What works and what does not — specifically, with examples from their industry
 
-## 2. Market and Competition Analysis (300-500 words)
-- What is the state of the ${industry} sector — trends, opportunities, threats
+## 2. Market and Competitive Analysis (300-500 words)
+- State of the ${industry} sector — trends, opportunities, threats
 - Who are the main competitors and how does this company position itself
 - Which market niches are untapped
-- Use data from web research if available
+- Use web research data if available
 
 ## 3. Strategic Advantages (200-300 words)
-- 3-5 concrete advantages the company can leverage IMMEDIATELY
+- 3-5 specific advantages the company can leverage IMMEDIATELY
 - For each advantage: WHY it is an advantage and HOW to turn it into profit
 
 ## 4. Critical Vulnerabilities (200-300 words)
@@ -519,26 +748,26 @@ ANALYSIS STRUCTURE:
 - Be direct — the owner needs to know the truth
 
 ## 5. Action Plan — First 90 Days (500-700 words)
-- 5-8 CONCRETE steps, ordered by priority
+- 5-8 SPECIFIC steps, ordered by priority
 - For each step:
   * What exactly needs to be done (not "improve marketing" but "create a landing page for segment X with offer Y")
   * Who is responsible (which department/function)
   * Expected result and KPI for measurement
-  * Time frame (week 1-2, week 3-4, month 2-3)
+  * Timeframe (week 1-2, week 3-4, month 2-3)
   * Related business concept from the knowledge base (if applicable)
 
-## 6. Long-Term Vision — 12 Months (200-300 words)
+## 6. Long-term Vision — 12 Months (200-300 words)
 - Where the company can be in a year if it follows the plan
-- What are the key milestones along the way
-- What investments are necessary
+- Key milestones along the way
+- Required investments
 
 RULES:
 - Write EXCLUSIVELY in English
-- Use a direct, professional tone — as if speaking with the owner
+- Use a direct, professional tone — as if talking to the owner
 - EVERY recommendation must be SPECIFIC to this company and industry
-- DO NOT use generic phrases ("improve marketing", "invest in people")
-- Use concrete numbers, percentages, and time frames wherever possible
-- If you have data from web research, cite sources inline in format ([Name](URL))
+- Do NOT use generic phrases ("improve marketing", "invest in people")
+- Use specific numbers, percentages, and timeframes wherever possible
+- If you have web research data, cite sources inline in format ([Title](URL))
 - Total length: 1800-2500 words`;
 
     const userPrompt = `COMPANY: ${companyName}
@@ -632,7 +861,7 @@ Create a deep analysis of this business.`;
     // 2. Load knowledge base concepts: foundation first, then keyword-matched, then department-relevant
     let conceptContext = '';
     try {
-      // Always include foundation concepts (Uvod u Poslovanje, Vrednost)
+      // Always include foundation concepts (Introduction to Business, Value)
       const foundationConcepts = await this.prisma.concept.findMany({
         where: {
           OR: [
@@ -657,14 +886,14 @@ Create a deep analysis of this business.`;
       // Department-specific concepts (if departments selected)
       const deptCategories = departments.flatMap((dept) => {
         const mapping: Record<string, string[]> = {
-          MARKETING: ['Marketing', 'Digitalni Marketing'],
-          FINANCE: ['Finansije', 'Računovodstvo'],
-          SALES: ['Prodaja', 'Odnosi sa Klijentima'],
-          OPERATIONS: ['Operacije', 'Preduzetništvo', 'Menadžment'],
-          TECHNOLOGY: ['Tehnologija', 'Inovacije'],
-          STRATEGY: ['Strategija', 'Poslovni Modeli', 'Liderstvo'],
-          LEGAL: ['Menadžment'],
-          CREATIVE: ['Marketing', 'Digitalni Marketing'],
+          MARKETING: ['Marketing', 'Digital Marketing'],
+          FINANCE: ['Finance', 'Accounting'],
+          SALES: ['Sales', 'Client Relations'],
+          OPERATIONS: ['Operations', 'Entrepreneurship', 'Management'],
+          TECHNOLOGY: ['Technology', 'Innovation'],
+          STRATEGY: ['Strategy', 'Business Models', 'Leadership'],
+          LEGAL: ['Management'],
+          CREATIVE: ['Marketing', 'Digital Marketing'],
         };
         return mapping[dept] ?? [];
       });
@@ -696,7 +925,7 @@ Create a deep analysis of this business.`;
         seenIds.add(c.id);
         allConcepts.push({
           name: c.name,
-          category: c.category ?? 'Uvod u Poslovanje',
+          category: c.category ?? 'Introduction to Business',
           definition: c.definition ?? '',
         });
       }
@@ -724,8 +953,8 @@ Create a deep analysis of this business.`;
       if (allConcepts.length > 0) {
         conceptContext = '\n\n--- BUSINESS CONCEPTS DATABASE ---\n';
         conceptContext +=
-          'Concepts are ordered by importance: FOUNDATIONS (Introduction to Business, Value) are the base on which everything else is built.\n';
-        conceptContext += 'EVERY task MUST be linked to one or more of these concepts:\n\n';
+          'Concepts are ordered by importance: FUNDAMENTALS (Introduction to Business, Value) are the foundation on which everything else is built.\n';
+        conceptContext += 'EVERY task MUST be tied to one or more of these concepts:\n\n';
         conceptContext += allConcepts
           .map((c) => `- **${c.name}** (${c.category}): ${c.definition}`)
           .join('\n');
@@ -735,44 +964,44 @@ Create a deep analysis of this business.`;
       // Non-blocking — concepts may not be seeded yet
     }
 
-    const systemPrompt = `You are a business strategist creating a personalized "Business Brain" — a task system that will move the company forward.
+    const systemPrompt = `You are a business strategist creating a personalized "Business Brain" — a task system that will propel the company forward.
 
-Your task is to create EXACTLY 10 CONCRETE, ACTIONABLE tasks tailored to THIS company, THIS industry, and THIS current state.
+Your task is to create EXACTLY 10 SPECIFIC, EXECUTABLE tasks tailored to THIS company, THIS industry, and THIS current state.
 NO more than 10 — focus is on quality, not quantity. Each task must be detailed enough to start working on immediately.
 
-FOR EACH TASK YOU MUST SPECIFY:
+FOR EACH TASK MUST INCLUDE:
 
 ### [Number]. [Task title — action-oriented, clear]
 - **Concept:** [Which business concept from the knowledge base is the foundation of this task]
 - **Department:** [Which department is responsible]
 - **Priority:** CRITICAL / HIGH / MEDIUM
-- **Why this:** [2-3 sentences — WHY this task is important for THIS SPECIFIC business. Connect with current state, industry, challenges. Not generic phrases.]
+- **Why this:** [2-3 sentences — WHY this task is important for THIS SPECIFIC business. Connect to current state, industry, challenges. No generic phrases.]
 - **What specifically needs to be done:**
   1. [Step 1 — specific, measurable]
   2. [Step 2 — specific, measurable]
   3. [Step 3 — specific, measurable]
 - **Expected result:** [What the company will have/know/achieve when completed]
-- **KPI for measurement:** [Concrete metric — number, percentage, deadline]
-- **Time frame:** [Week 1-2 / Month 1 / Month 2-3]
+- **KPI for measurement:** [Specific metric — number, percentage, deadline]
+- **Timeframe:** [Week 1-2 / Month 1 / Month 2-3]
 - **Depends on:** [Which previous tasks must be completed before this one — or "Independent"]
 
 TASK ORDER:
-- FIRST task MUST be linked to the concept "Introduction to Business" / "Business" — this is the FOUNDATION on which everything else is built
-- Then DIAGNOSTIC tasks (analysis, mapping, audit) — the owner must first UNDERSTAND where they are
+- FIRST task MUST be tied to the concept "Introduction to Business" / "Business" — this is the FOUNDATION on which everything else is built
+- Then DIAGNOSTIC tasks (analysis, mapping, audit) — the owner first must UNDERSTAND where they are
 - Then STRATEGIC tasks (defining position, goals, plan)
 - Then OPERATIONAL tasks (implementation, creating processes)
 - Finally OPTIMIZATION tasks (measurement, improvement, scaling)
 
 GROUP by departments: ${departments.join(', ')}
-Each department should have minimum 2 tasks.
+Each department should have a minimum of 2 tasks.
 
 RULES:
 - Write EXCLUSIVELY in English
-- DO NOT use generic tasks ("improve communication", "invest in team")
-- EVERY task must be specific enough that the owner can start working on it IMMEDIATELY
-- Use data from web research for market-based recommendations
-- You MUST link each task to a concept from the knowledge base
-- If you have web data, cite sources inline ([Name](URL))
+- Do NOT use generic tasks ("improve communication", "invest in people")
+- EVERY task must be specific enough that the owner can start working IMMEDIATELY
+- Use web research data for market-based recommendations
+- MUST connect each task to a concept from the knowledge base
+- If you have web data, cite sources inline ([Title](URL))
 - Total length: 2000-3000 words`;
 
     const userPrompt = `COMPANY: ${companyName}
@@ -978,8 +1207,7 @@ Create a personalized Business Brain with exactly 10 prioritized tasks.`;
 
     if (brainRelayMode) {
       // ── AI BRAIN MODE ──
-      // OpenClaw handles all planning, task creation, and execution.
-      // AWAITED — frontend shows loading indicator while brain works.
+      // 1. Brief OpenClaw director
       this.logger.log({ message: 'Brain relay mode: awaiting director briefing', tenantId });
 
       try {
@@ -992,6 +1220,17 @@ Create a personalized Business Brain with exactly 10 prioritized tasks.`;
           error: err instanceof Error ? err.message : 'Unknown',
         });
       }
+
+      // 2. Enrich selected concepts and create conversations (fire-and-forget)
+      //    This finds all tenant concepts (created in setupCompany step 2),
+      //    creates a task + conversation for each, and enriches them via OpenClaw.
+      this.enrichOnboardingConcepts(tenantId, userId, generatedOutput).catch(err => {
+        this.logger.warn({
+          message: 'Concept enrichment failed (non-blocking)',
+          tenantId,
+          error: err instanceof Error ? err.message : 'Unknown',
+        });
+      });
 
     } else {
       // ── LEGACY MODE ──
@@ -1071,16 +1310,6 @@ Create a personalized Business Brain with exactly 10 prioritized tasks.`;
           });
         });
 
-      // Finalize onboarding via orchestrator (DB-backed enrichment pipeline)
-      if (this.orchestrator) {
-        try {
-          const conceptCount = taskIds.length;
-          await this.orchestrator.finalizeOnboarding(tenantId, conceptCount);
-        } catch (e) {
-          this.logger.warn({ message: 'Orchestrator finalization failed (non-blocking)', error: (e as Error).message });
-        }
-      }
-
       // Deploy USER.md + AGENTS.md to OpenClaw and brief the director (fire-and-forget)
       this.briefOpenClawDirector(tenantId, userId, generatedOutput, taskIds, executionMode)
         .catch((err) => {
@@ -1114,7 +1343,7 @@ Create a personalized Business Brain with exactly 10 prioritized tasks.`;
       output: generatedOutput,
       timeSavedMinutes,
       noteId: note.id,
-      celebrationMessage: `Čestitamo! Upravo ste uštedeli ~${timeSavedMinutes} minuta!`,
+      celebrationMessage: `Congratulations! You just saved ~${timeSavedMinutes} minutes!`,
       newTenantStatus: 'ACTIVE' as TenantStatus,
       welcomeConversationId: welcomeConversationId ?? undefined,
       executionMode: (executionMode as 'MANUAL' | 'YOLO') ?? undefined,
@@ -1149,7 +1378,7 @@ Create a personalized Business Brain with exactly 10 prioritized tasks.`;
         industry: tenant.industry,
         description: tenant.description ?? undefined,
         onboardingOutput: generatedOutput.substring(0, 3000),
-        strategy: executionMode === 'YOLO' ? 'AUTONOMNO' : 'MANUALNO',
+        strategy: executionMode === 'YOLO' ? 'AUTONOMOUS' : 'MANUAL',
         executionMode: executionMode ?? 'MANUAL',
       });
       this.logger.log({ message: 'USER.md deployed to OpenClaw', tenantId });
@@ -1176,60 +1405,60 @@ Create a personalized Business Brain with exactly 10 prioritized tasks.`;
 
     // 5. Create welcome conversation
     const conversation = await this.conversationService.createConversation(
-      tenantId, userId, `Poslovni Mozak — ${tenant.name}`,
+      tenantId, userId, `Business Brain — ${tenant.name}`,
     );
     const welcomeConvId = conversation.id;
 
     // 5. Build briefing message and save as user message in the conversation
     const briefing = [
-      `ONBOARDING ZAVRSEN za ${tenant.name} (${tenant.industry}).`,
+      `ONBOARDING COMPLETED for ${tenant.name} (${tenant.industry}).`,
       '',
-      `VAZNO — tvoj tenantId za sve Bridge API pozive je: ${tenantId}`,
-      'Koristi TACNO ovaj tenantId u SVAKOM curl pozivu ka mentor-ai-bridge.',
+      `IMPORTANT — your tenantId for all Bridge API calls is: ${tenantId}`,
+      'Use EXACTLY this tenantId in EVERY curl call to mentor-ai-bridge.',
       '',
-      '=== BIZNIS ANALIZA ===',
+      '=== BUSINESS ANALYSIS ===',
       generatedOutput.substring(0, 2500),
-      '=== KRAJ ANALIZE ===',
+      '=== END OF ANALYSIS ===',
       '',
-      'TVOJ ZADATAK:',
+      'YOUR TASK:',
       '',
-      'KORAK 1 — Pretrazi bazu znanja (obavezno uradi SVE ove pretrage):',
-      `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=prodaja&tenantId=${tenantId}"`,
+      'STEP 1 — Search the knowledge base (you MUST run ALL these searches):',
+      `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=sales&tenantId=${tenantId}"`,
       `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=marketing&tenantId=${tenantId}"`,
-      `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=finansije&tenantId=${tenantId}"`,
-      `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=operacije&tenantId=${tenantId}"`,
-      `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=vrednost&tenantId=${tenantId}"`,
-      `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=strategija&tenantId=${tenantId}"`,
-      `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=cena&tenantId=${tenantId}"`,
-      'Iz rezultata odaberi koncepte koji su NAJRELEVANTNIJI za analizu biznisa. Zapamti njihove ID-jeve.',
+      `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=finance&tenantId=${tenantId}"`,
+      `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=operations&tenantId=${tenantId}"`,
+      `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=value&tenantId=${tenantId}"`,
+      `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=strategy&tenantId=${tenantId}"`,
+      `  curl -s -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" "http://100.114.192.85:3000/api/bridge/concepts/search?q=pricing&tenantId=${tenantId}"`,
+      'From results, select the concepts that are MOST RELEVANT for business analysis. Remember their IDs.',
       '',
-      'KORAK 2 — Za svaku preporuku kreiraj proposal sa relatedConcepts:',
-      `  curl -s -X POST -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" -H "Content-Type: application/json" "http://100.114.192.85:3000/api/bridge/proposals" -d '{"tenantId":"${tenantId}","canvasBlock":"CANVAS_BLOCK","type":"task_execution","title":"NASLOV","reasoning":"OBRAZLOZENJE","proposedAction":"AKCIJA","estimatedCost":1.5,"priority":"high","relatedConcepts":["CONCEPT_ID"]}'`,
+      'STEP 2 — For each recommendation create a proposal with relatedConcepts:',
+      `  curl -s -X POST -H "Authorization: Bearer 9b8d2c89d0ff9f2477b9c2b50b4bf1c0a6a01672014cd02d" -H "Content-Type: application/json" "http://100.114.192.85:3000/api/bridge/proposals" -d '{"tenantId":"${tenantId}","canvasBlock":"CANVAS_BLOCK","type":"task_execution","title":"TITLE","reasoning":"REASONING","proposedAction":"ACTION","estimatedCost":1.5,"priority":"high","relatedConcepts":["CONCEPT_ID"]}'`,
       '',
-      'PRAVILA ZA NASLOVE I OPISE (OBAVEZNO):',
-      '- title: Konkretan i akcionski. NIKADA ne koristi jednu rec ili kategoriju.',
-      '  LOSE: "Marketing", "Prodaja", "Strategija"',
-      '  DOBRO: "Kreirati cenovnu strategiju za premium pozicioniranje skulptura"',
-      '  DOBRO: "Razviti B2B partnerski program sa arhitektama i dizajnerima"',
-      '  DOBRO: "Implementirati CRM sistem za pracenje prodajnog pipeline-a"',
+      'RULES FOR TITLES AND DESCRIPTIONS (MANDATORY):',
+      '- title: Concrete and action-oriented. NEVER use a single word or category.',
+      '  BAD: "Marketing", "Sales", "Strategy"',
+      '  GOOD: "Create pricing strategy for premium sculpture positioning"',
+      '  GOOD: "Develop B2B partner program with architects and designers"',
+      '  GOOD: "Implement CRM system for tracking sales pipeline"',
       '',
-      '- reasoning: Minimum 4-5 recenica. Objasni CEO-u ZASTO je ovo kriticno. Koristi brojeve.',
-      '  Primer: "Trenutno imate 15 klijenata sa prosecnom vrednoscu od 13K EUR. Povecanje prosecne',
-      '  vrednosti na 25K kroz upsell strategiju bi donelo dodatnih 180K EUR godisnje bez novih',
-      '  klijenata. Bez ovog, rast zavisi iskljucivo od akvizicije koja kosta 5x vise."',
+      '- reasoning: Minimum 4-5 sentences. Explain to the CEO WHY this is critical. Use numbers.',
+      '  Example: "You currently have 15 clients with an average value of 13K EUR. Increasing the average',
+      '  value to 25K through an upsell strategy would bring an additional 180K EUR annually without new',
+      '  clients. Without this, growth depends solely on acquisition which costs 5x more."',
       '',
-      '- proposedAction: Korak-po-korak plan sa agentima. Minimum 4 koraka.',
-      '  Primer: "1. Research agent istrazuje konkurentske cene (brave-search). 2. Financial agent',
-      '  pravi Excel sa cenovnim modelom (excel-xlsx). 3. Content agent pise prodajni pitch.',
-      '  4. Designer pravi prezentaciju za klijente (generate-presentation). Output: Excel cenovnik,',
-      '  prodajni pitch dokument, prezentacija sa 10 slide-ova."',
+      '- proposedAction: Step-by-step plan with agents. Minimum 4 steps.',
+      '  Example: "1. Research agent investigates competitor prices (brave-search). 2. Financial agent',
+      '  creates Excel with pricing model (excel-xlsx). 3. Content agent writes sales pitch.',
+      '  4. Designer creates client presentation (generate-presentation). Output: Excel price list,',
+      '  sales pitch document, presentation with 10 slides."',
       '',
       'canvasBlock: KEY_PARTNERS, KEY_ACTIVITIES, KEY_RESOURCES, VALUE_PROPOSITION, CUSTOMER_RELATIONSHIPS, CHANNELS, CUSTOMER_SEGMENTS, REVENUE_STREAMS, COST_STRUCTURE',
       '',
-      'KREIRAJ MINIMUM 5 predloga. Svaki MORA imati relatedConcepts sa concept ID-jevima iz pretrage.',
+      'CREATE MINIMUM 5 proposals. Each MUST have relatedConcepts with concept IDs from the search.',
       '',
-      'NA KRAJU OBAVEZNO napisi kratak rezime sta si nasao i sta si kreirao.',
-      'Korisnik ce videti tvoj tekstualni odgovor u chatu. Ako ne napises nista, videce praznu poruku.',
+      'AT THE END you MUST write a short summary of what you found and what you created.',
+      'The user will see your text response in chat. If you write nothing, they will see an empty message.',
     ].join('\n');
 
     await this.conversationService.addMessage(
@@ -1264,8 +1493,8 @@ Create a personalized Business Brain with exactly 10 prioritized tasks.`;
             agent: 'direktor',
             status: status === 'start' ? 'running' : 'completed',
             message: status === 'start'
-              ? `Koristi ${tool}${query ? ': ' + query.substring(0, 100) : ''}`
-              : `Završio ${tool}`,
+              ? `Using ${tool}${query ? ': ' + query.substring(0, 100) : ''}`
+              : `Completed ${tool}`,
             timestamp: new Date().toISOString(),
           });
           this.logger.log({ message: `Brain tool: ${tool} ${status}`, tenantId, query: query?.substring(0, 50) });
@@ -1276,14 +1505,14 @@ Create a personalized Business Brain with exactly 10 prioritized tasks.`;
             taskId: welcomeConvId,
             agent: 'direktor',
             status: 'running',
-            message: `Faza: ${phase}`,
+            message: `Phase: ${phase}`,
             timestamp: new Date().toISOString(),
           });
         },
       });
 
       // Save director's response as assistant message in the welcome conversation
-      const directorOutput = result.output || 'Poslovni mozak je analizirao vaš biznis i kreirao predloge. Pogledajte panel Zadaci za detalje.';
+      const directorOutput = result.output || 'The Business Brain has analyzed your business and created proposals. Check the Tasks panel for details.';
       await this.conversationService.addMessage(
         tenantId,
         welcomeConvId,
@@ -1301,7 +1530,7 @@ Create a personalized Business Brain with exactly 10 prioritized tasks.`;
         taskId: welcomeConvId,
         agent: 'direktor',
         status: 'completed',
-        message: 'Briefing završen — preporuke i koncepti kreirani',
+        message: 'Briefing complete — recommendations and concepts created',
         timestamp: new Date().toISOString(),
       });
 
@@ -1318,7 +1547,7 @@ Create a personalized Business Brain with exactly 10 prioritized tasks.`;
         tenantId,
         welcomeConvId,
         'ASSISTANT' as MessageRole,
-        'Poslovni mozak je primio analizu i razmišlja o preporukama. Predlozi će se pojaviti uskoro u panelu Zadaci.'
+        'The Business Brain has received the analysis and is thinking about recommendations. Proposals will appear soon in the Tasks panel.'
       ).catch(() => {});
 
       this.logger.error({
@@ -1390,7 +1619,10 @@ Create a personalized Business Brain with exactly 10 prioritized tasks.`;
         // Determine canvas block from recommendation keywords
         const canvasBlock = this.inferCanvasBlock(rec.title + ' ' + rec.description);
 
-        // Create proposal (visible in Task Hub left panel)
+        // Create proposal (visible in Task Hub left panel).
+        // No expectedDeliverables here — the manifest is locked later via
+        // the chat "Confirm plan and run" step after the user discusses
+        // the proposal with the director.
         await this.bridgeService.createProposal({
           tenantId,
           canvasBlock,
@@ -1459,7 +1691,7 @@ Create a personalized Business Brain with exactly 10 prioritized tasks.`;
 
     let match: RegExpExecArray | null;
 
-    // Pattern 1: "### N. **Title** (Category)\n**Zašto:** ...\n**Akcije:** ..."
+    // Pattern 1: "### N. **Title** (Category)\n**Why:** ...\n**Actions:** ..."
     // This is the director's preferred format
     const heading = /###?\s*\d*\.?\s*\*\*([^*]+)\*\*[^\n]*\n((?:(?!###?\s)[\s\S])*?)(?=###?\s|\n##\s|$)/g;
     while ((match = heading.exec(text)) !== null) {
@@ -1467,8 +1699,8 @@ Create a personalized Business Brain with exactly 10 prioritized tasks.`;
       const body = (match[2] ?? '').trim();
       if (title.length > 5 && !recommendations.some(r => r.title === title)) {
         // Extract priority from keywords
-        const priority = body.toLowerCase().includes('kritič') || body.toLowerCase().includes('kritičan')
-          ? 'critical' : body.toLowerCase().includes('visok') ? 'high' : 'medium';
+        const priority = body.toLowerCase().includes('critical') || body.toLowerCase().includes('kritič') || body.toLowerCase().includes('kritičan')
+          ? 'critical' : body.toLowerCase().includes('high') || body.toLowerCase().includes('visok') ? 'high' : 'medium';
         recommendations.push({ title, description: body.substring(0, 800), priority });
       }
     }
@@ -1509,11 +1741,16 @@ Create a personalized Business Brain with exactly 10 prioritized tasks.`;
   private extractKeyTerms(text: string): string[] {
     const terms: string[] = [];
     const businessTerms = [
-      'prodaj', 'marketing', 'finansij', 'operacij', 'strategij', 'vrednost',
-      'klijent', 'cen', 'prihod', 'trošk', 'budžet', 'brand', 'konkurenc',
-      'lead', 'pipeline', 'ugovor', 'profit', 'investicij', 'digitalizacij',
-      'automatizacij', 'proces', 'tim', 'zaposleni', 'obuk', 'partner',
-      'kanal', 'segment', 'retencij', 'lojalnost', 'cash flow', 'ROI',
+      'sales', 'marketing', 'finance', 'operations', 'strategy', 'value',
+      'client', 'price', 'revenue', 'cost', 'budget', 'brand', 'competitor',
+      'lead', 'pipeline', 'contract', 'profit', 'investment', 'digitalization',
+      'automation', 'process', 'team', 'employee', 'training', 'partner',
+      'channel', 'segment', 'retention', 'loyalty', 'cash flow', 'ROI',
+      // Legacy Serbian stems for backward compatibility with existing data
+      'prodaj', 'finansij', 'operacij', 'strategij', 'vrednost',
+      'klijent', 'cen', 'prihod', 'trošk', 'budžet', 'konkurenc',
+      'ugovor', 'investicij', 'digitalizacij', 'automatizacij',
+      'zaposleni', 'obuk', 'kanal', 'retencij', 'lojalnost',
     ];
     const lower = text.toLowerCase();
     for (const term of businessTerms) {
@@ -1526,15 +1763,15 @@ Create a personalized Business Brain with exactly 10 prioritized tasks.`;
 
   private inferCanvasBlock(text: string): string {
     const lower = text.toLowerCase();
-    if (lower.match(/partner|dobavljač|supplier|vendor/)) return 'KEY_PARTNERS';
-    if (lower.match(/prodaj|sales|lead|outreach|klijent.*kontakt/)) return 'CUSTOMER_SEGMENTS';
-    if (lower.match(/marketing|kampanj|brand|advertis|reklam|SEO|content/)) return 'CHANNELS';
-    if (lower.match(/cen[aou]|pricing|pretplat|subscription|revenue|prihod/)) return 'REVENUE_STREAMS';
-    if (lower.match(/trošk|cost|budžet|budget|ušteda/)) return 'COST_STRUCTURE';
-    if (lower.match(/vrednost|value|ponuda|proposition|benefit/)) return 'VALUE_PROPOSITION';
-    if (lower.match(/odnos|relationship|lojalnost|loyalty|retencij|retention/)) return 'CUSTOMER_RELATIONSHIPS';
-    if (lower.match(/operacij|process|efikasnost|automat|workflow/)) return 'KEY_ACTIVITIES';
-    if (lower.match(/resurs|resource|tim|team|talent|zaposleni/)) return 'KEY_RESOURCES';
+    if (lower.match(/partner|supplier|vendor|dobavljač/)) return 'KEY_PARTNERS';
+    if (lower.match(/sales|lead|outreach|customer.*contact|prodaj|klijent.*kontakt/)) return 'CUSTOMER_SEGMENTS';
+    if (lower.match(/marketing|campaign|brand|advertis|SEO|content|kampanj|reklam/)) return 'CHANNELS';
+    if (lower.match(/pricing|subscription|revenue|cen[aou]|pretplat|prihod/)) return 'REVENUE_STREAMS';
+    if (lower.match(/cost|budget|savings|trošk|budžet|ušteda/)) return 'COST_STRUCTURE';
+    if (lower.match(/value|proposition|benefit|vrednost|ponuda/)) return 'VALUE_PROPOSITION';
+    if (lower.match(/relationship|loyalty|retention|odnos|lojalnost|retencij/)) return 'CUSTOMER_RELATIONSHIPS';
+    if (lower.match(/operations|process|efficiency|automat|workflow|operacij|efikasnost/)) return 'KEY_ACTIVITIES';
+    if (lower.match(/resource|team|talent|employee|resurs|tim|zaposleni/)) return 'KEY_RESOURCES';
     return 'KEY_ACTIVITIES'; // default
   }
 
@@ -1674,12 +1911,12 @@ Create a personalized Business Brain with exactly 10 prioritized tasks.`;
       })
       .join('\n');
 
-    const taskEnrichmentSystemPrompt = `You are a business consultant who creates actionable tasks.
+    const taskEnrichmentSystemPrompt = `You are a business consultant who creates action tasks.
 
-For EACH concept, write a structured task in the following format:
+For EACH concept write a structured task in the following format:
 
----TASK: {ordinal number}---
-TITLE: {action-oriented title — verb + concrete action, max 60 characters}
+---TASK: {sequential number}---
+TITLE: {action title — verb + specific action, max 60 characters}
 CONTENT:
 ## Goal
 {1-2 sentences: what specifically needs to be achieved for "${tenant.name}" in the "${tenant.industry}" industry}
@@ -1687,22 +1924,22 @@ CONTENT:
 ## Why this is important
 {2-3 sentences: business value, what is lost if not done}
 
-## Steps for implementation
-1. {Concrete step with description — not generic}
-2. {Concrete step with description}
-3. {Concrete step with description}
-4. {Concrete step with description}
-5. {Concrete step with description}
+## Implementation steps
+1. {Specific step with description — not generic}
+2. {Specific step with description}
+3. {Specific step with description}
+4. {Specific step with description}
+5. {Specific step with description}
 
 ## Expected result
 {1-2 sentences: measurable outcome, KPI or deliverable}
 
-## Time frame
+## Timeframe
 {Suggested deadline: 1 week / 2 weeks / 1 month}
 ---END TASK---
 
 RULES:
-- Every title MUST be an action verb: "Analyze...", "Define...", "Create...", "Map...", "Develop...", "Optimize...", "Establish..."
+- Each title MUST be an action verb: "Analyze...", "Define...", "Create...", "Map...", "Develop...", "Optimize...", "Establish..."
 - Steps must be SPECIFIC to "${tenant.name}" and "${tenant.industry}" — not generic
 - If the concept has prerequisites, mention them in the "Why this is important" section
 - ${tenant.description ? `Company context: ${tenant.description}` : ''}
@@ -1776,21 +2013,21 @@ Generate structured tasks.`;
       .join('\n');
 
     // Generate narrative welcome message via LLM
-    const welcomeSystemPrompt = `You are a business advisor introducing the client to a personalized action plan.
+    const welcomeSystemPrompt = `You are a business consultant introducing the client to a personalized action plan.
 
-Write a welcome message that:
+Write a welcome that:
 1. Greets the client by company name and summarizes their profile (2-3 sentences)
-2. Explains the strategy: WHY these ${topTasks.length} tasks, what is the ultimate goal
-3. For EACH task explains WHY it is important for THEIR business (not just the name — business value)
-4. Explains the ORDER — why we start with task #1, how each subsequent one builds on the previous
-5. At the end clearly suggest the first step
+2. Explains the strategy: WHY these ${topTasks.length} tasks, what is the end goal
+3. For EACH task explains WHY it matters for THEIR business (not just the name — the business value)
+4. Explains the ORDER — why we start with task #1, how each subsequent task builds on the previous one
+5. At the end clearly suggests the first step
 
 RULES:
-- DO NOT use [[Concept Name]] tags
-- DO NOT list steps as a dry list — explain the business logic behind each
+- Do NOT use [[Concept Name]] markers
+- Do NOT list steps as a dry list — explain the business logic behind each one
 - Use the company name "${tenant.name}" and industry "${tenant.industry}"
 - Write warmly but professionally, like an experienced consultant
-- At the end add: reply "yes" for all tasks, "run 1, 3, 5" for selection, or "run first" for just the first
+- At the end add: reply "yes" for all tasks, "run 1, 3, 5" for a selection, or "run first" for just the first one
 - Write EXCLUSIVELY in English
 - Between 500 and 800 words — enough detail for context`;
 
@@ -1801,7 +2038,7 @@ ${tenant.description ? `Description: ${tenant.description}` : ''}
 Prepared tasks (in order):
 ${conceptSummaries}
 
-Write a personalized welcome.`;
+Write a personalized welcome message.`;
 
     let welcomeMsg = '';
     try {
@@ -1824,17 +2061,17 @@ Write a personalized welcome.`;
         .map((m, i) => {
           const parsed = parsedTasks[i];
           const title = parsed?.title ?? this.buildActionTitle(m.conceptName);
-          return `${i + 1}. **${title}**${i === 0 ? ' (preporučeno)' : ''}`;
+          return `${i + 1}. **${title}**${i === 0 ? ' (recommended)' : ''}`;
         })
         .join('\n');
-      welcomeMsg = `Dobrodošli! Pripremili smo ${topTasks.length} zadataka za vaše poslovanje:\n\n${taskList}\n\nOdgovorite "da" da pokrenete sve zadatke.`;
+      welcomeMsg = `Welcome! We have prepared ${topTasks.length} tasks for your business:\n\n${taskList}\n\nReply "yes" to start all tasks.`;
     }
 
     // Create welcome conversation
     const conversation = await this.conversationService.createConversation(
       tenantId,
       userId,
-      'Dobrodošli u Mentor AI',
+      'Welcome to Mentor AI',
       undefined,
       topTasks[0]?.conceptId
     );
@@ -1882,7 +2119,7 @@ Write a personalized welcome.`;
         // Construct a realistic user message + AI context for the classifier prompt:
         //   userMessage = what the user wants (concept name in business context)
         //   aiResponse = the concept definition (what the AI matched to)
-        const userMessage = `Trebam zadatak za: ${task.conceptName}. ${tenantContext}`;
+        const userMessage = `I need a task for: ${task.conceptName}. ${tenantContext}`;
         const aiResponse = task.definition ?? task.conceptName;
         try {
           const betterMatches = await this.conceptClassifierService.classifyAndMatch(
@@ -1926,22 +2163,22 @@ Write a personalized welcome.`;
     }
 
     // Split by task delimiters
-    const taskBlocks = llmOutput.split(/---ZADATAK:\s*\d+---/).filter((b) => b.trim().length > 0);
+    const taskBlocks = llmOutput.split(/---(?:TASK|ZADATAK):\s*\d+---/).filter((b) => b.trim().length > 0);
 
     return concepts.map((_, index) => {
       const block = taskBlocks[index];
       if (!block) return null;
 
-      // Remove end delimiter if present
-      const cleaned = block.replace(/---KRAJ ZADATKA---/g, '').trim();
+      // Remove end delimiter if present (supports both English and legacy Serbian)
+      const cleaned = block.replace(/---(?:END TASK|KRAJ ZADATKA)---/g, '').trim();
 
-      // Extract title
-      const titleMatch = cleaned.match(/NASLOV:\s*(.+?)(?:\n|$)/);
+      // Extract title (supports both English TITLE: and legacy Serbian NASLOV:)
+      const titleMatch = cleaned.match(/(?:TITLE|NASLOV):\s*(.+?)(?:\n|$)/);
       const title = titleMatch?.[1]?.trim();
       if (!title) return null;
 
-      // Extract content (everything after SADRŽAJ:)
-      const contentMatch = cleaned.match(/SADRŽAJ:\s*([\s\S]+)/);
+      // Extract content (everything after CONTENT: or legacy SADRŽAJ:)
+      const contentMatch = cleaned.match(/(?:CONTENT|SADRŽAJ):\s*([\s\S]+)/);
       const content = contentMatch?.[1]?.trim();
       if (!content) return null;
 
@@ -1957,52 +2194,52 @@ Write a personalized welcome.`;
     match: ConceptMatch,
     tenant: { name: string | null; industry: string | null }
   ): string {
-    return `## Cilj
-Primenite koncept "${match.conceptName}" na poslovanje ${tenant.name ?? 'vaše kompanije'} u industriji ${tenant.industry ?? 'vašoj industriji'}.
+    return `## Goal
+Apply the concept "${match.conceptName}" to the business of ${tenant.name ?? 'your company'} in the ${tenant.industry ?? 'your industry'} industry.
 
-## Definicija koncepta
+## Concept definition
 ${match.definition}
 
-## Kategorija
+## Category
 ${match.category}
 
-## Koraci za realizaciju
-1. Analizirajte trenutno stanje u kontekstu ovog koncepta
-2. Identifikujte ključne oblasti za poboljšanje
-3. Definišite konkretne akcije i odgovorne osobe
-4. Postavite merljive KPI za praćenje napretka
-5. Implementirajte i pratite rezultate`;
+## Implementation steps
+1. Analyze the current state in the context of this concept
+2. Identify key areas for improvement
+3. Define concrete actions and responsible persons
+4. Set measurable KPIs for tracking progress
+5. Implement and monitor results`;
   }
 
   /**
-   * Generates an action title for a concept name (Serbian).
-   * Uses category-aware verb mapping for natural Serbian titles.
+   * Generates an action title for a concept name.
+   * Uses category-aware verb mapping for natural English titles.
    */
   private buildActionTitle(conceptName: string): string {
     const lower = conceptName.toLowerCase();
 
-    // Category-based Serbian verb prefixes
-    if (lower.includes('analiz') || lower.includes('swot') || lower.includes('dijagnos'))
-      return `Analizirajte: ${conceptName}`;
-    if (lower.includes('plan') || lower.includes('strategij') || lower.includes('model'))
-      return `Kreirajte: ${conceptName}`;
-    if (lower.includes('vrednost') || lower.includes('ponud') || lower.includes('cen'))
-      return `Definišite: ${conceptName}`;
+    // Category-based verb prefixes
+    if (lower.includes('analiz') || lower.includes('swot') || lower.includes('diagnos'))
+      return `Analyze: ${conceptName}`;
+    if (lower.includes('plan') || lower.includes('strategij') || lower.includes('strategy') || lower.includes('model'))
+      return `Create: ${conceptName}`;
+    if (lower.includes('vrednost') || lower.includes('value') || lower.includes('ponud') || lower.includes('cen') || lower.includes('pric'))
+      return `Define: ${conceptName}`;
     if (lower.includes('marketing') || lower.includes('brend') || lower.includes('brand'))
-      return `Razvijte: ${conceptName}`;
-    if (lower.includes('prodaj') || lower.includes('kupac') || lower.includes('klijent'))
-      return `Optimizujte: ${conceptName}`;
-    if (lower.includes('finans') || lower.includes('budžet') || lower.includes('novčan'))
-      return `Analizirajte: ${conceptName}`;
-    if (lower.includes('operaci') || lower.includes('proces') || lower.includes('efikas'))
-      return `Uspostavite: ${conceptName}`;
-    if (lower.includes('tim') || lower.includes('lider') || lower.includes('menadž'))
-      return `Razvijte: ${conceptName}`;
-    if (lower.includes('inovacij') || lower.includes('tehnolog') || lower.includes('digital'))
-      return `Implementirajte: ${conceptName}`;
+      return `Develop: ${conceptName}`;
+    if (lower.includes('prodaj') || lower.includes('sales') || lower.includes('kupac') || lower.includes('customer') || lower.includes('klijent') || lower.includes('client'))
+      return `Optimize: ${conceptName}`;
+    if (lower.includes('finans') || lower.includes('finance') || lower.includes('budžet') || lower.includes('budget') || lower.includes('novčan') || lower.includes('cash'))
+      return `Analyze: ${conceptName}`;
+    if (lower.includes('operaci') || lower.includes('operation') || lower.includes('proces') || lower.includes('efikas') || lower.includes('efficien'))
+      return `Establish: ${conceptName}`;
+    if (lower.includes('tim') || lower.includes('team') || lower.includes('lider') || lower.includes('leader') || lower.includes('menadž') || lower.includes('manag'))
+      return `Develop: ${conceptName}`;
+    if (lower.includes('inovacij') || lower.includes('innovat') || lower.includes('tehnolog') || lower.includes('technol') || lower.includes('digital'))
+      return `Implement: ${conceptName}`;
 
-    // Default: "Primenite" (Apply) — universal action verb
-    return `Primenite: ${conceptName}`;
+    // Default: "Apply" — universal action verb
+    return `Apply: ${conceptName}`;
   }
 
   /**

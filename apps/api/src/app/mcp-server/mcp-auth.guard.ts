@@ -3,27 +3,40 @@ import {
   ExecutionContext,
   Injectable,
   UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
+/**
+ * Guard that validates MCP Bearer token authentication.
+ * Checks the Authorization header against MCP_AUTH_TOKEN env var.
+ */
 @Injectable()
 export class McpAuthGuard implements CanActivate {
+  constructor(private readonly configService: ConfigService) {}
+
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
-    const authHeader = request.headers['authorization'];
+    const authHeader: string | undefined = request.headers?.['authorization'];
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new UnauthorizedException('Missing or invalid authorization header');
+    if (!authHeader) {
+      throw new UnauthorizedException('Missing Authorization header');
     }
 
-    const token = authHeader.substring(7);
-    const expectedToken = process.env.MCP_AUTH_TOKEN;
+    const parts = authHeader.split(' ');
+    if (parts.length !== 2 || parts[0] !== 'Bearer' || !parts[1]) {
+      throw new UnauthorizedException('Invalid Authorization header format');
+    }
+
+    const token = parts[1];
+    const expectedToken = this.configService.get<string>('MCP_AUTH_TOKEN');
 
     if (!expectedToken) {
-      throw new UnauthorizedException('MCP_AUTH_TOKEN not configured');
+      throw new ForbiddenException('MCP_AUTH_TOKEN not configured');
     }
 
     if (token !== expectedToken) {
-      throw new UnauthorizedException('Invalid MCP auth token');
+      throw new ForbiddenException('Invalid MCP auth token');
     }
 
     return true;

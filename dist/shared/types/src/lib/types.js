@@ -306,6 +306,7 @@ var NoteStatus;
     NoteStatus["PENDING"] = "PENDING";
     NoteStatus["READY_FOR_REVIEW"] = "READY_FOR_REVIEW";
     NoteStatus["COMPLETED"] = "COMPLETED";
+    NoteStatus["INCOMPLETE"] = "INCOMPLETE";
 })(NoteStatus || (NoteStatus = {}));
 var AgentExecutionStatus;
 (function(AgentExecutionStatus) {

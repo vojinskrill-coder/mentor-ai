@@ -41,7 +41,7 @@ import { ToastService } from '../core/services/toast.service';
         padding: 8px 16px;
         border-radius: 6px;
         border: none;
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
         font-size: 13px;
         font-weight: 500;
@@ -75,14 +75,14 @@ import { ToastService } from '../core/services/toast.service';
         gap: 16px;
         padding: 16px;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
-        background: #1a1a1a;
+        border: 1px solid #21262D;
+        background: #161B22;
       }
       .skeleton-avatar {
         width: 40px;
         height: 40px;
         border-radius: 50%;
-        background: #242424;
+        background: #1C2128;
         flex-shrink: 0;
       }
       .skeleton-text {
@@ -90,7 +90,7 @@ import { ToastService } from '../core/services/toast.service';
       }
       .skeleton-line {
         height: 12px;
-        background: #242424;
+        background: #1C2128;
         border-radius: 4px;
         margin-bottom: 8px;
       }
@@ -130,8 +130,8 @@ import { ToastService } from '../core/services/toast.service';
         align-items: center;
         justify-content: space-between;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
-        background: #1a1a1a;
+        border: 1px solid #21262D;
+        background: #161B22;
         padding: 16px;
       }
       .member-left {
@@ -147,7 +147,7 @@ import { ToastService } from '../core/services/toast.service';
         align-items: center;
         justify-content: center;
         background: rgba(59, 130, 246, 0.1);
-        color: #3b82f6;
+        color: #58A6FF;
         font-size: 13px;
         font-weight: 600;
         flex-shrink: 0;
@@ -190,11 +190,11 @@ import { ToastService } from '../core/services/toast.service';
         color: #60a5fa;
       }
       .badge-member {
-        background: #242424;
+        background: #1C2128;
         color: #9e9e9e;
       }
       .badge-dept {
-        background: #242424;
+        background: #1C2128;
         color: #9e9e9e;
       }
 
@@ -208,7 +208,7 @@ import { ToastService } from '../core/services/toast.service';
         color: #4ade80;
       }
       .badge-expired {
-        background: #242424;
+        background: #1C2128;
         color: #9e9e9e;
       }
       .badge-revoked {
@@ -276,8 +276,8 @@ import { ToastService } from '../core/services/toast.service';
       /* Table */
       .table-container {
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
-        background: #1a1a1a;
+        border: 1px solid #21262D;
+        background: #161B22;
         overflow: hidden;
       }
       .data-table {
@@ -286,7 +286,7 @@ import { ToastService } from '../core/services/toast.service';
         border-collapse: collapse;
       }
       .data-table thead tr {
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
         background: rgba(36, 36, 36, 0.5);
       }
       .data-table th {
@@ -296,14 +296,14 @@ import { ToastService } from '../core/services/toast.service';
         color: #9e9e9e;
       }
       .data-table tbody tr {
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
       }
       .data-table tbody tr:last-child {
         border-bottom: none;
       }
       .data-table td {
         padding: 12px 16px;
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .data-table td.muted {
         color: #9e9e9e;
@@ -372,7 +372,7 @@ import { ToastService } from '../core/services/toast.service';
   ],
   template: `
       <div class="page-header-bar">
-        <h1>Upravljanje timom</h1>
+        <h1>Team Management</h1>
         <button class="invite-btn" (click)="showInviteDialog$.set(true)">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -382,7 +382,7 @@ import { ToastService } from '../core/services/toast.service';
               d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
             />
           </svg>
-          Pozovi člana
+          Invite member
         </button>
       </div>
 
@@ -403,14 +403,14 @@ import { ToastService } from '../core/services/toast.service';
           @if (loadError$()) {
             <div class="error-state">
               <p class="error-text">{{ loadError$() }}</p>
-              <button class="invite-btn" (click)="loadData()">Pokušaj ponovo</button>
+              <button class="invite-btn" (click)="loadData()">Try again</button>
             </div>
           }
 
           <!-- Active Members -->
           @if (members$().length > 0) {
             <section class="section">
-              <h2 class="section-title">Aktivni članovi ({{ members$().length }})</h2>
+              <h2 class="section-title">Active members ({{ members$().length }})</h2>
               <div class="member-list">
                 @for (member of members$(); track member.id) {
                   <div class="member-card">
@@ -450,7 +450,7 @@ import { ToastService } from '../core/services/toast.service';
                               d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6"
                             />
                           </svg>
-                          Ukloni
+                          Remove
                         </button>
                       }
                     </div>
@@ -463,7 +463,7 @@ import { ToastService } from '../core/services/toast.service';
           <!-- Pending Invitations -->
           @if (pendingInvitations$().length > 0) {
             <section class="section">
-              <h2 class="section-title">Pozivi na čekanju ({{ pendingInvitations$().length }})</h2>
+              <h2 class="section-title">Pending invitations ({{ pendingInvitations$().length }})</h2>
               <div class="member-list">
                 @for (invitation of pendingInvitations$(); track invitation.id) {
                   <div class="member-card">
@@ -491,13 +491,13 @@ import { ToastService } from '../core/services/toast.service';
                                 d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                               />
                             </svg>
-                            Ističe {{ formatExpiry(invitation.expiresAt) }}
+                            Expires {{ formatExpiry(invitation.expiresAt) }}
                           </span>
                         </div>
                       </div>
                     </div>
                     <button class="remove-btn" (click)="revokeInvitation(invitation.id)">
-                      Opozovi
+                      Revoke
                     </button>
                   </div>
                 }
@@ -508,15 +508,15 @@ import { ToastService } from '../core/services/toast.service';
           <!-- All Invitations History -->
           @if (allInvitations$().length > 0) {
             <section class="section">
-              <h2 class="section-title">Istorija poziva</h2>
+              <h2 class="section-title">Invitation history</h2>
               <div class="table-container">
                 <table class="data-table">
                   <thead>
                     <tr>
                       <th>Email</th>
-                      <th>Odeljenje</th>
+                      <th>Department</th>
                       <th>Status</th>
-                      <th>Poslato</th>
+                      <th>Sent</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -551,8 +551,8 @@ import { ToastService } from '../core/services/toast.service';
                   d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
                 />
               </svg>
-              <h3>Još nema članova tima</h3>
-              <p>Pozovite prvog člana tima da biste počeli.</p>
+              <h3>No team members yet</h3>
+              <p>Invite your first team member to get started.</p>
               <button class="invite-btn" (click)="showInviteDialog$.set(true)">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
@@ -562,7 +562,7 @@ import { ToastService } from '../core/services/toast.service';
                     d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
                   />
                 </svg>
-                Pozovi člana
+                Invite member
               </button>
             </div>
           }
@@ -619,7 +619,7 @@ export class TeamComponent implements OnInit {
           this.isLoading$.set(false);
         },
         error: () => {
-          this.loadError$.set('Greška pri učitavanju podataka tima. Pokušajte ponovo.');
+          this.loadError$.set('Error loading team data. Please try again.');
           this.isLoading$.set(false);
         },
       });
@@ -654,7 +654,7 @@ export class TeamComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
-          this.toastService.success('Poziv je opozvan');
+          this.toastService.success('Invitation revoked');
           this.loadInvitations();
         },
       });
@@ -676,7 +676,7 @@ export class TeamComponent implements OnInit {
           next: () => {
             this.memberToRemove$.set(null);
             this.removalError$.set('');
-            this.toastService.success('Član tima je uklonjen');
+            this.toastService.success('Team member removed');
             this.loadMembers();
           },
           error: (err: Error) => {
@@ -719,11 +719,11 @@ export class TeamComponent implements OnInit {
   formatRole(role: string): string {
     switch (role) {
       case 'TENANT_OWNER':
-        return 'Vlasnik';
+        return 'Owner';
       case 'ADMIN':
         return 'Admin';
       case 'MEMBER':
-        return 'Član';
+        return 'Member';
       default:
         return role;
     }
@@ -745,13 +745,13 @@ export class TeamComponent implements OnInit {
     const now = new Date();
     const diffMs = date.getTime() - now.getTime();
     const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-    if (diffDays <= 0) return 'isteklo';
-    if (diffDays === 1) return 'za 1 dan';
-    return `za ${diffDays} dana`;
+    if (diffDays <= 0) return 'expired';
+    if (diffDays === 1) return 'in 1 day';
+    return `in ${diffDays} days`;
   }
 
   formatDate(dateStr: string): string {
-    return new Date(dateStr).toLocaleDateString('sr-Latn', {
+    return new Date(dateStr).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -761,13 +761,13 @@ export class TeamComponent implements OnInit {
   formatStatus(status: string): string {
     switch (status) {
       case 'PENDING':
-        return 'Na čekanju';
+        return 'Pending';
       case 'ACCEPTED':
-        return 'Prihvaćeno';
+        return 'Accepted';
       case 'EXPIRED':
-        return 'Isteklo';
+        return 'Expired';
       case 'REVOKED':
-        return 'Opozvano';
+        return 'Revoked';
       default:
         return status;
     }

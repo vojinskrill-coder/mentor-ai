@@ -12,7 +12,7 @@ import { AuthService } from '../core/auth/auth.service';
     :host { display: block; }
     .page {
       min-height: 100vh; display: flex; align-items: center; justify-content: center;
-      background: #0D0D0D; padding: 16px; font-family: 'Inter', system-ui, sans-serif; color: #FAFAFA;
+      background: #0D1117; padding: 16px; font-family: 'Inter', system-ui, sans-serif; color: #E6EDF3;
     }
     .content { text-align: center; }
     .error-box {
@@ -22,15 +22,15 @@ import { AuthService } from '../core/auth/auth.service';
     .error-box h2 { font-size: 18px; font-weight: 600; color: #EF4444; margin-bottom: 8px; }
     .error-box p { font-size: 14px; color: #EF4444; margin-bottom: 16px; }
     .retry-btn {
-      padding: 8px 20px; background: #3B82F6; color: white; border: none;
+      padding: 8px 20px; background: #58A6FF; color: white; border: none;
       border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer;
       font-family: inherit;
     }
     .retry-btn:hover { opacity: 0.9; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     .spinner {
-      width: 32px; height: 32px; border: 3px solid #2A2A2A;
-      border-top-color: #3B82F6; border-radius: 50%;
+      width: 32px; height: 32px; border: 3px solid #21262D;
+      border-top-color: #58A6FF; border-radius: 50%;
       animation: spin 0.8s linear infinite; margin: 0 auto 16px;
     }
     .loading-text { font-size: 15px; color: #A1A1A1; }

@@ -27,7 +27,7 @@ import {
       <!-- Confidence Badge -->
       <button
         type="button"
-        class="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium transition-all hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#1A1A1A]"
+        class="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium transition-all hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#161B22]"
         [style.backgroundColor]="badgeBackgroundColor$()"
         [style.color]="'white'"
         [attr.aria-label]="ariaLabel$()"
@@ -71,11 +71,11 @@ import {
         <div
           id="confidence-tooltip"
           role="tooltip"
-          class="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-[#2A2A2A] border border-[#3A3A3A] rounded-lg shadow-lg text-sm"
+          class="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-[#21262D] border border-[#3A3A3A] rounded-lg shadow-lg text-sm"
         >
           <!-- Tooltip Arrow -->
           <div
-            class="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-8 border-transparent border-t-[#2A2A2A]"
+            class="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-8 border-transparent border-t-[#21262D]"
           ></div>
 
           <!-- Confidence Level Header -->

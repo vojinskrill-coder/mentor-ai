@@ -107,13 +107,13 @@ export interface PageLayout {
     .page-viewer { display: flex; flex-direction: column; gap: 8px; }
 
     .page-header { display: flex; align-items: center; gap: 8px; }
-    .page-num { color: #FAFAFA; font-size: 13px; font-weight: 600; }
+    .page-num { color: #E6EDF3; font-size: 13px; font-weight: 600; }
     .page-type { color: #C9A96E; font-size: 11px; background: #C9A96E15; padding: 2px 8px; border-radius: 4px; }
     .page-title { color: #6B7280; font-size: 12px; }
 
     .page-frame {
       width: 100%; aspect-ratio: 1.414 / 1; /* A4 landscape spread */
-      background: #0D0D0D; border: 1px solid #2A2A2A; border-radius: 6px;
+      background: #0D1117; border: 1px solid #21262D; border-radius: 6px;
       position: relative; overflow: hidden;
     }
 
@@ -121,13 +121,13 @@ export interface PageLayout {
       position: absolute; border-radius: 3px; cursor: pointer;
       transition: border-color 0.15s, box-shadow 0.15s;
     }
-    .slot:hover { box-shadow: 0 0 0 2px #3B82F640; z-index: 2; }
-    .slot.selected { box-shadow: 0 0 0 2px #3B82F6; z-index: 3; }
+    .slot:hover { box-shadow: 0 0 0 2px #58A6FF40; z-index: 2; }
+    .slot.selected { box-shadow: 0 0 0 2px #58A6FF; z-index: 3; }
     .slot.approved { box-shadow: 0 0 0 1px #22c55e40; }
     .slot.rejected { box-shadow: 0 0 0 1px #ef444440; }
 
     /* Wireframe mode */
-    .wireframe .text-slot { border: 1px dashed #3B82F640; background: #3B82F608; }
+    .wireframe .text-slot { border: 1px dashed #58A6FF40; background: #58A6FF08; }
     .wireframe .image-slot { border: 1px dashed #C9A96E40; background: #C9A96E08; }
 
     .slot-label {
@@ -137,7 +137,7 @@ export interface PageLayout {
     .slot-type { font-size: 14px; }
     .slot-name { color: #6B7280; font-size: 8px; text-align: center; overflow: hidden; text-overflow: ellipsis; }
     .slot-role { color: #C9A96E; font-size: 7px; font-weight: 600; }
-    .slot-chars { color: #3B82F6; font-size: 7px; }
+    .slot-chars { color: #58A6FF; font-size: 7px; }
 
     /* Content mode */
     .content .text-slot { border: 1px solid transparent; }
@@ -158,7 +158,7 @@ export interface PageLayout {
 
     .slot-placeholder {
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      height: 100%; background: #1A1A1A; gap: 4px;
+      height: 100%; background: #161B22; gap: 4px;
     }
     .ph-text { color: #6B7280; font-size: 7px; text-align: center; }
 
@@ -167,10 +167,10 @@ export interface PageLayout {
       border-radius: 50%; display: flex; align-items: center; justify-content: center;
       font-size: 8px;
     }
-    .status-approved { background: #22c55e; color: #0D0D0D; }
-    .status-pending { background: #C9A96E; color: #0D0D0D; }
-    .status-rejected { background: #ef4444; color: #FAFAFA; }
-    .status-regenerating { background: #3B82F6; color: #FAFAFA; }
+    .status-approved { background: #22c55e; color: #0D1117; }
+    .status-pending { background: #C9A96E; color: #0D1117; }
+    .status-rejected { background: #ef4444; color: #E6EDF3; }
+    .status-regenerating { background: #58A6FF; color: #E6EDF3; }
   `],
 })
 export class BrochurePageViewerComponent {

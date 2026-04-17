@@ -114,9 +114,9 @@ export class CurriculumService {
       throw new Error(`Curriculum node not found: ${curriculumId}`);
     }
 
-    // Check if already exists
-    const existing = await this.prisma.concept.findUnique({
-      where: { curriculumId },
+    // Check if already exists (platform concepts have tenantId=null)
+    const existing = await this.prisma.concept.findFirst({
+      where: { curriculumId, tenantId: null },
       select: { id: true },
     });
     if (existing) return existing.id;
@@ -126,8 +126,8 @@ export class CurriculumService {
     let parentConceptId: string | null = null;
 
     for (const ancestor of chain) {
-      const existingAncestor = await this.prisma.concept.findUnique({
-        where: { curriculumId: ancestor.id },
+      const existingAncestor = await this.prisma.concept.findFirst({
+        where: { curriculumId: ancestor.id, tenantId: null },
         select: { id: true },
       });
 
@@ -137,8 +137,8 @@ export class CurriculumService {
       }
 
       // Concept may exist by name (e.g. seeded from Obsidian without curriculumId)
-      const existingByName = await this.prisma.concept.findUnique({
-        where: { name: ancestor.label },
+      const existingByName = await this.prisma.concept.findFirst({
+        where: { name: ancestor.label, tenantId: null },
         select: { id: true },
       });
 

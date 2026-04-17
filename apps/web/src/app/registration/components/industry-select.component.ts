@@ -25,9 +25,9 @@ import { ControlValueAccessor, FormsModule, NG_VALUE_ACCESSOR } from '@angular/f
         width: 100%;
         padding: 10px 12px;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
-        background: #0d0d0d;
-        color: #fafafa;
+        border: 1px solid #21262D;
+        background: #0D1117;
+        color: #E6EDF3;
         font-size: 14px;
         font-family: inherit;
         cursor: pointer;
@@ -36,10 +36,10 @@ import { ControlValueAccessor, FormsModule, NG_VALUE_ACCESSOR } from '@angular/f
       }
       .select-trigger:focus {
         outline: none;
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .select-trigger.open {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .placeholder {
         color: #9e9e9e;
@@ -64,28 +64,28 @@ import { ControlValueAccessor, FormsModule, NG_VALUE_ACCESSOR } from '@angular/f
         max-height: 240px;
         overflow: auto;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
-        background: #1a1a1a;
+        border: 1px solid #21262D;
+        background: #161B22;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
       }
       .search-wrapper {
         padding: 8px;
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
       }
       .search-input {
         width: 100%;
         padding: 8px 10px;
         border-radius: 6px;
-        border: 1px solid #2a2a2a;
-        background: #0d0d0d;
-        color: #fafafa;
+        border: 1px solid #21262D;
+        background: #0D1117;
+        color: #E6EDF3;
         font-size: 13px;
         font-family: inherit;
         box-sizing: border-box;
       }
       .search-input:focus {
         outline: none;
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .options-list {
         list-style: none;
@@ -100,22 +100,22 @@ import { ControlValueAccessor, FormsModule, NG_VALUE_ACCESSOR } from '@angular/f
         padding: 8px 12px;
         border: none;
         background: transparent;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 14px;
         font-family: inherit;
         cursor: pointer;
         text-align: left;
       }
       .option-btn:hover {
-        background: #242424;
+        background: #1C2128;
       }
       .option-btn.selected {
-        background: #242424;
+        background: #1C2128;
       }
       .check-icon {
         width: 16px;
         height: 16px;
-        color: #3b82f6;
+        color: #58A6FF;
       }
       .empty-text {
         padding: 8px 12px;

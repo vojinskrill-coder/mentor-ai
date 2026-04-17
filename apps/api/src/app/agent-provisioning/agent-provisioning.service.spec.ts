@@ -1,114 +1,115 @@
 import { AgentProvisioningService, TenantConfig } from './agent-provisioning.service';
 import { AgentRegistryService } from '../agent-registry/agent-registry.service';
 import { TemplateService } from '../template/template.service';
+import { VaultStorage } from '../vault-storage/vault-storage.interface';
 
 describe('AgentProvisioningService', () => {
   let service: AgentProvisioningService;
-  let mockRegistry: Partial<AgentRegistryService>;
-  let mockTemplate: Partial<TemplateService>;
-  let mockVault: any;
+  let registry: AgentRegistryService;
+  let templateService: TemplateService;
+  let mockVault: VaultStorage;
+  let writtenFiles: Map<string, string>;
 
-  const mockAgents = [
-    {
-      id: 'main',
-      name: 'Main Agent',
-      description: 'Primary',
-      soulTemplate: 'SOUL.template.md',
-      skills: ['mentor-ai-bridge'],
-      guardrails: { maxTokensPerCall: 4096, maxRetriesPerStep: 5, requireValidation: true, requireSelfCorrection: true },
-    },
-    {
-      id: 'research',
-      name: 'Research Agent',
-      description: 'Research',
-      soulTemplate: 'SOUL.template.md',
-      skills: ['mentor-ai-bridge'],
-      guardrails: { maxTokensPerCall: 4096, maxRetriesPerStep: 3, requireValidation: true, requireSelfCorrection: true },
-    },
-  ];
-
+  const tenantId = 'test-tenant-001';
   const tenantConfig: TenantConfig = {
-    tenantName: 'Test Corp',
-    backendUrl: 'https://example.com',
-    bridgeAuthToken: 'token-123',
+    companyName: 'Acme Corp',
+    industry: 'Technology',
+    description: 'A technology company specializing in widgets',
   };
 
-  beforeEach(() => {
-    mockRegistry = {
-      getAllAgents: jest.fn().mockReturnValue(mockAgents),
-    };
-    mockTemplate = {
-      resolve: jest.fn().mockReturnValue('# Resolved SOUL Content'),
-    };
+  beforeAll(() => {
+    registry = new AgentRegistryService();
+    templateService = new TemplateService();
+
+    writtenFiles = new Map();
     mockVault = {
-      writeFile: jest.fn().mockResolvedValue(undefined),
-      createDirectories: jest.fn().mockResolvedValue(undefined),
-    };
-    service = new AgentProvisioningService(
-      mockRegistry as AgentRegistryService,
-      mockTemplate as TemplateService,
-      mockVault,
-    );
-  });
-
-  it('should provision all agents', async () => {
-    const results = await service.provisionAgents('tenant-1', tenantConfig);
-    expect(results).toHaveLength(2);
-    expect(results.every((r) => r.success)).toBe(true);
-  });
-
-  it('should write SOUL.md for each agent', async () => {
-    await service.provisionAgents('tenant-1', tenantConfig);
-    expect(mockVault.writeFile).toHaveBeenCalledTimes(2);
-    expect(mockVault.writeFile).toHaveBeenCalledWith(
-      'tenant-1',
-      'agents/main/SOUL.md',
-      '# Resolved SOUL Content',
-    );
-  });
-
-  it('should create tenant directories', async () => {
-    await service.provisionAgents('tenant-1', tenantConfig);
-    expect(mockVault.createDirectories).toHaveBeenCalledWith('tenant-1', [
-      'agents',
-      'concepts',
-      'logs',
-    ]);
-  });
-
-  it('should resolve templates with tenant variables', async () => {
-    await service.provisionAgents('tenant-1', tenantConfig);
-    expect(mockTemplate.resolve).toHaveBeenCalledWith(
-      'vault/SOUL.template.md',
-      expect.objectContaining({
-        TENANT_ID: 'tenant-1',
-        TENANT_NAME: 'Test Corp',
-        BACKEND_URL: 'https://example.com',
-        AGENT_NAME: 'Main Agent',
+      writeFile: jest.fn(async (_t: string, p: string, c: string) => { writtenFiles.set(p, c); }),
+      readFile: jest.fn(async (_t: string, p: string) => writtenFiles.get(p) ?? ''),
+      fileExists: jest.fn(async (_t: string, _p: string) => false),
+      listFiles: jest.fn(async (_t: string, _d: string): Promise<string[]> => []),
+      writeFiles: jest.fn(async (_t: string, files: Map<string, string>) => {
+        for (const [p, c] of files.entries()) {
+          writtenFiles.set(p, c);
+        }
       }),
-    );
+      createDirectories: jest.fn(async (_t: string, _d: string[]) => { /* noop */ }),
+    };
+
+    service = new AgentProvisioningService(registry, templateService, mockVault);
   });
 
-  it('should handle individual agent failures gracefully', async () => {
-    (mockTemplate.resolve as jest.Mock)
-      .mockReturnValueOnce('# OK')
-      .mockImplementationOnce(() => {
-        throw new Error('Template failed');
-      });
-    const results = await service.provisionAgents('tenant-1', tenantConfig);
-    expect(results[0]!.success).toBe(true);
-    expect(results[1]!.success).toBe(false);
-    expect(results[1]!.error).toContain('Template failed');
+  beforeEach(() => {
+    writtenFiles.clear();
+    jest.clearAllMocks();
   });
 
-  it('should include agent id in results', async () => {
-    const results = await service.provisionAgents('tenant-1', tenantConfig);
-    expect(results.map((r) => r.agentId)).toEqual(['main', 'research']);
+  it('should provision all 8 agents', async () => {
+    await service.provisionAgents(tenantId, tenantConfig);
+
+    // writeFiles should have been called with a Map of 8 entries
+    const writeFilesFn = mockVault.writeFiles as jest.Mock;
+    expect(writeFilesFn).toHaveBeenCalledTimes(1);
+    const filesArg = writeFilesFn.mock.calls[0]![1] as Map<string, string>;
+    expect(filesArg.size).toBe(8);
   });
 
-  it('should handle vault write failures', async () => {
-    mockVault.writeFile.mockRejectedValue(new Error('Vault unreachable'));
-    const results = await service.provisionAgents('tenant-1', tenantConfig);
-    expect(results.every((r) => !r.success)).toBe(true);
+  it('SOUL.md should contain tenant name', async () => {
+    await service.provisionAgents(tenantId, tenantConfig);
+
+    const mainSoul = writtenFiles.get('agents/main/SOUL.md');
+    expect(mainSoul).toBeDefined();
+    expect(mainSoul).toContain('Acme Corp');
+  });
+
+  it('SOUL.md should contain ENGLISH language rule', async () => {
+    await service.provisionAgents(tenantId, tenantConfig);
+
+    const mainSoul = writtenFiles.get('agents/main/SOUL.md');
+    expect(mainSoul).toBeDefined();
+    expect(mainSoul).toContain('ENGLISH');
+  });
+
+  it('SOUL.md should have no unresolved {{placeholders}}', async () => {
+    await service.provisionAgents(tenantId, tenantConfig);
+
+    for (const [filePath, content] of writtenFiles.entries()) {
+      const unresolved = content.match(/\{\{([^}]+)\}\}/g);
+      expect(unresolved).toBeNull();
+    }
+  });
+
+  it('should be deterministic — same inputs produce identical output', async () => {
+    await service.provisionAgents(tenantId, tenantConfig);
+    const firstRun = new Map(writtenFiles);
+
+    writtenFiles.clear();
+    jest.clearAllMocks();
+
+    await service.provisionAgents(tenantId, tenantConfig);
+    const secondRun = new Map(writtenFiles);
+
+    expect(firstRun.size).toBe(secondRun.size);
+    for (const [path, content] of firstRun.entries()) {
+      expect(secondRun.get(path)).toBe(content);
+    }
+  });
+
+  it('should create agent directories before writing files', async () => {
+    await service.provisionAgents(tenantId, tenantConfig);
+
+    const createDirsFn = mockVault.createDirectories as jest.Mock;
+    expect(createDirsFn).toHaveBeenCalledTimes(1);
+    const dirsArg = createDirsFn.mock.calls[0]![1] as string[];
+    expect(dirsArg.length).toBe(8);
+    expect(dirsArg).toContain('agents/main');
+    expect(dirsArg).toContain('agents/research');
+  });
+
+  it('SOUL.md should contain tenantId and vault path', async () => {
+    await service.provisionAgents(tenantId, tenantConfig);
+
+    const mainSoul = writtenFiles.get('agents/main/SOUL.md');
+    expect(mainSoul).toContain(tenantId);
+    expect(mainSoul).toContain(`/root/${tenantId}/vault`);
   });
 });

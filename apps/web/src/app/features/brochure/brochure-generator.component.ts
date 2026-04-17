@@ -124,48 +124,48 @@ import { BrochurePageViewerComponent, PageLayout, PageComponent } from './compon
   styles: [`
     .brochure-gen { padding: 24px; max-width: 1200px; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-    .title { color: #FAFAFA; font-size: 24px; font-weight: 700; margin: 0; }
+    .title { color: #E6EDF3; font-size: 24px; font-weight: 700; margin: 0; }
     .header-actions { display: flex; gap: 8px; }
     .btn-generate {
-      padding: 10px 24px; background: #C9A96E; color: #0D0D0D; border: none;
+      padding: 10px 24px; background: #C9A96E; color: #0D1117; border: none;
       border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
     }
     .btn-generate:disabled { opacity: 0.5; }
     .btn-pdf {
-      padding: 10px 24px; background: #3B82F6; color: #FAFAFA; border: none;
+      padding: 10px 24px; background: #58A6FF; color: #E6EDF3; border: none;
       border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
     }
 
     .section { margin-bottom: 32px; }
-    .section-title { color: #FAFAFA; font-size: 16px; font-weight: 600; margin: 0 0 12px; }
+    .section-title { color: #E6EDF3; font-size: 16px; font-weight: 600; margin: 0 0 12px; }
 
     .profiles { display: flex; gap: 8px; flex-wrap: wrap; }
     .profile-card {
-      padding: 12px 16px; background: #1A1A1A; border: 1px solid #2A2A2A;
+      padding: 12px 16px; background: #161B22; border: 1px solid #21262D;
       border-radius: 8px; cursor: pointer; display: flex; flex-direction: column; gap: 4px;
     }
     .profile-card:hover { border-color: #C9A96E; }
     .profile-card.active { border-color: #C9A96E; background: #1A1A2A; }
-    .pname { color: #FAFAFA; font-size: 13px; font-weight: 500; }
+    .pname { color: #E6EDF3; font-size: 13px; font-weight: 500; }
     .pmeta { color: #C9A96E; font-size: 11px; }
 
     .config-grid { display: grid; grid-template-columns: 1fr 1fr 100px; gap: 12px; }
     .field { display: flex; flex-direction: column; gap: 4px; }
     .field-label { color: #9CA3AF; font-size: 11px; font-weight: 600; text-transform: uppercase; }
     .field-input {
-      padding: 8px 12px; background: #242424; border: 1px solid #2A2A2A;
-      border-radius: 6px; color: #FAFAFA; font-size: 13px;
+      padding: 8px 12px; background: #1C2128; border: 1px solid #21262D;
+      border-radius: 6px; color: #E6EDF3; font-size: 13px;
     }
     .field-input:focus { outline: none; border-color: #C9A96E; }
 
     .pages-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
-    .page-card { background: #1A1A1A; border: 1px solid #2A2A2A; border-radius: 8px; padding: 12px; }
+    .page-card { background: #161B22; border: 1px solid #21262D; border-radius: 8px; padding: 12px; }
 
-    .preview-frame { background: #1A1A1A; border-radius: 8px; padding: 12px; }
-    .preview-iframe { width: 100%; height: 600px; border: none; border-radius: 4px; background: #0D0D0D; }
+    .preview-frame { background: #161B22; border-radius: 8px; padding: 12px; }
+    .preview-iframe { width: 100%; height: 600px; border: none; border-radius: 4px; background: #0D1117; }
 
     .slot-panel {
-      position: fixed; bottom: 0; right: 0; width: 300px; background: #1A1A1A;
+      position: fixed; bottom: 0; right: 0; width: 300px; background: #161B22;
       border: 1px solid #C9A96E40; border-radius: 8px 0 0 0; padding: 16px; z-index: 10;
     }
     .panel-title { color: #C9A96E; font-size: 14px; margin: 0 0 8px; }
@@ -173,12 +173,12 @@ import { BrochurePageViewerComponent, PageLayout, PageComponent } from './compon
 
     .logo-upload { margin-top: 12px; }
     .upload-row { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
-    .logo-preview { height: 48px; max-width: 200px; object-fit: contain; background: #242424; border-radius: 6px; padding: 4px; }
+    .logo-preview { height: 48px; max-width: 200px; object-fit: contain; background: #1C2128; border-radius: 6px; padding: 4px; }
     .upload-btn {
-      padding: 8px 16px; background: #242424; border: 1px dashed #2A2A2A;
-      border-radius: 6px; color: #3B82F6; cursor: pointer; font-size: 13px;
+      padding: 8px 16px; background: #1C2128; border: 1px dashed #21262D;
+      border-radius: 6px; color: #58A6FF; cursor: pointer; font-size: 13px;
     }
-    .upload-btn:hover { border-color: #3B82F6; }
+    .upload-btn:hover { border-color: #58A6FF; }
     .btn-remove { background: none; border: none; color: #ef4444; cursor: pointer; font-size: 12px; }
 
     .generation-status { color: #C9A96E; font-size: 13px; margin-top: 8px; }
@@ -291,14 +291,22 @@ export class BrochureGeneratorComponent implements OnInit {
           };
         });
         this.previewPages.set(updated);
-        this.generationStatus.set('Renderujem HTML...');
 
-        // Step 2: Render HTML
-        this.renderHtml(profile.id, updated);
+        // HTML is now included in the same response
+        if (res.data.html) {
+          this.previewHtml.set(res.data.html);
+          this.generating.set(false);
+          this.generationStatus.set('Gotovo!');
+        } else {
+          this.generating.set(false);
+          this.generationStatus.set('Generisano, ali HTML renderovanje nije uspelo');
+        }
       },
       error: (err) => {
         this.generating.set(false);
-        this.generationStatus.set('Greska: ' + (err?.error?.detail ?? 'Nepoznata greska'));
+        const detail = err?.error?.detail ?? err?.message ?? 'Nepoznata greska';
+        this.generationStatus.set('Greska pri generisanju: ' + detail);
+        console.error('Brochure generate error:', err);
       },
     });
   }
@@ -317,26 +325,53 @@ export class BrochureGeneratorComponent implements OnInit {
       })),
     }));
 
-    this.http.post<{ data: { html: string } }>(`${this.apiBase}/v1/brochure/preview`, {
-      brandProfileId: profileId,
-      pages: apiPages,
-    }).subscribe({
+    // Use relative URL through Vite proxy instead of absolute URL
+    const url = `${this.apiBase}/v1/brochure/preview`;
+    const payload = { brandProfileId: profileId, pages: apiPages };
+    console.log('[Brochure] POST', url, JSON.stringify(payload).slice(0, 200));
+
+    this.http.post<{ data: { html: string } }>(url, payload).subscribe({
       next: (res) => {
         this.previewHtml.set(res.data.html);
         this.generating.set(false);
         this.generationStatus.set('Gotovo!');
       },
-      error: () => {
+      error: (err) => {
         this.generating.set(false);
-        this.generationStatus.set('Greska pri renderovanju');
+        const detail = err?.error?.detail ?? err?.message ?? JSON.stringify(err?.error ?? 'Unknown');
+        this.generationStatus.set('Greska pri renderovanju: ' + detail);
+        console.error('Brochure render error:', err);
       },
     });
   }
 
   downloadPdf(): void {
-    const blob = new Blob([this.previewHtml()], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
+    const html = this.previewHtml();
+    if (!html) return;
+    this.generationStatus.set('Generisem PDF...');
+    this.http.post(`${this.apiBase}/v1/brochure/pdf`, { html }, { responseType: 'blob' }).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `brochure-${Date.now()}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.generationStatus.set('PDF preuzet!');
+      },
+      error: (err) => {
+        console.error('PDF error:', err);
+        // Fallback: download as HTML
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `brochure-${Date.now()}.html`;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.generationStatus.set('PDF nije dostupan — preuzet kao HTML');
+      },
+    });
   }
 
   onLogoUpload(event: Event): void {

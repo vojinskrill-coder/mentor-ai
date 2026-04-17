@@ -1,238 +1,341 @@
+import { Test } from '@nestjs/testing';
+import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { EnrichmentQueueService, EnrichmentStatus } from './enrichment-queue.service';
 import { InvalidStateTransitionError } from './enrichment-queue.error';
 
-describe('EnrichmentQueueService', () => {
-  let service: EnrichmentQueueService;
-  let mockPrisma: any;
-  let mockQueue: any;
+// ── Mock Prisma ────────────────────────────────────────────────
 
-  const makeEntry = (overrides: Partial<any> = {}) => ({
-    id: 'entry-1',
-    tenantId: 'tenant-1',
-    conceptSlug: 'test-concept',
+function createMockPrisma() {
+  return {
+    enrichmentQueue: {
+      upsert: jest.fn().mockResolvedValue({}),
+      createMany: jest.fn().mockResolvedValue({ count: 0 }),
+      findUnique: jest.fn().mockResolvedValue(null),
+      update: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
+    $queryRaw: jest.fn().mockResolvedValue([]),
+  };
+}
+
+function makeEntry(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: 'eq-1',
+    tenantId: 'tnt-1',
+    conceptId: 'concept-1',
     status: EnrichmentStatus.QUEUED,
-    retryCount: 0,
-    maxRetries: 5,
-    errorMessage: null,
+    attempt: 0,
+    maxAttempts: 3,
+    sessionId: null,
+    dispatchedAt: null,
+    completedAt: null,
+    failedAt: null,
+    error: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
+  };
+}
+
+describe('EnrichmentQueueService', () => {
+  let service: EnrichmentQueueService;
+  let mockPrisma: ReturnType<typeof createMockPrisma>;
+
+  beforeEach(async () => {
+    mockPrisma = createMockPrisma();
+
+    const module = await Test.createTestingModule({
+      providers: [
+        EnrichmentQueueService,
+        { provide: PlatformPrismaService, useValue: mockPrisma },
+      ],
+    }).compile();
+
+    service = module.get(EnrichmentQueueService);
   });
 
-  beforeEach(() => {
-    mockQueue = {
-      create: jest.fn(),
-      createMany: jest.fn(),
-      findUnique: jest.fn(),
-      update: jest.fn(),
-      updateMany: jest.fn(),
-      groupBy: jest.fn(),
-    };
-    mockPrisma = {
-      enrichmentQueue: mockQueue,
-      $queryRawUnsafe: jest.fn(),
-    };
-    service = new EnrichmentQueueService(mockPrisma as any);
+  // ── Enqueue ──────────────────────────────────────────────────
+
+  it('enqueue creates a QUEUED entry via upsert', async () => {
+    await service.enqueue('tnt-1', 'concept-1');
+
+    expect(mockPrisma.enrichmentQueue.upsert).toHaveBeenCalledWith({
+      where: { tenantId_conceptId: { tenantId: 'tnt-1', conceptId: 'concept-1' } },
+      create: {
+        tenantId: 'tnt-1',
+        conceptId: 'concept-1',
+        status: EnrichmentStatus.QUEUED,
+      },
+      update: {},
+    });
   });
 
-  it('should enqueue a single entry', async () => {
-    const entry = makeEntry();
-    mockQueue.create.mockResolvedValue(entry);
-    const result = await service.enqueue('tenant-1', 'test-concept');
-    expect(result).toEqual(entry);
-    expect(mockQueue.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          tenantId: 'tenant-1',
-          conceptSlug: 'test-concept',
-          status: EnrichmentStatus.QUEUED,
-        }),
-      }),
-    );
+  it('enqueue is idempotent — second call does not error', async () => {
+    await service.enqueue('tnt-1', 'concept-1');
+    await service.enqueue('tnt-1', 'concept-1');
+
+    expect(mockPrisma.enrichmentQueue.upsert).toHaveBeenCalledTimes(2);
   });
 
-  it('should enqueue a batch', async () => {
-    mockQueue.createMany.mockResolvedValue({ count: 3 });
-    const count = await service.enqueueBatch('tenant-1', ['a', 'b', 'c']);
-    expect(count).toBe(3);
+  it('enqueueBatch inserts N entries with skipDuplicates', async () => {
+    const ids = ['c-1', 'c-2', 'c-3'];
+    await service.enqueueBatch('tnt-1', ids);
+
+    expect(mockPrisma.enrichmentQueue.createMany).toHaveBeenCalledWith({
+      data: ids.map((conceptId) => ({
+        tenantId: 'tnt-1',
+        conceptId,
+        status: EnrichmentStatus.QUEUED,
+      })),
+      skipDuplicates: true,
+    });
   });
 
-  it('should dequeue using FOR UPDATE SKIP LOCKED', async () => {
+  // ── Dequeue ──────────────────────────────────────────────────
+
+  it('dequeue returns QUEUED entry and marks DISPATCHED', async () => {
     const entry = makeEntry({ status: EnrichmentStatus.DISPATCHED });
-    mockPrisma.$queryRawUnsafe.mockResolvedValue([entry]);
-    const result = await service.dequeue('tenant-1');
+    mockPrisma.$queryRaw.mockResolvedValue([entry]);
+
+    const result = await service.dequeue('tnt-1');
+
     expect(result).toEqual(entry);
-    expect(mockPrisma.$queryRawUnsafe).toHaveBeenCalled();
+    expect(mockPrisma.$queryRaw).toHaveBeenCalled();
   });
 
-  it('should return null when queue is empty', async () => {
-    mockPrisma.$queryRawUnsafe.mockResolvedValue([]);
-    const result = await service.dequeue('tenant-1');
+  it('dequeue returns null when queue is empty', async () => {
+    mockPrisma.$queryRaw.mockResolvedValue([]);
+
+    const result = await service.dequeue('tnt-1');
+
     expect(result).toBeNull();
   });
 
-  it('should transition DISPATCHED -> EXECUTING', async () => {
-    const entry = makeEntry({ status: EnrichmentStatus.DISPATCHED });
-    mockQueue.findUnique.mockResolvedValue(entry);
-    mockQueue.update.mockResolvedValue({
-      ...entry,
-      status: EnrichmentStatus.EXECUTING,
-    });
-    const result = await service.markExecuting('entry-1');
-    expect(result.status).toBe(EnrichmentStatus.EXECUTING);
-  });
+  // ── Valid Transitions ────────────────────────────────────────
 
-  it('should transition EXECUTING -> VALIDATING', async () => {
-    const entry = makeEntry({ status: EnrichmentStatus.EXECUTING });
-    mockQueue.findUnique.mockResolvedValue(entry);
-    mockQueue.update.mockResolvedValue({
-      ...entry,
-      status: EnrichmentStatus.VALIDATING,
-    });
-    const result = await service.markValidating('entry-1');
-    expect(result.status).toBe(EnrichmentStatus.VALIDATING);
-  });
-
-  it('should transition VALIDATING -> COMPLETED', async () => {
-    const entry = makeEntry({ status: EnrichmentStatus.VALIDATING });
-    mockQueue.findUnique.mockResolvedValue(entry);
-    mockQueue.update.mockResolvedValue({
-      ...entry,
-      status: EnrichmentStatus.COMPLETED,
-    });
-    const result = await service.markCompleted('entry-1');
-    expect(result.status).toBe(EnrichmentStatus.COMPLETED);
-  });
-
-  it('should transition VALIDATING -> CORRECTING', async () => {
-    const entry = makeEntry({ status: EnrichmentStatus.VALIDATING });
-    mockQueue.findUnique.mockResolvedValue(entry);
-    mockQueue.update.mockResolvedValue({
-      ...entry,
-      status: EnrichmentStatus.CORRECTING,
-    });
-    const result = await service.markCorrecting('entry-1');
-    expect(result.status).toBe(EnrichmentStatus.CORRECTING);
-  });
-
-  it('should transition CORRECTING -> VALIDATING (back to validating)', async () => {
-    const entry = makeEntry({ status: EnrichmentStatus.CORRECTING });
-    mockQueue.findUnique.mockResolvedValue(entry);
-    mockQueue.update.mockResolvedValue({
-      ...entry,
-      status: EnrichmentStatus.VALIDATING,
-    });
-    const result = await service.markBackToValidating('entry-1');
-    expect(result.status).toBe(EnrichmentStatus.VALIDATING);
-  });
-
-  it('should reject invalid state transition', async () => {
-    const entry = makeEntry({ status: EnrichmentStatus.QUEUED });
-    mockQueue.findUnique.mockResolvedValue(entry);
-    await expect(service.markExecuting('entry-1')).rejects.toThrow(
-      InvalidStateTransitionError,
+  it('markExecuting transitions DISPATCHED -> EXECUTING', async () => {
+    mockPrisma.enrichmentQueue.findUnique.mockResolvedValue(
+      makeEntry({ status: EnrichmentStatus.DISPATCHED }),
     );
-  });
 
-  it('should reject transition from COMPLETED', async () => {
-    const entry = makeEntry({ status: EnrichmentStatus.COMPLETED });
-    mockQueue.findUnique.mockResolvedValue(entry);
-    await expect(service.markExecuting('entry-1')).rejects.toThrow(
-      InvalidStateTransitionError,
-    );
-  });
+    await service.markExecuting('eq-1');
 
-  it('should reject transition from PERMANENTLY_FAILED', async () => {
-    const entry = makeEntry({ status: EnrichmentStatus.PERMANENTLY_FAILED });
-    mockQueue.findUnique.mockResolvedValue(entry);
-    await expect(service.markExecuting('entry-1')).rejects.toThrow(
-      InvalidStateTransitionError,
-    );
-  });
-
-  it('should mark as FAILED and increment retryCount', async () => {
-    const entry = makeEntry({
-      status: EnrichmentStatus.EXECUTING,
-      retryCount: 1,
+    expect(mockPrisma.enrichmentQueue.update).toHaveBeenCalledWith({
+      where: { id: 'eq-1' },
+      data: { status: EnrichmentStatus.EXECUTING },
     });
-    mockQueue.findUnique.mockResolvedValue(entry);
-    mockQueue.update.mockResolvedValue({
-      ...entry,
-      status: EnrichmentStatus.FAILED,
-      retryCount: 2,
+  });
+
+  it('markValidating transitions EXECUTING -> VALIDATING', async () => {
+    mockPrisma.enrichmentQueue.findUnique.mockResolvedValue(
+      makeEntry({ status: EnrichmentStatus.EXECUTING }),
+    );
+
+    await service.markValidating('eq-1');
+
+    expect(mockPrisma.enrichmentQueue.update).toHaveBeenCalledWith({
+      where: { id: 'eq-1' },
+      data: { status: EnrichmentStatus.VALIDATING },
     });
-    const result = await service.markFailed('entry-1', 'timeout');
-    expect(mockQueue.update).toHaveBeenCalledWith(
+  });
+
+  it('markCompleted transitions VALIDATING -> COMPLETED with completedAt', async () => {
+    mockPrisma.enrichmentQueue.findUnique.mockResolvedValue(
+      makeEntry({ status: EnrichmentStatus.VALIDATING }),
+    );
+
+    await service.markCompleted('eq-1');
+
+    expect(mockPrisma.enrichmentQueue.update).toHaveBeenCalledWith(
       expect.objectContaining({
+        where: { id: 'eq-1' },
         data: expect.objectContaining({
+          status: EnrichmentStatus.COMPLETED,
+          completedAt: expect.any(Date),
+        }),
+      }),
+    );
+  });
+
+  it('markCorrecting transitions VALIDATING -> CORRECTING', async () => {
+    mockPrisma.enrichmentQueue.findUnique.mockResolvedValue(
+      makeEntry({ status: EnrichmentStatus.VALIDATING }),
+    );
+
+    await service.markCorrecting('eq-1');
+
+    expect(mockPrisma.enrichmentQueue.update).toHaveBeenCalledWith({
+      where: { id: 'eq-1' },
+      data: { status: EnrichmentStatus.CORRECTING },
+    });
+  });
+
+  it('markBackToValidating transitions CORRECTING -> VALIDATING', async () => {
+    mockPrisma.enrichmentQueue.findUnique.mockResolvedValue(
+      makeEntry({ status: EnrichmentStatus.CORRECTING }),
+    );
+
+    await service.markBackToValidating('eq-1');
+
+    expect(mockPrisma.enrichmentQueue.update).toHaveBeenCalledWith({
+      where: { id: 'eq-1' },
+      data: { status: EnrichmentStatus.VALIDATING },
+    });
+  });
+
+  // ── Invalid Transitions ──────────────────────────────────────
+
+  it('throws InvalidStateTransitionError for QUEUED -> COMPLETED', async () => {
+    mockPrisma.enrichmentQueue.findUnique.mockResolvedValue(
+      makeEntry({ status: EnrichmentStatus.QUEUED }),
+    );
+
+    await expect(service.markCompleted('eq-1')).rejects.toThrow(InvalidStateTransitionError);
+  });
+
+  it('throws InvalidStateTransitionError for COMPLETED -> EXECUTING', async () => {
+    mockPrisma.enrichmentQueue.findUnique.mockResolvedValue(
+      makeEntry({ status: EnrichmentStatus.COMPLETED }),
+    );
+
+    await expect(service.markExecuting('eq-1')).rejects.toThrow(InvalidStateTransitionError);
+  });
+
+  it('throws InvalidStateTransitionError for QUEUED -> EXECUTING (skipping DISPATCHED)', async () => {
+    mockPrisma.enrichmentQueue.findUnique.mockResolvedValue(
+      makeEntry({ status: EnrichmentStatus.QUEUED }),
+    );
+
+    await expect(service.markExecuting('eq-1')).rejects.toThrow(InvalidStateTransitionError);
+  });
+
+  // ── markFailed ───────────────────────────────────────────────
+
+  it('markFailed increments attempt and sets FAILED', async () => {
+    mockPrisma.enrichmentQueue.findUnique.mockResolvedValue(
+      makeEntry({ status: EnrichmentStatus.EXECUTING, attempt: 0 }),
+    );
+
+    await service.markFailed('eq-1', 'timeout');
+
+    expect(mockPrisma.enrichmentQueue.update).toHaveBeenCalledWith({
+      where: { id: 'eq-1' },
+      data: expect.objectContaining({
+        status: EnrichmentStatus.FAILED,
+        attempt: 1,
+        error: 'timeout',
+        failedAt: expect.any(Date),
+      }),
+    });
+  });
+
+  it('markFailed sets PERMANENTLY_FAILED when attempt >= maxAttempts', async () => {
+    mockPrisma.enrichmentQueue.findUnique.mockResolvedValue(
+      makeEntry({ status: EnrichmentStatus.EXECUTING, attempt: 2, maxAttempts: 3 }),
+    );
+
+    await service.markFailed('eq-1', 'max retries');
+
+    expect(mockPrisma.enrichmentQueue.update).toHaveBeenCalledWith({
+      where: { id: 'eq-1' },
+      data: expect.objectContaining({
+        status: EnrichmentStatus.PERMANENTLY_FAILED,
+        attempt: 3,
+      }),
+    });
+  });
+
+  it('markFailed throws for QUEUED status', async () => {
+    mockPrisma.enrichmentQueue.findUnique.mockResolvedValue(
+      makeEntry({ status: EnrichmentStatus.QUEUED }),
+    );
+
+    await expect(service.markFailed('eq-1', 'nope')).rejects.toThrow(
+      InvalidStateTransitionError,
+    );
+  });
+
+  // ── retryFailed ──────────────────────────────────────────────
+
+  it('retryFailed re-enqueues FAILED entries below max attempts', async () => {
+    mockPrisma.enrichmentQueue.updateMany.mockResolvedValue({ count: 3 });
+
+    const count = await service.retryFailed('tnt-1');
+
+    expect(count).toBe(3);
+    expect(mockPrisma.enrichmentQueue.updateMany).toHaveBeenCalledWith({
+      where: {
+        tenantId: 'tnt-1',
+        status: EnrichmentStatus.FAILED,
+        attempt: { lt: 3 },
+      },
+      data: {
+        status: EnrichmentStatus.QUEUED,
+        error: null,
+        failedAt: null,
+      },
+    });
+  });
+
+  it('retryFailed ignores PERMANENTLY_FAILED entries', async () => {
+    mockPrisma.enrichmentQueue.updateMany.mockResolvedValue({ count: 0 });
+
+    const count = await service.retryFailed('tnt-1');
+
+    expect(count).toBe(0);
+    // The where clause only targets FAILED, never PERMANENTLY_FAILED
+    expect(mockPrisma.enrichmentQueue.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
           status: EnrichmentStatus.FAILED,
-          errorMessage: 'timeout',
         }),
       }),
     );
   });
 
-  it('should mark as PERMANENTLY_FAILED when retries exhausted', async () => {
-    const entry = makeEntry({
-      status: EnrichmentStatus.EXECUTING,
-      retryCount: 5,
-      maxRetries: 5,
-    });
-    mockQueue.findUnique.mockResolvedValue(entry);
-    mockQueue.update.mockResolvedValue({
-      ...entry,
-      status: EnrichmentStatus.PERMANENTLY_FAILED,
-    });
-    await service.markFailed('entry-1', 'too many retries');
-    expect(mockQueue.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          status: EnrichmentStatus.PERMANENTLY_FAILED,
-        }),
-      }),
-    );
-  });
+  // ── getQueueStats ────────────────────────────────────────────
 
-  it('should retry all failed entries', async () => {
-    mockQueue.updateMany.mockResolvedValue({ count: 5 });
-    const count = await service.retryFailed('tenant-1');
-    expect(count).toBe(5);
-  });
-
-  it('should return queue stats', async () => {
-    mockQueue.groupBy.mockResolvedValue([
-      { status: 'QUEUED', _count: 10 },
-      { status: 'COMPLETED', _count: 5 },
+  it('getQueueStats returns correct counts per status', async () => {
+    mockPrisma.enrichmentQueue.groupBy.mockResolvedValue([
+      { status: EnrichmentStatus.QUEUED, _count: 5 },
+      { status: EnrichmentStatus.EXECUTING, _count: 2 },
+      { status: EnrichmentStatus.COMPLETED, _count: 10 },
     ]);
-    const stats = await service.getQueueStats('tenant-1');
-    expect(stats['QUEUED']).toBe(10);
-    expect(stats['COMPLETED']).toBe(5);
+
+    const stats = await service.getQueueStats('tnt-1');
+
+    expect(stats).toEqual({
+      QUEUED: 5,
+      DISPATCHED: 0,
+      EXECUTING: 2,
+      VALIDATING: 0,
+      CORRECTING: 0,
+      COMPLETED: 10,
+      FAILED: 0,
+      PERMANENTLY_FAILED: 0,
+    });
   });
 
-  it('should get a single entry', async () => {
+  // ── getEntry ─────────────────────────────────────────────────
+
+  it('getEntry returns entry by id', async () => {
     const entry = makeEntry();
-    mockQueue.findUnique.mockResolvedValue(entry);
-    const result = await service.getEntry('entry-1');
+    mockPrisma.enrichmentQueue.findUnique.mockResolvedValue(entry);
+
+    const result = await service.getEntry('eq-1');
+
     expect(result).toEqual(entry);
+    expect(mockPrisma.enrichmentQueue.findUnique).toHaveBeenCalledWith({
+      where: { id: 'eq-1' },
+    });
   });
 
-  it('should throw on transition for nonexistent entry', async () => {
-    mockQueue.findUnique.mockResolvedValue(null);
-    await expect(service.markExecuting('nonexistent')).rejects.toThrow(
-      'not found',
-    );
-  });
+  it('getEntry returns null for non-existent id', async () => {
+    mockPrisma.enrichmentQueue.findUnique.mockResolvedValue(null);
 
-  it('should throw on markFailed for nonexistent entry', async () => {
-    mockQueue.findUnique.mockResolvedValue(null);
-    await expect(
-      service.markFailed('nonexistent', 'error'),
-    ).rejects.toThrow('not found');
-  });
+    const result = await service.getEntry('nope');
 
-  it('should use default maxRetries of 5', async () => {
-    mockQueue.create.mockImplementation(({ data }: any) => data);
-    const result = await service.enqueue('tenant-1', 'slug');
-    expect(result.maxRetries).toBe(5);
+    expect(result).toBeNull();
   });
 });

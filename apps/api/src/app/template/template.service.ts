@@ -1,101 +1,82 @@
-import { Injectable, Logger } from '@nestjs/common';
-import * as fs from 'fs';
+import { Injectable } from '@nestjs/common';
+import { readFileSync, readdirSync } from 'fs';
 import * as path from 'path';
 import { TemplateResolutionError } from './template.error';
 
+/** File names of all vault templates (with .template extension). */
+const TEMPLATE_FILES = [
+  'SCHEMA.template.md',
+  'TENANT-PROTOCOL.template.md',
+  'GUARDRAILS.template.md',
+  'SOUL.template.md',
+  'FLOW.template.md',
+  'bootstrap.template.md',
+] as const;
+
 @Injectable()
 export class TemplateService {
-  private readonly logger = new Logger(TemplateService.name);
   private readonly templateDir: string;
 
   constructor() {
-    this.templateDir = path.resolve(
+    this.templateDir = path.join(
       process.cwd(),
       'openclaw-config',
       'templates',
+      'vault',
     );
   }
 
   /**
-   * Resolve a template file with the given variables.
-   * Throws TemplateResolutionError if any placeholders remain unresolved.
+   * Resolve a single template by replacing all `{{key}}` placeholders
+   * with the corresponding values from `variables`.
+   *
+   * @param templateName - file name inside the template directory, e.g. `SCHEMA.template.md`
+   * @param variables    - key/value map; keys should match placeholder names (without braces)
+   * @returns the fully-resolved template content
+   * @throws TemplateResolutionError if any `{{…}}` placeholders remain after substitution
    */
-  resolve(
-    templateName: string,
-    vars: Record<string, string>,
-  ): string {
-    const templatePath = path.join(this.templateDir, templateName);
-    if (!fs.existsSync(templatePath)) {
-      throw new Error(`Template not found: ${templateName}`);
+  resolve(templateName: string, variables: Record<string, string>): string {
+    const filePath = path.join(this.templateDir, templateName);
+    let content = readFileSync(filePath, 'utf-8');
+
+    // Replace all {{key}} occurrences with corresponding variable values.
+    // Uses a global regex so every occurrence is replaced (deterministic).
+    for (const [key, value] of Object.entries(variables)) {
+      // Escape key for regex safety (keys are simple identifiers, but be safe).
+      const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = new RegExp(`\\{\\{${escaped}\\}\\}`, 'g');
+      content = content.replace(pattern, value);
     }
-    const template = fs.readFileSync(templatePath, 'utf-8');
-    return this.resolveContent(template, vars);
+
+    // Check for any remaining unresolved placeholders.
+    const remaining: string[] = [];
+    for (const m of content.matchAll(/\{\{([^}]+)\}\}/g)) {
+      if (m[1]) remaining.push(m[1]);
+    }
+    if (remaining.length > 0) {
+      const unique = [...new Set(remaining)];
+      throw new TemplateResolutionError(templateName, unique);
+    }
+
+    return content;
   }
 
   /**
-   * Resolve template content (string) with variables.
+   * Resolve all 6 vault templates and return a Map of
+   * output filename (without `.template`) to resolved content.
+   *
+   * Example entry: `'SCHEMA.md'` -> resolved content string
    */
-  resolveContent(
-    content: string,
-    vars: Record<string, string>,
-  ): string {
-    let resolved = content;
-    for (const [key, value] of Object.entries(vars)) {
-      const pattern = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-      resolved = resolved.replace(pattern, value);
-    }
-
-    // Check for unresolved placeholders
-    const unresolved = resolved.match(/\{\{[A-Z_]+\}\}/g);
-    if (unresolved && unresolved.length > 0) {
-      const unique = [...new Set(unresolved)];
-      throw new TemplateResolutionError(
-        `Unresolved placeholders: ${unique.join(', ')}`,
-        unique,
-      );
-    }
-
-    return resolved;
-  }
-
-  /**
-   * Resolve all templates in a directory with the given variables.
-   */
-  resolveAll(
-    vars: Record<string, string>,
-    subDir?: string,
-  ): Map<string, string> {
-    const dir = subDir
-      ? path.join(this.templateDir, subDir)
-      : this.templateDir;
-
-    if (!fs.existsSync(dir)) {
-      throw new Error(`Template directory not found: ${dir}`);
-    }
-
+  resolveAll(variables: Record<string, string>): Map<string, string> {
     const results = new Map<string, string>();
-    const files = this.getAllFiles(dir);
 
-    for (const file of files) {
-      const relativePath = path.relative(this.templateDir, file);
-      const content = fs.readFileSync(file, 'utf-8');
-      results.set(relativePath, this.resolveContent(content, vars));
+    for (const templateFile of TEMPLATE_FILES) {
+      const resolved = this.resolve(templateFile, variables);
+      // Strip ".template" from the filename: "SCHEMA.template.md" -> "SCHEMA.md"
+      const outputName = templateFile.replace('.template', '');
+      results.set(outputName, resolved);
     }
 
     return results;
-  }
-
-  private getAllFiles(dir: string): string[] {
-    const files: string[] = [];
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        files.push(...this.getAllFiles(fullPath));
-      } else {
-        files.push(fullPath);
-      }
-    }
-    return files;
   }
 }

@@ -1,73 +1,195 @@
-import { OnboardingVerificationService } from './onboarding-verification.service';
+import { Test } from '@nestjs/testing';
+import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
+import { VAULT_STORAGE } from '../vault-storage/vault-storage.interface';
+import {
+  OnboardingVerificationService,
+  VerificationResult,
+} from './onboarding-verification.service';
+
+// ── Mocks ──────────────────────────────────────────────────────
+
+function createMockPrisma() {
+  return {
+    concept: {
+      count: jest.fn().mockResolvedValue(10),
+    },
+    conversation: {
+      count: jest.fn().mockResolvedValue(10),
+    },
+    note: {
+      count: jest.fn().mockResolvedValue(10),
+    },
+  };
+}
+
+function createMockVault() {
+  return {
+    fileExists: jest.fn().mockResolvedValue(true),
+    readFile: jest.fn().mockResolvedValue('non-empty content'),
+    writeFile: jest.fn(),
+    listFiles: jest.fn(),
+    writeFiles: jest.fn(),
+    createDirectories: jest.fn(),
+  };
+}
+
+const TENANT_ID = 'test-tenant-001';
+const EXPECTED_COUNT = 10;
+
+// Valid SOUL.md content
+const VALID_SOUL = `# SOUL Configuration
+Tenant: test-tenant-001
+Language: ENGLISH
+Some other content here.`;
 
 describe('OnboardingVerificationService', () => {
   let service: OnboardingVerificationService;
-  let mockPrisma: any;
-  let mockVault: any;
+  let mockPrisma: ReturnType<typeof createMockPrisma>;
+  let mockVault: ReturnType<typeof createMockVault>;
 
-  beforeEach(() => {
-    mockPrisma = {
-      tenant: { findUnique: jest.fn().mockResolvedValue({ id: 'tenant-1', name: 'Test' }) },
-      user: { count: jest.fn().mockResolvedValue(2) },
-      concept: { count: jest.fn().mockResolvedValue(443) },
-      conceptRelationship: { count: jest.fn().mockResolvedValue(3658) },
-      llmProviderConfig: { count: jest.fn().mockResolvedValue(1) },
-    };
-    mockVault = {
-      fileExists: jest.fn().mockResolvedValue(true),
-      listFiles: jest.fn().mockResolvedValue(['main', 'research']),
-      readFile: jest.fn().mockResolvedValue('## Identity\n## Mission\n## Self-Validation'),
-    };
-    service = new OnboardingVerificationService(mockPrisma, mockVault);
+  beforeEach(async () => {
+    mockPrisma = createMockPrisma();
+    mockVault = createMockVault();
+
+    // Default: SOUL.md returns valid content
+    mockVault.readFile.mockImplementation((_tid: string, path: string) => {
+      if (path === 'SOUL.md') return Promise.resolve(VALID_SOUL);
+      return Promise.resolve('non-empty content');
+    });
+
+    const module = await Test.createTestingModule({
+      providers: [
+        OnboardingVerificationService,
+        { provide: PlatformPrismaService, useValue: mockPrisma },
+        { provide: VAULT_STORAGE, useValue: mockVault },
+      ],
+    }).compile();
+
+    service = module.get(OnboardingVerificationService);
   });
 
-  it('should pass all checks for valid tenant', async () => {
-    const result = await service.verifyTenantSetup('tenant-1', 2);
-    expect(result.passed).toBe(true);
-    expect(result.checks.length).toBeGreaterThanOrEqual(13);
+  // ── All Passing ──────────────────────────────────────────────
+
+  it('passes when all checks pass', async () => {
+    const result = await service.verifyTenantSetup(TENANT_ID, EXPECTED_COUNT);
+
+    expect(result.verified).toBe(true);
+    expect(result.failures).toHaveLength(0);
+    // 3 PG checks + 9 vault files + 1 SOUL.md = 13 checks
+    expect(result.checks).toHaveLength(13);
   });
 
-  it('should fail when tenant not found', async () => {
-    mockPrisma.tenant.findUnique.mockResolvedValue(null);
-    const result = await service.verifyTenantSetup('unknown', 2);
-    expect(result.passed).toBe(false);
-    expect(result.checks.find((c: any) => c.name === 'tenant_exists')!.passed).toBe(false);
+  // ── Concept Count ────────────────────────────────────────────
+
+  it('fails when concept count is 0', async () => {
+    mockPrisma.concept.count.mockResolvedValue(0);
+
+    const result = await service.verifyTenantSetup(TENANT_ID, EXPECTED_COUNT);
+
+    expect(result.verified).toBe(false);
+    const conceptFailure = result.failures.find((f) => f.check === 'concept_count');
+    expect(conceptFailure).toBeDefined();
+    expect(conceptFailure!.passed).toBe(false);
+    expect(conceptFailure!.actual).toBe(0);
+    expect(conceptFailure!.expected).toBe(EXPECTED_COUNT);
   });
 
-  it('should fail when no users exist', async () => {
-    mockPrisma.user.count.mockResolvedValue(0);
-    const result = await service.verifyTenantSetup('tenant-1', 2);
-    expect(result.passed).toBe(false);
+  // ── Vault File Missing ───────────────────────────────────────
+
+  it('fails when vault file missing (fileExists returns false)', async () => {
+    mockVault.fileExists.mockImplementation((_tid: string, path: string) => {
+      if (path === 'SCHEMA.md') return Promise.resolve(false);
+      return Promise.resolve(true);
+    });
+
+    const result = await service.verifyTenantSetup(TENANT_ID, EXPECTED_COUNT);
+
+    expect(result.verified).toBe(false);
+    const fileFailure = result.failures.find(
+      (f) => f.check === 'vault_file:SCHEMA.md',
+    );
+    expect(fileFailure).toBeDefined();
+    expect(fileFailure!.passed).toBe(false);
+    expect(fileFailure!.message).toContain('does not exist');
   });
 
-  it('should fail when agent count is below expected', async () => {
-    mockVault.listFiles.mockResolvedValue(['main']); // only 1 agent
-    const result = await service.verifyTenantSetup('tenant-1', 3);
-    const agentCheck = result.checks.find((c: any) => c.name === 'agent_soul_files');
-    expect(agentCheck!.passed).toBe(false);
+  // ── SOUL.md Wrong Tenant ─────────────────────────────────────
+
+  it('fails when SOUL.md has wrong tenantId', async () => {
+    mockVault.readFile.mockImplementation((_tid: string, path: string) => {
+      if (path === 'SOUL.md') {
+        return Promise.resolve('Tenant: other-tenant-999\nLanguage: ENGLISH');
+      }
+      return Promise.resolve('non-empty content');
+    });
+
+    const result = await service.verifyTenantSetup(TENANT_ID, EXPECTED_COUNT);
+
+    expect(result.verified).toBe(false);
+    const soulFailure = result.failures.find((f) => f.check === 'soul_md');
+    expect(soulFailure).toBeDefined();
+    expect(soulFailure!.passed).toBe(false);
+    expect(soulFailure!.message).toContain('tenantId');
   });
 
-  it('should handle vault errors gracefully', async () => {
-    mockVault.fileExists.mockRejectedValue(new Error('Vault down'));
-    mockVault.listFiles.mockRejectedValue(new Error('Vault down'));
-    mockVault.readFile.mockRejectedValue(new Error('Vault down'));
-    const result = await service.verifyTenantSetup('tenant-1', 2);
-    // Should not throw, just mark checks as failed
-    expect(result).toBeDefined();
-    expect(result.checks.length).toBeGreaterThan(0);
+  // ── SOUL.md Missing ENGLISH ──────────────────────────────────
+
+  it("fails when SOUL.md doesn't contain ENGLISH", async () => {
+    mockVault.readFile.mockImplementation((_tid: string, path: string) => {
+      if (path === 'SOUL.md') {
+        return Promise.resolve(`Tenant: ${TENANT_ID}\nLanguage: SERBIAN`);
+      }
+      return Promise.resolve('non-empty content');
+    });
+
+    const result = await service.verifyTenantSetup(TENANT_ID, EXPECTED_COUNT);
+
+    expect(result.verified).toBe(false);
+    const soulFailure = result.failures.find((f) => f.check === 'soul_md');
+    expect(soulFailure).toBeDefined();
+    expect(soulFailure!.passed).toBe(false);
+    expect(soulFailure!.message).toContain('ENGLISH');
   });
 
-  it('should return summary with failed check names', async () => {
-    mockPrisma.tenant.findUnique.mockResolvedValue(null);
-    const result = await service.verifyTenantSetup('unknown', 2);
-    expect(result.summary).toContain('checks failed');
-    expect(result.summary).toContain('tenant_exists');
+  // ── Failure Details ──────────────────────────────────────────
+
+  it('failure result includes specific check name and details', async () => {
+    mockPrisma.concept.count.mockResolvedValue(0);
+    mockPrisma.conversation.count.mockResolvedValue(0);
+
+    const result = await service.verifyTenantSetup(TENANT_ID, EXPECTED_COUNT);
+
+    expect(result.verified).toBe(false);
+    expect(result.failures.length).toBeGreaterThanOrEqual(2);
+
+    for (const failure of result.failures) {
+      expect(failure.check).toBeDefined();
+      expect(failure.check.length).toBeGreaterThan(0);
+      expect(failure.passed).toBe(false);
+      expect(failure.message).toBeDefined();
+      expect(failure.message.length).toBeGreaterThan(0);
+    }
   });
 
-  it('should check SOUL.md content validity', async () => {
-    mockVault.readFile.mockResolvedValue('# Empty SOUL');
-    const result = await service.verifyTenantSetup('tenant-1', 2);
-    const soulCheck = result.checks.find((c: any) => c.name === 'soul_content_valid');
-    expect(soulCheck!.passed).toBe(false);
+  // ── Checks Count ─────────────────────────────────────────────
+
+  it('checks count matches expected for each type', async () => {
+    const result = await service.verifyTenantSetup(TENANT_ID, EXPECTED_COUNT);
+
+    const pgChecks = result.checks.filter(
+      (c) =>
+        c.check === 'concept_count' ||
+        c.check === 'conversation_count' ||
+        c.check === 'note_count',
+    );
+    expect(pgChecks).toHaveLength(3);
+
+    const vaultChecks = result.checks.filter((c) =>
+      c.check.startsWith('vault_file:'),
+    );
+    expect(vaultChecks).toHaveLength(9);
+
+    const soulChecks = result.checks.filter((c) => c.check === 'soul_md');
+    expect(soulChecks).toHaveLength(1);
   });
 });

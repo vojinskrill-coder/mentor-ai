@@ -29,49 +29,49 @@ const MAX_RECURSION_DEPTH = 10;
 
 const WORKFLOW_GENERATION_SYSTEM_PROMPT = `You are an experienced business workflow designer. Create structured, sequential workflows where each step PRODUCES a concrete business document.
 
-Every workflow must:
-1. Start with diagnostics/assessment before strategic recommendations — NEVER skip analysis of the current state
+Each workflow must:
+1. Start with diagnostics/assessment before strategic recommendations — NEVER skip current state analysis
 2. Include prompts that instruct the AI to EXECUTE the work and PRODUCE results — NOT to explain to the user
 3. Each step produces a usable output (analysis, plan, matrix, strategy, profile, etc.)
-4. Use the appropriate departmental framework when departmentTag is specified
+4. Use the appropriate department framework when departmentTag is specified
 5. Be SPECIFIC to the given company and industry — NOT generic
 
 CONCEPT USAGE:
 - Each step MUST apply {{conceptName}} as an analytical framework — not explain it
 - If the concept has PREREQUISITE concepts, earlier steps must apply those foundations before the main concept
 - If the concept has RELATED concepts, use them for supplementary analysis where relevant
-- NEVER list concept definitions — APPLY them to the concrete business
+- NEVER list concept definitions — APPLY them to the specific business
 
 SEQUENTIAL BUILDING:
-- Step 2 MUST use findings from step 1 — must not generate an independent analysis
-- Step 3 MUST synthesize findings from steps 1 and 2 into a concrete plan
+- Step 2 MUST use findings from Step 1 — must not generate an independent analysis
+- Step 3 MUST synthesize findings from Steps 1 and 2 into a concrete plan
 - promptTemplate of each step (except the first) MUST contain the instruction: "Based on the previously completed analysis, ..."
-- NEVER repeat analysis that was already done in a previous step
+- NEVER repeat an analysis already done in a previous step
 
 OUTPUT QUALITY:
-- Every finding must have a rationale — not just a claim
+- Every finding must have justification — not just a claim
 - Recommendations must be prioritized — not a list of equally important items
-- Every document must end with CONCRETE next steps
+- Every document must end with SPECIFIC next steps
 - Use tables for comparative analyses and numerical data
 - Format: clean markdown with ## sections, tables, > callout blocks
 
-CRITICAL for the promptTemplate field:
+CRITICAL for promptTemplate field:
 - Prompt MUST instruct the AI to DO the work, NOT to explain to the user how to do it
-- Prompt is INTERNAL — the user NEVER sees it. The user only sees the produced document.
+- Prompt is INTERNAL — the user NEVER sees it. The user sees only the produced document.
 - ALWAYS use imperative verbs: "Execute", "Create", "Analyze", "Develop", "Map", "Produce"
 - NEVER use: "Explain", "Consider", "You should", "It is recommended"
 - ALWAYS use placeholder {{businessContext}} for company name and industry
 - ALWAYS use placeholder {{conceptName}} for the concept name
-- EVERY prompt MUST request minimum 800 words of output with structured headings and concrete examples
+- EVERY prompt MUST require a minimum of 800 words output with structured headings and specific examples
 
 Example GOOD promptTemplate:
-"Execute a complete SWOT analysis for {{businessContext}} using the {{conceptName}} framework. Produce a structured matrix with minimum 5 items per category. For each item write: finding, evidence/rationale, action recommendation. Use tables where possible. Minimum 1000 words."
+"Execute a complete SWOT analysis for {{businessContext}} using the {{conceptName}} framework. Produce a structured matrix with a minimum of 5 items per category. For each item write: finding, evidence/justification, action recommendation. Use tables where possible. Minimum 1000 words."
 
 Example BAD promptTemplate:
-"Explain what SWOT analysis is and how to apply it to a business"
+"Explain what SWOT analysis is and how to apply it to business"
 
-IMPORTANT: All text MUST be in English.
-Return ONLY valid JSON array without markdown formatting.`;
+IMPORTANT: All text MUST be in ENGLISH.
+Return ONLY a valid JSON array without markdown formatting.`;
 
 /**
  * Callbacks provided by the gateway for plan execution.
@@ -291,8 +291,8 @@ ${task.content ? `TASK DESCRIPTION: ${task.content}` : ''}${conceptContext}${con
 
 CONVERSATION ANALYSIS:
 - Read the conversation and identify WHAT the user already knows about this problem
-- Do not generate steps for things that have already been discussed or resolved
-- Reference specific problems, products, or situations the user mentioned
+- Do not generate steps for things already discussed or resolved
+- Reference specific problems, products or situations the user mentioned
 - promptTemplate MUST use specifics from the conversation
 
 CONCEPT AS FRAMEWORK:
@@ -300,19 +300,19 @@ CONCEPT AS FRAMEWORK:
 - Do not explain the concept — apply it to the user's specific situation
 
 SEQUENTIAL BUILDING:
-- Step 2 MUST use findings from step 1 — promptTemplate must contain "Based on the previously completed analysis, ..."
-- Step 3 MUST synthesize findings from steps 1 and 2 into a concrete plan
-- NEVER repeat analysis that was already done in a previous step
+- Step 2 MUST use findings from Step 1 — promptTemplate must contain "Based on the previously completed analysis, ..."
+- Step 3 MUST synthesize findings from Steps 1 and 2 into a concrete plan
+- NEVER repeat an analysis already done in a previous step
 
-CRITICAL: Steps MUST be directly related to the TASK above and to the USER'S CONVERSATION.
-DO NOT generate generic steps for a concept. Generate steps that solve the user's SPECIFIC problem.
+CRITICAL: Steps MUST be directly connected to the TASK above and the USER'S CONVERSATION.
+Do NOT generate generic steps for a concept. Generate steps that solve the user's SPECIFIC problem.
 
 Return a JSON array of steps. Each step must have:
 - stepNumber (integer starting from 1)
-- title (concise action title, max 60 characters, in English)
-- description (what this step achieves, max 200 characters, in English)
-- promptTemplate (INTERNAL prompt that instructs the AI to EXECUTE the step. Use {{conceptName}} and {{businessContext}} placeholders. Action verbs: "Execute", "Create", "Analyze". NEVER "Explain" or "You should".)
-- expectedOutcome (concrete deliverable, max 100 characters, in English)
+- title (concise action title, max 60 characters)
+- description (what this step achieves, max 200 characters)
+- promptTemplate (INTERNAL prompt instructing AI to EXECUTE the step. Use {{conceptName}} and {{businessContext}} placeholders. Action verbs: "Execute", "Create", "Analyze". NEVER "Explain" or "You should".)
+- expectedOutcome (concrete deliverable, max 100 characters)
 - estimatedMinutes (integer)
 - departmentTag (optional: "CFO", "CMO", "CTO", "OPERATIONS", "LEGAL", "CREATIVE")
 
@@ -389,13 +389,13 @@ Generate exactly 3 steps. Order logically according to the task.`;
     tenant?: { name: string | null; industry: string | null; description: string | null } | null,
     relatedConcepts?: string[]
   ): string {
-    let prompt = `Generate a workflow for EXECUTING a business analysis and PRODUCING concrete results using the concept "${name}".
+    let prompt = `Generate a workflow for EXECUTING business analysis and PRODUCING concrete results using the concept "${name}".
 
 --- CONCEPT ---
 Name: ${name}
 Definition: ${definition}
 ${extendedDescription ? `Extended description: ${extendedDescription}` : ''}
-${prerequisites.length > 0 ? `Prerequisites (concept builds on these): ${prerequisites.join(', ')}` : 'No prerequisites — this is a fundamental concept.'}
+${prerequisites.length > 0 ? `Prerequisites (the concept builds on these): ${prerequisites.join(', ')}` : 'No prerequisites — this is a fundamental concept.'}
 ${relatedConcepts && relatedConcepts.length > 0 ? `Related concepts: ${relatedConcepts.join(', ')}` : ''}
 ${departmentTags.length > 0 ? `Relevant departments: ${departmentTags.join(', ')}` : ''}`;
 
@@ -406,7 +406,7 @@ ${departmentTags.length > 0 ? `Relevant departments: ${departmentTags.join(', ')
 Company: ${tenant.name ?? 'Unknown'}
 Industry: ${tenant.industry ?? 'General'}
 ${tenant.description ? `Description: ${tenant.description}` : ''}
-CRITICAL: Steps MUST be tailored to this company and industry. DO NOT generate generic steps.`;
+CRITICAL: Steps MUST be tailored to this company and industry. Do NOT generate generic steps.`;
     }
 
     prompt += `
@@ -414,18 +414,18 @@ CRITICAL: Steps MUST be tailored to this company and industry. DO NOT generate g
 --- RESPONSE FORMAT ---
 Return a JSON array of steps. Each step must have:
 - stepNumber (integer starting from 1)
-- title (concise action title, max 60 characters, in English, action verb: "Analyze...", "Create...", "Map...")
-- description (what this step achieves and WHY it is important, max 200 characters, in English)
-- promptTemplate (INTERNAL prompt that instructs the AI to EXECUTE the step and PRODUCE a concrete document. Must contain {{conceptName}} and {{businessContext}} placeholders. Request minimum 800 words of output, structured headings, tables where possible, concrete examples and recommendations.)
-- expectedOutcome (concrete deliverable the client can use immediately, max 100 characters, in English)
+- title (concise action title, max 60 characters, action verb: "Analyze...", "Create...", "Map...")
+- description (what this step achieves and WHY it is important, max 200 characters)
+- promptTemplate (INTERNAL prompt instructing AI to EXECUTE the step and PRODUCE a concrete document. Must contain {{conceptName}} and {{businessContext}} placeholders. Require minimum 800 words output, structure with headings, tables where possible, specific examples and recommendations.)
+- expectedOutcome (concrete deliverable the client can use immediately, max 100 characters)
 - estimatedMinutes (integer, realistic estimate)
 - departmentTag (optional: "CFO", "CMO", "CTO", "OPERATIONS", "LEGAL", "CREATIVE")
 
 Generate 3-4 steps. Order:
-1. Diagnostics/analysis of current state
+1. Diagnostics/current state analysis
 2. Strategic planning and action plan
 3. Implementation plan with KPI measurement
-4. (optional, only for complex topics) Market/competition research`;
+4. (optional, only for complex topics) Market/competitive research`;
 
     return prompt;
   }
@@ -448,7 +448,7 @@ Generate 3-4 steps. Order:
         description: (step.description as string) || '',
         promptTemplate:
           (step.promptTemplate as string) ||
-          `Execute a comprehensive analysis of the concept "{{conceptName}}" applied to {{businessContext}}. Produce a structured document with concrete findings, tabular presentation, and actionable recommendations. Minimum 800 words.`,
+          `Execute a comprehensive analysis of the concept "{{conceptName}}" applied to {{businessContext}}. Produce a structured document with concrete findings, tabular display, and action recommendations. Minimum 800 words.`,
         expectedOutcome: (step.expectedOutcome as string) || '',
         estimatedMinutes: (step.estimatedMinutes as number) ?? 5,
         departmentTag: (step.departmentTag as string) || undefined,
@@ -462,10 +462,10 @@ Generate 3-4 steps. Order:
         {
           stepNumber: 1,
           title: 'Analyze current state',
-          description: 'Diagnostics and analysis by applying this concept to the concrete business',
+          description: 'Diagnostics and analysis by applying this concept to the specific business',
           promptTemplate:
-            'Execute a detailed analysis of the concept "{{conceptName}}" applied to {{businessContext}}. Diagnose the current state, identify key areas for improvement. Produce a structured document with headings, tables, and concrete actionable recommendations. Minimum 1000 words.',
-          expectedOutcome: 'Complete analytical report with actionable recommendations',
+            'Execute a detailed analysis of the concept "{{conceptName}}" applied to {{businessContext}}. Diagnose the current state, identify key areas for improvement. Produce a structured document with headings, tables, and specific action recommendations. Minimum 1000 words.',
+          expectedOutcome: 'Complete analytical report with action recommendations',
           estimatedMinutes: 10,
         },
       ];
@@ -606,7 +606,7 @@ Generate 3-4 steps. Order:
 
     if (conceptIds.length === 0) {
       throw new Error(
-        'No relevant concepts found for the selected tasks. Check whether concepts are loaded in the knowledge base.'
+        'No relevant concepts found for selected tasks. Verify that concepts are loaded in the knowledge base.'
       );
     }
 
@@ -1117,69 +1117,69 @@ TASK: ${step.title}
 EXPECTED OUTCOME: ${workflowStep.expectedOutcome}
 
 RULES:
-1. DO the work — do not describe how it is done. Produce the finished document.
+1. DO the work — do not describe how it is done. Produce a finished document.
 2. Use CONCEPT KNOWLEDGE below as an analytical framework, but do NOT explain it to the user
-3. Apply the analysis specifically to THIS business using the BUSINESS CONTEXT
+3. Apply the analysis specifically to THIS business using BUSINESS CONTEXT
 4. Produce a complete, usable result the client can use immediately
-5. When using concept knowledge, mark it as [[Concept Name]]
-6. Be concrete — use the company name, industry, and specific situation
-7. Structure with headings, tables, lists, and concrete recommendations
+5. When using knowledge from a concept, mark it as [[Concept Name]]
+6. Be specific — use the company name, industry, and specific situation
+7. Structure with headings, tables, bullet points, and specific recommendations
 8. Respond EXCLUSIVELY in English
 
 CONCEPT USAGE:
-- Concepts below are your ANALYTICAL FRAMEWORK — not lessons to explain
-- APPLY the concept to the concrete business: if the concept is "SWOT Analysis", do not explain what SWOT is — do the SWOT for this company
-- If there are RELATED concepts, use them for supplementary depth of analysis
+- The concepts below are your ANALYTICAL FRAMEWORK — not lessons to explain
+- APPLY the concept to the specific business: if the concept is "SWOT Analysis", do not explain what SWOT is — do the SWOT for this company
+- If there are RELATED concepts, use them for additional analytical depth
 - Mark applied concepts with [[Concept Name]] so the user can trace the knowledge source
 - Explain HOW the concept changes the analysis — not just that it was applied, but WHAT new it reveals
 
 ANALYTICAL STANDARDS:
-- Every finding MUST have a rationale — not just a claim. Instead of "Strong brand" → "Strong brand — because it has 45 years of tradition and exclusive contracts with 30+ restaurants"
-- When applying an analytical framework, finish with STRATEGIC IMPLICATIONS — do not just list items
-- Connect findings — if analysis shows a gap, the strategy must address that gap
+- Every finding MUST have justification — not just a claim. Instead of "Strong brand" → "Strong brand — because it has 45 years of tradition and exclusive contracts with 30+ restaurants"
+- When applying an analytical framework, end with STRATEGIC IMPLICATIONS — do not just list items
+- Connect findings — if the analysis shows a gap, the strategy must address that gap
 - Recommendations must be PRIORITIZED — 3 critical recommendations at the top, others after
-- Every document must end with CONCRETE next steps: who, what, when
-- State KEY METRICS identified in this analysis (e.g., current margin, market size, conversion) — these are baseline values for future tracking
-- Mark under which CONDITIONS this analysis should be redone (e.g., competitor price change, new market player, regulatory change)
+- Every document must end with SPECIFIC next steps: who, what, when
+- State KEY METRICS established in this analysis (e.g., current margin, market size, conversion) — these are baseline values for future tracking
+- Mark under which CONDITIONS this analysis should be redone (e.g., competitor price change, new market player, regulation change)
 
 OUTPUT FORMAT (markdown):
 - Use ## for sections, ### for subsections
-- Use > **Key Insight:** for the most important conclusions
+- Use > **Key insight:** for the most important conclusions
 - Use tables for all comparative and numerical data
 - Use **bold** for key terms
-- Use bullet lists for enumeration, NOT long paragraphs
+- Use bullet lists for enumerations, NOT long paragraphs
 - Minimum 800 words for analytical documents
 
 DISTINGUISH TWO TYPES OF TASKS:
 A) DIGITAL (content, plans, analyses, emails, campaigns, budgets, templates, procedures):
-   → PRODUCE THE FINISHED RESULT. Do not give instructions — DO the work and present the finished document.
+   → PRODUCE A FINISHED RESULT. Do not give instructions — DO the work and present the finished document.
 B) PHYSICAL (going somewhere, ordering, calls, installation, meetings):
-   → DO NOT simulate having completed a physical action. Write WHO needs to do WHAT with all details.
-   → Mark with "⚠ REQUIRES HUMAN ACTION:" before each step that AI cannot execute.
+   → Do NOT simulate having performed a physical action. Write WHO needs to do WHAT with all details.
+   → Mark with "⚠ REQUIRES HUMAN ACTION:" before every step AI cannot execute.
 
 FORBIDDEN (never do this):
-- DO NOT write "you should analyze..." or "it is recommended to consider..." for digital tasks
-- DO NOT write "you need to consider..." or "think about the following..."
-- DO NOT explain what a concept or framework is — APPLY it
-- DO NOT give generic advice — give SPECIFIC findings for this company
-- DO NOT describe steps the client should take for digital work — YOU execute them and present results
-- DO NOT write introductions like "In this document we will..." — start with content immediately
-- DO NOT fabricate data — if you don't have a concrete data point, indicate [TO BE FILLED: ...]
+- Do NOT write "you should analyze..." or "it is recommended to consider..." for digital tasks
+- Do NOT write "you need to consider..." or "think about the following..."
+- Do NOT explain what a concept or framework is — APPLY it
+- Do NOT give generic advice — give SPECIFIC findings for this company
+- Do NOT describe steps the client needs to take for digital work — YOU execute them and present results
+- Do NOT write introductions like "In this document we will..." — start immediately with the content
+- Do NOT fabricate data — if you do not have a specific data point, indicate [TO BE FILLED: ...]
 
-EXAMPLE OF GOOD RESPONSE (SWOT analysis for "LuxVino", luxury wines):
+EXAMPLE OF A GOOD RESPONSE (SWOT analysis for "LuxVino", luxury wines):
 ---
 ## SWOT Analysis — LuxVino
 
 ### Strengths
-1. **Premium positioning** — hand-picked harvest and limited production [[Value Proposition]]
+1. **Premium positioning** — hand-harvested and limited production [[Value Proposition]]
 2. **45 years of family winemaking** — brand authenticity
 3. **Exclusive contracts with 30+ restaurants** — stable B2B channel
 
 ### Weaknesses
-1. **Only 2% of revenue from online channels** — missed digital audience
+1. **Only 2% revenue from online channels** — missed digital audience
 ---
 
-EXAMPLE OF BAD RESPONSE (FORBIDDEN):
+EXAMPLE OF A BAD RESPONSE (FORBIDDEN):
 ---
 "SWOT analysis is a strategic tool used to assess strengths, weaknesses, opportunities, and threats.
 To apply it to your business, you should:
@@ -1204,11 +1204,11 @@ This is FORBIDDEN because it explains the tool instead of applying it.${taskSpec
       systemPromptText += '\n--- END OF COMPLETED STEPS ---';
       systemPromptText += `
 USING PREVIOUS RESULTS:
-- You MUST use findings from previous steps — do not repeat analysis that was already done
-- Reference concrete data, names, numbers from previous steps
+- MUST use findings from previous steps — do not repeat analysis already done
+- Reference specific data, names, numbers from previous steps
 - If a previous step identifies a problem, your step must address that SPECIFIC problem
 - If a previous step contains web search data, use those SPECIFIC sources and URLs
-- NEVER repeat analyses or recommendations from previous steps — BUILD UPON them`;
+- NEVER repeat analyses or recommendations from previous steps — BUILD ON them`;
     }
 
     // 4b. Maturity Engine: inject prerequisite concept outputs as context
@@ -1229,7 +1229,7 @@ USING PREVIOUS RESULTS:
             systemPromptText += `\n### ${po.conceptName}\n${po.outputSummary}`;
           }
           systemPromptText += '\n--- END OF PREREQUISITE CONTEXT ---';
-          systemPromptText += `\nUSE these findings as a FOUNDATION — do not repeat them, BUILD UPON them.`;
+          systemPromptText += `\nUSE these findings as a FOUNDATION — do not repeat them, BUILD ON them.`;
         }
       }
     } catch (err) {
@@ -1246,7 +1246,7 @@ USING PREVIOUS RESULTS:
       .replace(
         /\{\{businessContext\}\}/g,
         tenant
-          ? `for the company "${tenant.name}" in the ${tenant.industry ?? 'general business'} industry`
+          ? `for company "${tenant.name}" in the ${tenant.industry ?? 'general business'} industry`
           : 'for this business'
       );
 
@@ -1591,7 +1591,7 @@ USING PREVIOUS RESULTS:
     const noteData = toSeed.map((concept) => ({
       id: `note_${createId()}`,
       title: concept.name,
-      content: `Explore concept: ${concept.name}`,
+      content: `Enrich: ${concept.name}`,
       source: NoteSource.CONVERSATION,
       noteType: NoteType.TASK,
       status: NoteStatus.PENDING,

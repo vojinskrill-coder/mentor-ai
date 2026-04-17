@@ -61,13 +61,22 @@ export class ConceptService {
    * @returns Paginated list of concept summaries
    */
   async findAll(
-    options: ConceptQueryOptions = {}
+    options: ConceptQueryOptions & { tenantId?: string | null } = {}
   ): Promise<{ data: ConceptSummary[]; meta: PaginationMeta }> {
     const page = options.page ?? 1;
     const limit = Math.min(options.limit ?? 20, 100);
     const skip = (page - 1) * limit;
 
     const where: Record<string, unknown> = {};
+
+    // Tenant scoping: if tenantId provided, filter to that tenant only.
+    // If not provided, default to platform concepts (tenantId=null).
+    // This prevents cross-tenant data leakage.
+    if (options.tenantId !== undefined) {
+      where.tenantId = options.tenantId;
+    } else {
+      where.tenantId = null; // Platform concepts only by default
+    }
 
     if (options.category) {
       where.category = options.category;
@@ -250,9 +259,9 @@ export class ConceptService {
    * @returns Full concept with relationships
    * @throws NotFoundException if concept doesn't exist
    */
-  async findBySlug(slug: string): Promise<ConceptWithRelations> {
-    const concept = await this.prisma.concept.findUnique({
-      where: { slug },
+  async findBySlug(slug: string, tenantId?: string | null): Promise<ConceptWithRelations> {
+    const concept = await this.prisma.concept.findFirst({
+      where: { slug, tenantId: tenantId ?? null },
     });
 
     if (!concept) {
@@ -336,7 +345,7 @@ export class ConceptService {
    * Batch lookup of concepts by IDs.
    * Used by ConversationService to resolve concept details for tree display.
    */
-  async findByIds(ids: string[]): Promise<
+  async findByIds(ids: string[], tenantId?: string | null): Promise<
     Map<
       string,
       {
@@ -352,8 +361,16 @@ export class ConceptService {
   > {
     if (ids.length === 0) return new Map();
 
+    // STRICT tenant isolation: only return concepts owned by this tenant.
+    // Platform concepts (tenantId=null) are seed templates — NOT shown to users.
+    // After onboarding, the tenant has their own vault with tenant-scoped concepts.
+    const where: Record<string, unknown> = { id: { in: ids } };
+    if (tenantId !== undefined) {
+      where['tenantId'] = tenantId;
+    }
+
     const concepts = await this.prisma.concept.findMany({
-      where: { id: { in: ids } },
+      where,
       select: {
         id: true,
         name: true,
@@ -368,9 +385,36 @@ export class ConceptService {
     return new Map(concepts.map((c) => [c.id, c]));
   }
 
+  /** Get tenantId + slug for a concept (used by vault read) */
+  async findTenantInfo(conceptId: string): Promise<{ tenantId: string | null; slug: string } | null> {
+    return this.prisma.concept.findUnique({
+      where: { id: conceptId },
+      select: { tenantId: true, slug: true },
+    });
+  }
+
   async findTenantConcepts(tenantId: string): Promise<Array<{ id: string }>> {
     return this.prisma.concept.findMany({
       where: { tenantId },
+      select: { id: true },
+    });
+  }
+
+  /**
+   * Returns only ACTIVATED tenant concepts — those beyond placeholder status.
+   * Vault placeholders (tier='working', confidence=0.3, source='SEED_DATA')
+   * are excluded until enriched or activated by the pipeline.
+   */
+  async findActivatedTenantConcepts(tenantId: string): Promise<Array<{ id: string }>> {
+    return this.prisma.concept.findMany({
+      where: {
+        tenantId,
+        OR: [
+          { source: 'AI_DISCOVERED' },
+          { tier: { not: 'working' } },
+          { confidence: { gte: 0.5 } },
+        ],
+      },
       select: { id: true },
     });
   }

@@ -149,17 +149,17 @@ export class ProcessDeduplicationService implements OnModuleInit {
     if (known.length === 0) return '';
 
     const lines = known.map(l =>
-      `- ${l.name} @ ${l.company}${l.location ? ` (${l.location})` : ''}`
+      `- ${l.name} | ${l.company} | ${(l as any).website || 'no website'}`
     );
 
     return [
-      '## Previously Discovered Contacts (SKIP these specific people)',
-      `We already have ${known.length} contacts in our database. Do NOT include these exact people again:`,
+      '## BLACKLIST — DO NOT RETURN THESE',
+      `We already have ${known.length} leads. A lead is a DUPLICATE if the full name AND company AND website all match.`,
+      'SKIP any company+person combination from this list:',
       '',
       ...lines,
       '',
-      'You CAN find OTHER people at the same companies — just not the exact same person.',
-      'Focus on discovering NEW contacts we do not already have.',
+      'Find ONLY NEW companies and people NOT on this list.',
     ].join('\n');
   }
 

@@ -1,12 +1,25 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
+import { VaultStorage, VAULT_STORAGE } from '../vault-storage/vault-storage.interface';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
-import { VAULT_STORAGE, VaultStorage } from '../vault-storage/vault-storage.interface';
+
+/**
+ * Content Delivery Service (Story 5.1)
+ *
+ * Reads enriched concept content from the vault (source of truth).
+ * PG provides metadata only — content is NEVER read from PG.
+ * Gracefully degrades if vault is unreachable.
+ */
 
 export interface ConceptContent {
+  id: string;
+  name: string;
   slug: string;
-  content: string;
-  source: 'vault' | 'database' | 'fallback';
-  metadata?: Record<string, any>;
+  category: string;
+  tier: string | null;
+  confidence: number | null;
+  enrichmentStatus: 'completed' | 'pending' | 'error';
+  content: string | null;
+  error?: string;
 }
 
 @Injectable()
@@ -18,92 +31,84 @@ export class ContentDeliveryService {
     @Inject(VAULT_STORAGE) private readonly vaultStorage: VaultStorage,
   ) {}
 
-  async getConceptContent(
-    tenantId: string,
-    conceptId: string,
-  ): Promise<ConceptContent | null> {
-    // Verify concept exists and belongs to tenant context
+  /**
+   * Get concept with content from vault.
+   * tenantId comes from authenticated session — never from URL.
+   */
+  async getConceptContent(tenantId: string, conceptId: string): Promise<ConceptContent> {
+    // 1. Metadata from PG
     const concept = await (this.prisma as any).concept.findUnique({
       where: { id: conceptId },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        category: true,
+        tier: true,
+        confidence: true,
+        tenantId: true,
+      },
     });
 
     if (!concept) {
-      this.logger.warn(`Concept ${conceptId} not found`);
-      return null;
+      throw new Error(`Concept ${conceptId} not found`);
     }
 
-    // Cross-tenant rejection: concepts are platform-wide but content is tenant-specific
-    // The slug is used to locate tenant-specific vault content
-    const slug = concept.slug;
+    // Tenant isolation: verify concept belongs to this tenant
+    if (concept.tenantId && concept.tenantId !== tenantId) {
+      throw new Error(`Concept ${conceptId} does not belong to tenant ${tenantId}`);
+    }
 
-    // Vault-first: try reading from tenant vault
+    // 2. Content from vault (source of truth — NEVER from PG)
+    const slug = concept.slug || concept.name.toLowerCase().replace(/\s+/g, '-');
+    const vaultPath = `wiki/concepts/${slug}.md`;
+
     try {
-      const content = await this.vaultStorage.readFile(
-        tenantId,
-        `concepts/${slug}.md`,
-      );
-      this.logger.debug(`Vault hit for ${tenantId}/${slug}`);
-      return {
-        slug,
-        content,
-        source: 'vault',
-        metadata: {
-          conceptId: concept.id,
+      const exists = await this.vaultStorage.fileExists(tenantId, vaultPath);
+      if (!exists) {
+        return {
+          id: concept.id,
           name: concept.name,
+          slug,
           category: concept.category,
-        },
-      };
-    } catch {
-      this.logger.debug(`Vault miss for ${tenantId}/${slug}, falling back`);
-    }
+          tier: concept.tier,
+          confidence: concept.confidence,
+          enrichmentStatus: 'pending',
+          content: null,
+        };
+      }
 
-    // Fallback: return concept description from DB
-    if (concept.description) {
+      const content = await this.vaultStorage.readFile(tenantId, vaultPath);
       return {
-        slug,
-        content: concept.description,
-        source: 'database',
-        metadata: {
-          conceptId: concept.id,
-          name: concept.name,
-          category: concept.category,
-        },
-      };
-    }
-
-    // Graceful degradation
-    return {
-      slug,
-      content: `# ${concept.name}\n\nContent is being generated. Please check back later.`,
-      source: 'fallback',
-      metadata: {
-        conceptId: concept.id,
+        id: concept.id,
         name: concept.name,
+        slug,
         category: concept.category,
-      },
-    };
-  }
+        tier: concept.tier,
+        confidence: concept.confidence,
+        enrichmentStatus: 'completed',
+        content,
+      };
+    } catch (err) {
+      // Graceful degradation — not a 500
+      this.logger.error({
+        event: 'content_delivery.vault_error',
+        tenantId,
+        conceptId,
+        error: (err as Error).message,
+      });
 
-  async getConceptContentBySlug(
-    tenantId: string,
-    slug: string,
-  ): Promise<ConceptContent | null> {
-    const concept = await (this.prisma as any).concept.findFirst({
-      where: { slug },
-    });
-
-    if (!concept) return null;
-    return this.getConceptContent(tenantId, concept.id);
-  }
-
-  async listAvailableContent(tenantId: string): Promise<string[]> {
-    try {
-      const files = await this.vaultStorage.listFiles(tenantId, 'concepts');
-      return files
-        .filter((f: string) => f.endsWith('.md'))
-        .map((f: string) => f.replace('.md', ''));
-    } catch {
-      return [];
+      return {
+        id: concept.id,
+        name: concept.name,
+        slug,
+        category: concept.category,
+        tier: concept.tier,
+        confidence: concept.confidence,
+        enrichmentStatus: 'error',
+        content: null,
+        error: 'Content temporarily unavailable',
+      };
     }
   }
 }

@@ -2,7 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { InvalidStateTransitionError } from './enrichment-queue.error';
 
-/** Local enum — avoids depending on @prisma/client generate */
+/**
+ * Local enum mirroring Prisma's EnrichmentStatus.
+ * Used until `prisma generate` runs against the updated schema.
+ * Once generated, this can be replaced with the Prisma import.
+ */
 export enum EnrichmentStatus {
   QUEUED = 'QUEUED',
   DISPATCHED = 'DISPATCHED',
@@ -14,36 +18,53 @@ export enum EnrichmentStatus {
   PERMANENTLY_FAILED = 'PERMANENTLY_FAILED',
 }
 
-const VALID_TRANSITIONS: Record<string, string[]> = {
+// ── Types ──────────────────────────────────────────────────────
+
+export interface EnrichmentQueueEntry {
+  id: string;
+  tenantId: string;
+  conceptId: string;
+  status: EnrichmentStatus;
+  attempt: number;
+  maxAttempts: number;
+  sessionId: string | null;
+  dispatchedAt: Date | null;
+  completedAt: Date | null;
+  failedAt: Date | null;
+  error: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface QueueStats {
+  QUEUED: number;
+  DISPATCHED: number;
+  EXECUTING: number;
+  VALIDATING: number;
+  CORRECTING: number;
+  COMPLETED: number;
+  FAILED: number;
+  PERMANENTLY_FAILED: number;
+}
+
+// ── Valid State Transitions ────────────────────────────────────
+
+const VALID_TRANSITIONS: Record<EnrichmentStatus, EnrichmentStatus[]> = {
   [EnrichmentStatus.QUEUED]: [EnrichmentStatus.DISPATCHED],
-  [EnrichmentStatus.DISPATCHED]: [EnrichmentStatus.EXECUTING, EnrichmentStatus.FAILED],
+  [EnrichmentStatus.DISPATCHED]: [EnrichmentStatus.EXECUTING],
   [EnrichmentStatus.EXECUTING]: [EnrichmentStatus.VALIDATING, EnrichmentStatus.FAILED],
   [EnrichmentStatus.VALIDATING]: [
     EnrichmentStatus.COMPLETED,
     EnrichmentStatus.CORRECTING,
     EnrichmentStatus.FAILED,
   ],
-  [EnrichmentStatus.CORRECTING]: [
-    EnrichmentStatus.VALIDATING,
-    EnrichmentStatus.FAILED,
-    EnrichmentStatus.PERMANENTLY_FAILED,
-  ],
-  [EnrichmentStatus.FAILED]: [EnrichmentStatus.QUEUED],
+  [EnrichmentStatus.CORRECTING]: [EnrichmentStatus.VALIDATING, EnrichmentStatus.FAILED],
   [EnrichmentStatus.COMPLETED]: [],
+  [EnrichmentStatus.FAILED]: [EnrichmentStatus.QUEUED], // via retryFailed only
   [EnrichmentStatus.PERMANENTLY_FAILED]: [],
 };
 
-export interface EnrichmentEntry {
-  id: string;
-  tenantId: string;
-  conceptSlug: string;
-  status: EnrichmentStatus;
-  retryCount: number;
-  maxRetries: number;
-  errorMessage?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
+// ── Service ────────────────────────────────────────────────────
 
 @Injectable()
 export class EnrichmentQueueService {
@@ -51,158 +72,230 @@ export class EnrichmentQueueService {
 
   constructor(private readonly prisma: PlatformPrismaService) {}
 
+  /**
+   * Access the enrichmentQueue model.
+   * Cast needed until `prisma generate` runs with the updated schema.
+   */
   private get queue() {
     return (this.prisma as any).enrichmentQueue;
   }
 
-  async enqueue(
-    tenantId: string,
-    conceptSlug: string,
-    maxRetries = 5,
-  ): Promise<EnrichmentEntry> {
-    return this.queue.create({
-      data: {
-        tenantId,
-        conceptSlug,
-        status: EnrichmentStatus.QUEUED,
-        retryCount: 0,
-        maxRetries,
+  // ── Enqueue ──────────────────────────────────────────────────
+
+  /**
+   * Enqueue a single concept for enrichment. Idempotent — if already
+   * exists for this tenant+concept, it is a no-op.
+   */
+  async enqueue(tenantId: string, conceptId: string): Promise<void> {
+    await this.queue.upsert({
+      where: {
+        tenantId_conceptId: { tenantId, conceptId },
       },
+      create: {
+        tenantId,
+        conceptId,
+        status: EnrichmentStatus.QUEUED,
+      },
+      update: {}, // no-op if exists
     });
   }
 
-  async enqueueBatch(
-    tenantId: string,
-    conceptSlugs: string[],
-    maxRetries = 5,
-  ): Promise<number> {
-    const result = await this.queue.createMany({
-      data: conceptSlugs.map((slug) => ({
+  /**
+   * Enqueue multiple concepts in a single transaction.
+   * Each insert is idempotent (skipDuplicates).
+   */
+  async enqueueBatch(tenantId: string, conceptIds: string[]): Promise<void> {
+    await this.queue.createMany({
+      data: conceptIds.map((conceptId) => ({
         tenantId,
-        conceptSlug: slug,
+        conceptId,
         status: EnrichmentStatus.QUEUED,
-        retryCount: 0,
-        maxRetries,
       })),
+      skipDuplicates: true,
     });
-    this.logger.log(`Enqueued ${result.count} entries for tenant ${tenantId}`);
-    return result.count;
   }
 
-  async dequeue(tenantId: string): Promise<EnrichmentEntry | null> {
-    // Use raw query for FOR UPDATE SKIP LOCKED
-    const entries = await this.prisma.$queryRawUnsafe<EnrichmentEntry[]>(
-      `UPDATE "enrichment_queue"
-       SET status = $1, "updatedAt" = NOW()
-       WHERE id = (
-         SELECT id FROM "enrichment_queue"
-         WHERE "tenantId" = $2 AND status = $3
-         ORDER BY "createdAt" ASC
-         LIMIT 1
-         FOR UPDATE SKIP LOCKED
-       )
-       RETURNING *`,
-      EnrichmentStatus.DISPATCHED,
-      tenantId,
-      EnrichmentStatus.QUEUED,
-    );
-    return entries.length > 0 ? (entries[0] ?? null) : null;
+  // ── Dequeue ──────────────────────────────────────────────────
+
+  /**
+   * Atomically dequeue the next QUEUED entry for the given tenant.
+   * Uses FOR UPDATE SKIP LOCKED for safe concurrent access.
+   * Returns null if the queue is empty.
+   */
+  async dequeue(tenantId: string): Promise<EnrichmentQueueEntry | null> {
+    const rows = await this.prisma.$queryRaw<EnrichmentQueueEntry[]>`
+      UPDATE enrichment_queue
+      SET status = ${EnrichmentStatus.DISPATCHED}::"EnrichmentStatus",
+          dispatched_at = NOW(),
+          updated_at = NOW()
+      WHERE id = (
+        SELECT id FROM enrichment_queue
+        WHERE tenant_id = ${tenantId}
+          AND status = ${EnrichmentStatus.QUEUED}::"EnrichmentStatus"
+        ORDER BY created_at ASC
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING *
+    `;
+
+    if (!rows || rows.length === 0) {
+      return null;
+    }
+
+    return rows[0] ?? null;
   }
 
-  async markExecuting(entryId: string): Promise<EnrichmentEntry> {
-    return this.transition(entryId, EnrichmentStatus.EXECUTING);
+  // ── State Transitions ────────────────────────────────────────
+
+  /** DISPATCHED -> EXECUTING */
+  async markExecuting(id: string): Promise<void> {
+    await this.transition(id, EnrichmentStatus.DISPATCHED, EnrichmentStatus.EXECUTING);
   }
 
-  async markValidating(entryId: string): Promise<EnrichmentEntry> {
-    return this.transition(entryId, EnrichmentStatus.VALIDATING);
+  /** EXECUTING -> VALIDATING */
+  async markValidating(id: string): Promise<void> {
+    await this.transition(id, EnrichmentStatus.EXECUTING, EnrichmentStatus.VALIDATING);
   }
 
-  async markCompleted(entryId: string): Promise<EnrichmentEntry> {
-    return this.transition(entryId, EnrichmentStatus.COMPLETED);
+  /** VALIDATING -> COMPLETED */
+  async markCompleted(id: string): Promise<void> {
+    await this.transition(id, EnrichmentStatus.VALIDATING, EnrichmentStatus.COMPLETED, {
+      completedAt: new Date(),
+    });
   }
 
-  async markCorrecting(entryId: string): Promise<EnrichmentEntry> {
-    return this.transition(entryId, EnrichmentStatus.CORRECTING);
+  /** VALIDATING -> CORRECTING */
+  async markCorrecting(id: string): Promise<void> {
+    await this.transition(id, EnrichmentStatus.VALIDATING, EnrichmentStatus.CORRECTING);
   }
 
-  async markBackToValidating(entryId: string): Promise<EnrichmentEntry> {
-    return this.transition(entryId, EnrichmentStatus.VALIDATING);
+  /** CORRECTING -> VALIDATING */
+  async markBackToValidating(id: string): Promise<void> {
+    await this.transition(id, EnrichmentStatus.CORRECTING, EnrichmentStatus.VALIDATING);
   }
 
-  async markFailed(
-    entryId: string,
-    errorMessage: string,
-  ): Promise<EnrichmentEntry> {
-    const entry = await this.getEntry(entryId);
-    if (!entry) throw new Error(`Entry ${entryId} not found`);
+  /**
+   * Move any active status -> FAILED. Increments the attempt counter.
+   * If attempt >= maxAttempts, moves to PERMANENTLY_FAILED instead.
+   */
+  async markFailed(id: string, error: string): Promise<void> {
+    const entry = await this.queue.findUnique({ where: { id } });
+    if (!entry) {
+      throw new Error(`EnrichmentQueue entry ${id} not found`);
+    }
 
-    const isPermanent = entry.retryCount >= entry.maxRetries;
-    const targetStatus = isPermanent
-      ? EnrichmentStatus.PERMANENTLY_FAILED
-      : EnrichmentStatus.FAILED;
+    const allowedFrom: EnrichmentStatus[] = [
+      EnrichmentStatus.EXECUTING,
+      EnrichmentStatus.VALIDATING,
+      EnrichmentStatus.CORRECTING,
+    ];
 
-    return this.queue.update({
-      where: { id: entryId },
+    if (!allowedFrom.includes(entry.status)) {
+      throw new InvalidStateTransitionError(entry.status, EnrichmentStatus.FAILED, id);
+    }
+
+    const newAttempt = entry.attempt + 1;
+    const finalStatus =
+      newAttempt >= entry.maxAttempts
+        ? EnrichmentStatus.PERMANENTLY_FAILED
+        : EnrichmentStatus.FAILED;
+
+    await this.queue.update({
+      where: { id },
       data: {
-        status: targetStatus,
-        errorMessage,
-        retryCount: { increment: 1 },
-        updatedAt: new Date(),
+        status: finalStatus,
+        attempt: newAttempt,
+        failedAt: new Date(),
+        error,
       },
     });
   }
 
+  // ── Retry ────────────────────────────────────────────────────
+
+  /**
+   * Re-enqueue FAILED entries (not PERMANENTLY_FAILED) where
+   * attempt < maxAttempts. Returns count of re-enqueued entries.
+   */
   async retryFailed(tenantId: string): Promise<number> {
     const result = await this.queue.updateMany({
       where: {
         tenantId,
         status: EnrichmentStatus.FAILED,
+        attempt: { lt: 3 }, // safety — also checked by markFailed
       },
       data: {
         status: EnrichmentStatus.QUEUED,
-        updatedAt: new Date(),
+        error: null,
+        failedAt: null,
       },
     });
-    this.logger.log(`Retried ${result.count} failed entries for tenant ${tenantId}`);
     return result.count;
   }
 
-  async getQueueStats(tenantId: string): Promise<Record<string, number>> {
-    const entries = await this.queue.groupBy({
+  // ── Query ────────────────────────────────────────────────────
+
+  /** Count entries per status for a given tenant. */
+  async getQueueStats(tenantId: string): Promise<QueueStats> {
+    const counts = await this.queue.groupBy({
       by: ['status'],
       where: { tenantId },
       _count: true,
     });
-    const stats: Record<string, number> = {};
-    for (const entry of entries) {
-      stats[entry.status] = entry._count;
+
+    const stats: QueueStats = {
+      QUEUED: 0,
+      DISPATCHED: 0,
+      EXECUTING: 0,
+      VALIDATING: 0,
+      CORRECTING: 0,
+      COMPLETED: 0,
+      FAILED: 0,
+      PERMANENTLY_FAILED: 0,
+    };
+
+    for (const row of counts) {
+      stats[row.status as EnrichmentStatus] = (row as any)._count;
     }
+
     return stats;
   }
 
-  async getEntry(entryId: string): Promise<EnrichmentEntry | null> {
-    return this.queue.findUnique({ where: { id: entryId } });
+  /** Get a single entry by ID. */
+  async getEntry(id: string): Promise<EnrichmentQueueEntry | null> {
+    return this.queue.findUnique({ where: { id } });
   }
 
-  private async transition(
-    entryId: string,
-    targetStatus: EnrichmentStatus,
-  ): Promise<EnrichmentEntry> {
-    const entry = await this.getEntry(entryId);
-    if (!entry) throw new Error(`Entry ${entryId} not found`);
+  // ── Internal ─────────────────────────────────────────────────
 
-    const allowed = VALID_TRANSITIONS[entry.status] || [];
-    if (!allowed.includes(targetStatus)) {
-      throw new InvalidStateTransitionError(
-        entryId,
-        entry.status,
-        targetStatus,
-      );
+  /**
+   * Validate and execute a state transition.
+   * Throws InvalidStateTransitionError if the transition is not allowed.
+   */
+  private async transition(
+    id: string,
+    expectedFrom: EnrichmentStatus,
+    to: EnrichmentStatus,
+    extra: Record<string, unknown> = {},
+  ): Promise<void> {
+    const entry = await this.queue.findUnique({ where: { id } });
+    if (!entry) {
+      throw new Error(`EnrichmentQueue entry ${id} not found`);
     }
 
-    return this.queue.update({
-      where: { id: entryId },
-      data: { status: targetStatus, updatedAt: new Date() },
+    if (entry.status !== expectedFrom) {
+      throw new InvalidStateTransitionError(entry.status, to, id);
+    }
+
+    const allowed = VALID_TRANSITIONS[expectedFrom];
+    if (!allowed.includes(to)) {
+      throw new InvalidStateTransitionError(expectedFrom, to, id);
+    }
+
+    await this.queue.update({
+      where: { id },
+      data: { status: to, ...extra },
     });
   }
 }

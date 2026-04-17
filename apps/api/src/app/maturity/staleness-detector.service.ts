@@ -70,7 +70,7 @@ export class StalenessDetectorService {
         });
         return {
           isStale: true,
-          reason: `Prerequisite koncept "${concept?.name || firstPrereq.conceptId}" je ponovo izvršen nakon završetka ovog koncepta`,
+          reason: `Prerequisite concept "${concept?.name || firstPrereq.conceptId}" was re-executed after this concept was completed`,
         };
       }
     }
@@ -82,7 +82,7 @@ export class StalenessDetectorService {
     if (daysSinceCompletion > this.TIME_DECAY_DAYS) {
       return {
         isStale: true,
-        reason: `Analiza je starija od ${this.TIME_DECAY_DAYS} dana (${daysSinceCompletion} dana)`,
+        reason: `Analysis is older than ${this.TIME_DECAY_DAYS} days (${daysSinceCompletion} days)`,
       };
     }
 
@@ -169,7 +169,7 @@ export class StalenessDetectorService {
           staleResults.push({
             assignmentId: assignment.id,
             conceptId: assignment.conceptId,
-            reason: `Prerequisite koncept "${nameMap.get(prereqId) || prereqId}" je ponovo izvršen nakon završetka ovog koncepta`,
+            reason: `Prerequisite concept "${nameMap.get(prereqId) || prereqId}" was re-executed after this concept was completed`,
           });
           foundStale = true;
           break;
@@ -186,7 +186,7 @@ export class StalenessDetectorService {
         staleResults.push({
           assignmentId: assignment.id,
           conceptId: assignment.conceptId,
-          reason: `Analiza je starija od ${this.TIME_DECAY_DAYS} dana (${daysSinceCompletion} dana)`,
+          reason: `Analysis is older than ${this.TIME_DECAY_DAYS} days (${daysSinceCompletion} days)`,
         });
       }
     }
@@ -243,7 +243,7 @@ export class StalenessDetectorService {
         data: {
           id: newNoteId,
           title: `${concept?.name || conceptId} (v${newVersion})`,
-          content: `Re-analiza koncepta: ${concept?.name || conceptId}\nRazlog: ${reason}`,
+          content: `Re-analysis of concept: ${concept?.name || conceptId}\nReason: ${reason}`,
           source: 'CONVERSATION',
           noteType: 'TASK',
           status: 'PENDING',

@@ -9,6 +9,7 @@ import { JobPanelComponent } from '../../features/chat/components/job-panel.comp
 import { MarkdownPipe } from '@mentor-ai/shared/ui';
 import { NotesApiService } from '../../features/chat/services/notes-api.service';
 import { ChatWebsocketService } from '../../features/chat/services/chat-websocket.service';
+import { PageLoadingService } from '../services/page-loading.service';
 import { GraphViewComponent } from '../../features/graph/graph-view.component';
 import { GraphPopupComponent } from '../../features/graph/graph-popup.component';
 
@@ -27,8 +28,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         display: flex;
         height: 100vh;
         overflow: hidden;
-        background: var(--color-bg-base, #0d0d0d);
-        color: var(--color-text-primary, #fafafa);
+        background: var(--color-bg-base, #0D1117);
+        color: var(--color-text-primary, #E6EDF3);
         font-family: 'Inter', system-ui, sans-serif;
       }
 
@@ -36,8 +37,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .sidebar {
         width: clamp(200px, 14vw, 260px);
         min-width: clamp(200px, 14vw, 260px);
-        background: var(--color-bg-base, #0d0d0d);
-        border-right: 1px solid var(--color-border-subtle, #2a2a2a);
+        background: var(--color-bg-base, #0D1117);
+        border-right: 1px solid var(--color-border-subtle, #21262D);
         display: flex;
         flex-direction: column;
         flex-shrink: 0;
@@ -48,23 +49,21 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         display: flex;
         align-items: center;
         padding: 0 clamp(16px, 1.2vw, 24px);
-        border-bottom: 1px solid var(--color-border-subtle, #2a2a2a);
+        border-bottom: 1px solid var(--color-border-subtle, #21262D);
         flex-shrink: 0;
       }
       .sidebar-brand h1 {
         font-size: clamp(14px, 0.9vw, 17px);
         font-weight: 600;
-        color: var(--color-text-primary, #fafafa);
+        color: var(--color-text-primary, #E6EDF3);
         letter-spacing: -0.01em;
       }
-      .sidebar-brand .brand-dot {
-        display: inline-block;
-        width: clamp(7px, 0.5vw, 10px);
-        height: clamp(7px, 0.5vw, 10px);
-        border-radius: 50%;
-        background: var(--color-primary, #3b82f6);
+      .sidebar-brand .brand-icon {
+        height: clamp(24px, 1.6vw, 30px);
+        width: auto;
         margin-right: clamp(8px, 0.6vw, 12px);
         flex-shrink: 0;
+        object-fit: contain;
       }
       .sidebar-nav {
         flex: 1;
@@ -95,12 +94,12 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         cursor: pointer;
       }
       .nav-item:hover {
-        background: var(--color-bg-surface, #1a1a1a);
-        color: var(--color-text-primary, #fafafa);
+        background: var(--color-bg-surface, #161B22);
+        color: var(--color-text-primary, #E6EDF3);
       }
       .nav-item.active {
-        background: var(--color-bg-surface, #1a1a1a);
-        color: var(--color-text-primary, #fafafa);
+        background: var(--color-bg-surface, #161B22);
+        color: var(--color-text-primary, #E6EDF3);
       }
       .nav-item.active::before {
         content: '';
@@ -110,7 +109,14 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         bottom: 6px;
         width: 3px;
         border-radius: 0 2px 2px 0;
-        background: var(--color-primary, #3b82f6);
+        background: var(--color-primary, #58A6FF);
+      }
+      .nav-badge {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 18px; height: 18px; padding: 0 5px;
+        border-radius: 9px; background: #58A6FF; color: #fff;
+        font-size: 11px; font-weight: 600; margin-left: auto;
+        line-height: 1;
       }
       .nav-item svg {
         width: var(--icon-sm, 16px);
@@ -139,8 +145,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         align-items: center;
         justify-content: flex-end;
         padding: 0 clamp(16px, 1.5vw, 32px);
-        border-bottom: 1px solid var(--color-border-subtle, #2a2a2a);
-        background: var(--color-bg-base, #0d0d0d);
+        border-bottom: 1px solid var(--color-border-subtle, #21262D);
+        background: var(--color-bg-base, #0D1117);
         flex-shrink: 0;
         position: relative;
         box-sizing: border-box;
@@ -152,7 +158,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         bottom: 0;
         left: 0;
         height: 2px;
-        background: var(--color-primary, #3b82f6);
+        background: var(--color-primary, #58A6FF);
         animation: loading-bar 1.5s ease-in-out infinite;
         border-radius: 0 2px 2px 0;
       }
@@ -178,7 +184,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         border-radius: 6px;
         border: none;
         background: transparent;
-        color: var(--color-text-primary, #fafafa);
+        color: var(--color-text-primary, #E6EDF3);
         cursor: pointer;
         font-family: inherit;
         font-size: clamp(13px, 0.85vw, 16px);
@@ -186,13 +192,13 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         transition: background 0.15s ease;
       }
       .user-btn:hover {
-        background: var(--color-bg-surface, #1a1a1a);
+        background: var(--color-bg-surface, #161B22);
       }
       .user-avatar {
         width: clamp(26px, 1.8vw, 34px);
         height: clamp(26px, 1.8vw, 34px);
         border-radius: 50%;
-        background: var(--color-primary, #3b82f6);
+        background: var(--color-primary, #58A6FF);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -211,8 +217,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         top: calc(100% + 4px);
         right: 0;
         min-width: 180px;
-        background: var(--color-bg-surface, #1a1a1a);
-        border: 1px solid var(--color-border-subtle, #2a2a2a);
+        background: var(--color-bg-surface, #161B22);
+        border: 1px solid var(--color-border-subtle, #21262D);
         border-radius: 8px;
         padding: 4px;
         z-index: 100;
@@ -241,8 +247,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         transition: background 0.1s ease, color 0.1s ease;
       }
       .dropdown-item:hover {
-        background: var(--color-bg-elevated, #242424);
-        color: var(--color-text-primary, #fafafa);
+        background: var(--color-bg-elevated, #1C2128);
+        color: var(--color-text-primary, #E6EDF3);
       }
       .dropdown-item svg {
         width: 16px;
@@ -251,14 +257,14 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       }
       .dropdown-sep {
         height: 1px;
-        background: var(--color-border-subtle, #2a2a2a);
+        background: var(--color-border-subtle, #21262D);
         margin: 4px 8px;
       }
       .dropdown-item.danger {
-        color: var(--color-error, #ef4444);
+        color: var(--color-error, #F85149);
       }
       .dropdown-item.danger:hover {
-        background: rgba(239, 68, 68, 0.1);
+        background: rgba(248, 81, 73, 0.1);
       }
       .dropdown-backdrop {
         position: fixed;
@@ -270,7 +276,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .graph-panel {
         min-height: 150px;
         max-height: 80%;
-        border-bottom: 1px solid #2A2A2A;
+        border-bottom: 1px solid #21262D;
         overflow: hidden;
         position: relative;
         flex-shrink: 0;
@@ -291,7 +297,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       }
       .graph-resize-handle:hover,
       .graph-resize-handle.active {
-        background: rgba(59, 130, 246, 0.3);
+        background: rgba(88, 166, 255, 0.3);
       }
 
       /* Content area — row layout for content + exec panel */
@@ -318,8 +324,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         max-width: 55vw;
         flex-shrink: 0;
         height: 100%;
-        background: #111111;
-        border-left: 1px solid #2a2a2a;
+        background: #0D1117;
+        border-left: 1px solid #21262D;
         display: flex;
         flex-direction: column;
         overflow: hidden;
@@ -347,7 +353,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       }
       .panel-resize-handle:hover,
       .panel-resize-handle.active {
-        background: rgba(59, 130, 246, 0.3);
+        background: rgba(88, 166, 255, 0.3);
       }
       .exec-panel.collapsed * {
         display: none;
@@ -357,7 +363,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         align-items: center;
         gap: clamp(8px, 0.6vw, 12px);
         padding: clamp(10px, 0.8vw, 16px) clamp(12px, 1vw, 20px);
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
         flex-shrink: 0;
         min-height: clamp(44px, 3vw, 52px);
         box-sizing: border-box;
@@ -383,8 +389,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         transition: color 0.15s, background 0.15s;
       }
       .exec-panel-close:hover {
-        color: #fafafa;
-        background: #242424;
+        color: #E6EDF3;
+        background: #1C2128;
       }
       .exec-panel-close svg {
         width: 16px;
@@ -395,27 +401,27 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         height: 6px;
         border-radius: 50%;
         flex-shrink: 0;
-        background: #ef4444;
+        background: #F85149;
       }
-      .ws-indicator.ws-connected { background: #22c55e; }
-      .ws-indicator.ws-disconnected { background: #ef4444; }
+      .ws-indicator.ws-connected { background: #3FB950; }
+      .ws-indicator.ws-disconnected { background: #F85149; }
       .ws-indicator.ws-reconnecting { background: #eab308; animation: pulse-dot 1s infinite; }
       .exec-panel-body {
         flex: 1;
         overflow-y: auto;
         padding: clamp(12px, 1vw, 20px);
         scrollbar-width: thin;
-        scrollbar-color: #2a2a2a transparent;
+        scrollbar-color: #21262D transparent;
         font-size: 16px;
       }
       .exec-panel-body::-webkit-scrollbar { width: 4px; }
       .exec-panel-body::-webkit-scrollbar-track { background: transparent; }
-      .exec-panel-body::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
+      .exec-panel-body::-webkit-scrollbar-thumb { background: #21262D; border-radius: 4px; }
 
       /* Panel toggle button in topbar */
       .panel-toggle-btn {
         background: none;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         color: #707070;
         cursor: pointer;
         padding: clamp(4px, 0.4vw, 8px) clamp(6px, 0.5vw, 10px);
@@ -428,13 +434,13 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         transition: color 0.15s, border-color 0.15s, background 0.15s;
       }
       .panel-toggle-btn:hover {
-        color: #fafafa;
-        border-color: #3a3a3a;
+        color: #E6EDF3;
+        border-color: #30363D;
       }
       .panel-toggle-btn.active {
-        color: #3b82f6;
-        border-color: #3b82f6;
-        background: rgba(59, 130, 246, 0.08);
+        color: #58A6FF;
+        border-color: #58A6FF;
+        background: rgba(88, 166, 255, 0.08);
       }
       .panel-toggle-btn svg {
         width: 16px;
@@ -488,8 +494,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         letter-spacing: 0.03em;
       }
       .panel-status-badge.pending { background: rgba(234, 179, 8, 0.12); color: #eab308; }
-      .panel-status-badge.review { background: rgba(59, 130, 246, 0.12); color: #3b82f6; }
-      .panel-status-badge.completed { background: rgba(34, 197, 94, 0.12); color: #22c55e; }
+      .panel-status-badge.review { background: rgba(88, 166, 255, 0.12); color: #58A6FF; }
+      .panel-status-badge.completed { background: rgba(63, 185, 80, 0.12); color: #3FB950; }
       .panel-status-badge svg { width: 10px; height: 10px; }
       .panel-score {
         margin-left: auto;
@@ -498,9 +504,9 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         font-size: 16px;
         font-weight: 600;
       }
-      .panel-score.high { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+      .panel-score.high { background: rgba(63, 185, 80, 0.15); color: #4ade80; }
       .panel-score.medium { background: rgba(234, 179, 8, 0.15); color: #fbbf24; }
-      .panel-score.low { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+      .panel-score.low { background: rgba(248, 81, 73, 0.15); color: #f87171; }
       .panel-task-title {
         font-size: 16px;
         font-weight: 600;
@@ -513,7 +519,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         gap: 5px;
         padding: 3px 10px;
         border-radius: 999px;
-        background: #242424;
+        background: #1C2128;
         font-size: 16px;
         font-weight: 500;
         color: #a1a1a1;
@@ -528,9 +534,9 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         gap: 0;
         margin-bottom: 16px;
         padding: 10px 12px;
-        background: #1a1a1a;
+        background: #161B22;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
       }
       .panel-step {
         display: flex;
@@ -542,13 +548,13 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         width: 12px;
         height: 12px;
         border-radius: 50%;
-        border: 2px solid #3a3a3a;
+        border: 2px solid #30363D;
         background: transparent;
       }
-      .panel-step-dot.done { background: #22c55e; border-color: #22c55e; }
+      .panel-step-dot.done { background: #3FB950; border-color: #3FB950; }
       .panel-step-dot.active {
-        background: #3b82f6;
-        border-color: #3b82f6;
+        background: #58A6FF;
+        border-color: #58A6FF;
         animation: pulse-dot 1.5s ease-in-out infinite;
       }
       @keyframes pulse-dot {
@@ -560,16 +566,16 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         color: #707070;
         white-space: nowrap;
       }
-      .panel-step-label.done { color: #22c55e; }
-      .panel-step-label.active { color: #3b82f6; }
+      .panel-step-label.done { color: #3FB950; }
+      .panel-step-label.active { color: #58A6FF; }
       .panel-step-line {
         flex: 1;
         height: 2px;
-        background: #3a3a3a;
+        background: #30363D;
         margin: 0 4px;
         margin-bottom: 16px;
       }
-      .panel-step-line.done { background: #22c55e; }
+      .panel-step-line.done { background: #3FB950; }
 
       /* Panel section */
       .panel-section {
@@ -595,8 +601,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .panel-description :first-child { margin-top: 0; }
       .panel-description :last-child { margin-bottom: 0; }
       .panel-expected {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 8px;
         padding: 12px;
         font-size: 16px;
@@ -606,8 +612,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
 
       /* Jobs summary in panel */
       .panel-jobs {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 8px;
         padding: 12px;
       }
@@ -630,7 +636,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         align-items: center;
         gap: 8px;
         padding: 6px 0;
-        border-bottom: 1px solid #242424;
+        border-bottom: 1px solid #1C2128;
       }
       .panel-job-row:last-child { border-bottom: none; }
       .panel-job-dot {
@@ -639,10 +645,10 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         border-radius: 50%;
         flex-shrink: 0;
       }
-      .panel-job-dot.planned { border: 2px solid #3a3a3a; background: transparent; }
-      .panel-job-dot.running { background: #3b82f6; animation: pulse-dot 1.5s ease-in-out infinite; }
-      .panel-job-dot.completed { background: #22c55e; }
-      .panel-job-dot.failed { background: #ef4444; }
+      .panel-job-dot.planned { border: 2px solid #30363D; background: transparent; }
+      .panel-job-dot.running { background: #58A6FF; animation: pulse-dot 1.5s ease-in-out infinite; }
+      .panel-job-dot.completed { background: #3FB950; }
+      .panel-job-dot.failed { background: #F85149; }
       .panel-job-name {
         flex: 1;
         font-size: 16px;
@@ -656,9 +662,9 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         letter-spacing: 0.03em;
       }
       .panel-job-status.planned { color: #707070; }
-      .panel-job-status.running { color: #3b82f6; }
-      .panel-job-status.completed { color: #22c55e; }
-      .panel-job-status.failed { color: #ef4444; }
+      .panel-job-status.running { color: #58A6FF; }
+      .panel-job-status.completed { color: #3FB950; }
+      .panel-job-status.failed { color: #F85149; }
 
       /* Panel meta */
       .panel-meta {
@@ -666,12 +672,12 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         align-items: center;
         gap: 10px;
         padding-top: 12px;
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid #21262D;
         font-size: 16px;
         color: #707070;
       }
       .panel-chat-link {
-        color: #3b82f6;
+        color: #58A6FF;
         text-decoration: none;
         margin-left: auto;
         font-weight: 500;
@@ -693,7 +699,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .feed-running-count {
         display: inline-flex; align-items: center; justify-content: center;
         min-width: 18px; height: 18px; padding: 0 5px;
-        border-radius: 9px; background: #3b82f6; color: #fff;
+        border-radius: 9px; background: #58A6FF; color: #fff;
         font-size: 10px; font-weight: 700; letter-spacing: 0;
       }
       .feed-clear-btn {
@@ -701,7 +707,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         cursor: pointer; padding: 3px 8px; border-radius: 4px; font-family: inherit;
         transition: all 0.15s ease;
       }
-      .feed-clear-btn:hover { color: #fafafa; background: #242424; }
+      .feed-clear-btn:hover { color: #E6EDF3; background: #1C2128; }
 
       /* Timeline container */
       .activity-feed {
@@ -718,7 +724,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         top: 8px;
         bottom: 8px;
         width: 1px;
-        background: linear-gradient(to bottom, #2a2a2a 0%, #1a1a1a 100%);
+        background: linear-gradient(to bottom, #21262D 0%, #161B22 100%);
       }
 
       /* Timeline entry */
@@ -744,7 +750,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         align-items: center;
         justify-content: center;
         z-index: 1;
-        background: #111111;
+        background: #0D1117;
       }
       .tl-dot-inner {
         width: 8px;
@@ -754,20 +760,20 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       }
       .tl-dot-inner.running {
         width: 10px; height: 10px;
-        background: #3b82f6;
-        box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+        background: #58A6FF;
+        box-shadow: 0 0 8px rgba(88, 166, 255, 0.5);
         animation: tl-pulse 2s ease-in-out infinite;
       }
       @keyframes tl-pulse {
-        0%, 100% { box-shadow: 0 0 4px rgba(59, 130, 246, 0.3); }
-        50% { box-shadow: 0 0 12px rgba(59, 130, 246, 0.7); }
+        0%, 100% { box-shadow: 0 0 4px rgba(88, 166, 255, 0.3); }
+        50% { box-shadow: 0 0 12px rgba(88, 166, 255, 0.7); }
       }
       .tl-dot-inner.completed {
-        background: #22c55e;
+        background: #3FB950;
       }
       .tl-dot-inner.error {
-        background: #ef4444;
-        box-shadow: 0 0 6px rgba(239, 68, 68, 0.3);
+        background: #F85149;
+        box-shadow: 0 0 6px rgba(248, 81, 73, 0.3);
       }
       .tl-dot-inner.info {
         width: 6px; height: 6px;
@@ -782,11 +788,11 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       }
       .tl-dot.has-icon .tl-dot-inner { display: none; }
       .tl-dot.has-icon {
-        background: #22c55e;
+        background: #3FB950;
         width: 14px; height: 14px;
       }
       .tl-dot.has-icon.error-icon {
-        background: #ef4444;
+        background: #F85149;
       }
 
       /* Content block next to timeline */
@@ -861,7 +867,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .tl-thinking-dot {
         width: 5px; height: 5px;
         border-radius: 50%;
-        background: #3b82f6;
+        background: #58A6FF;
         animation: thinking-bounce 1.4s infinite ease-in-out;
       }
       .tl-thinking-dot:nth-child(2) { animation-delay: 0.16s; }
@@ -875,18 +881,18 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .tl-stream-wrap {
         margin: 6px 0 2px;
         padding: 10px 12px;
-        background: #111111;
+        background: #0D1117;
         border-radius: 8px;
-        border: 1px solid #1e1e1e;
+        border: 1px solid #21262D;
         max-height: 200px;
         overflow-y: auto;
         position: relative;
         scrollbar-width: thin;
-        scrollbar-color: #2a2a2a transparent;
+        scrollbar-color: #21262D transparent;
       }
       .tl-stream-wrap::-webkit-scrollbar { width: 3px; }
       .tl-stream-wrap::-webkit-scrollbar-track { background: transparent; }
-      .tl-stream-wrap::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
+      .tl-stream-wrap::-webkit-scrollbar-thumb { background: #21262D; border-radius: 3px; }
 
       /* Markdown-rendered streaming content */
       .tl-stream-content {
@@ -901,11 +907,11 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .tl-stream-content em { color: #a0a0a0; }
       .tl-stream-content code {
         font-family: 'JetBrains Mono', 'Fira Code', monospace;
-        font-size: 11px; background: #1a1a1a; padding: 1px 4px;
+        font-size: 11px; background: #161B22; padding: 1px 4px;
         border-radius: 3px; color: #93c5fd;
       }
       .tl-stream-content pre {
-        background: #0d0d0d; padding: 10px 12px; border-radius: 6px;
+        background: #0D1117; padding: 10px 12px; border-radius: 6px;
         overflow-x: auto; margin: 8px 0;
       }
       .tl-stream-content pre code {
@@ -925,18 +931,18 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
         width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 11px;
       }
       .tl-stream-content th {
-        background: #1a1a1a; font-weight: 600; text-align: left;
-        padding: 6px 8px; border: 1px solid #2a2a2a; color: #d0d0d0;
+        background: #161B22; font-weight: 600; text-align: left;
+        padding: 6px 8px; border: 1px solid #21262D; color: #d0d0d0;
       }
       .tl-stream-content td {
-        padding: 5px 8px; border: 1px solid #2a2a2a;
+        padding: 5px 8px; border: 1px solid #21262D;
       }
-      .tl-stream-content tr:nth-child(even) { background: #141414; }
+      .tl-stream-content tr:nth-child(even) { background: #161B22; }
       .tl-stream-content blockquote {
-        border-left: 2px solid #3b82f6; padding-left: 12px;
+        border-left: 2px solid #58A6FF; padding-left: 12px;
         margin: 8px 0; color: #808080; font-style: italic;
       }
-      .tl-stream-content a { color: #3b82f6; text-decoration: none; }
+      .tl-stream-content a { color: #58A6FF; text-decoration: none; }
       .tl-stream-content a:hover { text-decoration: underline; }
 
       /* ── Sub-entry styles (smaller dot, no icon, muted) ── */
@@ -971,7 +977,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       .tl-cursor {
         display: inline-block;
         width: 2px; height: 14px;
-        background: #3b82f6;
+        background: #58A6FF;
         margin-left: 2px;
         vertical-align: text-bottom;
         animation: cursor-blink 1s step-end infinite;
@@ -993,14 +999,14 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       }
 
       .feed-divider {
-        height: 1px; background: #2a2a2a; margin: 12px 0;
+        height: 1px; background: #21262D; margin: 12px 0;
       }
 
       /* Panel toggle badge showing running count */
       .panel-toggle-badge {
         display: inline-flex; align-items: center; justify-content: center;
         min-width: 16px; height: 16px; padding: 0 4px;
-        border-radius: 8px; background: #3b82f6; color: #fff;
+        border-radius: 8px; background: #58A6FF; color: #fff;
         font-size: 10px; font-weight: 700; margin-left: 4px;
         animation: tl-pulse 2s ease-in-out infinite;
       }
@@ -1013,61 +1019,71 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       <!-- Sidebar -->
       <aside class="sidebar">
         <div class="sidebar-brand">
-          <span class="brand-dot"></span>
-          <h1>Mentor AI</h1>
+          <img class="brand-icon" src="assets/images/neuron-os-logo.png" alt="Neuron OS" />
         </div>
         <nav class="sidebar-nav">
           <a class="nav-item" routerLink="/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
-            Kontrolna tabla
+            Dashboard
           </a>
-          <a class="nav-item" routerLink="/chat" routerLinkActive="active">
+          <a class="nav-item" routerLink="/chat" routerLinkActive="active" (click)="chatBadge.set(0)">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
-            Razgovori
+            Conversations
+            @if (chatBadge() > 0) { <span class="nav-badge">{{ chatBadge() }}</span> }
           </a>
-          <a class="nav-item" routerLink="/tasks" routerLinkActive="active">
+          <a class="nav-item" routerLink="/tasks" routerLinkActive="active" (click)="taskBadge.set(0)">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
-            Zadaci
+            Tasks
+            @if (taskBadge() > 0) { <span class="nav-badge">{{ taskBadge() }}</span> }
           </a>
           <a class="nav-item" routerLink="/materijali" routerLinkActive="active">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-            Materijali
+            Materials
           </a>
-          <a class="nav-item" routerLink="/process-results" routerLinkActive="active">
+          <a class="nav-item" routerLink="/process-results" routerLinkActive="active" (click)="processBadge.set(0)">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-            Procesi
+            Processes
+            @if (processBadge() > 0) { <span class="nav-badge">{{ processBadge() }}</span> }
           </a>
           @if (isOwnerOrAdmin()) {
             <a class="nav-item" routerLink="/team" routerLinkActive="active">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-              Tim
+              Team
             </a>
           }
 
           <!-- Separator -->
-          <div style="height: 1px; background: #2a2a2a; margin: 8px 16px;"></div>
-          <a class="nav-item" routerLink="/profile-settings" routerLinkActive="active">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-            Podešavanja
+          <div style="height: 1px; background: #21262D; margin: 8px 16px;"></div>
+          <a class="nav-item" routerLink="/settings" routerLinkActive="active">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
+            Settings
           </a>
           @if (isOwner()) {
             <a class="nav-item" routerLink="/brochure-generator" routerLinkActive="active">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
-              Brosure
+              Brochures
+            </a>
+            <a class="nav-item" routerLink="/process-design" routerLinkActive="active">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+              Design Process
             </a>
             <a class="nav-item" routerLink="/process-builder" routerLinkActive="active">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
-              Podesavanja procesa
+              Process Settings
             </a>
             <a class="nav-item" routerLink="/account-settings" routerLinkActive="active">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-              Nalog
+              Account
             </a>
           }
           @if (isPlatformOwner()) {
             <a class="nav-item" routerLink="/admin/llm-config" routerLinkActive="active">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-              AI podešavanja
+              AI Settings
+            </a>
+            <a class="nav-item" routerLink="/admin/monitoring" routerLinkActive="active">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+              Monitoring
             </a>
           }
         </nav>
@@ -1077,22 +1093,11 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
       <div class="main-area">
         <!-- Topbar -->
         <header class="topbar">
-          @if (routeLoading()) {
+          @if (routeLoading() || pageLoading.isLoading()) {
             <div class="route-loading-bar"></div>
           }
           <div class="topbar-right">
-            <button
-              class="panel-toggle-btn"
-              [class.active]="execPanel.panelOpen()"
-              (click)="execPanel.toggle()"
-              title="Panel za izvršavanje"
-            >
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-              Graf
-              @if (runningCount() > 0) {
-                <span class="panel-toggle-badge">{{ runningCount() }}</span>
-              }
-            </button>
+            <!-- Graph button removed — graph accessible via popup only -->
             <div class="user-menu">
               <button class="user-btn" (click)="toggleDropdown()">
                 <div class="user-avatar">{{ userInitials() }}</div>
@@ -1103,16 +1108,16 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
                 <div class="dropdown">
                   <a class="dropdown-item" routerLink="/profile-settings" (click)="dropdownOpen.set(false)">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                    Profil
+                    Profile
                   </a>
                   <a class="dropdown-item" routerLink="/profile-settings" (click)="dropdownOpen.set(false)">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                    Podešavanja
+                    Settings
                   </a>
                   <div class="dropdown-sep"></div>
                   <button class="dropdown-item danger" (click)="logout()">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                    Odjavi se
+                    Sign out
                   </button>
                 </div>
               }
@@ -1137,10 +1142,10 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
                   @if (execPanel.activeTask(); as t) {
                     {{ t.note.title }}
                   } @else {
-                    Prikaz grafa
+                    Graph View
                   }
                 </span>
-                <button class="exec-panel-close" (click)="execPanel.close()" title="Skupi panel">
+                <button class="exec-panel-close" (click)="execPanel.close()" title="Collapse panel">
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
@@ -1163,12 +1168,12 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
                   <div class="feed-section">
                     <div class="feed-header">
                       <span class="feed-header-title">
-                        Aktivnost
+                        Activity
                         @if (runningCount() > 0) {
                           <span class="feed-running-count">{{ runningCount() }}</span>
                         }
                       </span>
-                      <button class="feed-clear-btn" (click)="execPanel.clearFeed()">Obriši</button>
+                      <button class="feed-clear-btn" (click)="execPanel.clearFeed()">Delete</button>
                     </div>
                     <div class="activity-feed">
                       @for (entry of execPanel.activityFeed(); track entry.id) {
@@ -1241,17 +1246,17 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
                     @if (t.note.status === 'COMPLETED') {
                       <span class="panel-status-badge completed">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-                        Završeno
+                        Completed
                       </span>
                     } @else if (t.note.status === 'READY_FOR_REVIEW') {
                       <span class="panel-status-badge review">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                        Za pregled
+                        For Review
                       </span>
                     } @else {
                       <span class="panel-status-badge pending">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3" /></svg>
-                        Na čekanju
+                        Pending
                       </span>
                     }
                     @if (t.note.aiScore != null) {
@@ -1274,22 +1279,22 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
                   <div class="panel-stepper">
                     <span class="panel-step">
                       <span class="panel-step-dot done"></span>
-                      <span class="panel-step-label done">Kreiran</span>
+                      <span class="panel-step-label done">Created</span>
                     </span>
                     <span class="panel-step-line" [class.done]="t.note.status === 'COMPLETED'"></span>
                     <span class="panel-step">
                       <span class="panel-step-dot" [class.done]="t.note.status === 'COMPLETED'"></span>
-                      <span class="panel-step-label" [class.done]="t.note.status === 'COMPLETED'">Izvršava se</span>
+                      <span class="panel-step-label" [class.done]="t.note.status === 'COMPLETED'">Executing</span>
                     </span>
                     <span class="panel-step-line" [class.done]="t.note.userReport !== null"></span>
                     <span class="panel-step">
                       <span class="panel-step-dot" [class.active]="t.note.status === 'COMPLETED' && !t.note.aiScore" [class.done]="t.note.aiScore !== null && t.note.aiScore !== undefined"></span>
-                      <span class="panel-step-label" [class.active]="t.note.status === 'COMPLETED' && !t.note.aiScore" [class.done]="t.note.aiScore !== null && t.note.aiScore !== undefined">Pregled</span>
+                      <span class="panel-step-label" [class.active]="t.note.status === 'COMPLETED' && !t.note.aiScore" [class.done]="t.note.aiScore !== null && t.note.aiScore !== undefined">Review</span>
                     </span>
                     <span class="panel-step-line" [class.done]="t.note.aiScore !== null && t.note.aiScore !== undefined"></span>
                     <span class="panel-step">
                       <span class="panel-step-dot" [class.done]="t.note.aiScore !== null && t.note.aiScore !== undefined"></span>
-                      <span class="panel-step-label" [class.done]="t.note.aiScore !== null && t.note.aiScore !== undefined">Ocenjen</span>
+                      <span class="panel-step-label" [class.done]="t.note.aiScore !== null && t.note.aiScore !== undefined">Scored</span>
                     </span>
                   </div>
 
@@ -1298,7 +1303,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
                     <div class="panel-section">
                       <div class="panel-section-label">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" /></svg>
-                        Opis
+                        Description
                       </div>
                       <div class="panel-description agent-result-content" [innerHTML]="t.note.content | markdown"></div>
                     </div>
@@ -1309,7 +1314,7 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
                     <div class="panel-section">
                       <div class="panel-section-label">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                        Očekivani ishod
+                        Expected Outcome
                       </div>
                       <div class="panel-expected agent-result-content" [innerHTML]="t.note.expectedOutcome | markdown"></div>
                     </div>
@@ -1352,8 +1357,8 @@ import { GraphPopupComponent } from '../../features/graph/graph-popup.component'
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
-                    <h4>Nema aktivnosti</h4>
-                    <p>Pokrenite zadatak ili razgovor da biste videli status izvršavanja ovde.</p>
+                    <h4>No activity</h4>
+                    <p>Start a task or conversation to see execution status here.</p>
                   </div>
                 }
               </div>
@@ -1377,12 +1382,18 @@ export class AppShellComponent {
   readonly execPanel = inject(ExecutionPanelService);
   private readonly notesApi = inject(NotesApiService);
   private readonly wsService = inject(ChatWebsocketService);
+  readonly pageLoading = inject(PageLoadingService);
 
   /** Cache for sanitized SVG icons */
   private readonly iconCache = new Map<string, SafeHtml>();
 
   readonly dropdownOpen = signal(false);
   readonly routeLoading = signal(false);
+
+  /** Navigation badge counters — show unread/new items since last page visit */
+  readonly chatBadge = signal(0);
+  readonly taskBadge = signal(0);
+  readonly processBadge = signal(0);
   readonly showGraph = signal(true);
   readonly showGraphPopup = signal(false);
   readonly panelWidth = signal(parseInt(localStorage.getItem('execPanelWidth') ?? '420', 10));
@@ -1440,6 +1451,11 @@ export class AppShellComponent {
         event instanceof NavigationError
       ) {
         this.routeLoading.set(false);
+        // Architecture: force-reset the global page loading indicator on
+        // every navigation. This guarantees no leaked start() from a
+        // component that got unmounted mid-load can leave the spinner
+        // stuck on forever. Each new page starts with a clean slate.
+        this.pageLoading.reset();
       }
     });
 
@@ -1449,9 +1465,9 @@ export class AppShellComponent {
 
     // Show connection status in the activity feed
     this.wsService.waitForConnection(15000).then(() => {
-      this.execPanel.addEntry('system', 'Sistem povezan — praćenje aktivno', 'completed');
+      this.execPanel.addEntry('system', 'System connected — tracking active', 'completed');
     }).catch(() => {
-      this.execPanel.addEntry('system', 'WebSocket veza neuspešna', 'error', 'Osvežite stranicu za ponovni pokušaj.');
+      this.execPanel.addEntry('system', 'WebSocket connection failed', 'error', 'Refresh the page to retry.');
     });
   }
 
@@ -1474,10 +1490,10 @@ export class AppShellComponent {
 
   getJobStatusLabel(status: string): string {
     const labels: Record<string, string> = {
-      PLANNED: 'Planiran',
-      RUNNING: 'U toku',
-      COMPLETED: 'Završen',
-      FAILED: 'Greška',
+      PLANNED: 'Planned',
+      RUNNING: 'Running',
+      COMPLETED: 'Completed',
+      FAILED: 'Error',
     };
     return labels[status] ?? status;
   }
@@ -1528,7 +1544,11 @@ export class AppShellComponent {
     const startY = event.clientY;
     const startH = this.graphHeight();
 
+    let lastGraphUpdate = 0;
     const onMove = (e: MouseEvent) => {
+      const now = Date.now();
+      if (now - lastGraphUpdate < 16) return; // Throttle to ~60fps
+      lastGraphUpdate = now;
       const delta = e.clientY - startY;
       this.graphHeight.set(Math.max(120, Math.min(800, startH + delta)));
     };
@@ -1547,9 +1567,8 @@ export class AppShellComponent {
   }
 
   onGraphNoteActivated(event: { noteId: string; conceptId: string }): void {
-    // Navigate to the task hub or chat with this note
-    // For now, navigate to task hub with search
-    this.router.navigate(['/tasks'], { queryParams: { search: event.conceptId } });
+    // Navigate to chat with this concept as context
+    this.router.navigate(['/chat'], { queryParams: { concept: event.conceptId } });
     this.showGraphPopup.set(false);
   }
 
@@ -1641,12 +1660,12 @@ export class AppShellComponent {
     // ── Chat AI Responses ──
     this.wsService.onResearchPhase((data) => {
       if (data.phase === 'researching') {
-        const id = panel.addEntry('research', 'Istraživanje konteksta...', 'running');
+        const id = panel.addEntry('research', 'Researching context...', 'running');
         this.entryMap.set('research-phase', id);
       } else {
         const eid = this.entryMap.get('research-phase');
         if (eid) {
-          panel.completeEntry(eid, 'Istraživanje završeno');
+          panel.completeEntry(eid, 'Research completed');
           this.entryMap.delete('research-phase');
         }
       }
@@ -1655,7 +1674,7 @@ export class AppShellComponent {
     this.wsService.onMessageChunk((data) => {
       let eid = this.entryMap.get('chat-response');
       if (!eid) {
-        eid = panel.addEntry('chat', 'AI odgovor...', 'running');
+        eid = panel.addEntry('chat', 'AI response...', 'running');
         this.entryMap.set('chat-response', eid);
       }
       panel.appendToEntryStream(eid, data.content);
@@ -1664,24 +1683,28 @@ export class AppShellComponent {
     this.wsService.onComplete(() => {
       const eid = this.entryMap.get('chat-response');
       if (eid) {
-        panel.completeEntry(eid, 'Odgovor završen');
+        panel.completeEntry(eid, 'Response completed');
         this.entryMap.delete('chat-response');
+      }
+      // Increment chat badge if user is NOT on chat page
+      if (!this.router.url.startsWith('/chat')) {
+        this.chatBadge.update(n => n + 1);
       }
     });
 
     this.wsService.onError((err) => {
       const eid = this.entryMap.get('chat-response');
       if (eid) {
-        panel.failEntry(eid, err.message || 'Greška');
+        panel.failEntry(eid, err.message || 'Error');
         this.entryMap.delete('chat-response');
       } else {
-        panel.addEntry('error', 'Greška', 'error', err.message);
+        panel.addEntry('error', 'Error', 'error', err.message);
       }
     });
 
     // ── Task AI Execution (Popuni) ──
     this.wsService.onTaskAiStart((data) => {
-      const id = panel.addEntry('task-ai', 'Generisanje sadržaja zadatka...', 'running');
+      const id = panel.addEntry('task-ai', 'Generating task content...', 'running');
       this.entryMap.set(`task-ai-${data.taskId}`, id);
     });
 
@@ -1693,7 +1716,7 @@ export class AppShellComponent {
     this.wsService.onTaskAiComplete((data) => {
       const eid = this.entryMap.get(`task-ai-${data.taskId}`);
       if (eid) {
-        panel.completeEntry(eid, 'Sadržaj generisan');
+        panel.completeEntry(eid, 'Content generated');
         this.entryMap.delete(`task-ai-${data.taskId}`);
       }
     });
@@ -1708,7 +1731,7 @@ export class AppShellComponent {
 
     // ── Task Result Submission ──
     this.wsService.onTaskResultStart((data) => {
-      const id = panel.addEntry('task-result', 'Evaluacija rezultata...', 'running');
+      const id = panel.addEntry('task-result', 'Evaluating results...', 'running');
       this.entryMap.set(`task-result-${data.taskId}`, id);
     });
 
@@ -1720,14 +1743,14 @@ export class AppShellComponent {
     this.wsService.onTaskResultComplete((data) => {
       const eid = this.entryMap.get(`task-result-${data.taskId}`);
       if (eid) {
-        const scoreText = data.score != null ? `Ocena: ${data.score}/100` : 'Završeno';
+        const scoreText = data.score != null ? `Score: ${data.score}/100` : 'Completed';
         panel.completeEntry(eid, scoreText);
         this.entryMap.delete(`task-result-${data.taskId}`);
       }
       // Also complete any scoring entry for this task
       const scoringEid = this.entryMap.get(`scoring-${data.taskId}`);
       if (scoringEid) {
-        const scoreDetail = data.score != null ? `Ocena: ${data.score}/100` : 'Ocenjivanje završeno';
+        const scoreDetail = data.score != null ? `Score: ${data.score}/100` : 'Scoring completed';
         panel.completeEntry(scoringEid, scoreDetail);
         this.entryMap.delete(`scoring-${data.taskId}`);
       }
@@ -1745,7 +1768,7 @@ export class AppShellComponent {
     this.wsService.onStepProgress((data) => {
       const key = `workflow-step-${data.stepIndex ?? 0}`;
       const eid = this.entryMap.get(key);
-      const title = `Korak ${(data.stepIndex ?? 0) + 1}: ${data.stepTitle || 'U toku...'}`;
+      const title = `Step ${(data.stepIndex ?? 0) + 1}: ${data.stepTitle || 'In progress...'}`;
       if (eid) {
         const patch: { title: string; detail: string; status?: 'running' | 'completed' | 'error' | 'info' } = { title, detail: data.status };
         if (data.status === 'completed') patch.status = 'completed';
@@ -1760,21 +1783,21 @@ export class AppShellComponent {
     });
 
     this.wsService.onWorkflowComplete(() => {
-      panel.addEntry('workflow', 'Radni tok završen', 'completed');
+      panel.addEntry('workflow', 'Workflow completed', 'completed');
       for (const [key] of this.entryMap) {
         if (key.startsWith('workflow-step-')) this.entryMap.delete(key);
       }
     });
 
     this.wsService.onWorkflowError((data) => {
-      panel.addEntry('workflow', 'Greška u radnom toku', 'error', data.message);
+      panel.addEntry('workflow', 'Workflow error', 'error', data.message);
     });
 
     // ── Discovery ──
     this.wsService.onDiscoveryChunk((data) => {
       let eid = this.entryMap.get('discovery');
       if (!eid) {
-        eid = panel.addEntry('discovery', 'Otkrivanje zadataka...', 'running');
+        eid = panel.addEntry('discovery', 'Discovering tasks...', 'running');
         this.entryMap.set('discovery', eid);
       }
       panel.appendToEntryStream(eid, data.chunk);
@@ -1783,7 +1806,7 @@ export class AppShellComponent {
     this.wsService.onDiscoveryComplete(() => {
       const eid = this.entryMap.get('discovery');
       if (eid) {
-        panel.completeEntry(eid, 'Otkrivanje završeno');
+        panel.completeEntry(eid, 'Discovery completed');
         this.entryMap.delete('discovery');
       }
     });
@@ -1798,7 +1821,7 @@ export class AppShellComponent {
 
     // ── Parallel Popuni (batch execution) ──
     this.wsService.onParallelPopuniStart((data) => {
-      const id = panel.addEntry('batch', `Paralelno izvršavanje: ${data.tasks.length} zadataka`, 'running');
+      const id = panel.addEntry('batch', `Parallel execution: ${data.tasks.length} tasks`, 'running');
       this.entryMap.set(`batch-${data.batchId}`, id);
     });
 
@@ -1806,18 +1829,18 @@ export class AppShellComponent {
       const eid = this.entryMap.get(`batch-${data.batchId}`);
       if (eid) {
         panel.updateEntry(eid, {
-          detail: `${data.stepLabel || data.status} (korak ${data.currentStep ?? '?'}/${data.totalSteps ?? '?'})`,
+          detail: `${data.stepLabel || data.status} (step ${data.currentStep ?? '?'}/${data.totalSteps ?? '?'})`,
         });
       }
     });
 
     this.wsService.onParallelPopuniTaskDone((data) => {
       const detail = data.status === 'completed'
-        ? (data.score != null ? `Ocena: ${data.score}/100` : 'Završeno')
-        : (data.error || 'Greška');
+        ? (data.score != null ? `Score: ${data.score}/100` : 'Completed')
+        : (data.error || 'Error');
       panel.addEntry(
         'batch-task',
-        data.status === 'completed' ? 'Zadatak završen' : 'Zadatak neuspešan',
+        data.status === 'completed' ? 'Task completed' : 'Task failed',
         data.status === 'completed' ? 'completed' : 'error',
         detail
       );
@@ -1826,66 +1849,66 @@ export class AppShellComponent {
     this.wsService.onParallelPopuniBatchDone((data) => {
       const eid = this.entryMap.get(`batch-${data.batchId}`);
       if (eid) {
-        panel.completeEntry(eid, `Završeno: ${data.completedCount}, greške: ${data.failedCount}`);
+        panel.completeEntry(eid, `Completed: ${data.completedCount}, errors: ${data.failedCount}`);
         this.entryMap.delete(`batch-${data.batchId}`);
       }
     });
 
     // ── Auto Popuni ──
     this.wsService.onAutoPopuniStart((data) => {
-      const id = panel.addEntry('auto-popuni', `Auto popunjavanje: ${data.taskCount} zadataka`, 'running');
+      const id = panel.addEntry('auto-popuni', `Auto-fill: ${data.taskCount} tasks`, 'running');
       this.entryMap.set('auto-popuni', id);
     });
 
     this.wsService.onAutoPopuniComplete((data) => {
       const eid = this.entryMap.get('auto-popuni');
       if (eid) {
-        panel.completeEntry(eid, `Završeno: ${data.completedTasks}/${data.totalTasks}`);
+        panel.completeEntry(eid, `Completed: ${data.completedTasks}/${data.totalTasks}`);
         this.entryMap.delete('auto-popuni');
       }
     });
 
     this.wsService.onAutoPopuniTaskError((data) => {
-      panel.addEntry('auto-popuni-error', 'Greška zadatka', 'error', data.message);
+      panel.addEntry('auto-popuni-error', 'Task error', 'error', data.message);
     });
 
     // ── Jobs Planned ──
     this.wsService.onJobsPlanned((data) => {
-      panel.addEntry('jobs', `Planirano: ${data.jobs.length} agenata`, 'info',
+      panel.addEntry('jobs', `Planned: ${data.jobs.length} agents`, 'info',
         data.jobs.map((j) => j.agentType.replace(/_/g, ' ')).join(', '));
     });
 
     // ── Tasks Created for Execution ──
     this.wsService.onTasksCreatedForExecution((data) => {
-      panel.addEntry('tasks-created', `Kreirano ${data.taskIds.length} zadataka za izvršavanje`, 'info');
+      panel.addEntry('tasks-created', `Created ${data.taskIds.length} tasks for execution`, 'info');
     });
 
     // ── Task AI Workflow (auto-popuni per-step progress) ──
     this.wsService.onTaskAiWorkflowStart((data) => {
-      const id = panel.addEntry('task-workflow', 'Generisanje plana izvršavanja...', 'running', data.message);
+      const id = panel.addEntry('task-workflow', 'Generating execution plan...', 'running', data.message);
       this.entryMap.set(`task-workflow-${data.taskId}`, id);
     });
 
     this.wsService.onTaskAiStepProgress((data) => {
       const key = `task-workflow-${data.taskId}`;
       const eid = this.entryMap.get(key);
-      const detail = `Korak ${data.stepIndex + 1}/${data.totalSteps}: ${data.stepTitle}`;
+      const detail = `Step ${data.stepIndex + 1}/${data.totalSteps}: ${data.stepTitle}`;
       if (eid) {
-        panel.updateEntry(eid, { title: 'Izvršavanje plana...', detail });
+        panel.updateEntry(eid, { title: 'Executing plan...', detail });
       } else {
-        const id = panel.addEntry('task-workflow', 'Izvršavanje plana...', 'running', detail);
+        const id = panel.addEntry('task-workflow', 'Executing plan...', 'running', detail);
         this.entryMap.set(key, id);
       }
     });
 
     this.wsService.onTaskAiStepComplete((data) => {
-      const detail = `Korak ${data.stepIndex + 1}/${data.totalSteps}: ${data.stepTitle} — završen`;
+      const detail = `Step ${data.stepIndex + 1}/${data.totalSteps}: ${data.stepTitle} — completed`;
       panel.addEntry('task-step', detail, 'completed');
       // If this is the last step, complete the workflow entry
       if (data.stepIndex + 1 >= data.totalSteps) {
         const eid = this.entryMap.get(`task-workflow-${data.taskId}`);
         if (eid) {
-          panel.completeEntry(eid, `Svi koraci završeni (${data.totalSteps})`);
+          panel.completeEntry(eid, `All steps completed (${data.totalSteps})`);
           this.entryMap.delete(`task-workflow-${data.taskId}`);
         }
       }
@@ -1893,16 +1916,16 @@ export class AppShellComponent {
 
     // ── Scoring ──
     this.wsService.onTaskScoringStart((data) => {
-      const id = panel.addEntry('scoring', 'Ocenjivanje zadatka...', 'running');
+      const id = panel.addEntry('scoring', 'Scoring task...', 'running');
       this.entryMap.set(`scoring-${data.taskId}`, id);
     });
 
     // ── YOLO Mode ──
     this.wsService.onYoloProgress((data) => {
       let eid = this.entryMap.get(`yolo-${data.planId}`);
-      const detail = `${data.completed}/${data.total} završeno, ${data.running} aktivno`;
+      const detail = `${data.completed}/${data.total} completed, ${data.running} active`;
       if (!eid) {
-        eid = panel.addEntry('yolo', 'YOLO izvršavanje...', 'running', detail);
+        eid = panel.addEntry('yolo', 'YOLO execution...', 'running', detail);
         this.entryMap.set(`yolo-${data.planId}`, eid);
       } else {
         panel.updateEntry(eid, { detail });
@@ -1912,35 +1935,35 @@ export class AppShellComponent {
     this.wsService.onYoloComplete((data) => {
       const eid = this.entryMap.get(`yolo-${data.planId}`);
       if (eid) {
-        panel.completeEntry(eid, 'YOLO izvršavanje završeno');
+        panel.completeEntry(eid, 'YOLO execution completed');
         this.entryMap.delete(`yolo-${data.planId}`);
       } else {
-        panel.addEntry('yolo', 'YOLO izvršavanje završeno', 'completed');
+        panel.addEntry('yolo', 'YOLO execution completed', 'completed');
       }
     });
 
     // ── Workflow Plan Ready ──
     this.wsService.onPlanReady((data) => {
-      panel.addEntry('workflow', `Plan spreman: ${data.plan.steps?.length ?? 0} koraka`, 'info');
+      panel.addEntry('workflow', `Plan ready: ${data.plan.steps?.length ?? 0} steps`, 'info');
     });
 
     // ── Workflow Step Messages ──
     this.wsService.onStepMessage((data) => {
-      panel.addEntry('workflow-msg', 'Korak: poruka primljena', 'info', data.content?.substring(0, 100));
+      panel.addEntry('workflow-msg', 'Step: message received', 'info', data.content?.substring(0, 100));
     });
 
     // ── Workflow Awaiting Input/Confirmation ──
     this.wsService.onStepAwaitingConfirmation(() => {
-      panel.addEntry('workflow-input', 'Čekanje na potvrdu korisnika...', 'running');
+      panel.addEntry('workflow-input', 'Awaiting user confirmation...', 'running');
     });
 
     this.wsService.onStepAwaitingInput((data) => {
-      panel.addEntry('workflow-input', `Čekanje na unos: ${data.stepTitle?.substring(0, 60) || 'korisnik'}`, 'running');
+      panel.addEntry('workflow-input', `Awaiting input: ${data.stepTitle?.substring(0, 60) || 'user'}`, 'running');
     });
 
     // ── Tasks Discovered ──
     this.wsService.onTasksDiscovered((data) => {
-      panel.addEntry('discovery', `Otkriveno ${data.conceptIds.length} novih koncepata`, 'info');
+      panel.addEntry('discovery', `Discovered ${data.conceptIds.length} new concepts`, 'info');
     });
 
     // ── Maturity Stage Init + Execution ──
@@ -1948,11 +1971,11 @@ export class AppShellComponent {
       const key = 'maturity-init';
       const eid = this.entryMap.get(key);
       const detail = `${data.persona} (${data.personaIndex + 1}/${data.totalPersonas})` +
-        (data.assignedSoFar > 0 ? ` — ${data.assignedSoFar} dodeljeno` : '');
+        (data.assignedSoFar > 0 ? ` — ${data.assignedSoFar} assigned` : '');
       if (eid) {
         panel.updateEntry(eid, { detail });
       } else {
-        const id = panel.addEntry('maturity', 'Inicijalizacija Maturity...', 'running', detail);
+        const id = panel.addEntry('maturity', 'Initializing Maturity...', 'running', detail);
         this.entryMap.set(key, id);
       }
     });
@@ -1960,50 +1983,85 @@ export class AppShellComponent {
     this.wsService.onStageInitialized((data) => {
       const eid = this.entryMap.get('maturity-init');
       if (eid) {
-        panel.completeEntry(eid, `${data.assignmentCount} koncepata, ${data.noteCount} zadataka`);
+        panel.completeEntry(eid, `${data.assignmentCount} concepts, ${data.noteCount} tasks`);
         this.entryMap.delete('maturity-init');
       } else {
-        panel.addEntry('maturity', `${data.stage} inicijalizovan`, 'completed',
-          `${data.assignmentCount} koncepata, ${data.noteCount} zadataka`);
+        panel.addEntry('maturity', `${data.stage} initialized`, 'completed',
+          `${data.assignmentCount} concepts, ${data.noteCount} tasks`);
       }
     });
 
     this.wsService.onExecutionStarted(() => {
-      const id = panel.addEntry('maturity', 'Izvršavanje zadataka...', 'running');
+      const id = panel.addEntry('maturity', 'Executing tasks...', 'running');
       this.entryMap.set('maturity-exec', id);
     });
 
     this.wsService.onExecutionProgress((data) => {
+      // Update overall progress entry
       const eid = this.entryMap.get('maturity-exec');
       if (eid) {
-        const detail = `${data.executed}/${data.total} završeno` +
-          (data.failed > 0 ? `, ${data.failed} neuspešno` : '') +
+        const detail = `${data.executed}/${data.total} completed` +
+          (data.failed > 0 ? `, ${data.failed} failed` : '') +
           (data.current ? ` — ${data.current.conceptName}` : '');
         panel.updateEntry(eid, { detail });
+      }
+
+      // Mark previous concept entry as completed
+      const prevKey = this.entryMap.get('maturity-current-concept');
+      if (prevKey && !data.current) {
+        // No current concept = previous one just finished
+        panel.completeEntry(prevKey);
+        this.entryMap.delete('maturity-current-concept');
+      }
+
+      // Add new concept entry when a new concept starts
+      if (data.current?.conceptName) {
+        const conceptKey = `concept-${data.current.conceptId}`;
+        if (!this.entryMap.has(conceptKey)) {
+          // Complete the previous concept entry first
+          const prevConceptKey = this.entryMap.get('maturity-current-concept');
+          if (prevConceptKey) {
+            panel.completeEntry(prevConceptKey);
+          }
+          const cid = panel.addEntry('concept-enrich', data.current.conceptName, 'running', 'Enriching...');
+          this.entryMap.set(conceptKey, cid);
+          this.entryMap.set('maturity-current-concept', cid);
+        }
       }
     });
 
     this.wsService.onExecutionComplete((data) => {
+      // Complete any remaining concept entry
+      const lastConcept = this.entryMap.get('maturity-current-concept');
+      if (lastConcept) {
+        panel.completeEntry(lastConcept);
+        this.entryMap.delete('maturity-current-concept');
+      }
+
       const eid = this.entryMap.get('maturity-exec');
       if (eid) {
-        const detail = `${data.executed}/${data.total} završeno` +
-          (data.failed > 0 ? `, ${data.failed} neuspešno` : '');
+        const detail = `${data.executed}/${data.total} completed` +
+          (data.failed > 0 ? `, ${data.failed} failed` : '');
         panel.completeEntry(eid, detail);
         this.entryMap.delete('maturity-exec');
+      }
+      // Increment task badge if user is NOT on tasks page
+      if (!this.router.url.startsWith('/tasks')) {
+        this.taskBadge.update(n => n + 1);
       }
     });
 
     // ── Execution Active State (reconnect resilience) ──
     this.wsService.onExecutionActiveState((data) => {
       if (data.active.length > 0) {
-        panel.addEntry('reconnect', `Aktivna izvršavanja: ${data.active.length}`, 'info',
+        panel.addEntry('reconnect', `Active executions: ${data.active.length}`, 'info',
           data.active.map((a) => a.type).join(', '));
       }
     });
 
     // ── Execution Replay Complete ──
     this.wsService.onExecutionReplayComplete((data) => {
-      panel.addEntry('replay', `Replay završen: ${data.eventCount} događaja`, 'info');
+      panel.addEntry('replay', `Replay completed: ${data.eventCount} events`, 'info');
     });
 
     // ── Agent Execution Streaming (Claude-style multi-entry flow) ──
@@ -2027,7 +2085,7 @@ export class AppShellComponent {
       const fmtKey = `agent-fmt-${data.executionId}`;
       let fmtEntryId = this.entryMap.get(fmtKey);
       if (!fmtEntryId) {
-        fmtEntryId = panel.addEntryAfter(parentId, 'agent-formatting', 'Priprema instrukcija...', 'running', undefined, parentId);
+        fmtEntryId = panel.addEntryAfter(parentId, 'agent-formatting', 'Preparing instructions...', 'running', undefined, parentId);
         this.entryMap.set(fmtKey, fmtEntryId);
       }
       panel.appendToEntryStream(fmtEntryId, data.chunk);
@@ -2037,7 +2095,7 @@ export class AppShellComponent {
       const fmtKey = `agent-fmt-${data.executionId}`;
       const fmtEntryId = this.entryMap.get(fmtKey);
       if (fmtEntryId) {
-        panel.completeEntry(fmtEntryId, `Instrukcije pripremljene (${data.promptLength} znakova)`);
+        panel.completeEntry(fmtEntryId, `Instructions prepared (${data.promptLength} chars)`);
         this.entryMap.delete(fmtKey);
       }
     });
@@ -2049,7 +2107,7 @@ export class AppShellComponent {
         const m = Math.floor(sec / 60);
         const s = sec % 60;
         panel.updateEntry(eid, {
-          detail: `Agent istražuje... (${m > 0 ? m + 'm ' : ''}${s}s)`,
+          detail: `Agent researching... (${m > 0 ? m + 'm ' : ''}${s}s)`,
         });
       }
     });
@@ -2060,9 +2118,9 @@ export class AppShellComponent {
       const textKey = `agent-text-${data.executionId}`;
       let textEntryId = this.entryMap.get(textKey);
       if (!textEntryId) {
-        textEntryId = panel.addEntryAfter(parentId, 'agent-text', 'Piše odgovor...', 'running', undefined, parentId);
+        textEntryId = panel.addEntryAfter(parentId, 'agent-text', 'Writing response...', 'running', undefined, parentId);
         this.entryMap.set(textKey, textEntryId);
-        panel.updateEntry(parentId, { detail: 'Agent piše...' });
+        panel.updateEntry(parentId, { detail: 'Agent writing...' });
         this.scrollPanelToTop();
       }
       panel.appendToEntryStream(textEntryId, data.text);
@@ -2072,10 +2130,10 @@ export class AppShellComponent {
       const parentId = this.entryMap.get(`agent-exec-${data.executionId}`);
       if (!parentId) return;
       const toolLabels: Record<string, string> = {
-        'web_search': 'Pretražuje web',
-        'web_fetch': 'Preuzima stranicu',
-        'exec': 'Izvršava komandu',
-        'browser': 'Pregledava stranicu',
+        'web_search': 'Searching web',
+        'web_fetch': 'Fetching page',
+        'exec': 'Executing command',
+        'browser': 'Browsing page',
       };
       const label = toolLabels[data.tool] || data.tool;
       const toolKey = `agent-tool-${data.executionId}-${data.tool}`;
@@ -2103,16 +2161,16 @@ export class AppShellComponent {
       const textKey = `agent-text-${data.executionId}`;
       const textEntryId = this.entryMap.get(textKey);
       if (textEntryId) {
-        panel.completeEntry(textEntryId, `Završeno za ${durationSec}s`);
+        panel.completeEntry(textEntryId, `Completed in ${durationSec}s`);
         this.entryMap.delete(textKey);
       } else if (data.output) {
         // No text sub-entry was created — create one now with full output
-        const finalId = panel.addEntryAfter(parentId, 'agent-text', 'Rezultat', 'completed', `Završeno za ${durationSec}s`, parentId);
+        const finalId = panel.addEntryAfter(parentId, 'agent-text', 'Result', 'completed', `Completed in ${durationSec}s`, parentId);
         panel.updateEntry(finalId, { streamContent: data.output });
       }
 
       // Complete the parent entry
-      panel.updateEntry(parentId, { status: 'completed', detail: `Agent završio za ${durationSec}s` });
+      panel.updateEntry(parentId, { status: 'completed', detail: `Agent completed in ${durationSec}s` });
       this.entryMap.delete(key);
 
       // Clean up any leftover tool entries
@@ -2147,16 +2205,16 @@ export class AppShellComponent {
     // ── Bridge Events (OpenClaw Brain) ──
 
     this.wsService.onBridgeAgentStatus((data) => {
-      const agentLabel = (data.agent || 'direktor').replace(/_/g, ' ');
+      const agentLabel = (data.agent || 'director').replace(/_/g, ' ');
       const key = `bridge-agent-${data.taskId}-${data.agent}`;
 
       if (data.status === 'completed' || data.status === 'failed') {
         const eid = this.entryMap.get(key);
         if (eid) {
           if (data.status === 'completed') {
-            panel.completeEntry(eid, data.message || 'Završeno');
+            panel.completeEntry(eid, data.message || 'Completed');
           } else {
-            panel.failEntry(eid, data.message || 'Greška');
+            panel.failEntry(eid, data.message || 'Error');
           }
           this.entryMap.delete(key);
         }
@@ -2172,7 +2230,11 @@ export class AppShellComponent {
     });
 
     this.wsService.onBridgeTaskCreated(() => {
-      panel.addEntry('bridge-task', 'Novi zadatak kreiran', 'info');
+      panel.addEntry('bridge-task', 'New task created', 'info');
+      // Show blue dot on Tasks nav so user knows a fresh task was created.
+      if (!this.router.url.startsWith('/tasks')) {
+        this.taskBadge.update((n) => n + 1);
+      }
     });
 
     this.wsService.onBridgeTaskContribution((data) => {
@@ -2180,9 +2242,9 @@ export class AppShellComponent {
       const eid = this.entryMap.get(key);
       const agent = (data.agentType || '').replace(/_/g, ' ');
       if (eid) {
-        panel.updateEntry(eid, { detail: `${agent} doprineo` });
+        panel.updateEntry(eid, { detail: `${agent} contributed` });
       } else {
-        const id = panel.addEntry('bridge-contribution', `${agent}: doprinos zadatku`, 'running');
+        const id = panel.addEntry('bridge-contribution', `${agent}: task contribution`, 'running');
         this.entryMap.set(key, id);
       }
     });
@@ -2203,47 +2265,47 @@ export class AppShellComponent {
       const key = `bridge-task-${data.noteId}`;
       const eid = this.entryMap.get(key);
       if (eid) {
-        panel.completeEntry(eid, data.score ? `Ocena: ${data.score}` : 'Završeno');
+        panel.completeEntry(eid, data.score ? `Score: ${data.score}` : 'Completed');
         this.entryMap.delete(key);
       } else {
-        panel.addEntry('bridge-complete', 'Zadatak završen', 'completed', data.score ? `Ocena: ${data.score}` : undefined);
+        panel.addEntry('bridge-complete', 'Task completed', 'completed', data.score ? `Score: ${data.score}` : undefined);
       }
     });
 
     this.wsService.onProposalNew(() => {
-      panel.addEntry('bridge-proposal', 'Novi AI predlog', 'info');
+      panel.addEntry('bridge-proposal', 'New AI proposal', 'info');
     });
 
     this.wsService.onProposalApproved(() => {
-      panel.addEntry('bridge-proposal', 'Predlog odobren — izvršavanje...', 'running');
+      panel.addEntry('bridge-proposal', 'Proposal approved — executing...', 'running');
     });
 
     // ── Process Workflow Engine activity ──
     const processRunEntries = new Map<string, string>();
 
     this.wsService.onProcessRunStarted((data) => {
-      const id = panel.addEntry('process', `Proces: ${data.workflowName}`, 'running', `${data.totalSteps} koraka`);
+      const id = panel.addEntry('process', `Process: ${data.workflowName}`, 'running', `${data.totalSteps} steps`);
       processRunEntries.set(`process-run-${data.runId}`, id);
     });
 
     this.wsService.onProcessStepStarted((data) => {
       const entryId = processRunEntries.get(`process-run-${data.runId}`);
       if (entryId) {
-        panel.updateEntry(entryId, { detail: `Korak ${data.stepOrder}/${data.totalSteps}: ${data.stepName}` });
+        panel.updateEntry(entryId, { detail: `Step ${data.stepOrder}/${data.totalSteps}: ${data.stepName}` });
       }
     });
 
     this.wsService.onProcessStepOutput((data) => {
       const entryId = processRunEntries.get(`process-run-${data.runId}`);
       if (entryId) {
-        panel.updateEntry(entryId, { detail: `Korak ${data.stepOrder}/${data.totalSteps}: ${data.stepName} ✓` });
+        panel.updateEntry(entryId, { detail: `Step ${data.stepOrder}/${data.totalSteps}: ${data.stepName} ✓` });
       }
     });
 
     this.wsService.onProcessStepFailed((data) => {
       const entryId = processRunEntries.get(`process-run-${data.runId}`);
       if (entryId) {
-        panel.updateEntry(entryId, { detail: `Korak ${data.stepOrder} neuspešan: ${data.error ?? ''}`, status: 'error' });
+        panel.updateEntry(entryId, { detail: `Step ${data.stepOrder} failed: ${data.error ?? ''}`, status: 'error' });
       }
     });
 
@@ -2251,17 +2313,21 @@ export class AppShellComponent {
       const entryId = processRunEntries.get(`process-run-${data.runId}`);
       if (entryId) {
         panel.updateEntry(entryId, {
-          detail: data.success ? 'Proces završen uspešno' : 'Proces neuspešan',
+          detail: data.success ? 'Process completed successfully' : 'Process failed',
           status: data.success ? 'completed' : 'error',
         });
         processRunEntries.delete(`process-run-${data.runId}`);
+      }
+      // Increment process badge if user is NOT on processes page
+      if (!this.router.url.startsWith('/process')) {
+        this.processBadge.update(n => n + 1);
       }
     });
 
     this.wsService.onProcessApprovalNeeded((data) => {
       const entryId = processRunEntries.get(`process-run-${data.runId}`);
       if (entryId) {
-        panel.updateEntry(entryId, { detail: `Čeka odobrenje: ${data.stepName}`, status: 'running' });
+        panel.updateEntry(entryId, { detail: `Awaiting approval: ${data.stepName}`, status: 'running' });
       }
     });
 

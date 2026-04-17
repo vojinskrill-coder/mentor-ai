@@ -1,81 +1,80 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
+import { PlatformConfigService } from '../platform-config/platform-config.service';
 import { EnrichmentQueueService } from '../enrichment-queue/enrichment-queue.service';
 import { ContentValidationService } from '../content-validation/content-validation.service';
-import { VAULT_STORAGE, VaultStorage } from '../vault-storage/vault-storage.interface';
-import { PlatformConfigService } from '../platform-config/platform-config.service';
+import { VaultStorage } from '../vault-storage/vault-storage.interface';
 
+// ── Result interface ────────────────────────────────────────────────────────
+export interface ValidationResult {
+  status: 'completed' | 'failed' | 'permanently_failed' | 'correcting';
+  errors?: string[];
+  error?: string;
+  correctionMessage?: string;
+}
+
+// ── Service ─────────────────────────────────────────────────────────────────
 @Injectable()
 export class GuardrailValidationService {
   private readonly logger = new Logger(GuardrailValidationService.name);
 
   constructor(
-    private readonly queue: EnrichmentQueueService,
-    private readonly contentValidation: ContentValidationService,
-    @Inject(VAULT_STORAGE) private readonly vaultStorage: VaultStorage,
-    private readonly config: PlatformConfigService,
+    @Inject('VAULT_STORAGE') private readonly vaultStorage: VaultStorage,
+    private readonly validationService: ContentValidationService,
+    private readonly queueService: EnrichmentQueueService,
+    private readonly configService: PlatformConfigService,
   ) {}
 
-  async validateAndComplete(
-    entryId: string,
-    slug: string,
-  ): Promise<boolean> {
-    const entry = await this.queue.getEntry(entryId);
-    if (!entry) {
-      this.logger.error(`Entry ${entryId} not found`);
-      return false;
-    }
+  async validateAndComplete(entryId: string, slug: string): Promise<ValidationResult> {
+    const entry = await this.queueService.getEntry(entryId);
+    if (!entry) throw new Error(`Queue entry ${entryId} not found`);
 
-    const enrichmentConfig = this.config.getEnrichmentConfig();
-    const maxCorrections = enrichmentConfig.maxRetries;
+    const maxRetries = this.configService.getEnrichmentConfig().maxRetries;
 
+    // FR23: Always read vault regardless of relay success
+    let content: string;
     try {
-      // Read content from vault
-      const content = await this.vaultStorage.readFile(
-        entry.tenantId,
-        `concepts/${slug}.md`,
-      );
-
-      // Validate content
-      const validation = this.contentValidation.validateContent(content, {
-        minWords: enrichmentConfig.minWords,
-        minChars: enrichmentConfig.minChars,
-        requireDiacritics: enrichmentConfig.requireDiacritics,
-        requireFrontmatter: enrichmentConfig.requireFrontmatter,
-        requireSources: enrichmentConfig.requireSources,
-      });
-
-      if (validation.valid) {
-        await this.queue.markCompleted(entryId);
-        this.logger.log(`Entry ${entryId} (${slug}) passed validation`);
-        return true;
-      }
-
-      // Content failed validation — enter correction loop
-      this.logger.warn(
-        `Entry ${entryId} (${slug}) failed validation: ${validation.errors.join(', ')}`,
-      );
-
-      if (entry.retryCount >= maxCorrections) {
-        await this.queue.markFailed(
-          entryId,
-          `Max corrections reached. Errors: ${validation.errors.join('; ')}`,
-        );
-        return false;
-      }
-
-      // Transition to CORRECTING
-      await this.queue.markCorrecting(entryId);
-
-      // In production, this would call the relay for self-correction
-      // For now, mark back to VALIDATING after correction attempt
-      await this.queue.markBackToValidating(entryId);
-
-      return false; // Will be re-validated on next cycle
-    } catch (err) {
-      const msg = (err as Error).message;
-      this.logger.error(`Validation failed for ${entryId}: ${msg}`);
-      await this.queue.markFailed(entryId, msg).catch(() => {});
-      return false;
+      content = await this.vaultStorage.readFile(entry.tenantId, `wiki/concepts/${slug}.md`);
+    } catch {
+      await this.queueService.markFailed(entryId, 'No article written to vault');
+      return { status: 'failed', error: 'No article in vault' };
     }
+
+    // Validate content
+    const validation = this.validationService.validateContent(content);
+
+    if (validation.valid) {
+      await this.queueService.markCompleted(entryId);
+      this.logger.log({
+        event: 'enrichment.validated',
+        tenantId: entry.tenantId,
+        conceptId: entry.conceptId,
+      });
+      return { status: 'completed' };
+    }
+
+    // Check retry budget
+    if (entry.attempt >= maxRetries) {
+      await this.queueService.markFailed(
+        entryId,
+        `Validation failed after ${maxRetries} attempts: ${validation.errors.join('; ')}`,
+      );
+      return { status: 'permanently_failed', errors: validation.errors };
+    }
+
+    // Send correction
+    await this.queueService.markCorrecting(entryId);
+    this.logger.warn({
+      event: 'enrichment.correction_needed',
+      tenantId: entry.tenantId,
+      conceptId: entry.conceptId,
+      errors: validation.errors,
+      attempt: entry.attempt + 1,
+    });
+
+    return {
+      status: 'correcting',
+      errors: validation.errors,
+      correctionMessage: `Article for concept failed validation. Errors: ${validation.errors.join('; ')}. Fix ONLY these issues.`,
+    };
   }
 }

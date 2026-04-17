@@ -18,8 +18,8 @@ import type { AgentEnrichments, AgentEnrichmentEntry, DeliverableFile, Deliverab
       }
 
       .contribution-section {
-        background: #141414;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 8px;
         overflow: hidden;
       }
@@ -29,12 +29,12 @@ import type { AgentEnrichments, AgentEnrichmentEntry, DeliverableFile, Deliverab
         align-items: center;
         gap: 8px;
         padding: 10px 12px;
-        background: #1a1a1a;
+        background: #161B22;
         cursor: pointer;
         user-select: none;
       }
       .contribution-header:hover {
-        background: #1e1e1e;
+        background: #21262D;
       }
 
       .contribution-number {
@@ -42,7 +42,7 @@ import type { AgentEnrichments, AgentEnrichmentEntry, DeliverableFile, Deliverab
         height: 22px;
         border-radius: 50%;
         background: rgba(59, 130, 246, 0.15);
-        color: #3b82f6;
+        color: #58A6FF;
         font-size: 12px;
         font-weight: 700;
         display: flex;
@@ -57,7 +57,7 @@ import type { AgentEnrichments, AgentEnrichmentEntry, DeliverableFile, Deliverab
       .contribution-agent {
         font-size: 13px;
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
       }
 
       .contribution-summary {
@@ -95,8 +95,8 @@ import type { AgentEnrichments, AgentEnrichmentEntry, DeliverableFile, Deliverab
         align-items: center;
         gap: 4px;
         padding: 4px 10px;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 6px;
         font-size: 12px;
         color: #a1a1a1;
@@ -104,7 +104,7 @@ import type { AgentEnrichments, AgentEnrichmentEntry, DeliverableFile, Deliverab
         transition: border-color 0.15s;
       }
       .file-chip:hover {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
         color: #60a5fa;
       }
 
@@ -123,7 +123,7 @@ import type { AgentEnrichments, AgentEnrichmentEntry, DeliverableFile, Deliverab
       }
 
       .action-checkbox {
-        accent-color: #3b82f6;
+        accent-color: #58A6FF;
       }
 
       .action-label {
@@ -171,7 +171,7 @@ import type { AgentEnrichments, AgentEnrichmentEntry, DeliverableFile, Deliverab
         padding: 8px 16px;
         border-radius: 6px;
         border: none;
-        background: #3b82f6;
+        background: #58A6FF;
         color: #fff;
         font-size: 13px;
         font-weight: 500;

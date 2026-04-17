@@ -53,7 +53,7 @@ import type { Persona, PersonaType } from '@mentor-ai/shared/types';
               </div>
               <span
                 class="persona-name"
-                [style.color]="selectedPersona$()?.id === persona.id ? persona.color : '#FAFAFA'"
+                [style.color]="selectedPersona$()?.id === persona.id ? persona.color : '#E6EDF3'"
               >
                 {{ persona.shortName }}
               </span>
@@ -108,9 +108,9 @@ import type { Persona, PersonaType } from '@mentor-ai/shared/types';
       .skeleton-card {
         height: 96px;
         border-radius: 12px;
-        background: #242424;
+        background: #1C2128;
         animation: shimmer 1.5s linear infinite;
-        background-image: linear-gradient(90deg, #242424 25%, #2a2a2a 50%, #242424 75%);
+        background-image: linear-gradient(90deg, #1C2128 25%, #21262D 50%, #1C2128 75%);
         background-size: 200% 100%;
       }
       @keyframes shimmer {
@@ -128,7 +128,7 @@ import type { Persona, PersonaType } from '@mentor-ai/shared/types';
         color: #ef4444;
         font-size: 13px;
         padding: 12px;
-        background: #242424;
+        background: #1C2128;
         border-radius: 8px;
       }
       .persona-card {
@@ -138,7 +138,7 @@ import type { Persona, PersonaType } from '@mentor-ai/shared/types';
         padding: 12px;
         border-radius: 12px;
         border: 2px solid transparent;
-        background: #242424;
+        background: #1C2128;
         cursor: pointer;
         transition: all 0.2s;
         min-height: 96px;
@@ -166,7 +166,7 @@ import type { Persona, PersonaType } from '@mentor-ai/shared/types';
         font-size: 13px;
         font-weight: 500;
         text-align: center;
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .persona-desc {
         font-size: 11px;
@@ -196,10 +196,10 @@ import type { Persona, PersonaType } from '@mentor-ai/shared/types';
         transition: color 0.15s;
       }
       .clear-btn:hover {
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .clear-btn.active {
-        color: #fafafa;
+        color: #E6EDF3;
       }
     `,
   ],

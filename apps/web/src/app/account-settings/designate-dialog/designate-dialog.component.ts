@@ -22,8 +22,8 @@ import type { TeamMemberResponse } from '@mentor-ai/shared/types';
         z-index: 51;
         width: 90%;
         max-width: 440px;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 12px;
         padding: 24px;
       }
@@ -41,7 +41,7 @@ import type { TeamMemberResponse } from '@mentor-ai/shared/types';
       .dialog-header svg {
         width: 20px;
         height: 20px;
-        color: #3b82f6;
+        color: #58A6FF;
       }
       .dialog-title {
         font-size: 16px;
@@ -56,8 +56,8 @@ import type { TeamMemberResponse } from '@mentor-ai/shared/types';
         border-radius: 4px;
       }
       .close-btn:hover {
-        color: #fafafa;
-        background: #242424;
+        color: #E6EDF3;
+        background: #1C2128;
       }
       .close-btn svg {
         width: 20px;
@@ -84,8 +84,8 @@ import type { TeamMemberResponse } from '@mentor-ai/shared/types';
       .spinner {
         width: 24px;
         height: 24px;
-        border: 3px solid #2a2a2a;
-        border-top-color: #3b82f6;
+        border: 3px solid #21262D;
+        border-top-color: #58A6FF;
         border-radius: 50%;
         animation: spin 0.6s linear infinite;
       }
@@ -116,7 +116,7 @@ import type { TeamMemberResponse } from '@mentor-ai/shared/types';
         gap: 12px;
         padding: 12px;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         cursor: pointer;
         transition: border-color 0.15s, background 0.15s;
       }
@@ -124,11 +124,11 @@ import type { TeamMemberResponse } from '@mentor-ai/shared/types';
         background: rgba(59, 130, 246, 0.05);
       }
       .member-option.selected {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
         background: rgba(59, 130, 246, 0.08);
       }
       .member-option input[type="radio"] {
-        accent-color: #3b82f6;
+        accent-color: #58A6FF;
         margin-top: 2px;
       }
       .member-option-name {
@@ -161,22 +161,22 @@ import type { TeamMemberResponse } from '@mentor-ai/shared/types';
       .btn-cancel {
         padding: 8px 16px;
         border-radius: 6px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         background: transparent;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 14px;
         font-weight: 500;
         cursor: pointer;
         font-family: inherit;
       }
       .btn-cancel:hover {
-        background: #242424;
+        background: #1C2128;
       }
       .btn-confirm {
         padding: 8px 16px;
         border-radius: 6px;
         border: none;
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
         font-size: 14px;
         font-weight: 500;

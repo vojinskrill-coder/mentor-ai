@@ -70,7 +70,7 @@ export class ConversationService {
     let conceptName: string | null = null;
     let conceptCategory: string | null = null;
     if (conceptId) {
-      const conceptMap = await this.conceptService.findByIds([conceptId]);
+      const conceptMap = await this.conceptService.findByIds([conceptId], tenantId);
       const info = conceptMap.get(conceptId);
       if (info) {
         conceptName = info.name;
@@ -272,7 +272,7 @@ export class ConversationService {
     }
 
     if (unmappedConceptIds.size > 0) {
-      const conceptDetails = await this.conceptService.findByIds([...unmappedConceptIds]);
+      const conceptDetails = await this.conceptService.findByIds([...unmappedConceptIds], tenantId);
 
       // Group orphaned conversations by their conceptId
       const orphanedConvsByConceptId = new Map<string, Conversation[]>();
@@ -462,10 +462,11 @@ export class ConversationService {
       }
     }
 
-    // 3b. Also include AI-discovered concepts (tenant-specific)
-    const aiConcepts = await this.conceptService.findTenantConcepts(tenantId);
-    this.logger.log({ message: 'AI-discovered concepts for tree', count: aiConcepts.length, tenantId });
-    for (const c of aiConcepts) {
+    // 3b. Include activated tenant concepts (AI-discovered or enriched beyond placeholder)
+    //     NOT all 484 vault placeholders — only those with conversations, tasks, or enrichment
+    const activatedConcepts = await this.conceptService.findActivatedTenantConcepts(tenantId);
+    this.logger.log({ message: 'Activated tenant concepts for tree', count: activatedConcepts.length, tenantId });
+    for (const c of activatedConcepts) {
       allConceptIds.add(c.id);
     }
 
@@ -474,7 +475,7 @@ export class ConversationService {
     }
 
     // 4. Load concept details (includes slug = curriculumId)
-    const conceptMap = await this.conceptService.findByIds([...allConceptIds]);
+    const conceptMap = await this.conceptService.findByIds([...allConceptIds], tenantId);
 
     // 5. Get visible categories for department filtering
     const visibleCategories = getVisibleCategories(department, role);
@@ -484,8 +485,8 @@ export class ConversationService {
     const neededCurriculumIds = new Set<string>();
     const conceptToCurriculum = new Map<string, string>(); // conceptId → curriculumId
 
-    // Track which concepts are AI-discovered (tenant-specific) — they bypass category filtering
-    const aiConceptIdSet = new Set(aiConcepts.map(c => c.id));
+    // Track which concepts are activated (tenant-specific) — they bypass category filtering
+    const aiConceptIdSet = new Set(activatedConcepts.map((c: { id: string }) => c.id));
 
     for (const [conceptId, info] of conceptMap) {
       // AI-discovered concepts bypass category filtering
@@ -591,6 +592,20 @@ export class ConversationService {
       'Inovacije': 'razvoj-i-tehnologija',
       'Pravo': 'operacije-i-proizvodnja',
       'Logistika': 'operacije-i-proizvodnja',
+      'proposal': 'prodaja', 'Proposal': 'prodaja',
+      'business strategy': 'strategija', 'Business Strategy': 'strategija',
+      'Entrepreneurship': 'startup',
+      'entrepreneurship': 'startup',
+      'Introduction to Business': 'uvod-u-poslovanje',
+      'Digital Marketing': 'marketing',
+      'digital marketing': 'marketing',
+      'Customer Relations': 'prodaja',
+      'customer relations': 'prodaja',
+      'Management': 'menadzment',
+      'management': 'menadzment',
+      'Creating Competitive Barriers': 'strategija',
+      'Value Stream': 'vrednost',
+      'Value Delivery': 'isporuka-vrednosti',
     };
     // Group unmapped concepts by their target root
     const unmappedByRoot = new Map<string, ConceptHierarchyNode[]>();

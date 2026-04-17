@@ -1,58 +1,51 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as os from 'os';
 import { VaultStorageBase } from './vault-storage.base';
 import { VaultStorageError } from './vault-storage.error';
 
+/**
+ * Local-filesystem VaultStorage for development and testing.
+ *
+ * File layout: {rootDir}/{tenantId}/vault/{path}
+ */
 export class LocalVaultStorage extends VaultStorageBase {
-  constructor(private readonly basePath: string) {
-    super();
+  constructor(rootDir?: string) {
+    super(rootDir ?? os.tmpdir());
   }
 
-  private resolvePath(tenantId: string, filePath: string): string {
-    this.sanitizePath(tenantId, filePath);
-    return path.join(this.basePath, tenantId, filePath);
-  }
-
-  async writeFile(
-    tenantId: string,
-    filePath: string,
-    content: string,
-  ): Promise<void> {
+  protected async doWriteFile(tenantId: string, fullPath: string, content: string): Promise<void> {
     try {
-      const fullPath = this.resolvePath(tenantId, filePath);
-      await fs.mkdir(path.dirname(fullPath), { recursive: true });
+      const dir = path.dirname(fullPath);
+      await fs.mkdir(dir, { recursive: true });
       await fs.writeFile(fullPath, content, 'utf-8');
     } catch (err) {
-      if (err instanceof VaultStorageError) throw err;
       throw new VaultStorageError(
-        `Failed to write file: ${(err as Error).message}`,
+        `Local write failed: ${fullPath} — ${(err as Error).message}`,
         tenantId,
-        filePath,
+        fullPath,
         'write',
-        err as Error,
+        err instanceof Error ? err : undefined,
       );
     }
   }
 
-  async readFile(tenantId: string, filePath: string): Promise<string> {
+  protected async doReadFile(tenantId: string, fullPath: string): Promise<string> {
     try {
-      const fullPath = this.resolvePath(tenantId, filePath);
       return await fs.readFile(fullPath, 'utf-8');
     } catch (err) {
-      if (err instanceof VaultStorageError) throw err;
       throw new VaultStorageError(
-        `Failed to read file: ${(err as Error).message}`,
+        `Local read failed: ${fullPath} — ${(err as Error).message}`,
         tenantId,
-        filePath,
+        fullPath,
         'read',
-        err as Error,
+        err instanceof Error ? err : undefined,
       );
     }
   }
 
-  async fileExists(tenantId: string, filePath: string): Promise<boolean> {
+  protected async doFileExists(tenantId: string, fullPath: string): Promise<boolean> {
     try {
-      const fullPath = this.resolvePath(tenantId, filePath);
       await fs.access(fullPath);
       return true;
     } catch {
@@ -60,37 +53,56 @@ export class LocalVaultStorage extends VaultStorageBase {
     }
   }
 
-  async listFiles(tenantId: string, dirPath: string): Promise<string[]> {
+  protected async doListFiles(tenantId: string, fullPath: string): Promise<string[]> {
     try {
-      const fullPath = this.resolvePath(tenantId, dirPath);
       const entries = await fs.readdir(fullPath);
       return entries;
     } catch (err) {
-      if (err instanceof VaultStorageError) throw err;
+      // If directory doesn't exist, return empty list (matches `ls ... || true` SSH behaviour)
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        return [];
+      }
       throw new VaultStorageError(
-        `Failed to list files: ${(err as Error).message}`,
+        `Local list failed: ${fullPath} — ${(err as Error).message}`,
         tenantId,
-        dirPath,
+        fullPath,
         'list',
-        err as Error,
+        err instanceof Error ? err : undefined,
       );
     }
   }
 
-  async writeFiles(
-    tenantId: string,
-    files: Array<{ path: string; content: string }>,
-  ): Promise<void> {
-    for (const file of files) {
-      await this.writeFile(tenantId, file.path, file.content);
+  protected async doWriteFiles(tenantId: string, files: Map<string, string>): Promise<void> {
+    for (const [fullPath, content] of files) {
+      try {
+        const dir = path.dirname(fullPath);
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(fullPath, content, 'utf-8');
+      } catch (err) {
+        throw new VaultStorageError(
+          `Local batch write failed: ${fullPath} — ${(err as Error).message}`,
+          tenantId,
+          fullPath,
+          'writeFiles',
+          err instanceof Error ? err : undefined,
+        );
+      }
     }
   }
 
-  async createDirectories(tenantId: string, dirs: string[]): Promise<void> {
+  protected async doCreateDirectories(tenantId: string, dirs: string[]): Promise<void> {
     for (const dir of dirs) {
-      this.sanitizePath(tenantId, dir);
-      const fullPath = path.join(this.basePath, tenantId, dir);
-      await fs.mkdir(fullPath, { recursive: true });
+      try {
+        await fs.mkdir(dir, { recursive: true });
+      } catch (err) {
+        throw new VaultStorageError(
+          `Local mkdir failed: ${dir} — ${(err as Error).message}`,
+          tenantId,
+          dir,
+          'mkdir',
+          err instanceof Error ? err : undefined,
+        );
+      }
     }
   }
 }

@@ -1,12 +1,18 @@
 import { Module } from '@nestjs/common';
-import { TenantModule } from '@mentor-ai/shared/tenant-context';
 import { McpServerController } from './mcp-server.controller';
 import { McpAuthGuard } from './mcp-auth.guard';
-import { ContentValidationModule } from '../content-validation/content-validation.module';
 import { VaultStorageModule } from '../vault-storage/vault-storage.module';
+import { ContentValidationModule } from '../content-validation/content-validation.module';
+import { EnrichmentQueueModule } from '../enrichment-queue/enrichment-queue.module';
+import { PlatformConfigModule } from '../platform-config/platform-config.module';
 
 @Module({
-  imports: [TenantModule, ContentValidationModule, VaultStorageModule],
+  imports: [
+    VaultStorageModule,
+    ContentValidationModule,
+    EnrichmentQueueModule,
+    PlatformConfigModule,
+  ],
   controllers: [McpServerController],
   providers: [McpAuthGuard],
 })

@@ -14,7 +14,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
         height: 80px;
         border-radius: 8px;
         object-fit: cover;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
       }
       .remove-btn {
         position: absolute;
@@ -44,7 +44,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
         display: flex;
         align-items: center;
         justify-content: center;
-        border: 2px dashed #2a2a2a;
+        border: 2px dashed #21262D;
         border-radius: 8px;
         padding: 24px;
         cursor: pointer;
@@ -68,7 +68,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
       }
       .upload-link {
         font-weight: 500;
-        color: #3b82f6;
+        color: #58A6FF;
       }
       .upload-hint {
         font-size: 12px;

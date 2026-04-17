@@ -29,8 +29,8 @@ import type { NoteItem } from '@mentor-ai/shared/types';
       }
 
       .pdf-dialog {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 12px;
         width: 480px;
         max-width: 90vw;
@@ -45,13 +45,13 @@ import type { NoteItem } from '@mentor-ai/shared/types';
         align-items: center;
         justify-content: space-between;
         padding: 16px 20px;
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
       }
       .pdf-dialog-header h3 {
         margin: 0;
         font-size: 15px;
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .pdf-dialog-close {
         background: none;
@@ -63,7 +63,7 @@ import type { NoteItem } from '@mentor-ai/shared/types';
         line-height: 1;
       }
       .pdf-dialog-close:hover {
-        color: #fafafa;
+        color: #E6EDF3;
       }
 
       .pdf-dialog-body {
@@ -89,8 +89,8 @@ import type { NoteItem } from '@mentor-ai/shared/types';
         align-items: center;
         gap: 8px;
         padding: 10px 12px;
-        background: #242424;
-        border: 1px solid #2a2a2a;
+        background: #1C2128;
+        border: 1px solid #21262D;
         border-radius: 8px;
         cursor: grab;
         user-select: none;
@@ -103,10 +103,10 @@ import type { NoteItem } from '@mentor-ai/shared/types';
       }
       .pdf-reorder-item.dragging {
         opacity: 0.5;
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .pdf-reorder-item.drag-over {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
         background: #1e293b;
       }
 
@@ -121,7 +121,7 @@ import type { NoteItem } from '@mentor-ai/shared/types';
         width: 22px;
         height: 22px;
         border-radius: 50%;
-        background: #3b82f6;
+        background: #58A6FF;
         color: #fff;
         font-size: 11px;
         font-weight: 600;
@@ -168,7 +168,7 @@ import type { NoteItem } from '@mentor-ai/shared/types';
       }
       .pdf-arrow-btn {
         background: none;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         color: #9e9e9e;
         width: 22px;
         height: 18px;
@@ -181,8 +181,8 @@ import type { NoteItem } from '@mentor-ai/shared/types';
         padding: 0;
       }
       .pdf-arrow-btn:hover:not(:disabled) {
-        color: #fafafa;
-        border-color: #3b82f6;
+        color: #E6EDF3;
+        border-color: #58A6FF;
       }
       .pdf-arrow-btn:disabled {
         opacity: 0.3;
@@ -194,11 +194,11 @@ import type { NoteItem } from '@mentor-ai/shared/types';
         justify-content: flex-end;
         gap: 8px;
         padding: 16px 20px;
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid #21262D;
       }
       .pdf-btn-cancel {
         background: none;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         color: #9e9e9e;
         border-radius: 6px;
         padding: 8px 16px;
@@ -207,12 +207,12 @@ import type { NoteItem } from '@mentor-ai/shared/types';
       }
       .pdf-btn-cancel:hover {
         border-color: #555;
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .pdf-btn-export {
-        background: #3b82f6;
+        background: #58A6FF;
         border: none;
-        color: #fafafa;
+        color: #E6EDF3;
         border-radius: 6px;
         padding: 8px 20px;
         font-size: 13px;

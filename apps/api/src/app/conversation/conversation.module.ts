@@ -12,6 +12,8 @@ import { ExecutionModule } from '../execution/execution.module';
 import { AttachmentsModule } from '../attachments/attachments.module';
 import { AgentExecutionModule } from '../agent-execution/agent-execution.module';
 import { MaturityModule } from '../maturity/maturity.module';
+import { VaultModule } from '../vault/vault.module';
+import { ConversationHooksService } from '../vault/conversation-hooks.service';
 import { ConversationController } from './conversation.controller';
 import { ConversationService } from './conversation.service';
 import { ConversationGateway } from './conversation.gateway';
@@ -32,9 +34,15 @@ import { ConceptPlanService } from './concept-plan.service';
     AttachmentsModule,
     AgentExecutionModule,
     MaturityModule,
+    VaultModule, // Provides ConversationHooksService for prompt enrichment + crystallization
   ],
   controllers: [ConversationController],
-  providers: [ConversationService, ConversationGateway, ConceptPlanService],
+  providers: [
+    ConversationService,
+    ConversationGateway,
+    ConceptPlanService,
+    { provide: 'ConversationHooksService', useExisting: ConversationHooksService },
+  ],
   exports: [ConversationService],
 })
 export class ConversationModule {}

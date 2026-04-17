@@ -123,20 +123,20 @@ model Tenant {
 
   // Token quota for AI usage (Story 2.2)
   // Default: 10,000,000 tokens per month
-  tokenQuota  Int          @default(10000000) @map("token_quota")
+  tokenQuota Int @default(10000000) @map("token_quota")
 
   // Autonomous AI Popuni — when enabled, newly created tasks auto-fill + auto-score
-  autoAiPopuni Boolean     @default(false) @map("auto_ai_popuni")
+  autoAiPopuni Boolean @default(false) @map("auto_ai_popuni")
 
   // Business Maturity Engine — current stage (null = engine not initialized)
   maturityStage MaturityStage? @map("maturity_stage")
 
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Backup owner for account recovery
-  backupOwnerId          String?   @unique @map("backup_owner_id")
-  backupOwner            User?     @relation("BackupOwner", fields: [backupOwnerId], references: [id])
+  backupOwnerId           String?   @unique @map("backup_owner_id")
+  backupOwner             User?     @relation("BackupOwner", fields: [backupOwnerId], references: [id])
   backupOwnerDesignatedAt DateTime? @map("backup_owner_designated_at")
 
   // Deletion tracking (GDPR compliance)
@@ -149,35 +149,43 @@ model Tenant {
 
   deletionRequestedBy User? @relation("DeletionRequestedBy", fields: [deletionRequestedById], references: [id])
 
-  users           User[]
-  invitations     Invitation[]
-  dataExports     DataExport[]
-  executions      Execution[]
-  concepts        Concept[]        // Tenant-specific discovered concepts
-  brainProposals  BrainProposal[]  // Brain's pending/approved/rejected proposals
-  processWorkflows ProcessWorkflow[] // Process workflow definitions
-  processRuns      ProcessRun[]      // Process execution runs
-  approvedLeads    ApprovedLead[]    // Saved approved leads
-  approvedContent  ApprovedContent[] // Saved approved content
-  figmaConnection  FigmaConnection?  // Figma OAuth connection
-  brandProfiles    BrandDesignProfile[] // Extracted brand design profiles
-  brochureProjects BrochureProject[] // Brochure generation projects
+  users               User[]
+  invitations         Invitation[]
+  dataExports         DataExport[]
+  executions          Execution[]
+  concepts            Concept[] // Tenant-specific discovered concepts
+  brainProposals      BrainProposal[] // Brain's pending/approved/rejected proposals
+  processWorkflows    ProcessWorkflow[] // Process workflow definitions
+  processN8nWorkflows ProcessN8nWorkflow[] // n8n workflow mappings
+  processRuns         ProcessRun[] // Process execution runs
+  approvedLeads       ApprovedLead[] // Saved approved leads
+  approvedContent     ApprovedContent[] // Saved approved content
+  figmaConnection     FigmaConnection? // Figma OAuth connection
+  brandProfiles       BrandDesignProfile[] // Extracted brand design profiles
+  brochureProjects    BrochureProject[] // Brochure generation projects
+  catalogItems        TenantCatalogItem[] // Enabled catalog items (processes/tools)
+  toolBindings        TenantToolBinding[] // Per-tenant tool adapter bindings
+  productImages       ProductImage[] // Product reference images for content
+  mcpToolBindings     McpToolBinding[] // Builder v1 — per-process MCP bindings
+  processTestRuns     ProcessTestRun[] // Builder v1 — sandboxed test runs
+  tenantCredentials   TenantCredential[] // Builder v1 — tenant-level tool credentials
+  vault               TenantVault? // Per-tenant knowledge vault (Karpathy wiki pattern)
 
   @@map("tenant")
 }
 
 // Platform-wide user registry for authentication and email uniqueness
 model User {
-  id        String   @id // Must have usr_ prefix, e.g., usr_cuid123
-  email     String   @unique
-  name      String?
+  id         String      @id // Must have usr_ prefix, e.g., usr_cuid123
+  email      String      @unique
+  name       String?
   role       UserRole    @default(MEMBER)
   department Department? @map("department") // Business Brain domain isolation (Story 3.2)
   tenantId   String      @map("tenant_id")
   tenant     Tenant      @relation(fields: [tenantId], references: [id])
 
   // Auth0 integration
-  auth0Id   String?  @unique @map("auth0_id")
+  auth0Id String? @unique @map("auth0_id")
 
   // 2FA fields
   mfaEnabled        Boolean  @default(false) @map("mfa_enabled")
@@ -201,8 +209,8 @@ model User {
   deletionRequestedFor Tenant? @relation("DeletionRequestedBy")
 
   // Invitation relations
-  invitationsSent     Invitation[] @relation("InvitedBy")
-  invitationAccepted  Invitation?  @relation("AcceptedByUser")
+  invitationsSent    Invitation[] @relation("InvitedBy")
+  invitationAccepted Invitation?  @relation("AcceptedByUser")
 
   // Data export relations
   dataExports DataExport[]
@@ -242,21 +250,21 @@ model Invitation {
 
 // Data export tracking for GDPR compliance
 model DataExport {
-  id             String       @id // Must have exp_ prefix, e.g., exp_cuid123
-  userId         String       @map("user_id")
-  tenantId       String       @map("tenant_id")
-  format         ExportFormat
-  dataTypes      String[]     @map("data_types")
-  status         ExportStatus @default(PENDING)
-  filePath       String?      @map("file_path")
-  fileSize       Int?         @map("file_size")
-  encryptionIv   String?      @map("encryption_iv")
-  encryptionTag  String?      @map("encryption_tag")
-  errorMessage   String?      @map("error_message")
-  requestedAt    DateTime     @default(now()) @map("requested_at")
-  completedAt    DateTime?    @map("completed_at")
-  expiresAt      DateTime?    @map("expires_at")
-  downloadCount  Int          @default(0) @map("download_count")
+  id            String       @id // Must have exp_ prefix, e.g., exp_cuid123
+  userId        String       @map("user_id")
+  tenantId      String       @map("tenant_id")
+  format        ExportFormat
+  dataTypes     String[]     @map("data_types")
+  status        ExportStatus @default(PENDING)
+  filePath      String?      @map("file_path")
+  fileSize      Int?         @map("file_size")
+  encryptionIv  String?      @map("encryption_iv")
+  encryptionTag String?      @map("encryption_tag")
+  errorMessage  String?      @map("error_message")
+  requestedAt   DateTime     @default(now()) @map("requested_at")
+  completedAt   DateTime?    @map("completed_at")
+  expiresAt     DateTime?    @map("expires_at")
+  downloadCount Int          @default(0) @map("download_count")
 
   user   User   @relation(fields: [userId], references: [id])
   tenant Tenant @relation(fields: [tenantId], references: [id])
@@ -297,7 +305,7 @@ model LlmProviderConfig {
 // Tracks all modifications for compliance and debugging
 model LlmConfigAuditLog {
   id          String   @id @default(cuid())
-  action      String   // 'CREATE', 'UPDATE', 'DELETE'
+  action      String // 'CREATE', 'UPDATE', 'DELETE'
   changedBy   String   @map("changed_by") // User ID who made the change
   previousVal Json?    @map("previous_value")
   newVal      Json     @map("new_value")
@@ -317,15 +325,16 @@ enum MessageRole {
 // Chat conversation session
 // ID uses sess_ prefix for type identification
 model Conversation {
-  id          String       @id @map("id") // Must have sess_ prefix, e.g., sess_cuid123
-  userId      String       @map("user_id")
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title       String?
-  personaType PersonaType? @map("persona_type") // Selected department persona (Story 2.4)
-  conceptId   String?      @map("concept_id") // Links to platform Concept.id (no FK - cross-DB)
-  messages    Message[]
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
+  id             String       @id @map("id") // Must have sess_ prefix, e.g., sess_cuid123
+  userId         String       @map("user_id")
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title          String?
+  personaType    PersonaType? @map("persona_type") // Selected department persona (Story 2.4)
+  conceptId      String?      @map("concept_id") // Links to platform Concept.id (no FK - cross-DB)
+  departmentTags String[]     @map("department_tags") // Department scoping for role-based access (Story 5.4)
+  messages       Message[]
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
 
   @@index([userId])
   @@index([conceptId])
@@ -345,7 +354,7 @@ model Message {
   confidenceFactors Json?        @map("confidence_factors") // Array of ConfidenceFactor objects
   createdAt         DateTime     @default(now()) @map("created_at")
 
-  attachments   Attachment[]
+  attachments Attachment[]
 
   @@index([conversationId])
   @@map("messages")
@@ -403,32 +412,33 @@ enum NoteSource {
 }
 
 enum NoteType {
-  TASK             // Actionable item
-  NOTE             // Free-form note
-  SUMMARY          // AI-generated conversation summary
-  COMMENT          // Per-user comment on a task/workflow step (Story 3.4)
-  AGENT_RESEARCH   // Results from external agent research (OpenClaw)
+  TASK // Actionable item
+  NOTE // Free-form note
+  SUMMARY // AI-generated conversation summary
+  COMMENT // Per-user comment on a task/workflow step (Story 3.4)
+  AGENT_RESEARCH // Results from external agent research (OpenClaw)
 }
 
 enum NoteStatus {
-  PENDING          // Task not done
+  PENDING // Task not done
   READY_FOR_REVIEW // Workflow step completed, awaiting user review
-  COMPLETED        // Task finished
+  COMPLETED // Task finished — all expected deliverables produced
+  INCOMPLETE // Task ran but expected deliverables are missing (manifest mismatch)
 }
 
 // ── Concept Relationship Types (Story 3.1) ──
 enum RelationshipType {
   PREREQUISITE // Must understand this first
-  RELATED      // Related topic
-  ADVANCED     // Deeper dive on topic
+  RELATED // Related topic
+  ADVANCED // Deeper dive on topic
 }
 
 // ── Concept Source Tracking (Story 2.15) ──
 // Tracks how a concept was created for auditability
 enum ConceptSource {
-  SEED_DATA      // Pre-loaded from seed JSON files
-  CURRICULUM     // Created via curriculum tree UI
-  AI_DISCOVERED  // Automatically extracted from AI output
+  SEED_DATA // Pre-loaded from seed JSON files
+  CURRICULUM // Created via curriculum tree UI
+  AI_DISCOVERED // Automatically extracted from AI output
 }
 
 model Note {
@@ -437,39 +447,45 @@ model Note {
   content        String      @db.Text
   source         NoteSource  @default(MANUAL)
   noteType       NoteType    @default(NOTE) @map("note_type")
-  status         NoteStatus? @map("status")          // Only for TASK type
+  status         NoteStatus? @map("status") // Only for TASK type
   conversationId String?     @map("conversation_id") // Links to tenant conversation
-  conceptId      String?     @map("concept_id")      // Links to platform concept
-  messageId      String?     @map("message_id")      // Links to specific AI message
+  conceptId      String?     @map("concept_id") // Links to platform concept
+  messageId      String?     @map("message_id") // Links to specific AI message
   userId         String      @map("user_id")
   tenantId       String      @map("tenant_id")
   createdAt      DateTime    @default(now()) @map("created_at")
   updatedAt      DateTime    @updatedAt @map("updated_at")
 
   // Sub-task hierarchy
-  parentNoteId       String?  @map("parent_note_id")
-  parent             Note?    @relation("NoteHierarchy", fields: [parentNoteId], references: [id])
-  children           Note[]   @relation("NoteHierarchy")
+  parentNoteId String? @map("parent_note_id")
+  parent       Note?   @relation("NoteHierarchy", fields: [parentNoteId], references: [id])
+  children     Note[]  @relation("NoteHierarchy")
 
   // User completion report
-  userReport         String?  @db.Text @map("user_report")
+  userReport String? @map("user_report") @db.Text
 
   // AI scoring
-  aiScore            Int?     @map("ai_score")
-  aiFeedback         String?  @db.Text @map("ai_feedback")
+  aiScore    Int?    @map("ai_score")
+  aiFeedback String? @map("ai_feedback") @db.Text
 
   // Agent enrichments (V2: multi-agent results as JSON)
-  agentEnrichments   Json?    @map("agent_enrichments")
+  agentEnrichments Json? @map("agent_enrichments")
 
   // Workflow linkage
-  expectedOutcome    String?  @db.Text @map("expected_outcome")
-  workflowStepNumber Int?     @map("workflow_step_number")
+  expectedOutcome    String? @map("expected_outcome") @db.Text
+  workflowStepNumber Int?    @map("workflow_step_number")
+
+  // Deliverable manifest copied from BrainProposal at approval time.
+  // When non-null, completeTask enforces strict whitelist + manifest match.
+  // When null (e.g. maturity engine tasks), legacy free-form behavior applies.
+  // Shape matches BrainProposal.expectedDeliverables.
+  expectedDeliverables Json? @map("expected_deliverables")
 
   // Prior work reuse
-  reusedFromNoteId   String?  @map("reused_from_note_id")
+  reusedFromNoteId String? @map("reused_from_note_id")
 
   // File attachments
-  attachments        Attachment[]
+  attachments Attachment[]
 
   @@index([userId])
   @@index([tenantId])
@@ -486,33 +502,39 @@ model Note {
 // ID uses cpt_ prefix for type identification
 
 model Concept {
-  id                  String   @id @map("id") // Must have cpt_ prefix, e.g., cpt_cuid123
-  name                String   @unique
-  slug                String   @unique // URL-friendly version of name
-  category            String   // Finance, Marketing, Technology, Operations, Legal, Creative
-  definition          String   @db.Text // 2-3 sentence summary
-  extendedDescription String?  @db.Text @map("extended_description")
-  departmentTags      String[] @map("department_tags")
-  embeddingId         String?  @map("embedding_id") // Qdrant point UUID for semantic search
+  id                  String        @id @map("id") // Must have cpt_ prefix, e.g., cpt_cuid123
+  name                String // Tenant-scoped uniqueness via @@unique below
+  slug                String // Tenant-scoped uniqueness via @@unique below
+  category            String // Finance, Marketing, Technology, Operations, Legal, Creative
+  definition          String        @db.Text // 2-3 sentence summary
+  extendedDescription String?       @map("extended_description") @db.Text
+  departmentTags      String[]      @map("department_tags")
+  embeddingId         String?       @map("embedding_id") // Qdrant point UUID for semantic search
   source              ConceptSource @default(SEED_DATA) // How the concept was created (Story 2.15)
-  version             Int      @default(1)
+  version             Int           @default(1)
 
   // Brain Architecture: tenant-specific concepts + BMC canvas block mapping
-  tenantId            String?  @map("tenant_id") // null = platform concept, set = tenant-only
-  canvasBlock         String?  @map("canvas_block") // KEY_PARTNERS | KEY_ACTIVITIES | KEY_RESOURCES | VALUE_PROPOSITION | CUSTOMER_RELATIONSHIPS | CHANNELS | CUSTOMER_SEGMENTS | REVENUE_STREAMS | COST_STRUCTURE
-  discoveredBy        String?  @map("discovered_by") // "brain-heartbeat" | "user-conversation" | "seed"
-  discoveredAt        DateTime? @map("discovered_at")
-  confidence          Float?   // 0-1 confidence score for auto-discovered concepts
-  needsReview         Boolean  @default(false) @map("needs_review") // flagged if confidence < 0.7
+  tenantId     String?   @map("tenant_id") // null = platform concept, set = tenant-only
+  vaultId      String?   @map("vault_id") // Links to TenantVault for per-tenant vaults
+  canvasBlock  String?   @map("canvas_block") // KEY_PARTNERS | KEY_ACTIVITIES | etc.
+  discoveredBy String?   @map("discovered_by") // "brain-heartbeat" | "user-conversation" | "seed"
+  discoveredAt DateTime? @map("discovered_at")
+  confidence   Float?    @default(0.7) // 0-1 confidence score
+  needsReview  Boolean   @default(false) @map("needs_review")
+
+  // Knowledge lifecycle (Karpathy wiki pattern)
+  tier           String?   @default("semantic") // working | episodic | semantic | procedural
+  lastReinforced DateTime? @map("last_reinforced") // When this concept was last confirmed/accessed
+  sectionTags    Json?     @map("section_tags") @db.JsonB // Per-section department tags for role-based filtering
 
   // Curriculum hierarchy fields
-  parentId          String?  @map("parent_id")      // Self-referencing for hierarchy
-  sortOrder         Int      @default(0) @map("sort_order")  // Display order among siblings (within category)
-  categorySortOrder Int      @default(0) @map("category_sort_order") // Category display order (Story 3.3)
-  curriculumId      String?  @unique @map("curriculum_id")    // Links to curriculum.json id
+  parentId          String? @map("parent_id") // Self-referencing for hierarchy
+  sortOrder         Int     @default(0) @map("sort_order")
+  categorySortOrder Int     @default(0) @map("category_sort_order")
+  curriculumId      String? @map("curriculum_id") // Links to curriculum.json id
 
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Hierarchy self-relation
   parent   Concept?  @relation("ConceptHierarchy", fields: [parentId], references: [id])
@@ -528,13 +550,19 @@ model Concept {
   // Cached workflow for agent execution
   workflow ConceptWorkflow?
 
-  // Tenant relation for tenant-specific concepts
-  tenant   Tenant?  @relation(fields: [tenantId], references: [id])
+  // Tenant + Vault relations
+  tenant Tenant?      @relation(fields: [tenantId], references: [id])
+  vault  TenantVault? @relation("VaultConcepts", fields: [vaultId], references: [id])
 
+  // Tenant-scoped uniqueness: same slug allowed for different tenants
+  // Platform concepts (tenantId=null) are globally unique within null scope
+  @@unique([slug, tenantId])
+  @@unique([curriculumId, tenantId])
   @@index([category])
   @@index([slug])
   @@index([parentId])
   @@index([tenantId])
+  @@index([vaultId])
   @@map("concepts")
 }
 
@@ -563,8 +591,8 @@ model ConceptCitation {
   id        String   @id @map("id") // Must have cit_ prefix, e.g., cit_cuid123
   messageId String   @map("message_id")
   conceptId String   @map("concept_id")
-  position  Int      // Character position in message where citation appears
-  score     Float    // Semantic similarity score (0.0-1.0)
+  position  Int // Character position in message where citation appears
+  score     Float // Semantic similarity score (0.0-1.0)
   createdAt DateTime @default(now()) @map("created_at")
 
   concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
@@ -578,12 +606,12 @@ model ConceptCitation {
 // Cached LLM-generated workflow steps for each concept
 // ID uses wfl_ prefix for type identification
 model ConceptWorkflow {
-  id          String   @id @map("id") // Must have wfl_ prefix, e.g., wfl_cuid123
-  conceptId   String   @unique @map("concept_id")
-  steps       Json     // WorkflowStep[] - ordered steps for concept execution
-  version     Int      @default(1)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String   @id @map("id") // Must have wfl_ prefix, e.g., wfl_cuid123
+  conceptId String   @unique @map("concept_id")
+  steps     Json // WorkflowStep[] - ordered steps for concept execution
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
 
@@ -603,8 +631,8 @@ enum MemoryType {
 }
 
 enum MemorySource {
-  AI_EXTRACTED   // Automatically extracted from conversation
-  USER_STATED    // Explicitly stated by user
+  AI_EXTRACTED // Automatically extracted from conversation
+  USER_STATED // Explicitly stated by user
   USER_CORRECTED // Corrected by user
 }
 
@@ -615,7 +643,7 @@ model Memory {
   type            MemoryType
   source          MemorySource
   content         String       @db.Text // The actual memory content
-  subject         String?      // Client name, project name, or topic
+  subject         String? // Client name, project name, or topic
   confidence      Float        @default(1.0) // Extraction confidence (0.0-1.0)
   embeddingId     String?      @map("embedding_id") // Qdrant vector ID
   sourceMessageId String?      @map("source_message_id") // Original message reference
@@ -638,22 +666,22 @@ model Memory {
 // and server restart recovery. Events journal enables replay on reconnect.
 
 model Execution {
-  id              String   @id @default(cuid())
-  tenantId        String   @map("tenant_id")
-  userId          String   @map("user_id")
-  type            String   // 'yolo' | 'domain-yolo' | 'workflow' | 'auto-popuni'
-  status          String   @default("pending") // pending | executing | completed | failed | cancelled
-  planId          String?  @unique @map("plan_id") // links to YOLO/workflow planId
-  conversationId  String?  @map("conversation_id")
-  metadata        Json     @default("{}") // config, conceptIds, taskIds — serialized init params
-  checkpoint      Json     @default("{}") // last progress snapshot for resume
-  result          Json?    // final summary on completion
-  error           String?  // error message if failed
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  userId         String   @map("user_id")
+  type           String // 'yolo' | 'domain-yolo' | 'workflow' | 'auto-popuni'
+  status         String   @default("pending") // pending | executing | completed | failed | cancelled
+  planId         String?  @unique @map("plan_id") // links to YOLO/workflow planId
+  conversationId String?  @map("conversation_id")
+  metadata       Json     @default("{}") // config, conceptIds, taskIds — serialized init params
+  checkpoint     Json     @default("{}") // last progress snapshot for resume
+  result         Json? // final summary on completion
+  error          String? // error message if failed
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   events ExecutionEvent[]
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant Tenant           @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId, status])
   @@index([planId])
@@ -698,37 +726,60 @@ model Attachment {
   @@map("attachments")
 }
 
+// ── Product Images (Content Reference) ──
+// Images of products/materials uploaded by user for AI content creation.
+// Deployed to OpenClaw workspace so agent can reference them.
+model ProductImage {
+  id           String   @id @default(cuid()) @map("id")
+  tenantId     String   @map("tenant_id")
+  filename     String // stored filename (cuid.ext)
+  originalName String   @map("original_name") // user's filename
+  mimeType     String   @map("mime_type")
+  size         Int // bytes
+  storagePath  String   @map("storage_path") // local: uploads/product-images/xxx.jpg
+  remotePath   String?  @map("remote_path") // hetzner: /root/.openclaw/workspace/product-images/xxx.jpg
+  label        String? // user label: "Gold Sculpture Front View"
+  description  String?  @db.Text // AI-generated or user description
+  uploadedBy   String   @map("uploaded_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("product_images")
+}
+
 // ── Agent Execution (V1: OpenClaw Web Research) ──
 // Tracks each external agent task execution with cost and results
 // ID uses agx_ prefix for type identification
 
 model AgentExecution {
-  id               String    @id @map("id") // Must have agx_ prefix, e.g., agx_cuid123
-  tenantId         String    @map("tenant_id")
-  userId           String    @map("user_id")
-  noteId           String    @map("note_id")        // The completed task note
-  resultNoteId     String?   @map("result_note_id") // The child note created with results
-  status           String    @default("PENDING")     // PENDING|FORMATTING|EXECUTING|COMPLETED|FAILED
-  agentType        String    @default("web_search") @map("agent_type")
+  id           String  @id @map("id") // Must have agx_ prefix, e.g., agx_cuid123
+  tenantId     String  @map("tenant_id")
+  userId       String  @map("user_id")
+  noteId       String  @map("note_id") // The completed task note
+  resultNoteId String? @map("result_note_id") // The child note created with results
+  status       String  @default("PENDING") // PENDING|FORMATTING|EXECUTING|COMPLETED|FAILED
+  agentType    String  @default("web_search") @map("agent_type")
 
   // Input/Output
-  formattedPrompt  String?   @db.Text @map("formatted_prompt")
-  agentOutput      String?   @db.Text @map("agent_output")
+  formattedPrompt String? @map("formatted_prompt") @db.Text
+  agentOutput     String? @map("agent_output") @db.Text
 
   // Cost tracking
-  estimatedCostEur Decimal?  @db.Decimal(6, 4) @map("estimated_cost_eur")
-  actualCostEur    Decimal?  @db.Decimal(6, 4) @map("actual_cost_eur")
+  estimatedCostEur Decimal? @map("estimated_cost_eur") @db.Decimal(6, 4)
+  actualCostEur    Decimal? @map("actual_cost_eur") @db.Decimal(6, 4)
 
   // Timing
-  startedAt        DateTime? @map("started_at")
-  completedAt      DateTime? @map("completed_at")
-  durationMs       Int?      @map("duration_ms")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  durationMs  Int?      @map("duration_ms")
 
   // Error
-  error            String?
+  error String?
 
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([tenantId, createdAt])
   @@index([noteId])
@@ -737,11 +788,11 @@ model AgentExecution {
 
 // Daily budget tracking per tenant for agent executions
 model AgentDailyBudget {
-  id        String   @id @default(cuid())
-  tenantId  String   @map("tenant_id")
-  date      DateTime @db.Date
-  spentEur  Decimal  @default(0) @db.Decimal(8, 4) @map("spent_eur")
-  limitEur  Decimal  @default(20) @db.Decimal(8, 4) @map("limit_eur")
+  id       String   @id @default(cuid())
+  tenantId String   @map("tenant_id")
+  date     DateTime @db.Date
+  spentEur Decimal  @default(0) @map("spent_eur") @db.Decimal(8, 4)
+  limitEur Decimal  @default(20) @map("limit_eur") @db.Decimal(8, 4)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -760,17 +811,17 @@ enum AgentJobStatus {
 }
 
 model AgentJob {
-  id          String         @id              // ajob_ prefix
+  id          String         @id // ajob_ prefix
   noteId      String         @map("note_id")
   tenantId    String         @map("tenant_id")
   userId      String         @map("user_id")
   agentType   String         @map("agent_type")
-  order       Int                             // 1-based execution order
+  order       Int // 1-based execution order
   dependsOn   String[]       @map("depends_on") // ajob_ IDs
   instruction String         @db.Text
   status      AgentJobStatus @default(PLANNED)
   executionId String?        @map("execution_id")
-  agentOutput String?        @db.Text @map("agent_output")
+  agentOutput String?        @map("agent_output") @db.Text
   error       String?
   createdAt   DateTime       @default(now()) @map("created_at")
   updatedAt   DateTime       @updatedAt @map("updated_at")
@@ -826,27 +877,32 @@ model BrainProposal {
   id              String   @id @map("id") // Must have prop_ prefix
   tenantId        String   @map("tenant_id")
   canvasBlock     String   @map("canvas_block") // Which BMC block this addresses
-  type            String   // concept_discovery | task_execution | risk_alert | opportunity | correction
+  type            String // concept_discovery | task_execution | risk_alert | opportunity | correction
   title           String
   reasoning       String   @db.Text // WHY the brain thinks this matters
-  proposedAction  String   @db.Text @map("proposed_action") // WHAT it wants to do
+  proposedAction  String   @map("proposed_action") @db.Text // WHAT it wants to do
   estimatedCost   Float?   @map("estimated_cost") // Rough EUR estimate for execution
   priority        String   @default("medium") // critical | high | medium | low
   status          String   @default("pending") // pending | approved | rejected | expired
   relatedConcepts String[] @map("related_concepts") // Concept IDs
 
+  // Concrete deliverable manifest — what files the brain will produce when executed.
+  // Required at proposal birth so the user sees exactly what they'll get before approving.
+  // Shape: Array<{ type: 'xlsx'|'pdf'|'pptx'|'docx'|'png'|'jpg'|'jpeg'|'csv'|'svg', filename: string, description: string }>
+  expectedDeliverables Json @default("[]") @map("expected_deliverables")
+
   // Approval tracking
-  approvedBy      String?  @map("approved_by")
-  approvedAt      DateTime? @map("approved_at")
-  rejectedReason  String?  @map("rejected_reason")
+  approvedBy     String?   @map("approved_by")
+  approvedAt     DateTime? @map("approved_at")
+  rejectedReason String?   @map("rejected_reason")
 
   // Execution tracking (links to task created on approval)
-  executionNoteId String?  @map("execution_note_id")
+  executionNoteId String? @map("execution_note_id")
 
-  createdAt       DateTime @default(now()) @map("created_at")
-  expiresAt       DateTime? @map("expires_at") // Proposals can go stale (default 14 days)
+  createdAt DateTime  @default(now()) @map("created_at")
+  expiresAt DateTime? @map("expires_at") // Proposals can go stale (default 14 days)
 
-  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId, status])
   @@index([tenantId, canvasBlock])
@@ -901,45 +957,101 @@ enum ProcessStepResultStatus {
 // Process workflow definition — a reusable multi-step business process
 // ID uses proc_ prefix for type identification
 model ProcessWorkflow {
-  id            String   @id @map("id") // Must have proc_ prefix
-  tenantId      String   @map("tenant_id")
-  name          String
-  description   String?  @db.Text
-  slug          String
-  steps         ProcessStep[]
-  runs          ProcessRun[]
-  isActive      Boolean  @default(true) @map("is_active")
-  cronSchedule  String?  @map("cron_schedule")
-  skillMd       String?  @db.Text @map("skill_md")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  id           String               @id @map("id") // Must have proc_ prefix
+  tenantId     String               @map("tenant_id")
+  name         String
+  description  String?              @db.Text
+  slug         String
+  steps        ProcessStep[]
+  runs         ProcessRun[]
+  n8nWorkflows ProcessN8nWorkflow[]
+  testRuns     ProcessTestRun[]
+  mcpBindings  McpToolBinding[]
+  isActive     Boolean              @default(true) @map("is_active")
+  cronSchedule String?              @map("cron_schedule")
+  skillMd      String?              @map("skill_md") @db.Text
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
+  tenant       Tenant               @relation(fields: [tenantId], references: [id])
 
-  @@index([tenantId])
+  // ── Neuron Process Builder v1 extensions ───────────────────────────
+  // These fields are populated by the builder skill at publish time. All
+  // are nullable / defaulted so existing rows (Lead Discovery, Instagram
+  // Content) keep working with status backfilled to 'published'.
+
+  // Lifecycle state: draft | testing | published | archived
+  status            String   @default("draft")
+  // Draft/test runs never write to live tenant data; publish flips this.
+  isTestMode        Boolean  @default(true) @map("is_test_mode")
+  // manual | cron | webhook
+  triggerType       String   @default("manual") @map("trigger_type")
+  // fully_automated | ai_with_review | manual_input_required
+  automationLevel   String   @default("manual_input_required") @map("automation_level")
+  // OpenClaw dedicated agent id for this process (e.g. "proc-weekly-leads").
+  agentId           String?  @map("agent_id")
+  // OpenClaw dedicated skill slug for this process (matches agentId).
+  skillSlug         String?  @map("skill_slug")
+  // Frozen JSON Schema for process inputs. Never changes after publish.
+  inputContract     Json?    @map("input_contract")
+  // What deliverables must exist before approval.
+  outputManifest    Json?    @map("output_manifest")
+  // Shape of the approval card shown to the user (summary + items + actions).
+  approvalPayloadShape Json? @map("approval_payload_shape")
+  // Typed dispatch config (agentId, skillSlug, entryMode, n8n refs, etc.)
+  // Validated against a Zod schema at the API boundary.
+  invocationConfig  Json?    @map("invocation_config")
+  // The original design.json from the builder skill, kept for revise flows.
+  designArtifact    Json?    @map("design_artifact")
+  // Links back to the OpenClaw session that built this process.
+  builderSessionId  String?  @map("builder_session_id")
+  // Which agent executed the builder skill (director/main by default).
+  createdByAgentId  String?  @map("created_by_agent_id")
+
   @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@index([status])
   @@map("process_workflows")
 }
 
 // Individual step within a process workflow
 // ID uses pstep_ prefix for type identification
 model ProcessStep {
-  id              String          @id @map("id") // Must have pstep_ prefix
-  workflowId      String          @map("workflow_id")
-  order           Int
-  name            String
-  description     String?         @db.Text
-  stepType        ProcessStepType @map("step_type")
-  agentType       String          @map("agent_type")
-  toolSkill       String          @map("tool_skill")
-  inputSchema     Json            @map("input_schema")
-  outputSchema    Json            @map("output_schema")
-  skillMdSection  String?         @db.Text @map("skill_md_section")
-  retryPolicy     Json            @default("{}") @map("retry_policy")
-  verifyRules     Json?           @map("verify_rules")
-  createdAt       DateTime        @default(now()) @map("created_at")
-  updatedAt       DateTime        @updatedAt @map("updated_at")
-  results         ProcessStepResult[]
-  workflow        ProcessWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  id             String              @id @map("id") // Must have pstep_ prefix
+  workflowId     String              @map("workflow_id")
+  order          Int
+  name           String
+  description    String?             @db.Text
+  stepType       ProcessStepType     @map("step_type")
+  agentType      String              @map("agent_type")
+  toolSkill      String              @map("tool_skill")
+  inputSchema    Json                @map("input_schema")
+  outputSchema   Json                @map("output_schema")
+  skillMdSection String?             @map("skill_md_section") @db.Text
+  retryPolicy    Json                @default("{}") @map("retry_policy")
+  verifyRules    Json?               @map("verify_rules")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  results        ProcessStepResult[]
+  workflow       ProcessWorkflow     @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  // ── Builder v1 extensions ─────────────────────────────────────────
+  // Source of input for this step (drives the Run modal behavior).
+  // Shape: { type, recommendationQuery?, required?, fallback? }
+  // type ∈ manual | ai_recommended | ai_generated | previous_step | mcp_query | tenant_memory | literal
+  inputSource    Json?               @map("input_source")
+  // Optional MCP tool this step calls (null for pure transforms).
+  mcpToolSlug    String?             @map("mcp_tool_slug")
+  // Convenience flag for UI: is this step a manual approval gate or a
+  // required human input before the process can continue.
+  manualStep     Boolean             @default(false) @map("manual_step")
+  // Output of bind_mcp_fields.py: which input fields map to which source.
+  fieldBindings  Json?               @map("field_bindings")
+  // Canonical mock fixture used when running in test mode.
+  mockFixture    Json?               @map("mock_fixture")
+  // Idempotency key template (e.g. "${tenantId}-${slug}-${week}").
+  dedupKey       String?             @map("dedup_key")
+  // Per-step retry limit (default 3; surfaced here for easy UI config).
+  maxRetries     Int                 @default(3) @map("max_retries")
 
   @@index([workflowId])
   @@map("process_steps")
@@ -948,46 +1060,75 @@ model ProcessStep {
 // Execution run of a process workflow
 // ID uses prun_ prefix for type identification
 model ProcessRun {
-  id               String           @id @map("id") // Must have prun_ prefix
-  workflowId       String           @map("workflow_id")
-  tenantId         String           @map("tenant_id")
-  status           ProcessRunStatus @default(IDLE)
-  currentStepOrder Int?             @map("current_step_order")
-  correlationId    String?          @map("correlation_id")
+  id               String              @id @map("id") // Must have prun_ prefix
+  workflowId       String              @map("workflow_id")
+  tenantId         String              @map("tenant_id")
+  status           ProcessRunStatus    @default(IDLE)
+  currentStepOrder Int?                @map("current_step_order")
+  correlationId    String?             @map("correlation_id")
   input            Json?
-  finalOutput      Json?            @map("final_output")
+  finalOutput      Json?               @map("final_output")
   metrics          Json?
   error            String?
-  startedAt        DateTime?        @map("started_at")
-  completedAt      DateTime?        @map("completed_at")
-  createdAt        DateTime         @default(now()) @map("created_at")
+  // n8n integration: track which n8n workflow/execution corresponds to this run
+  n8nWorkflowId    String?             @map("n8n_workflow_id")
+  n8nExecutionId   String?             @map("n8n_execution_id")
+  startedAt        DateTime?           @map("started_at")
+  completedAt      DateTime?           @map("completed_at")
+  departmentTags   String[]            @map("department_tags") // Role-based filtering (Story 5.3)
+  createdAt        DateTime            @default(now()) @map("created_at")
   stepResults      ProcessStepResult[]
-  workflow         ProcessWorkflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  tenant           Tenant           @relation(fields: [tenantId], references: [id])
+  workflow         ProcessWorkflow     @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  tenant           Tenant              @relation(fields: [tenantId], references: [id])
+
+  // ── Builder v1 extensions — state machine + approval flow ─────────
+  // String enum for finer-grained state than the legacy ProcessRunStatus:
+  // QUEUED | LOADING_CONTEXT | STEP_RUNNING | STEP_VERIFYING | STEP_FAILED
+  // AWAITING_HUMAN | RETRYING | AWAITING_APPROVAL | APPROVED | REJECTED
+  // COMPLETE | ABANDONED
+  state            String              @default("QUEUED") @map("state")
+  currentStepIndex Int?                @map("current_step_index")
+  currentAttempt   Int                 @default(0) @map("current_attempt")
+  // Snapshot of the exact inputs the user provided (for reproducibility
+  // and for the golden-run comparison in Phase 5).
+  inputSnapshot    Json?               @map("input_snapshot")
+  // Approval lifecycle
+  awaitingApprovalSince DateTime?      @map("awaiting_approval_since")
+  approvalPayload  Json?               @map("approval_payload")
+  approvedItems    Json?               @map("approved_items")
+  rejectedItems    Json?               @map("rejected_items")
+  // Quality metrics (populated in Phase 5)
+  qualityScore     Float?              @map("quality_score")
+  regressionFlags  Json?               @map("regression_flags")
 
   @@index([tenantId, status])
   @@index([workflowId])
+  @@index([n8nExecutionId])
+  @@index([state])
   @@map("process_runs")
 }
 
 // Result of executing a single step within a process run
 // ID uses psres_ prefix for type identification
 model ProcessStepResult {
-  id          String                  @id @map("id") // Must have psres_ prefix
-  runId       String                  @map("run_id")
-  stepId      String                  @map("step_id")
-  status      ProcessStepResultStatus @default(PENDING)
-  input       Json?
-  output      Json?
-  rawOutput   String?                 @db.Text @map("raw_output")
-  retries     Int                     @default(0)
-  error       String?
-  approvedBy  String?                 @map("approved_by")
-  approvedAt  DateTime?               @map("approved_at")
-  startedAt   DateTime?               @map("started_at")
-  completedAt DateTime?               @map("completed_at")
-  run         ProcessRun              @relation(fields: [runId], references: [id], onDelete: Cascade)
-  step        ProcessStep             @relation(fields: [stepId], references: [id])
+  id           String                  @id @map("id") // Must have psres_ prefix
+  runId        String                  @map("run_id")
+  stepId       String                  @map("step_id")
+  status       ProcessStepResultStatus @default(PENDING)
+  input        Json?
+  output       Json?
+  rawOutput    String?                 @map("raw_output") @db.Text
+  retries      Int                     @default(0)
+  error        String?
+  errorType    String?                 @map("error_type") // Categorized error: transient_api, rate_limited, schema_invalid, etc.
+  // n8n integration: store resume URL for approval gates (Wait node webhook)
+  n8nResumeUrl String?                 @map("n8n_resume_url")
+  approvedBy   String?                 @map("approved_by")
+  approvedAt   DateTime?               @map("approved_at")
+  startedAt    DateTime?               @map("started_at")
+  completedAt  DateTime?               @map("completed_at")
+  run          ProcessRun              @relation(fields: [runId], references: [id], onDelete: Cascade)
+  step         ProcessStep             @relation(fields: [stepId], references: [id])
 
   @@unique([runId, stepId])
   @@index([runId])
@@ -995,30 +1136,147 @@ model ProcessStepResult {
   @@map("process_step_results")
 }
 
+// ───────────────────────────────────────────────────────────────────
+// Builder v1 — generic MCP tool catalog + per-process bindings
+// ───────────────────────────────────────────────────────────────────
+
+// Catalog of MCP tools the builder skill can choose from during DESIGN.
+// Generic, not per-process. The seed script populates this with ~5
+// starter tools (Notion, Gmail, Google Sheets, HTTP Generic, LinkedIn).
+// Adding new tools = one row insert; no code change, no migration.
+model McpToolCatalog {
+  id              String   @id @default(cuid())
+  slug            String   @unique                      // "notion", "gmail"
+  displayName     String   @map("display_name")
+  category        String                                // comms | db | crm | files | ai | http | social
+  description     String?  @db.Text
+  // Tool capability flags used by the builder skill during field binding.
+  capabilities    Json     @default("{}")               // { read, write, search, subscribe }
+  // Operations this tool supports (generic shape, interpreted by the
+  // mcp-dispatcher service):
+  //   [{ id, kind, displayName, inputSchema, outputSchema,
+  //      n8nNodeType, n8nOperation }]
+  operations      Json     @default("[]")
+  // Credential type — drives the tenant credential connect UI.
+  credentialType  String   @map("credential_type")      // oauth2 | apiKey | basic | none
+  // Default n8n node type (used by the builder when generating workflows).
+  n8nNodeType     String?  @map("n8n_node_type")
+  // Default params merged into every generated n8n node for this tool.
+  n8nNodeDefaults Json?    @map("n8n_node_defaults")
+  docsUrl         String?  @map("docs_url")
+  // Example trigger phrases the builder skill can use when matching
+  // user requests to available tools.
+  examplePrompts  String[] @map("example_prompts")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt      @map("updated_at")
+
+  bindings          McpToolBinding[]
+  tenantCredentials TenantCredential[]
+
+  @@map("mcp_tool_catalog")
+}
+
+// Per-process binding of an MCP tool with specific scopes + credentials.
+// Credential refs point to existing TenantToolBinding records — we do
+// NOT duplicate secrets here.
+model McpToolBinding {
+  id            String   @id @default(cuid())
+  tenantId      String   @map("tenant_id")
+  processId     String   @map("process_id")
+  toolSlug      String   @map("tool_slug")
+  // Opaque reference to where the secret lives (TenantToolBinding.id).
+  // Null if the tool doesn't need credentials (e.g. HTTP generic).
+  credentialRef String?  @map("credential_ref")
+  // Allowed operations + scopes for this process × tool:
+  //   { read: ["table1","table2"], write: ["table3"], search: [...] }
+  scopes        Json     @default("{}")
+  // Field mapping from process step inputs → MCP operation parameters.
+  fieldMapping  Json     @default("{}") @map("field_mapping")
+  enabled       Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt      @map("updated_at")
+
+  process ProcessWorkflow @relation(fields: [processId], references: [id], onDelete: Cascade)
+  tool    McpToolCatalog  @relation(fields: [toolSlug], references: [slug])
+  tenant  Tenant          @relation(fields: [tenantId], references: [id])
+
+  @@unique([processId, toolSlug])
+  @@index([tenantId])
+  @@map("mcp_tool_bindings")
+}
+
+// Builder v1 — isolated test runs that never touch live data.
+// Created by the TEST phase of the builder skill. Writes go only to
+// stepEvents (JSON); the executor engine enforces isTestMode and
+// blocks writes to real tables during test runs.
+model ProcessTestRun {
+  id          String    @id @map("id") // ptest_ prefix
+  processId   String    @map("process_id")
+  tenantId    String    @map("tenant_id")
+  status      String    @default("pending")           // pending | running | awaiting-approval | approved | passed | failed
+  input       Json
+  mocks       Json?                                    // mock MCP responses for deterministic tests
+  stepEvents  Json      @default("[]") @map("step_events")
+  output      Json?                                    // parsed items from the last brain call (for UI preview)
+  notionRecords Json?   @map("notion_records")         // records actually written to Notion after user approves
+  feedback    String?                                  // user-provided feedback when requesting changes
+  error       String?
+  startedAt   DateTime  @default(now()) @map("started_at")
+  completedAt DateTime?                @map("completed_at")
+
+  process ProcessWorkflow @relation(fields: [processId], references: [id], onDelete: Cascade)
+  tenant  Tenant          @relation(fields: [tenantId], references: [id])
+
+  @@index([processId])
+  @@index([tenantId])
+  @@map("process_test_runs")
+}
+
+// Mapping between our ProcessWorkflow and deployed n8n workflows
+model ProcessN8nWorkflow {
+  id                String          @id @default(cuid()) @map("id")
+  processWorkflowId String          @map("process_workflow_id")
+  tenantId          String          @map("tenant_id")
+  n8nWorkflowId     String          @map("n8n_workflow_id")
+  webhookPath       String?         @map("webhook_path") // e.g., "tenant-xxx-lead-discovery"
+  isActive          Boolean         @default(true) @map("is_active")
+  syncedAt          DateTime        @default(now()) @map("synced_at")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  processWorkflow   ProcessWorkflow @relation(fields: [processWorkflowId], references: [id], onDelete: Cascade)
+  tenant            Tenant          @relation(fields: [tenantId], references: [id])
+
+  @@unique([processWorkflowId, tenantId])
+  @@index([tenantId])
+  @@index([n8nWorkflowId])
+  @@map("process_n8n_workflows")
+}
+
 // Approved lead from Lead Discovery process
 model ApprovedLead {
-  id               String   @id @map("id")
-  tenantId         String   @map("tenant_id")
-  runId            String   @map("run_id")
-  name             String
-  company          String
-  role             String?
-  email            String?
-  emailSource      String?  @map("email_source")
-  linkedin         String?
-  phone            String?
-  website          String?
-  location         String?
-  companyDescription String? @db.Text @map("company_description")
-  whyGoodFit       String?  @db.Text @map("why_good_fit")
-  score            Int?
-  scoreBreakdown   Json?    @map("score_breakdown")
-  reasoning        String?  @db.Text
-  message          Json?
-  recentProjects   String[] @map("recent_projects")
-  createdAt        DateTime @default(now()) @map("created_at")
+  id                 String   @id @map("id")
+  tenantId           String   @map("tenant_id")
+  runId              String   @map("run_id")
+  name               String
+  company            String
+  role               String?
+  email              String?
+  emailSource        String?  @map("email_source")
+  linkedin           String?
+  phone              String?
+  website            String?
+  location           String?
+  companyDescription String?  @map("company_description") @db.Text
+  whyGoodFit         String?  @map("why_good_fit") @db.Text
+  score              Int?
+  scoreBreakdown     Json?    @map("score_breakdown")
+  reasoning          String?  @db.Text
+  message            Json?
+  recentProjects     String[] @map("recent_projects")
+  createdAt          DateTime @default(now()) @map("created_at")
 
-  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   @@index([runId])
@@ -1027,26 +1285,26 @@ model ApprovedLead {
 
 // Approved content from Instagram Content process
 model ApprovedContent {
-  id               String   @id @map("id")
-  tenantId         String   @map("tenant_id")
-  runId            String   @map("run_id")
-  topic            String
-  caption          String   @db.Text
-  hookLine         String?  @map("hook_line")
-  hashtags         String[]
-  imageType        String?  @map("image_type")
-  imageUrl         String?  @map("image_url")
-  imagePrompt      String?  @db.Text @map("image_prompt")
-  imageReference   String?  @map("image_reference")
-  callToAction     String?  @map("call_to_action")
-  score            Int?
-  reasoning        String?  @db.Text
-  whyItWorks       String?  @db.Text @map("why_it_works")
-  status           String   @default("approved") // approved, posted, scheduled
-  postedAt         DateTime? @map("posted_at")
-  createdAt        DateTime @default(now()) @map("created_at")
+  id             String    @id @map("id")
+  tenantId       String    @map("tenant_id")
+  runId          String    @map("run_id")
+  topic          String
+  caption        String    @db.Text
+  hookLine       String?   @map("hook_line")
+  hashtags       String[]
+  imageType      String?   @map("image_type")
+  imageUrl       String?   @map("image_url")
+  imagePrompt    String?   @map("image_prompt") @db.Text
+  imageReference String?   @map("image_reference")
+  callToAction   String?   @map("call_to_action")
+  score          Int?
+  reasoning      String?   @db.Text
+  whyItWorks     String?   @map("why_it_works") @db.Text
+  status         String    @default("approved") // approved, posted, scheduled
+  postedAt       DateTime? @map("posted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
 
-  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   @@index([runId])
@@ -1057,47 +1315,48 @@ model ApprovedContent {
 
 // Figma OAuth connection per tenant
 model FigmaConnection {
-  id            String   @id @map("id")
-  tenantId      String   @unique @map("tenant_id")
-  accessToken   String   @map("access_token")
-  refreshToken  String?  @map("refresh_token")
-  expiresAt     DateTime? @map("expires_at")
-  figmaUserId   String?  @map("figma_user_id")
-  figmaEmail    String?  @map("figma_email")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id           String    @id @map("id")
+  tenantId     String    @unique @map("tenant_id")
+  accessToken  String    @map("access_token")
+  refreshToken String?   @map("refresh_token")
+  expiresAt    DateTime? @map("expires_at")
+  figmaUserId  String?   @map("figma_user_id")
+  figmaEmail   String?   @map("figma_email")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
   @@map("figma_connections")
 }
 
 // Extracted brand design profile from a Figma file
 model BrandDesignProfile {
-  id            String   @id @map("id")
-  tenantId      String   @map("tenant_id")
+  id            String  @id @map("id")
+  tenantId      String  @map("tenant_id")
   name          String
-  figmaFileKey  String   @map("figma_file_key")
-  figmaFileName String?  @map("figma_file_name")
+  figmaFileKey  String  @map("figma_file_key")
+  figmaFileName String? @map("figma_file_name")
 
   // Extracted tokens
-  colors        Json     // { primary: "#c9a96e", background: "#1a1a1a", ... }
-  typography    Json     // [{ role: "h1", fontFamily, fontSize, fontWeight, ... }]
-  spacing       Json     // [8, 16, 24, 32, 48, ...]
-  grids         Json     // [{ pattern, count, gutterSize, offset }]
-  effects       Json     // [{ type, color, offset, radius }]
+  colors     Json // { primary: "#c9a96e", background: "#1a1a1a", ... }
+  typography Json // [{ role: "h1", fontFamily, fontSize, fontWeight, ... }]
+  spacing    Json // [8, 16, 24, 32, 48, ...]
+  grids      Json // [{ pattern, count, gutterSize, offset }]
+  effects    Json // [{ type, color, offset, radius }]
 
   // Layout patterns — spatial relationships learned from the file
-  layoutPatterns Json    @map("layout_patterns") // [{ pageType, components: [{ type, x%, y%, w%, h% }] }]
-  pageCount     Int      @map("page_count")
+  layoutPatterns Json @map("layout_patterns") // [{ pageType, components: [{ type, x%, y%, w%, h% }] }]
+  pageCount      Int  @map("page_count")
 
   // Raw CSS tokens for template engine
-  tokensCss     String?  @db.Text @map("tokens_css")
+  tokensCss String? @map("tokens_css") @db.Text
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant        Tenant   @relation(fields: [tenantId], references: [id])
-  brochures     BrochureProject[]
+  tenant    Tenant            @relation(fields: [tenantId], references: [id])
+  brochures BrochureProject[]
 
   @@index([tenantId])
   @@map("brand_design_profiles")
@@ -1105,22 +1364,22 @@ model BrandDesignProfile {
 
 // A brochure generation project
 model BrochureProject {
-  id              String   @id @map("id")
-  tenantId        String   @map("tenant_id")
-  brandProfileId  String   @map("brand_profile_id")
-  title           String
-  description     String?  @db.Text
-  targetAudience  String?  @map("target_audience")
-  goals           String?  @db.Text
-  status          String   @default("ideation") // ideation, layout, content_text, content_images, preview, exported
-  score           Int?
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id             String   @id @map("id")
+  tenantId       String   @map("tenant_id")
+  brandProfileId String   @map("brand_profile_id")
+  title          String
+  description    String?  @db.Text
+  targetAudience String?  @map("target_audience")
+  goals          String?  @db.Text
+  status         String   @default("ideation") // ideation, layout, content_text, content_images, preview, exported
+  score          Int?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
-  tenant          Tenant   @relation(fields: [tenantId], references: [id])
-  brandProfile    BrandDesignProfile @relation(fields: [brandProfileId], references: [id])
-  pages           BrochurePage[]
-  ideas           BrochureIdea[]
+  tenant       Tenant             @relation(fields: [tenantId], references: [id])
+  brandProfile BrandDesignProfile @relation(fields: [brandProfileId], references: [id])
+  pages        BrochurePage[]
+  ideas        BrochureIdea[]
 
   @@index([tenantId])
   @@map("brochure_projects")
@@ -1128,20 +1387,20 @@ model BrochureProject {
 
 // Brochure idea (Step 1 — multiple ideas, user selects)
 model BrochureIdea {
-  id          String   @id @map("id")
-  projectId   String   @map("project_id")
-  title       String
-  audience    String?
-  purpose     String?  @db.Text
-  format      String?  // "8 pages, A4, portrait"
-  score       Int?
-  reasoning   String?  @db.Text
-  status      String   @default("pending") // pending, approved, rejected, modified
-  feedback    String?  @db.Text
-  version     Int      @default(1)
-  createdAt   DateTime @default(now()) @map("created_at")
+  id        String   @id @map("id")
+  projectId String   @map("project_id")
+  title     String
+  audience  String?
+  purpose   String?  @db.Text
+  format    String? // "8 pages, A4, portrait"
+  score     Int?
+  reasoning String?  @db.Text
+  status    String   @default("pending") // pending, approved, rejected, modified
+  feedback  String?  @db.Text
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
 
-  project     BrochureProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project BrochureProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@map("brochure_ideas")
@@ -1149,18 +1408,18 @@ model BrochureIdea {
 
 // Individual page in a brochure
 model BrochurePage {
-  id          String   @id @map("id")
-  projectId   String   @map("project_id")
-  pageNumber  Int      @map("page_number")
-  layoutType  String   @map("layout_type") // cover, split, grid, editorial, product, cta, back-cover
-  layoutJson  Json     @map("layout_json") // { width, height, components: [{ slot, x, y, w, h, type }] }
-  status      String   @default("pending") // pending, approved, rejected
-  feedback    String?  @db.Text
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id         String   @id @map("id")
+  projectId  String   @map("project_id")
+  pageNumber Int      @map("page_number")
+  layoutType String   @map("layout_type") // cover, split, grid, editorial, product, cta, back-cover
+  layoutJson Json     @map("layout_json") // { width, height, components: [{ slot, x, y, w, h, type }] }
+  status     String   @default("pending") // pending, approved, rejected
+  feedback   String?  @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  project     BrochureProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  components  BrochureComponent[]
+  project    BrochureProject     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  components BrochureComponent[]
 
   @@index([projectId])
   @@map("brochure_pages")
@@ -1168,27 +1427,190 @@ model BrochurePage {
 
 // Individual component (text slot or image slot) on a page
 model BrochureComponent {
-  id          String   @id @map("id")
-  pageId      String   @map("page_id")
-  slotName    String   @map("slot_name") // "hero-image", "main-heading", "body-text"
-  type        String   // text, image, logo, accent
-  content     String?  @db.Text // actual text or image URL
-  status      String   @default("pending") // pending, approved, rejected, regenerating
-  feedback    String?  @db.Text
-  version     Int      @default(1)
-  maxChars    Int?     @map("max_chars")
-  fontSize    Float?   @map("font_size")
-  fontRole    String?  @map("font_role") // h1, h2, body, caption
-  dimensions  Json?    // { width, height, aspectRatio }
-  position    Json?    // { x, y, w, h } in percentage of page
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id         String   @id @map("id")
+  pageId     String   @map("page_id")
+  slotName   String   @map("slot_name") // "hero-image", "main-heading", "body-text"
+  type       String // text, image, logo, accent
+  content    String?  @db.Text // actual text or image URL
+  status     String   @default("pending") // pending, approved, rejected, regenerating
+  feedback   String?  @db.Text
+  version    Int      @default(1)
+  maxChars   Int?     @map("max_chars")
+  fontSize   Float?   @map("font_size")
+  fontRole   String?  @map("font_role") // h1, h2, body, caption
+  dimensions Json? // { width, height, aspectRatio }
+  position   Json? // { x, y, w, h } in percentage of page
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  page        BrochurePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  page BrochurePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
 
   @@index([pageId])
   @@map("brochure_components")
 }
+
+// ── Catalog of available processes and tools (MCP) ──
+// Platform-wide items that tenants can enable/disable
+model CatalogItem {
+  id            String              @id @default(cuid()) @map("id")
+  type          String // 'process' | 'tool'
+  name          String
+  slug          String              @unique
+  description   String              @db.Text
+  icon          String              @default("⚡")
+  category      String // 'lead-gen', 'content', 'analytics', 'search', 'email', 'crm', etc.
+  requiredTier  String              @default("starter") @map("required_tier") // starter | pro | enterprise
+  creditCost    Int                 @default(0) @map("credit_cost") // credits per run
+  n8nWorkflowId String?             @map("n8n_workflow_id") // links to n8n for processes
+  mcpEndpoint   String?             @map("mcp_endpoint") // MCP server URL for tools
+  configSchema  Json?               @map("config_schema") // JSON Schema for custom config
+  isActive      Boolean             @default(true) @map("is_active")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+  tenantItems   TenantCatalogItem[]
+
+  @@map("catalog_items")
+}
+
+// Per-tenant enablement of catalog items
+model TenantCatalogItem {
+  id            String      @id @default(cuid()) @map("id")
+  tenantId      String      @map("tenant_id")
+  catalogItemId String      @map("catalog_item_id")
+  enabled       Boolean     @default(false)
+  customConfig  Json?       @map("custom_config")
+  enabledAt     DateTime?   @map("enabled_at")
+  enabledBy     String?     @map("enabled_by")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  tenant        Tenant      @relation(fields: [tenantId], references: [id])
+  catalogItem   CatalogItem @relation(fields: [catalogItemId], references: [id])
+
+  @@unique([tenantId, catalogItemId])
+  @@index([tenantId])
+  @@map("tenant_catalog_items")
+}
+
+// ── Process Tool Adapters (Neuron OS) ──
+// Predefined adapter — defines how a process communicates with a specific MCP tool
+model ProcessToolAdapter {
+  id              String              @id @default(cuid()) @map("id")
+  processSlug     String              @map("process_slug") // e.g., "lead-discovery"
+  toolSlug        String              @map("tool_slug") // e.g., "nocodb"
+  adapterType     String              @map("adapter_type") // "read" | "write" | "readwrite"
+  n8nNodeType     String?             @map("n8n_node_type") // e.g., "n8n-nodes-base.nocodb"
+  n8nNodeConfig   Json?               @map("n8n_node_config") // default node parameters
+  fieldMapping    Json                @map("field_mapping") // { our_field: tool_field }
+  readConfig      Json?               @map("read_config") // { endpoint, filters, dedup_fields }
+  writeConfig     Json?               @map("write_config") // { endpoint, action }
+  toolkitTemplate String              @map("toolkit_template") @db.Text // MD template with placeholders
+  isActive        Boolean             @default(true) @map("is_active")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+  tenantBindings  TenantToolBinding[]
+
+  @@unique([processSlug, toolSlug])
+  @@map("process_tool_adapters")
+}
+
+// Per-tenant activation of a process+tool adapter
+model TenantToolBinding {
+  id                 String             @id @default(cuid()) @map("id")
+  tenantId           String             @map("tenant_id")
+  adapterId          String             @map("adapter_id")
+  toolCredentials    Json               @map("tool_credentials") // { apiToken, baseUrl, tableId }
+  enabled            Boolean            @default(true)
+  customFieldMapping Json?              @map("custom_field_mapping") // tenant override
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+  tenant             Tenant             @relation(fields: [tenantId], references: [id])
+  adapter            ProcessToolAdapter @relation(fields: [adapterId], references: [id])
+
+  @@unique([tenantId, adapterId])
+  @@index([tenantId])
+  @@map("tenant_tool_bindings")
+}
+
+// Tenant-level credentials for MCP tools used by the generic process
+// builder. Unlike TenantToolBinding (which is per-process via adapter),
+// this table stores credentials once per (tenant, toolSlug) and every
+// process created via the builder reads from it. Matches slugs in
+// McpToolCatalog.
+//
+// The builder v2 Settings → Integrations UI writes to this table.
+// Existing per-process bindings (lead-discovery × nocodb, instagram-content × notion)
+// are kept for backwards compat and progressively migrated here.
+model TenantCredential {
+  id          String   @id @default(cuid()) @map("id")
+  tenantId    String   @map("tenant_id")
+  toolSlug    String   @map("tool_slug") // matches McpToolCatalog.slug
+  credentials Json     @map("credentials") // { apiToken, oauthToken, baseUrl, … } tool-specific
+  // Scope hints for the builder — e.g. Notion parentPageId that new
+  // databases should be created under. Optional.
+  config      Json?    @map("config")
+  // Verification tracking — set to true after a successful test call.
+  verified    Boolean  @default(false)
+  verifiedAt  DateTime? @map("verified_at")
+  // Opaque label for the UI ("Notion (LSA workspace)").
+  label       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  toolSlugRef McpToolCatalog @relation(fields: [toolSlug], references: [slug])
+
+  @@unique([tenantId, toolSlug])
+  @@index([tenantId])
+  @@map("tenant_credentials")
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Tenant Knowledge Vault — per-tenant Obsidian-style knowledge base
+// Follows Karpathy LLM Wiki pattern: raw/ + wiki/ + schema layers
+// ID uses vault_ prefix for type identification
+// ────────────────────────────────────────────────────────────────────
+
+model TenantVault {
+  id             String   @id @map("id") // Must have vault_ prefix
+  tenantId       String   @unique @map("tenant_id")
+  name           String // e.g., "Acme Corp Knowledge Base"
+  description    String?  @db.Text
+  sourceVaultUrl String?  @map("source_vault_url") // URL of source Obsidian vault used as template
+  status         String   @default("creating") // creating | ready | error
+  conceptCount   Int      @default(0) @map("concept_count")
+  categoryCount  Int      @default(0) @map("category_count")
+  errorMessage   String?  @map("error_message") @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  concepts Concept[] @relation("VaultConcepts")
+
+  @@map("tenant_vaults")
+}
+
+// Vault operation audit log — tracks all vault operations for monitoring
+// ID uses vlog_ prefix for type identification
+model VaultOperationLog {
+  id               String   @id @map("id") // Must have vlog_ prefix
+  tenantId         String   @map("tenant_id")
+  operationType    String   @map("operation_type") // create | enrich | lint | update | merge | crystallize
+  conceptsAffected Int      @default(0) @map("concepts_affected")
+  durationMs       Int?     @map("duration_ms")
+  status           String   @default("running") // running | completed | failed
+  details          Json?    @db.JsonB // Operation-specific details
+  error            String?  @db.Text
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([operationType])
+  @@index([createdAt])
+  @@map("vault_operation_logs")
+}
+
+// ── Enrichment Queue (Story 1.7) ──
+// Persistent queue with state machine for concept enrichment pipeline.
+// Replaces in-memory runningExecutions Set that loses state on restart.
 
 enum EnrichmentStatus {
   QUEUED
@@ -1220,4 +1642,3 @@ model EnrichmentQueue {
   @@index([tenantId, status])
   @@map("enrichment_queue")
 }
-

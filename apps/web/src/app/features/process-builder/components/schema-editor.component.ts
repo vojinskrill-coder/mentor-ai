@@ -59,30 +59,30 @@ interface SchemaField {
     .fields-list { display: flex; flex-direction: column; gap: 4px; }
     .field-row { display: flex; gap: 4px; align-items: center; }
     .fname {
-      flex: 1; background: #242424; border: 1px solid #2A2A2A; border-radius: 4px;
-      color: #FAFAFA; padding: 4px 6px; font-size: 12px; font-family: monospace;
+      flex: 1; background: #1C2128; border: 1px solid #21262D; border-radius: 4px;
+      color: #E6EDF3; padding: 4px 6px; font-size: 12px; font-family: monospace;
     }
     .ftype, .fformat {
-      width: 80px; background: #242424; border: 1px solid #2A2A2A; border-radius: 4px;
-      color: #FAFAFA; padding: 4px; font-size: 11px;
+      width: 80px; background: #1C2128; border: 1px solid #21262D; border-radius: 4px;
+      color: #E6EDF3; padding: 4px; font-size: 11px;
     }
     .freq { display: flex; align-items: center; gap: 2px; color: #6B7280; font-size: 10px; white-space: nowrap; }
-    .freq input { accent-color: #3B82F6; }
+    .freq input { accent-color: #58A6FF; }
     .remove-field {
       background: none; border: none; color: #ef4444; cursor: pointer; font-size: 16px; padding: 0 4px;
     }
     .add-field-btn {
-      background: transparent; border: 1px dashed #2A2A2A; border-radius: 4px;
-      color: #3B82F6; padding: 4px 8px; cursor: pointer; font-size: 11px; align-self: flex-start;
+      background: transparent; border: 1px dashed #21262D; border-radius: 4px;
+      color: #58A6FF; padding: 4px 8px; cursor: pointer; font-size: 11px; align-self: flex-start;
     }
     .schema-preview { margin-top: 8px; }
     .schema-preview summary { color: #6B7280; font-size: 11px; cursor: pointer; }
     .schema-json {
-      background: #242424; border-radius: 4px; padding: 8px;
+      background: #1C2128; border-radius: 4px; padding: 8px;
       color: #9CA3AF; font-size: 10px; font-family: monospace;
       max-height: 200px; overflow: auto; white-space: pre-wrap;
     }
-    .fname:focus, .ftype:focus, .fformat:focus { outline: none; border-color: #3B82F6; }
+    .fname:focus, .ftype:focus, .fformat:focus { outline: none; border-color: #58A6FF; }
   `],
 })
 export class SchemaEditorComponent {

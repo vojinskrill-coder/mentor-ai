@@ -1,80 +1,70 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { OnboardingVerificationService } from '../onboarding-verification/onboarding-verification.service';
-import { EnrichmentQueueService } from '../enrichment-queue/enrichment-queue.service';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
+import {
+  OnboardingVerificationService,
+  VerificationCheck,
+} from '../onboarding-verification/onboarding-verification.service';
+import { EnrichmentQueueService } from '../enrichment-queue/enrichment-queue.service';
+
+// ── Types ──────────────────────────────────────────────────────
 
 export interface OnboardingResult {
   success: boolean;
-  tenantId: string;
-  verificationPassed: boolean;
-  enrichmentCount: number;
-  errors: string[];
+  failures?: VerificationCheck[];
+  queuedCount?: number;
 }
+
+// ── Service ────────────────────────────────────────────────────
 
 @Injectable()
 export class OnboardingOrchestratorService {
   private readonly logger = new Logger(OnboardingOrchestratorService.name);
 
   constructor(
-    private readonly verification: OnboardingVerificationService,
-    private readonly enrichmentQueue: EnrichmentQueueService,
+    private readonly verificationService: OnboardingVerificationService,
+    private readonly queueService: EnrichmentQueueService,
     private readonly prisma: PlatformPrismaService,
   ) {}
 
+  /**
+   * Called AFTER existing onboarding completes (concepts selected, vault provisioned).
+   * Verifies everything, populates enrichment queue, activates tenant.
+   */
   async finalizeOnboarding(
     tenantId: string,
-    expectedAgentCount: number,
+    expectedConceptCount: number,
   ): Promise<OnboardingResult> {
-    const errors: string[] = [];
-
-    // Step 1: Verify tenant setup
-    this.logger.log(`Verifying tenant setup for ${tenantId}...`);
-    const verification = await this.verification.verifyTenantSetup(
+    // 1. Verify tenant setup
+    const verification = await this.verificationService.verifyTenantSetup(
       tenantId,
-      expectedAgentCount,
+      expectedConceptCount,
     );
 
-    if (!verification.passed) {
-      this.logger.warn(
-        `Verification failed for ${tenantId}: ${verification.summary}`,
-      );
-      return {
-        success: false,
+    if (!verification.verified) {
+      this.logger.error({
+        msg: 'Onboarding verification FAILED',
         tenantId,
-        verificationPassed: false,
-        enrichmentCount: 0,
-        errors: verification.checks
-          .filter((c) => !c.passed)
-          .map((c) => `${c.name}: ${c.details || 'failed'}`),
-      };
-    }
-
-    // Step 2: Populate enrichment queue with all concepts
-    let enrichmentCount = 0;
-    try {
-      const concepts = await (this.prisma as any).concept.findMany({
-        select: { slug: true },
+        failures: verification.failures,
       });
-      const slugs = concepts.map((c: any) => c.slug);
-      enrichmentCount = await this.enrichmentQueue.enqueueBatch(
-        tenantId,
-        slugs,
-      );
-      this.logger.log(
-        `Enqueued ${enrichmentCount} concepts for enrichment (tenant: ${tenantId})`,
-      );
-    } catch (err) {
-      const msg = `Failed to populate enrichment queue: ${(err as Error).message}`;
-      errors.push(msg);
-      this.logger.error(msg);
+      return { success: false, failures: verification.failures };
     }
 
-    return {
-      success: errors.length === 0,
+    // 2. Populate enrichment queue
+    const concepts = await (this.prisma as any).concept.findMany({
+      where: { tenantId },
+      select: { id: true },
+    });
+    await this.queueService.enqueueBatch(
       tenantId,
-      verificationPassed: true,
-      enrichmentCount,
-      errors,
-    };
+      concepts.map((c: { id: string }) => c.id),
+    );
+
+    // 3. Return success
+    this.logger.log({
+      msg: 'Onboarding verified and queue populated',
+      tenantId,
+      queuedCount: concepts.length,
+    });
+    return { success: true, queuedCount: concepts.length };
   }
 }

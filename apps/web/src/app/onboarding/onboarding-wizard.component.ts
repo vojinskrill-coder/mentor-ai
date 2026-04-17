@@ -18,13 +18,13 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       }
       .page {
         min-height: 100vh;
-        background: #0a0a0a;
+        background: #0D1117;
         display: flex;
         align-items: center;
         justify-content: center;
         padding: 16px;
         font-family: 'Inter', system-ui, sans-serif;
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .container {
         width: 100%;
@@ -63,11 +63,11 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         transition: all 0.3s;
       }
       .step-circle.active {
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
       }
       .step-circle.inactive {
-        background: #2a2a2a;
+        background: #21262D;
         color: #a0a0a0;
       }
       .step-circle svg {
@@ -82,17 +82,17 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         border-radius: 2px;
       }
       .step-line.active {
-        background: #3b82f6;
+        background: #58A6FF;
       }
       .step-line.inactive {
-        background: #2a2a2a;
+        background: #21262D;
       }
 
       .card {
-        background: #1a1a1a;
+        background: #161B22;
         border-radius: 12px;
         padding: 24px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         animation: cardFadeIn 0.3s ease;
       }
       @keyframes cardFadeIn {
@@ -132,17 +132,17 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       .form-input {
         width: 100%;
         padding: 12px;
-        background: #0a0a0a;
-        border: 1px solid #2a2a2a;
+        background: #0D1117;
+        border: 1px solid #21262D;
         border-radius: 10px;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 15px;
         font-family: inherit;
         outline: none;
         box-sizing: border-box;
       }
       .form-input:focus {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .form-input::placeholder {
         color: #9e9e9e;
@@ -150,10 +150,10 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       .form-textarea {
         width: 100%;
         padding: 12px;
-        background: #0a0a0a;
-        border: 1px solid #2a2a2a;
+        background: #0D1117;
+        border: 1px solid #21262D;
         border-radius: 10px;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 14px;
         font-family: inherit;
         resize: none;
@@ -162,7 +162,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         box-sizing: border-box;
       }
       .form-textarea:focus {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .form-textarea::placeholder {
         color: #9e9e9e;
@@ -186,15 +186,15 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         width: 4px;
       }
       .industry-grid::-webkit-scrollbar-thumb {
-        background: #2a2a2a;
+        background: #21262D;
         border-radius: 2px;
       }
       .industry-btn {
         padding: 12px;
         border-radius: 8px;
-        border: 2px solid #2a2a2a;
+        border: 2px solid #21262D;
         background: transparent;
-        color: #fafafa;
+        color: #E6EDF3;
         cursor: pointer;
         text-align: center;
         font-size: 13px;
@@ -203,12 +203,12 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         font-family: inherit;
       }
       .industry-btn:hover {
-        border-color: rgba(59, 130, 246, 0.7);
-        background: rgba(59, 130, 246, 0.05);
+        border-color: rgba(88, 166, 255, 0.7);
+        background: rgba(88, 166, 255, 0.05);
       }
       .industry-btn.selected {
-        border-color: #3b82f6;
-        background: rgba(59, 130, 246, 0.08);
+        border-color: #58A6FF;
+        background: rgba(88, 166, 255, 0.08);
       }
 
       /* Other industry input */
@@ -216,17 +216,17 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         margin-top: 12px;
         width: 100%;
         padding: 10px 12px;
-        background: #0a0a0a;
-        border: 1px solid #2a2a2a;
+        background: #0D1117;
+        border: 1px solid #21262D;
         border-radius: 8px;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 14px;
         font-family: inherit;
         outline: none;
         box-sizing: border-box;
       }
       .other-input:focus {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .other-input::placeholder {
         color: #9e9e9e;
@@ -241,26 +241,26 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       .strategy-card {
         padding: 24px;
         border-radius: 12px;
-        border: 2px solid #2a2a2a;
+        border: 2px solid #21262D;
         background: transparent;
-        color: #fafafa;
+        color: #E6EDF3;
         cursor: pointer;
         text-align: left;
         transition: border-color 0.2s;
         font-family: inherit;
       }
       .strategy-card:hover {
-        border-color: rgba(59, 130, 246, 0.5);
+        border-color: rgba(88, 166, 255, 0.5);
       }
       .strategy-card.selected {
-        border-color: #3b82f6;
-        background: rgba(59, 130, 246, 0.08);
+        border-color: #58A6FF;
+        background: rgba(88, 166, 255, 0.08);
       }
       .strategy-icon {
         width: 48px;
         height: 48px;
         border-radius: 12px;
-        background: #242424;
+        background: #1C2128;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -269,7 +269,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       .strategy-icon svg {
         width: 24px;
         height: 24px;
-        color: #3b82f6;
+        color: #58A6FF;
       }
       .strategy-name {
         font-size: 16px;
@@ -291,9 +291,9 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       .dept-btn {
         padding: 10px 16px;
         border-radius: 20px;
-        border: 2px solid #2a2a2a;
+        border: 2px solid #21262D;
         background: transparent;
-        color: #fafafa;
+        color: #E6EDF3;
         cursor: pointer;
         font-size: 14px;
         font-weight: 500;
@@ -301,11 +301,11 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         font-family: inherit;
       }
       .dept-btn:hover {
-        border-color: rgba(59, 130, 246, 0.5);
+        border-color: rgba(88, 166, 255, 0.5);
       }
       .dept-btn.selected {
-        border-color: #3b82f6;
-        background: rgba(59, 130, 246, 0.15);
+        border-color: #58A6FF;
+        background: rgba(88, 166, 255, 0.15);
         color: #60a5fa;
       }
 
@@ -313,7 +313,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       .role-section {
         margin-top: 24px;
         padding-top: 20px;
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid #21262D;
       }
       .role-section-label {
         font-size: 13px;
@@ -331,9 +331,9 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       .role-btn {
         padding: 10px 18px;
         border-radius: 20px;
-        border: 2px solid #2a2a2a;
+        border: 2px solid #21262D;
         background: transparent;
-        color: #fafafa;
+        color: #E6EDF3;
         cursor: pointer;
         font-size: 14px;
         font-weight: 500;
@@ -341,11 +341,11 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         font-family: inherit;
       }
       .role-btn:hover {
-        border-color: rgba(59, 130, 246, 0.5);
+        border-color: rgba(88, 166, 255, 0.5);
       }
       .role-btn.selected {
-        border-color: #3b82f6;
-        background: rgba(59, 130, 246, 0.15);
+        border-color: #58A6FF;
+        background: rgba(88, 166, 255, 0.15);
         color: #60a5fa;
       }
       .role-hint {
@@ -371,8 +371,8 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       .gen-spinner {
         width: 48px;
         height: 48px;
-        border: 3px solid #2a2a2a;
-        border-top-color: #3b82f6;
+        border: 3px solid #21262D;
+        border-top-color: #58A6FF;
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
         margin: 0 auto 16px;
@@ -387,7 +387,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         color: #a0a0a0;
       }
       .gen-timer {
-        color: #3b82f6;
+        color: #58A6FF;
         margin-top: 16px;
         font-family: monospace;
         font-size: 15px;
@@ -406,13 +406,13 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       }
       .result-time {
         font-size: 13px;
-        color: #3b82f6;
+        color: #58A6FF;
       }
       .result-box {
-        background: #0a0a0a;
+        background: #0D1117;
         border-radius: 10px;
         padding: 16px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         max-height: 400px;
         overflow-y: auto;
         white-space: pre-wrap;
@@ -443,7 +443,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       }
       .celebration-summary {
         text-align: left;
-        background: #0d0d0d;
+        background: #0D1117;
         border-radius: 8px;
         padding: 16px;
         margin-top: 20px;
@@ -454,7 +454,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         padding: 4px 0;
       }
       .summary-item strong {
-        color: #fafafa;
+        color: #E6EDF3;
       }
 
       /* Spinners */
@@ -470,15 +470,15 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
 
       /* PDF Upload */
       .pdf-dropzone {
-        border: 2px dashed #2a2a2a;
+        border: 2px dashed #21262D;
         border-radius: 10px;
         padding: 16px;
         transition: all 0.2s;
         text-align: center;
       }
       .pdf-dropzone.drag-over {
-        border-color: #3b82f6;
-        background: rgba(59, 130, 246, 0.04);
+        border-color: #58A6FF;
+        background: rgba(88, 166, 255, 0.04);
       }
       .pdf-upload-row {
         display: flex;
@@ -491,9 +491,9 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         gap: 8px;
         padding: 10px 16px;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         background: transparent;
-        color: #fafafa;
+        color: #E6EDF3;
         cursor: pointer;
         font-size: 13px;
         font-weight: 500;
@@ -501,8 +501,8 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         transition: all 0.2s;
       }
       .btn-upload-pdf:hover:not(:disabled) {
-        border-color: #3b82f6;
-        background: rgba(59, 130, 246, 0.08);
+        border-color: #58A6FF;
+        background: rgba(88, 166, 255, 0.08);
       }
       .btn-upload-pdf:disabled {
         opacity: 0.5;
@@ -516,7 +516,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         width: 14px;
         height: 14px;
         border: 2px solid rgba(255, 255, 255, 0.3);
-        border-top-color: #3b82f6;
+        border-top-color: #58A6FF;
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
         display: inline-block;
@@ -525,7 +525,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        color: #22c55e;
+        color: #3FB950;
         font-size: 13px;
         font-weight: 500;
       }
@@ -535,7 +535,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       }
       .pdf-error-text {
         font-size: 12px;
-        color: #ef4444;
+        color: #F85149;
         margin-top: 6px;
       }
       .pdf-hint {
@@ -548,7 +548,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       .mode-toggle-section {
         margin-top: 24px;
         padding-top: 20px;
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid #21262D;
       }
       .mode-toggle-label {
         font-size: 13px;
@@ -561,7 +561,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       .mode-toggle {
         display: inline-flex;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         overflow: hidden;
       }
       .mode-toggle-btn {
@@ -576,12 +576,12 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         transition: all 0.2s;
       }
       .mode-toggle-btn.active {
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
       }
       .mode-toggle-btn:not(.active):hover {
-        background: rgba(59, 130, 246, 0.08);
-        color: #fafafa;
+        background: rgba(88, 166, 255, 0.08);
+        color: #E6EDF3;
       }
       .mode-hint {
         font-size: 12px;
@@ -594,8 +594,8 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       .error-box {
         margin-top: 16px;
         padding: 16px;
-        background: rgba(239, 68, 68, 0.1);
-        border: 1px solid rgba(239, 68, 68, 0.3);
+        background: rgba(248, 81, 73, 0.1);
+        border: 1px solid rgba(248, 81, 73, 0.3);
         border-radius: 10px;
         display: flex;
         align-items: flex-start;
@@ -604,18 +604,18 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       .error-box svg {
         width: 20px;
         height: 20px;
-        color: #ef4444;
+        color: #F85149;
         flex-shrink: 0;
         margin-top: 2px;
       }
       .error-title {
         font-size: 14px;
         font-weight: 500;
-        color: #ef4444;
+        color: #F85149;
       }
       .error-detail {
         font-size: 13px;
-        color: rgba(239, 68, 68, 0.8);
+        color: rgba(248, 81, 73, 0.8);
         margin-top: 4px;
       }
 
@@ -645,14 +645,14 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
       }
       .btn-secondary {
         background: transparent;
-        border: 1px solid #2a2a2a;
-        color: #fafafa;
+        border: 1px solid #21262D;
+        color: #E6EDF3;
       }
       .btn-secondary:hover:not(:disabled) {
-        background: #1a1a1a;
+        background: #161B22;
       }
       .btn-primary {
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
       }
       .btn-primary:hover:not(:disabled) {
@@ -667,8 +667,8 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
     <div class="page">
       <div class="container">
         <div class="header">
-          <h1>Dobrodošli u Mentor AI</h1>
-          <p>Podesite radni prostor i vidite AI u akciji</p>
+          <h1>Welcome to Neuron OS</h1>
+          <p>Set up your workspace and see AI in action</p>
         </div>
 
         <div
@@ -677,7 +677,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
           [attr.aria-valuenow]="currentStep$()"
           aria-valuemin="1"
           aria-valuemax="4"
-          [attr.aria-label]="'Korak ' + currentStep$() + ' od 4'"
+          [attr.aria-label]="'Step ' + currentStep$() + ' of 4'"
         >
           @for (stepNum of [1, 2, 3, 4]; track stepNum) {
             <div
@@ -685,13 +685,13 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
               [class.active]="currentStep$() >= stepNum"
               [class.inactive]="currentStep$() < stepNum"
               [attr.aria-label]="
-                'Korak ' +
+                'Step ' +
                 stepNum +
                 (currentStep$() > stepNum
-                  ? ' — završen'
+                  ? ' — completed'
                   : currentStep$() === stepNum
-                    ? ' — aktivan'
-                    : ' — predstoji')
+                    ? ' — active'
+                    : ' — upcoming')
               "
             >
               @if (currentStep$() > stepNum) {
@@ -720,25 +720,25 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
         <div class="card">
           <!-- Step 1: Company Setup -->
           @if (currentStep$() === 1) {
-            <h2>Podesite vaš radni prostor</h2>
+            <h2>Set up your workspace</h2>
             <p class="card-desc">
-              Recite nam o vašoj kompaniji da bismo prilagodili iskustvo vašim potrebama.
+              Tell us about your company so we can tailor the experience to your needs.
             </p>
 
             <div class="form-group">
-              <label class="form-label">Naziv kompanije</label>
+              <label class="form-label">Company name</label>
               <input
                 class="form-input"
                 type="text"
                 [ngModel]="companyName$()"
                 (ngModelChange)="companyName$.set($event)"
-                placeholder="npr. Acme Corporation"
+                placeholder="e.g. Acme Corporation"
                 maxlength="100"
               />
             </div>
 
             <div class="form-group">
-              <label class="form-label">Industrija</label>
+              <label class="form-label">Industry</label>
               <div class="industry-grid">
                 @for (industry of industries; track industry) {
                   <button
@@ -756,7 +756,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
                   type="text"
                   [ngModel]="customIndustry$()"
                   (ngModelChange)="customIndustry$.set($event)"
-                  placeholder="Unesite vašu industriju..."
+                  placeholder="Enter your industry..."
                   maxlength="100"
                 />
               }
@@ -764,27 +764,27 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
 
             <div class="form-group">
               <label class="form-label"
-                >Opis poslovanja
+                >Business description
                 <span style="color:#9e9e9e; text-transform:none; letter-spacing:0"
-                  >(opciono ali preporučeno)</span
+                  >(optional but recommended)</span
                 ></label
               >
               <textarea
                 class="form-textarea"
                 [ngModel]="companyDescription$()"
                 (ngModelChange)="companyDescription$.set($event)"
-                placeholder="Opišite vaše poslovanje detaljno — čime se bavite, ko su vaši klijenti, trenutni proizvodi/usluge, model prihoda, itd. Više detalja znači bolju AI pomoć."
+                placeholder="Describe your business in detail — what you do, who your clients are, current products/services, revenue model, etc. More details means better AI assistance."
                 maxlength="3000"
                 rows="6"
               ></textarea>
-              <div class="form-hint">{{ companyDescription$().length }}/3000 karaktera</div>
+              <div class="form-hint">{{ companyDescription$().length }}/3000 characters</div>
             </div>
 
             <div class="form-group">
               <label class="form-label"
-                >URL sajta
+                >Website URL
                 <span style="color:#9e9e9e; text-transform:none; letter-spacing:0"
-                  >(opciono — AI će analizirati vaš sajt za bolje preporuke)</span
+                  >(optional — AI will analyze your website for better recommendations)</span
                 ></label
               >
               <input
@@ -799,9 +799,9 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
 
             <div class="form-group">
               <label class="form-label"
-                >PDF brošura
+                >PDF brochure
                 <span style="color:#9e9e9e; text-transform:none; letter-spacing:0"
-                  >(opciono)</span
+                  >(optional)</span
                 ></label
               >
               <div
@@ -818,7 +818,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
                     (click)="pdfInput.click()"
                   >
                     @if (isUploadingPdf$()) {
-                      <span class="pdf-spinner"></span> Obrađujem...
+                      <span class="pdf-spinner"></span> Processing...
                     } @else {
                       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path
@@ -828,7 +828,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
                           d="M12 4v16m8-8H4"
                         />
                       </svg>
-                      Otpremi PDF
+                      Upload PDF
                     }
                   </button>
                   @if (pdfFileName$()) {
@@ -848,7 +848,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
                 @if (pdfError$()) {
                   <div class="pdf-error-text">{{ pdfError$() }}</div>
                 }
-                <div class="pdf-hint">PDF do 70MB. Prevucite datoteku ovde ili kliknite dugme.</div>
+                <div class="pdf-hint">PDF up to 70MB. Drag and drop a file here or click the button.</div>
               </div>
             </div>
             <input
@@ -862,8 +862,8 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
 
           <!-- Step 2: Choose Strategy -->
           @if (currentStep$() === 2) {
-            <h2>Izaberite vaš put</h2>
-            <p class="card-desc">Kako želite da vam AI pomogne da počnete?</p>
+            <h2>Choose your path</h2>
+            <p class="card-desc">How would you like AI to help you get started?</p>
 
             <div class="strategy-grid">
               <button
@@ -881,10 +881,10 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
                     />
                   </svg>
                 </div>
-                <div class="strategy-name">Analiziraj moje poslovanje</div>
+                <div class="strategy-name">Analyze my business</div>
                 <div class="strategy-desc">
-                  Dobijte sveobuhvatnu AI analizu vašeg poslovanja — snage, prilike i strateške
-                  preporuke.
+                  Get a comprehensive AI analysis of your business — strengths, opportunities, and strategic
+                  recommendations.
                 </div>
               </button>
 
@@ -903,24 +903,24 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
                     />
                   </svg>
                 </div>
-                <div class="strategy-name">Kreiraj moj poslovni mozak</div>
+                <div class="strategy-name">Create my business brain</div>
                 <div class="strategy-desc">
-                  Automatski generišite personalizovane zadatke i fokus oblasti na osnovu vašeg
-                  poslovanja. Oni će se pojaviti u vašem radnom prostoru za razgovor.
+                  Automatically generate personalized tasks and focus areas based on your
+                  business. They will appear in your chat workspace.
                 </div>
               </button>
             </div>
 
             @if (selectedStrategy$() === 'CREATE_BUSINESS_BRAIN') {
               <div class="mode-toggle-section">
-                <div class="mode-toggle-label">Režim izvršavanja</div>
+                <div class="mode-toggle-label">Execution mode</div>
                 <div class="mode-toggle">
                   <button
                     class="mode-toggle-btn"
                     [class.active]="executionMode$() === 'MANUAL'"
                     (click)="executionMode$.set('MANUAL')"
                   >
-                    RUČNO
+                    MANUAL
                   </button>
                   <button
                     class="mode-toggle-btn"
@@ -932,12 +932,12 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
                 </div>
                 @if (executionMode$() === 'YOLO') {
                   <div class="mode-hint">
-                    Svi zadaci će se izvršavati automatski bez ručne interakcije. Zadaci poštuju
-                    redosled zavisnosti i izvršavaju se paralelno (do 3 istovremeno).
+                    All tasks will execute automatically without manual interaction. Tasks respect
+                    dependency order and run in parallel (up to 3 simultaneously).
                   </div>
                 } @else {
                   <div class="mode-hint">
-                    Pregledaćete i odobriti svaki korak zadatka pre izvršavanja.
+                    You will review and approve each task step before execution.
                   </div>
                 }
               </div>
@@ -945,7 +945,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
 
             @if (selectedStrategy$()) {
               <div class="role-section">
-                <div class="role-section-label">Vaša uloga u kompaniji</div>
+                <div class="role-section-label">Your role in the company</div>
                 <div class="role-grid">
                   @for (role of userRoleOptions; track role.value) {
                     <button
@@ -958,7 +958,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
                   }
                 </div>
                 <div class="role-hint">
-                  Ovo određuje koje poslovne oblasti ćete videti u vašem Brain-u.
+                  This determines which business areas you will see in your Brain.
                 </div>
               </div>
             }
@@ -966,26 +966,26 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
 
           <!-- Step 3: Business Context + Generate -->
           @if (currentStep$() === 3 && !isGenerating$() && !generatedOutput$()) {
-            <h2>Recite nam više</h2>
+            <h2>Tell us more</h2>
             <p class="card-desc">
-              Obezbedite kontekst o vašem poslovanju za najrelevantnije rezultate.
+              Provide context about your business for the most relevant results.
             </p>
 
             <div class="form-group">
-              <label class="form-label">Gde se vaše poslovanje trenutno nalazi?</label>
+              <label class="form-label">Where is your business currently?</label>
               <textarea
                 class="form-textarea"
                 [ngModel]="businessState$()"
                 (ngModelChange)="businessState$.set($event)"
-                placeholder="Npr. mi smo startup star 2 godine sa 15 zaposlenih..."
+                placeholder="E.g. we are a 2-year-old startup with 15 employees..."
                 maxlength="1000"
                 rows="4"
               ></textarea>
-              <div class="form-hint">{{ businessState$().length }}/1000 karaktera</div>
+              <div class="form-hint">{{ businessState$().length }}/1000 characters</div>
             </div>
 
             <div class="form-group">
-              <label class="form-label">Koje funkcije/odeljenja ima vaše poslovanje?</label>
+              <label class="form-label">What functions/departments does your business have?</label>
               <div class="dept-grid">
                 @for (dept of departments; track dept) {
                   <button
@@ -1005,12 +1005,12 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
               <div class="gen-spinner"></div>
               <div class="gen-title">
                 @if (selectedStrategy$() === 'ANALYSE_BUSINESS') {
-                  Analiziram vaše poslovanje...
+                  Analyzing your business...
                 } @else {
-                  Kreiram vaš poslovni mozak...
+                  Creating your business brain...
                 }
               </div>
-              <div class="gen-sub">Ovo obično traje manje od 30 sekundi...</div>
+              <div class="gen-sub">This usually takes less than 30 seconds...</div>
               @if (generationTimer$() > 0) {
                 <div class="gen-timer">{{ formatTime(generationTimer$()) }}</div>
               }
@@ -1021,12 +1021,12 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
             <div class="result-header">
               <h2>
                 @if (selectedStrategy$() === 'ANALYSE_BUSINESS') {
-                  Vaša poslovna analiza
+                  Your business analysis
                 } @else {
-                  Vaš poslovni mozak
+                  Your business brain
                 }
               </h2>
-              <span class="result-time">Generisano za {{ formatTime(generationTimeMs$()) }}</span>
+              <span class="result-time">Generated in {{ formatTime(generationTimeMs$()) }}</span>
             </div>
             <div class="result-box">{{ generatedOutput$() }}</div>
           }
@@ -1034,10 +1034,10 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
           @if (isCompletingOnboarding$()) {
             <div class="generating">
               <div class="gen-spinner"></div>
-              <div class="gen-title">Poslovni mozak analizira vaš biznis...</div>
+              <div class="gen-title">Business brain analyzing your business...</div>
               <div class="gen-sub">
-                AI direktor čita analizu, pretražuje bazu znanja i priprema
-                personalizovane preporuke. Ovo može trajati 2-3 minuta.
+                The AI director is reading the analysis, searching the knowledge base, and preparing
+                personalized recommendations. This may take 2-3 minutes.
               </div>
             </div>
           }
@@ -1049,16 +1049,16 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
               <h2>{{ celebrationMessage$() }}</h2>
               @if (selectedStrategy$() === 'ANALYSE_BUSINESS') {
                 <p>
-                  Vaša poslovna analiza je sačuvana kao beleška. Sve je spremno za korišćenje Mentor
-                  AI!
+                  Your business analysis has been saved as a note. Everything is ready to use Neuron
+                  OS!
                 </p>
               } @else {
                 <p>
-                  Vaš poslovni mozak je kreiran! AI sada u pozadini priprema personalizovane
-                  zadatke za 8 C-level persona (CFO, CMO, CTO, COO, CLO, CCO, CSO, CRO).
+                  Your business brain has been created! AI is now preparing personalized
+                  tasks for 8 C-level personas (CFO, CMO, CTO, COO, CLO, CCO, CSO, CRO) in the background.
                 </p>
                 <p style="color:#a1a1a1;font-size:13px;margin-top:8px">
-                  Na sledećoj stranici ćete videti napredak inicijalizacije i automatskog izvršavanja.
+                  On the next page you will see initialization and automatic execution progress.
                 </p>
               }
             </div>
@@ -1076,7 +1076,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
               />
             </svg>
             <div>
-              <div class="error-title">Nešto je pošlo naopako</div>
+              <div class="error-title">Something went wrong</div>
               <div class="error-detail">{{ errorMessage$() }}</div>
             </div>
           </div>
@@ -1084,7 +1084,7 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
 
         <div class="btn-row">
           @if (currentStep$() > 1 && !isGenerating$() && !showCelebration$()) {
-            <button class="btn btn-secondary" (click)="previousStep()">&#8592; Nazad</button>
+            <button class="btn btn-secondary" (click)="previousStep()">&#8592; Back</button>
           } @else {
             <div></div>
           }
@@ -1096,28 +1096,28 @@ type Strategy = 'ANALYSE_BUSINESS' | 'CREATE_BUSINESS_BRAIN';
               [disabled]="!canProceed$() || isSavingCompany$()"
             >
               @if (isSavingCompany$()) {
-                <span class="saving-spinner"></span> Čuvam...
+                <span class="saving-spinner"></span> Saving...
               } @else {
-                Nastavi &#8594;
+                Continue &#8594;
               }
             </button>
           }
 
           @if (currentStep$() === 3 && !isGenerating$() && !generatedOutput$()) {
             <button class="btn btn-primary" (click)="generateOutput()" [disabled]="!canGenerate$()">
-              Generiši
+              Generate
             </button>
           }
 
           @if (generatedOutput$() && !showCelebration$() && !isCompletingOnboarding$()) {
             <button class="btn btn-primary" (click)="saveAndComplete()">
-              Sačuvaj i nastavi &#8594;
+              Save and continue &#8594;
             </button>
           }
 
           @if (showCelebration$()) {
             <button class="btn btn-primary btn-right" (click)="goToChat()">
-              Pogledaj napredak &#8594;
+              View progress &#8594;
             </button>
           }
         </div>
@@ -1139,13 +1139,13 @@ export class OnboardingWizardComponent implements OnInit {
 
   /** Story 3.2: User role options for department selection */
   readonly userRoleOptions = [
-    { label: 'Vlasnik / CEO', value: 'OWNER' },
+    { label: 'Owner / CEO', value: 'OWNER' },
     { label: 'Marketing', value: 'MARKETING' },
-    { label: 'Finansije', value: 'FINANCE' },
-    { label: 'Prodaja', value: 'SALES' },
-    { label: 'Operacije', value: 'OPERATIONS' },
-    { label: 'IT / Tehnologija', value: 'TECHNOLOGY' },
-    { label: 'Menadžment / Strategija', value: 'STRATEGY' },
+    { label: 'Finance', value: 'FINANCE' },
+    { label: 'Sales', value: 'SALES' },
+    { label: 'Operations', value: 'OPERATIONS' },
+    { label: 'IT / Technology', value: 'TECHNOLOGY' },
+    { label: 'Management / Strategy', value: 'STRATEGY' },
   ];
 
   readonly companyName$ = signal('');
@@ -1277,16 +1277,16 @@ export class OnboardingWizardComponent implements OnInit {
     this.isDragging$.set(false);
     const file = e.dataTransfer?.files[0];
     if (file?.type === 'application/pdf') this.processPdfFile(file);
-    else if (file) this.pdfError$.set('Izaberite PDF datoteku.');
+    else if (file) this.pdfError$.set('Please select a PDF file.');
   }
 
   private async processPdfFile(file: File): Promise<void> {
     if (file.type !== 'application/pdf') {
-      this.pdfError$.set('Izaberite PDF datoteku.');
+      this.pdfError$.set('Please select a PDF file.');
       return;
     }
     if (file.size > 70 * 1024 * 1024) {
-      this.pdfError$.set('Datoteka je prevelika. Maksimalna veličina je 70MB.');
+      this.pdfError$.set('File is too large. Maximum size is 70MB.');
       return;
     }
 
@@ -1301,7 +1301,7 @@ export class OnboardingWizardComponent implements OnInit {
       this.pdfExtractedText$.set(result.extractedText);
     } catch (error: any) {
       const detail = error?.error?.detail || error?.error?.message || error?.message;
-      this.pdfError$.set(detail || 'Obrada PDF-a nije uspela. Pokušajte ponovo.');
+      this.pdfError$.set(detail || 'PDF processing failed. Please try again.');
     } finally {
       this.isUploadingPdf$.set(false);
     }
@@ -1333,7 +1333,7 @@ export class OnboardingWizardComponent implements OnInit {
         );
       } catch (error) {
         console.warn('Failed to save company details:', error);
-        this.errorMessage$.set('Greška pri čuvanju podataka o kompaniji. Pokušajte ponovo.');
+        this.errorMessage$.set('Error saving company data. Please try again.');
         return;
       } finally {
         this.isSavingCompany$.set(false);
@@ -1347,7 +1347,7 @@ export class OnboardingWizardComponent implements OnInit {
         await this.onboardingService.setDepartment(dept);
       } catch (err) {
         console.warn('Failed to save department:', err);
-        this.errorMessage$.set('Greška pri čuvanju odeljenja. Pokušajte ponovo.');
+        this.errorMessage$.set('Error saving department. Please try again.');
         return;
       }
     }
@@ -1395,7 +1395,7 @@ export class OnboardingWizardComponent implements OnInit {
       this.generationTimeMs$.set(result.generationTimeMs);
     } catch (error: any) {
       const detail = error?.error?.detail || error?.error?.message || error?.message;
-      const message = detail || 'Generisanje sadržaja nije uspelo. Pokušajte ponovo.';
+      const message = detail || 'Content generation failed. Please try again.';
       console.error('Generate output error:', error);
       this.errorMessage$.set(message);
     } finally {
@@ -1430,7 +1430,7 @@ export class OnboardingWizardComponent implements OnInit {
     } catch (error) {
       console.error('Failed to save onboarding completion:', error);
       this.isCompletingOnboarding$.set(false);
-      this.celebrationMessage$.set('Čestitamo! Vaš radni prostor je spreman!');
+      this.celebrationMessage$.set('Congratulations! Your workspace is ready!');
       this.showCelebration$.set(true);
       this.currentStep$.set(4);
     }

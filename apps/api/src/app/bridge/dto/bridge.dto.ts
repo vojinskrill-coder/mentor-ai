@@ -1,5 +1,48 @@
-import { IsString, IsOptional, IsNumber, IsArray, Min, Max, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsArray,
+  Min,
+  Max,
+  MaxLength,
+  ArrayMinSize,
+  ValidateNested,
+  IsIn,
+  Matches,
+} from 'class-validator';
 import { Type } from 'class-transformer';
+
+// Whitelist of file types the brain may declare as deliverables.
+// Anything outside this list cannot be a deliverable on a proposal.
+export const ALLOWED_DELIVERABLE_TYPES = [
+  'xlsx',
+  'pdf',
+  'pptx',
+  'docx',
+  'png',
+  'jpg',
+  'jpeg',
+  'csv',
+  'svg',
+] as const;
+
+export type DeliverableType = (typeof ALLOWED_DELIVERABLE_TYPES)[number];
+
+export class ExpectedDeliverableDto {
+  @IsIn(ALLOWED_DELIVERABLE_TYPES as unknown as string[])
+  type!: DeliverableType;
+
+  @IsString()
+  @Matches(/^[a-z0-9._-]+\.(xlsx|pdf|pptx|docx|png|jpg|jpeg|csv|svg)$/i, {
+    message: 'filename must be lowercase-friendly and end with an allowed extension',
+  })
+  filename!: string;
+
+  @IsString()
+  @MaxLength(300)
+  description!: string;
+}
 
 // ── Read Operations ──
 
@@ -66,6 +109,17 @@ export class CreateProposalDto {
   @IsArray()
   @IsString({ each: true })
   relatedConcepts?: string[];
+
+  // OPTIONAL at proposal birth.
+  // The brain MAY provide an initial best-guess manifest when it creates the
+  // proposal, but the canonical place to lock in deliverables is the
+  // discussion + "Confirm plan and run" step. The approve endpoint can
+  // override or set this field via UpdateProposalDto.expectedDeliverables.
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ExpectedDeliverableDto)
+  expectedDeliverables?: ExpectedDeliverableDto[];
 }
 
 export class UpdateProposalDto {
@@ -79,6 +133,21 @@ export class UpdateProposalDto {
   @IsOptional()
   @IsString()
   rejectedReason?: string;
+
+  @IsOptional()
+  @IsString()
+  proposedAction?: string;
+
+  // The chat "Confirm plan and run" flow generates a deliverable manifest
+  // from the discussion and passes it here. When present, this becomes the
+  // locked manifest copied to the Note (overriding any initial brain guess
+  // stored on the proposal). When absent, the proposal's existing manifest
+  // is used (which may be empty).
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ExpectedDeliverableDto)
+  expectedDeliverables?: ExpectedDeliverableDto[];
 }
 
 // ── Write Operations: Concepts ──
@@ -251,6 +320,33 @@ export class CreateMemoryDto {
   @IsOptional()
   @IsString()
   conceptId?: string;
+
+  // ─── Winston-session learning-loop enrichment ───
+  // These fields are packed into the memory content as a structured
+  // suffix so the director/executor can recall accumulated learning
+  // without schema changes to the Memory table.
+
+  @IsOptional()
+  @IsString()
+  taskId?: string;
+
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  keyFacts?: string[];
+
+  @IsOptional()
+  @IsString()
+  appliesToFuture?: string;
 }
 
 // ── Write Operations: Brain State ──

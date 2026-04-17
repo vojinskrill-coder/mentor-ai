@@ -76,6 +76,32 @@ export class AgentExecutionService {
     }, 5000);
   }
 
+  private isTransientError(error: unknown): boolean {
+    const msg = error instanceof Error ? error.message : String(error);
+    const transientPatterns = [
+      'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT',
+      'fetch failed', 'socket hang up',
+      '502', '503', '504',
+    ];
+    return transientPatterns.some((p) => msg.includes(p));
+  }
+
+  private isRateLimitError(error: unknown): boolean {
+    const msg = error instanceof Error ? error.message : String(error);
+    return msg.toLowerCase().includes('rate_limit') || msg.includes('429');
+  }
+
+  private getRetryDelayMs(attempt: number, baseMs: number, maxMs: number, isRateLimit: boolean): number {
+    if (isRateLimit) return 5000;
+    const exponential = Math.min(baseMs * Math.pow(2, attempt), maxMs);
+    const jitter = exponential * (0.75 + Math.random() * 0.5); // ±25% jitter
+    return Math.round(jitter);
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   async triggerAgent(
     noteId: string,
     agentType: AgentType,
@@ -117,12 +143,6 @@ export class AgentExecutionService {
       throw new BadRequestException(`${agentDef.label} is already in progress for this task`);
     }
 
-    // Check budget
-    const canSpend = await this.budgetService.canSpend(tenantId);
-    if (!canSpend) {
-      throw new ForbiddenException('Daily budget exceeded');
-    }
-
     // Check concurrency via DB count (safe across multiple instances)
     const activeCount = await this.prisma.agentExecution.count({
       where: {
@@ -136,9 +156,14 @@ export class AgentExecutionService {
       );
     }
 
-    // Create execution record + reserve budget
+    // Atomically check budget and reserve estimated cost
     const executionId = `agx_${createId()}`;
     const estimatedCost = agentDef.estimatedCostEur;
+
+    const reserved = await this.budgetService.canSpendAndReserve(tenantId, estimatedCost);
+    if (!reserved) {
+      throw new ForbiddenException('Daily budget exceeded');
+    }
 
     await this.prisma.agentExecution.create({
       data: {
@@ -151,8 +176,6 @@ export class AgentExecutionService {
         estimatedCostEur: estimatedCost,
       },
     });
-
-    await this.budgetService.recordSpend(tenantId, estimatedCost);
 
     this.logger.log({
       message: 'Agent triggered',
@@ -213,7 +236,7 @@ export class AgentExecutionService {
       await this.updateStatus(executionId, 'FORMATTING');
       this.emitAgentEvent(tenantId, 'agent:status-change', {
         executionId, jobId: null, noteId: note.id, agentType, status: 'FORMATTING',
-        label: `${agentLabel}: Priprema instrukcija...`,
+        label: `${agentLabel}: Preparing instructions...`,
       });
 
       const formattedPrompt = await this.agentPrompt.formatPrompt({
@@ -244,47 +267,107 @@ export class AgentExecutionService {
       await this.updateStatus(executionId, 'EXECUTING', { startedAt: new Date() });
       this.emitAgentEvent(tenantId, 'agent:status-change', {
         executionId, jobId: null, noteId: note.id, agentType, status: 'EXECUTING',
-        label: `${agentLabel}: Agent istražuje...`,
+        label: `${agentLabel}: Agent researching...`,
       });
       heartbeat = this.startHeartbeat(executionId, null, agentType, tenantId, Date.now());
 
       // Use unique session-id for parallel execution safety
       const workSessionId = `work-${executionId}-${openClawAgentId}`;
-      const result = await this.openClawClient.executeAgent(formattedPrompt, {
-        agentId: openClawAgentId,
-        sessionId: workSessionId,
-        tenantProfile: tenantId,
-        onText: (text) => {
-          this.emitAgentEvent(tenantId, 'agent:text-chunk', {
-            executionId, jobId: null, text,
+      // Aggressive retries for AI Recommended Tasks: the user expects
+      // these to ALWAYS complete. 10 retries with exponential backoff
+      // (2s base, capped at 60s) ≈ 5-6 minutes worst-case before
+      // giving up. In normal conditions transient issues clear well
+      // before this.
+      const MAX_RETRIES = 10;
+      const RETRY_BASE_MS = 2000;
+      const RETRY_MAX_MS = 60000;
+      let result: Awaited<ReturnType<typeof this.openClawClient.executeAgent>> | undefined;
+
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          result = await this.openClawClient.executeAgent(formattedPrompt, {
+            agentId: openClawAgentId,
+            sessionId: workSessionId,
+            tenantProfile: tenantId,
+            onText: (text) => {
+              this.emitAgentEvent(tenantId, 'agent:text-chunk', {
+                executionId, jobId: null, text,
+              });
+            },
+            onTool: (tool, status, query) => {
+              this.emitAgentEvent(tenantId, 'agent:tool-event', {
+                executionId, jobId: null, tool, status, query,
+              });
+            },
+            onStatus: (phase) => {
+              this.emitAgentEvent(tenantId, 'agent:status-change', {
+                executionId, jobId: null, noteId: note.id, agentType, status: 'EXECUTING',
+                label: `${agentLabel}: ${phase === 'running' ? 'Agent researching...' : phase}`,
+              });
+            },
           });
-        },
-        onTool: (tool, status, query) => {
-          this.emitAgentEvent(tenantId, 'agent:tool-event', {
-            executionId, jobId: null, tool, status, query,
-          });
-        },
-        onStatus: (phase) => {
-          this.emitAgentEvent(tenantId, 'agent:status-change', {
-            executionId, jobId: null, noteId: note.id, agentType, status: 'EXECUTING',
-            label: `${agentLabel}: ${phase === 'running' ? 'Agent istražuje...' : phase}`,
-          });
-        },
-      });
+          // If the agent returned success=true, we're done
+          if (result?.success) break;
+
+          // success=false is treated as a retryable failure (agent
+          // crashed, timeout, transient model error). Iterate until
+          // success or retries exhausted.
+          if (attempt < MAX_RETRIES) {
+            const delayMs = this.getRetryDelayMs(attempt, RETRY_BASE_MS, RETRY_MAX_MS, false);
+            this.logger.warn({
+              message: 'OpenClaw returned success=false, retrying',
+              executionId,
+              agentType,
+              attempt: attempt + 1,
+              maxRetries: MAX_RETRIES,
+              delayMs,
+              error: result?.error,
+            });
+            this.emitAgentEvent(tenantId, 'agent:executing-heartbeat', {
+              executionId, jobId: null, agentType,
+              retrying: true, attempt: attempt + 1, delayMs,
+            });
+            await this.sleep(delayMs);
+            continue;
+          }
+          break; // exhausted
+        } catch (retryErr) {
+          if (attempt < MAX_RETRIES) {
+            const isRateLimit = this.isRateLimitError(retryErr);
+            const delayMs = this.getRetryDelayMs(attempt, RETRY_BASE_MS, RETRY_MAX_MS, isRateLimit);
+            this.logger.warn({
+              message: 'OpenClaw threw, retrying',
+              executionId,
+              agentType,
+              attempt: attempt + 1,
+              maxRetries: MAX_RETRIES,
+              delayMs,
+              error: retryErr instanceof Error ? retryErr.message : String(retryErr),
+            });
+            this.emitAgentEvent(tenantId, 'agent:executing-heartbeat', {
+              executionId, jobId: null, agentType,
+              retrying: true, attempt: attempt + 1, delayMs,
+            });
+            await this.sleep(delayMs);
+            continue;
+          }
+          throw retryErr;
+        }
+      }
 
       clearInterval(heartbeat);
       heartbeat = null;
 
-      if (!result.success) {
-        const errorMsg = result.error ?? 'Agent execution failed';
+      if (!result || !result.success) {
+        const errorMsg = result?.error ?? 'Agent execution failed';
         await this.updateStatus(executionId, 'FAILED', {
           error: errorMsg,
           completedAt: new Date(),
-          durationMs: result.durationMs,
+          durationMs: result?.durationMs,
         });
         this.emitAgentEvent(tenantId, 'agent:status-change', {
           executionId, jobId: null, noteId: note.id, agentType, status: 'FAILED',
-          label: `${agentLabel}: Greška`,
+          label: `${agentLabel}: Error`,
         });
         this.emitAgentEvent(tenantId, 'agent:error', {
           executionId, jobId: null, agentType, error: errorMsg,
@@ -313,24 +396,32 @@ export class AgentExecutionService {
         await this.budgetService.recordSpend(tenantId, costDifference);
       }
 
-      // Step 5: Mark completed + link result note (guard: don't overwrite if manually stopped)
-      const currentExec = await this.prisma.agentExecution.findUnique({ where: { id: executionId }, select: { status: true } });
-      if (currentExec?.status !== 'FAILED') {
-        await this.prisma.agentExecution.update({
-          where: { id: executionId },
-          data: {
-            status: 'COMPLETED',
-            agentOutput: result.output,
-            actualCostEur: actualCost,
-            completedAt: new Date(),
-            durationMs: result.durationMs,
-            resultNoteId,
-          },
-        });
+      // Step 5: Mark completed + link result note in a single transaction
+      // (guard: don't overwrite if manually stopped)
+      const wasCompleted = await this.prisma.$transaction(
+        async (tx) => {
+          const currentExec = await tx.agentExecution.findUnique({ where: { id: executionId }, select: { status: true } });
+          if (currentExec?.status === 'FAILED') return false;
+          await tx.agentExecution.update({
+            where: { id: executionId },
+            data: {
+              status: 'COMPLETED',
+              agentOutput: result.output,
+              actualCostEur: actualCost,
+              completedAt: new Date(),
+              durationMs: result.durationMs,
+              resultNoteId,
+            },
+          });
+          return true;
+        },
+        { timeout: 30000, maxWait: 10000 },
+      );
 
+      if (wasCompleted) {
         this.emitAgentEvent(tenantId, 'agent:status-change', {
           executionId, jobId: null, noteId: note.id, agentType, status: 'COMPLETED',
-          label: `${agentLabel}: Završeno`,
+          label: `${agentLabel}: Completed`,
         });
       }
       this.emitAgentEvent(tenantId, 'agent:result', {
@@ -372,7 +463,7 @@ export class AgentExecutionService {
 
       this.emitAgentEvent(tenantId, 'agent:status-change', {
         executionId, jobId: null, noteId: note.id, agentType, status: 'FAILED',
-        label: `${agentLabel}: Greška`,
+        label: `${agentLabel}: Error`,
       });
       this.emitAgentEvent(tenantId, 'agent:error', {
         executionId, jobId: null, agentType, error: errorMessage,
@@ -519,10 +610,10 @@ Output format: ["query 1", "query 2", "query 3"]`;
       const searchResults = await Promise.all(searchPromises);
 
       // Step 3: Format results into a research block for the domain agent
-      let researchBlock = '\n\n--- REZULTATI WEB ISTRAZIVANJA ---\n';
-      researchBlock += 'Sledeci podaci su pronadjeni putem web pretrage. KORISTI ove izvore kao PRIMARNI izvor cinjenica.\n';
-      researchBlock += 'OBAVEZNO citiraj izvor: ([Naziv](URL)) posle svake cinjenice.\n';
-      researchBlock += 'NE IGNORISI ove podatke — tvoja analiza MORA biti zasnovana na njima.\n\n';
+      let researchBlock = '\n\n--- WEB RESEARCH RESULTS ---\n';
+      researchBlock += 'The following data was found via web search. USE these sources as the PRIMARY source of facts.\n';
+      researchBlock += 'You MUST cite the source: ([Title](URL)) after each fact.\n';
+      researchBlock += 'Do NOT IGNORE this data — your analysis MUST be based on it.\n\n';
 
       let totalChars = 0;
       const MAX_RESEARCH_CHARS = 8_000;
@@ -531,7 +622,7 @@ Output format: ["query 1", "query 2", "query 3"]`;
         const results = searchResults[i] ?? [];
         if (results.length === 0) continue;
 
-        researchBlock += `### Pretraga: "${queries[i]}"\n`;
+        researchBlock += `### Search: "${queries[i]}"\n`;
         for (const r of results as Array<{ title: string; link: string; snippet: string }>) {
           if (totalChars > MAX_RESEARCH_CHARS) break;
           researchBlock += `\n**[${r.title}](${r.link})**\n${r.snippet}\n`;
@@ -540,7 +631,7 @@ Output format: ["query 1", "query 2", "query 3"]`;
         researchBlock += '\n';
       }
 
-      researchBlock += '\n--- KRAJ SIROVIH REZULTATA ---\n';
+      researchBlock += '\n--- END OF RAW RESULTS ---\n';
 
       // Step 4: Summarize entire research block to ~5000 chars via Gemini Flash
       // One call for ALL results — preserves key data, removes noise
@@ -555,7 +646,7 @@ RULES:
 - PRESERVE industry benchmarks and comparison data
 - REMOVE generic filler text, navigation content, duplicate information
 - ORGANIZE by topic with clear ## headings
-- Output in Serbian language
+- Output in English language
 - Include comparison tables where data from multiple sources exists
 
 RAW RESEARCH DATA:
@@ -579,11 +670,11 @@ ${researchBlock}`;
             const sumData = await sumResponse.json() as any;
             const summary = sumData.candidates?.[0]?.content?.parts?.[0]?.text;
             if (summary && summary.length > 1000) {
-              researchBlock = '\n\n--- REZULTATI WEB ISTRAZIVANJA (sumirano) ---\n';
-              researchBlock += 'Sledeci podaci su pronadjeni i sumirani iz web pretrage. KORISTI ih kao PRIMARNI izvor.\n';
-              researchBlock += 'OBAVEZNO citiraj izvor: ([Naziv](URL)) posle svake cinjenice.\n\n';
+              researchBlock = '\n\n--- WEB RESEARCH RESULTS (summarized) ---\n';
+              researchBlock += 'The following data was found and summarized from web search. USE it as the PRIMARY source.\n';
+              researchBlock += 'You MUST cite the source: ([Title](URL)) after each fact.\n\n';
               researchBlock += summary;
-              researchBlock += '\n\n--- KRAJ WEB ISTRAZIVANJA ---\n';
+              researchBlock += '\n\n--- END OF WEB RESEARCH ---\n';
 
               this.logger.log({
                 message: 'Research summarized by Gemini',
@@ -596,10 +687,10 @@ ${researchBlock}`;
         }
       }
 
-      if (!researchBlock.includes('KRAJ WEB ISTRAZIVANJA')) {
-        researchBlock += '\n--- KRAJ WEB ISTRAZIVANJA ---\n';
+      if (!researchBlock.includes('END OF WEB RESEARCH')) {
+        researchBlock += '\n--- END OF WEB RESEARCH ---\n';
       }
-      researchBlock += '\nKRITICNO: Koristi SAMO podatke iz izvora iznad. Svaku cinjenicu citiraj sa izvorom. NE izmisljaj podatke. NE kazi da "nemas podatke" ako su iznad navedeni.\n';
+      researchBlock += '\nCRITICAL: Use ONLY data from the sources above. Cite each fact with its source. Do NOT fabricate data. Do NOT say "no data available" if data is listed above.\n';
 
       this.logger.log({
         message: 'Search enrichment complete',
@@ -639,8 +730,9 @@ ${researchBlock}`;
     // Convert standalone fal-generate commands
     cleaned = cleaned.replace(/fal-generate\s+"([^"]+)"/g, '![Generated image: $1](https://placeholder.img/generate)');
 
-    // Remove [POTREBNO ISTRAZITI] markers completely
+    // Remove [NEEDS RESEARCH] markers completely (also matches legacy Serbian [POTREBNO ISTRAZITI])
     cleaned = cleaned.replace(/\[POTREBNO (?:DODATNO )?ISTRA[ZŽ]ITI\]/gi, '');
+    cleaned = cleaned.replace(/\[NEEDS (?:ADDITIONAL )?RESEARCH\]/gi, '');
 
     // Match ALL markdown images: ![alt](url) — any URL format including placeholders
     const imgPattern = /!\[([^\]]*)\]\(([^)]+)\)/g;
@@ -920,11 +1012,6 @@ Return ONLY a JSON array of prompt strings, one per image, in the same order:
       throw new BadRequestException('Agent execution is not configured');
     }
 
-    const canSpend = await this.budgetService.canSpend(tenantId);
-    if (!canSpend) {
-      throw new ForbiddenException('Daily budget exceeded');
-    }
-
     // Check concurrency
     const activeCount = await this.prisma.agentExecution.count({
       where: {
@@ -938,9 +1025,14 @@ Return ONLY a JSON array of prompt strings, one per image, in the same order:
       );
     }
 
-    // Create execution record + reserve budget
+    // Atomically check budget and reserve estimated cost
     const executionId = `agx_${createId()}`;
     const estimatedCost = agentDef.estimatedCostEur;
+
+    const reserved = await this.budgetService.canSpendAndReserve(tenantId, estimatedCost);
+    if (!reserved) {
+      throw new ForbiddenException('Daily budget exceeded');
+    }
 
     await this.prisma.agentExecution.create({
       data: {
@@ -953,8 +1045,6 @@ Return ONLY a JSON array of prompt strings, one per image, in the same order:
         estimatedCostEur: estimatedCost,
       },
     });
-
-    await this.budgetService.recordSpend(tenantId, estimatedCost);
 
     // Update job: RUNNING + link execution
     await this.prisma.agentJob.update({
@@ -1226,24 +1316,27 @@ Return ONLY a JSON array of prompt strings, one per image, in the same order:
         // Stagger to avoid lock contention
         await new Promise((r) => setTimeout(r, Math.random() * 5_000));
 
-        // Update domain masters
-        for (const agentTypeStr of agentTypes) {
-          try {
-            const agentId = agentTypeStr.replace(/_/g, '-');
-            await this.openClawClient.executeAgent(
-              `KNOWLEDGE UPDATE za ${companyName} - Koncept: ${note.title}. Zapamti ove nalaze:\n\n${summary}`,
-              { agentId, tenantProfile: tenantId, timeoutSeconds: 180 },
-            );
-          } catch { /* non-blocking */ }
-        }
+        // Update domain masters — fire-and-forget in PARALLEL (don't block task completion)
+        const updatePromises = agentTypes.map((agentTypeStr) => {
+          const agentId = agentTypeStr.replace(/_/g, '-');
+          return this.openClawClient.executeAgent(
+            `KNOWLEDGE UPDATE for ${companyName} - Concept: ${note.title}. Remember these findings:\n\n${summary}`,
+            { agentId, tenantProfile: tenantId, timeoutSeconds: 3600 },
+          ).catch(() => { /* non-blocking */ });
+        });
 
-        // Update main
-        try {
-          await this.openClawClient.executeAgent(
-            `KNOWLEDGE UPDATE za ${companyName}: Koncept "${note.title}" zavrsen. Zapamti i organizuj:\n${summary.substring(0, 3000)}`,
-            { agentId: 'main', tenantProfile: tenantId, timeoutSeconds: 120 },
-          );
-        } catch { /* non-blocking */ }
+        // Update main — also parallel
+        updatePromises.push(
+          this.openClawClient.executeAgent(
+            `KNOWLEDGE UPDATE for ${companyName}: Concept "${note.title}" completed. Remember and organize:\n${summary.substring(0, 3000)}`,
+            { agentId: 'main', tenantProfile: tenantId, timeoutSeconds: 3600 },
+          ).catch(() => { /* non-blocking */ })
+        );
+
+        // Don't await — let updates happen in background
+        Promise.allSettled(updatePromises).then(() => {
+          this.logger.log({ message: 'Knowledge updates completed', noteId, agents: agentTypes.length + 1 });
+        });
 
         this.logger.log({
           message: 'Knowledge updates sent for concept',
@@ -1297,7 +1390,7 @@ Return ONLY a JSON array of prompt strings, one per image, in the same order:
       await this.updateStatus(executionId, 'FORMATTING');
       this.emitAgentEvent(tenantId, 'agent:status-change', {
         executionId, jobId, noteId: note.id, agentType, status: 'FORMATTING',
-        label: `${agentLabel}: Priprema instrukcija...`,
+        label: `${agentLabel}: Preparing instructions...`,
       });
 
       const enrichedInstruction = dependencyContext
@@ -1329,13 +1422,13 @@ Return ONLY a JSON array of prompt strings, one per image, in the same order:
       // Domain agents get pre-researched data so they focus on analysis, not searching.
       this.emitAgentEvent(tenantId, 'agent:status-change', {
         executionId, jobId, noteId: note.id, agentType, status: 'FORMATTING',
-        label: `${agentLabel}: Web istrazivanje...`,
+        label: `${agentLabel}: Web research...`,
       });
 
       const searchResults = await this.generateSearchAndEnrich(formattedPrompt, agentLabel, note.title);
       // Put search results FIRST so DeepSeek sees data before instruction (16K context limit)
       const enrichedPrompt = searchResults
-        ? `${searchResults}\n\n--- TVOJ ZADATAK (koristi podatke iznad) ---\n${formattedPrompt}`
+        ? `${searchResults}\n\n--- YOUR TASK (use data above) ---\n${formattedPrompt}`
         : formattedPrompt;
 
       this.emitAgentEvent(tenantId, 'agent:formatting-complete', {
@@ -1355,62 +1448,88 @@ Return ONLY a JSON array of prompt strings, one per image, in the same order:
       });
       heartbeat = this.startHeartbeat(executionId, jobId, agentType, tenantId, Date.now());
 
-      let result: { success: boolean; output: string; durationMs: number; usage?: { input?: number; output?: number; total?: number }; error?: string };
+      let result: { success: boolean; output: string; durationMs: number; usage?: { input?: number; output?: number; total?: number }; error?: string } = {
+        success: false,
+        output: '',
+        durationMs: 0,
+        error: 'not started',
+      };
 
       {
-        const startMs = Date.now();
-        let fullOutput = '';
-        try {
-          await this.aiGateway.streamCompletionWithContext(
-            [{ role: 'user', content: enrichedPrompt }],
-            { tenantId, userId, skipRateLimit: true, skipQuotaCheck: true },
-            (chunk: string) => {
-              fullOutput += chunk;
-              this.emitAgentEvent(tenantId, 'agent:text-chunk', { executionId, jobId, text: chunk });
-            },
-          );
-          result = { success: true, output: fullOutput, durationMs: Date.now() - startMs };
-        } catch (err) {
-          result = {
-            success: false,
-            output: fullOutput,
-            durationMs: Date.now() - startMs,
-            error: err instanceof Error ? err.message : 'DeepSeek API call failed',
-          };
+        // Aggressive retry loop for AI Recommended Tasks: the user
+        // expects these to ALWAYS complete. Retry up to 10 times with
+        // exponential backoff (2s base, capped at 60s) on transient
+        // failures (network, rate limit, model overload, partial
+        // output). Only the truly fatal cases break out.
+        const MAX_JOB_RETRIES = 10;
+        const RETRY_BASE_MS = 2000;
+        const RETRY_MAX_MS = 60000;
+        for (let attempt = 0; attempt <= MAX_JOB_RETRIES; attempt++) {
+          const startMs = Date.now();
+          let fullOutput = '';
+          try {
+            await this.aiGateway.streamCompletionWithContext(
+              [{ role: 'user', content: enrichedPrompt }],
+              { tenantId, userId, skipRateLimit: true, skipQuotaCheck: true },
+              (chunk: string) => {
+                fullOutput += chunk;
+                this.emitAgentEvent(tenantId, 'agent:text-chunk', { executionId, jobId, text: chunk });
+              },
+            );
+            result = { success: true, output: fullOutput, durationMs: Date.now() - startMs };
+            if (result.output && result.output.length > 0) break;
+            // Empty output — treat as failure and retry
+            result = {
+              success: false,
+              output: fullOutput,
+              durationMs: Date.now() - startMs,
+              error: 'empty output from model',
+            };
+          } catch (err) {
+            result = {
+              success: false,
+              output: fullOutput,
+              durationMs: Date.now() - startMs,
+              error: err instanceof Error ? err.message : 'AI gateway call failed',
+            };
+          }
+          if (attempt < MAX_JOB_RETRIES) {
+            const isRateLimit = this.isRateLimitError(result.error);
+            const delayMs = this.getRetryDelayMs(attempt, RETRY_BASE_MS, RETRY_MAX_MS, isRateLimit);
+            this.logger.warn({
+              message: 'AI gateway call failed, retrying',
+              executionId,
+              jobId,
+              agentType,
+              attempt: attempt + 1,
+              maxRetries: MAX_JOB_RETRIES,
+              delayMs,
+              error: result.error,
+            });
+            this.emitAgentEvent(tenantId, 'agent:executing-heartbeat', {
+              executionId, jobId, agentType,
+              retrying: true, attempt: attempt + 1, delayMs,
+            });
+            await this.sleep(delayMs);
+          }
         }
 
         // Send full result to OpenClaw agent with instruction to memorize and learn
         if (result.success && result.output.length > 100) {
-          const conceptName = note.title ?? 'Nepoznat koncept';
-          const fullOutput = result.output; // Send FULL output, not truncated
+          const conceptName = note.title ?? 'Unknown concept';
+          const fullOutput = result.output;
 
-          // Send to the specific agent that should learn from this
+          // Fire-and-forget: agent memorizes result (don't block task completion)
           this.openClawClient.executeAgent(
-            [
-              `MEMORISI I UCI: Upravo sam završio analizu koncepta "${conceptName}" za Luxury Statues Adria.`,
-              '',
-              'Ovo su KOMPLETNI nalazi koje MORAŠ zapamtiti i koristiti u svom budućem radu:',
-              '',
-              fullOutput,
-              '',
-              'INSTRUKCIJA: Sačuvaj ključne nalaze u svoju memoriju. Kad budeš radio sličan zadatak,',
-              'koristi ove podatke kao osnovu — ne ponavljaj istraživanje koje je već urađeno.',
-              `Koncept: ${conceptName}`,
-              `Agent: ${agentLabel}`,
-            ].join('\n'),
-            { agentId: openClawAgentId, tenantProfile: tenantId, timeoutSeconds: 120 },
-          ).catch(() => { /* non-blocking */ });
+            `MEMORIZE: Analysis of concept "${conceptName}" completed. Key findings to remember:\n\n${fullOutput.substring(0, 8000)}\n\nSave key findings to memory. Use as basis for future similar tasks.`,
+            { agentId: openClawAgentId, tenantProfile: tenantId, timeoutSeconds: 3600 },
+          ).catch(() => {});
 
-          // Also send to director so he has full picture
+          // Fire-and-forget: update director
           if (openClawAgentId !== 'main') {
             this.openClawClient.executeAgent(
-              [
-                `UPDATE OD ${agentLabel.toUpperCase()}: Koncept "${conceptName}" je završen.`,
-                '',
-                'Ključni nalazi (koristi za buduće delegiranje i planiranje):',
-                fullOutput.substring(0, 15000),
-              ].join('\n'),
-              { agentId: 'main', tenantProfile: tenantId, timeoutSeconds: 60 },
+              `UPDATE FROM ${agentLabel.toUpperCase()}: Concept "${conceptName}" completed.\n\nKey findings:\n${fullOutput.substring(0, 5000)}`,
+              { agentId: 'main', tenantProfile: tenantId, timeoutSeconds: 3600 },
             ).catch(() => { /* non-blocking */ });
           }
         }
@@ -1421,18 +1540,22 @@ Return ONLY a JSON array of prompt strings, one per image, in the same order:
 
       if (!result.success) {
         const errorMsg = result.error ?? 'Agent execution failed';
-        await this.prisma.agentJob.update({
-          where: { id: jobId },
-          data: { status: 'FAILED', error: errorMsg },
-        });
-        await this.updateStatus(executionId, 'FAILED', {
-          error: errorMsg,
-          completedAt: new Date(),
-          durationMs: result.durationMs,
-        });
+        await this.prisma.$transaction(
+          async (tx) => {
+            await tx.agentJob.update({
+              where: { id: jobId },
+              data: { status: 'FAILED', error: errorMsg },
+            });
+            await tx.agentExecution.update({
+              where: { id: executionId },
+              data: { status: 'FAILED', error: errorMsg, completedAt: new Date(), durationMs: result.durationMs },
+            });
+          },
+          { timeout: 30000, maxWait: 10000 },
+        );
         this.emitAgentEvent(tenantId, 'agent:status-change', {
           executionId, jobId, noteId: note.id, agentType, status: 'FAILED',
-          label: `${agentLabel}: Greška`,
+          label: `${agentLabel}: Error`,
         });
         this.emitAgentEvent(tenantId, 'agent:error', {
           executionId, jobId, agentType, error: errorMsg,
@@ -1511,14 +1634,7 @@ Return ONLY a JSON array of prompt strings, one per image, in the same order:
         try {
           let messageContent = `**${agentLabel}**\n\n${fixedOutput}`;
 
-          // Inject concept citations so concept names become clickable links
-          if (note.conceptId) {
-            const conceptMatches = await this.loadConceptMatchesForNote(note.conceptId);
-            if (conceptMatches.length > 0) {
-              const citationResult = this.citationInjector.injectCitations(messageContent, conceptMatches);
-              messageContent = citationResult.content;
-            }
-          }
+          // Citations disabled — content shown as-is
 
           await this.prisma.message.create({
             data: {
@@ -1544,24 +1660,32 @@ Return ONLY a JSON array of prompt strings, one per image, in the same order:
         await this.budgetService.recordSpend(tenantId, costDifference);
       }
 
-      // Step 5: Mark execution completed (guard: don't overwrite if manually stopped)
-      const currentExec2 = await this.prisma.agentExecution.findUnique({ where: { id: executionId }, select: { status: true } });
-      if (currentExec2?.status !== 'FAILED') {
-        await this.prisma.agentExecution.update({
-          where: { id: executionId },
-          data: {
-            status: 'COMPLETED',
-            agentOutput: result.output,
-            actualCostEur: actualCost,
-            completedAt: new Date(),
-            durationMs: result.durationMs,
-            resultNoteId: jobResultNoteId,
-          },
-        });
+      // Step 5: Mark execution completed in a single transaction
+      // (guard: don't overwrite if manually stopped)
+      const wasJobCompleted = await this.prisma.$transaction(
+        async (tx) => {
+          const currentExec2 = await tx.agentExecution.findUnique({ where: { id: executionId }, select: { status: true } });
+          if (currentExec2?.status === 'FAILED') return false;
+          await tx.agentExecution.update({
+            where: { id: executionId },
+            data: {
+              status: 'COMPLETED',
+              agentOutput: result.output,
+              actualCostEur: actualCost,
+              completedAt: new Date(),
+              durationMs: result.durationMs,
+              resultNoteId: jobResultNoteId,
+            },
+          });
+          return true;
+        },
+        { timeout: 30000, maxWait: 10000 },
+      );
 
+      if (wasJobCompleted) {
         this.emitAgentEvent(tenantId, 'agent:status-change', {
           executionId, jobId, noteId: note.id, agentType, status: 'COMPLETED',
-          label: `${agentLabel}: Završeno`,
+          label: `${agentLabel}: Completed`,
         });
       }
       this.emitAgentEvent(tenantId, 'agent:result', {
@@ -1595,7 +1719,7 @@ Return ONLY a JSON array of prompt strings, one per image, in the same order:
         taskId: note.id,
         agent: agentType,
         status: 'completed',
-        message: `${agentType} završio: ${note.title?.substring(0, 60)}`,
+        message: `${agentType} completed: ${note.title?.substring(0, 60)}`,
         timestamp: new Date().toISOString(),
       });
       this.appEventBus.emit('bridge.task.contribution', {
@@ -1637,7 +1761,7 @@ Return ONLY a JSON array of prompt strings, one per image, in the same order:
 
       this.emitAgentEvent(tenantId, 'agent:status-change', {
         executionId, jobId, noteId: note.id, agentType, status: 'FAILED',
-        label: `${agentLabel}: Greška`,
+        label: `${agentLabel}: Error`,
       });
       this.emitAgentEvent(tenantId, 'agent:error', {
         executionId, jobId, agentType, error: errorMessage,
@@ -1711,18 +1835,18 @@ Return ONLY a JSON array of prompt strings, one per image, in the same order:
 
 --- TVOJ OUTPUT ---
 ${job.agentOutput.substring(0, 2000)}
---- KRAJ OUTPUTA ---
+--- END OF OUTPUT ---
 
---- KORISNIKOV FEEDBACK ---
+--- USER FEEDBACK ---
 ${feedback}
---- KRAJ FEEDBACKA ---
+--- END OF FEEDBACK ---
 
-Zapamti ovaj feedback i primeni ga u buducem radu. Sta ces uraditi drugacije sledeci put?`;
+Remember this feedback and apply it in future work. What will you do differently next time?`;
 
         await this.openClawClient.executeAgent(feedbackMessage, {
           agentId: openClawAgentId,
           tenantProfile: tenantId,
-          timeoutSeconds: 120,
+          timeoutSeconds: 3600,
         });
 
         this.logger.log({

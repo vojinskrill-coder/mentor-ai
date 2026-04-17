@@ -23,14 +23,14 @@ import { switchMap, catchError, tap, of } from 'rxjs';
 import type { DigestSummaryItem } from '@mentor-ai/shared/types';
 
 const PERSONA_LABELS: Record<string, { label: string; color: string }> = {
-  CFO: { label: 'CFO — Finansije', color: '#3B82F6' },
+  CFO: { label: 'CFO — Finance', color: '#58A6FF' },
   CMO: { label: 'CMO — Marketing', color: '#8B5CF6' },
-  CTO: { label: 'CTO — Tehnologija', color: '#10B981' },
-  OPERATIONS: { label: 'COO — Operacije', color: '#F59E0B' },
-  LEGAL: { label: 'CLO — Pravo', color: '#EF4444' },
-  CREATIVE: { label: 'CCO — Kreativa', color: '#EC4899' },
-  CSO: { label: 'CSO — Strategija', color: '#06B6D4' },
-  SALES: { label: 'CRO — Prodaja', color: '#F97316' },
+  CTO: { label: 'CTO — Technology', color: '#10B981' },
+  OPERATIONS: { label: 'COO — Operations', color: '#F59E0B' },
+  LEGAL: { label: 'CLO — Legal', color: '#EF4444' },
+  CREATIVE: { label: 'CCO — Creative', color: '#EC4899' },
+  CSO: { label: 'CSO — Strategy', color: '#06B6D4' },
+  SALES: { label: 'CRO — Sales', color: '#F97316' },
 };
 
 const STAGE_META: Record<
@@ -40,17 +40,17 @@ const STAGE_META: Record<
   BASIC: {
     label: 'Basic',
     color: '#10B981',
-    description: 'Fondacioni koncepti — osnove poslovanja',
+    description: 'Foundational concepts — business basics',
   },
   ADVANCED: {
     label: 'Advanced',
     color: '#F59E0B',
-    description: 'Napredne strategije i optimizacija',
+    description: 'Advanced strategies and optimization',
   },
   AUTONOMOUS: {
     label: 'Autonomous',
     color: '#8B5CF6',
-    description: 'Automatizovani monitoring i kontinualno poboljšanje',
+    description: 'Automated monitoring and continuous improvement',
   },
 };
 
@@ -99,7 +99,7 @@ const STAGE_ORDER: MaturityStage[] = [
       }
       .back-link {
         font-size: 14px;
-        color: #3b82f6;
+        color: #58A6FF;
         text-decoration: none;
       }
       .back-link:hover {
@@ -111,9 +111,9 @@ const STAGE_ORDER: MaturityStage[] = [
         display: flex;
         gap: 0;
         margin-bottom: 32px;
-        background: #1a1a1a;
+        background: #161B22;
         border-radius: 12px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         overflow: hidden;
       }
       .stage-step {
@@ -123,10 +123,10 @@ const STAGE_ORDER: MaturityStage[] = [
         cursor: default;
       }
       .stage-step:not(:last-child) {
-        border-right: 1px solid #2a2a2a;
+        border-right: 1px solid #21262D;
       }
       .stage-step.active {
-        background: #242424;
+        background: #1C2128;
       }
       .stage-step.completed-stage {
         background: rgba(16, 185, 129, 0.05);
@@ -144,8 +144,8 @@ const STAGE_ORDER: MaturityStage[] = [
         color: white;
       }
       .stage-step-num.pending-num {
-        background: #333;
-        color: #888;
+        background: #30363D;
+        color: #8B949E;
       }
       .stage-step-label {
         font-size: 15px;
@@ -155,7 +155,7 @@ const STAGE_ORDER: MaturityStage[] = [
       }
       .stage-step-desc {
         font-size: 12px;
-        color: #888;
+        color: #8B949E;
         white-space: nowrap;
       }
       .stage-badge {
@@ -181,9 +181,9 @@ const STAGE_ORDER: MaturityStage[] = [
         }
       }
       .ring-card {
-        background: #1a1a1a;
+        background: #161B22;
         border-radius: 12px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         padding: 24px;
         display: flex;
         flex-direction: column;
@@ -201,7 +201,7 @@ const STAGE_ORDER: MaturityStage[] = [
       }
       .ring-bg {
         fill: none;
-        stroke: #333;
+        stroke: #30363D;
         stroke-width: 8;
       }
       .ring-progress {
@@ -223,7 +223,7 @@ const STAGE_ORDER: MaturityStage[] = [
       }
       .ring-label {
         font-size: 11px;
-        color: #888;
+        color: #8B949E;
         margin-top: 2px;
         white-space: nowrap;
       }
@@ -238,14 +238,14 @@ const STAGE_ORDER: MaturityStage[] = [
       .ring-stat-val {
         font-size: 16px;
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
       }
 
       /* Persona Progress */
       .persona-card {
-        background: #1a1a1a;
+        background: #161B22;
         border-radius: 12px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         padding: 24px;
       }
       .persona-card h3 {
@@ -273,7 +273,7 @@ const STAGE_ORDER: MaturityStage[] = [
       .persona-bar-track {
         flex: 1;
         height: 8px;
-        background: #333;
+        background: #30363D;
         border-radius: 4px;
         overflow: hidden;
       }
@@ -301,14 +301,14 @@ const STAGE_ORDER: MaturityStage[] = [
         margin-bottom: 16px;
       }
       .stale-card {
-        background: #1a1a1a;
+        background: #161B22;
         border-radius: 12px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         padding: 20px;
       }
       .stale-empty {
         font-size: 14px;
-        color: #888;
+        color: #8B949E;
         text-align: center;
         padding: 16px;
       }
@@ -317,7 +317,7 @@ const STAGE_ORDER: MaturityStage[] = [
         align-items: center;
         justify-content: space-between;
         padding: 12px 0;
-        border-bottom: 1px solid #242424;
+        border-bottom: 1px solid #1C2128;
       }
       .stale-item:last-child {
         border-bottom: none;
@@ -328,7 +328,7 @@ const STAGE_ORDER: MaturityStage[] = [
       }
       .stale-reason {
         font-size: 12px;
-        color: #f59e0b;
+        color: #D29922;
         margin-top: 2px;
       }
       .stale-btn {
@@ -336,14 +336,14 @@ const STAGE_ORDER: MaturityStage[] = [
         border-radius: 6px;
         font-size: 13px;
         font-weight: 500;
-        background: #242424;
-        color: #fafafa;
-        border: 1px solid #2a2a2a;
+        background: #1C2128;
+        color: #E6EDF3;
+        border: 1px solid #21262D;
         cursor: pointer;
         transition: background 0.15s;
       }
       .stale-btn:hover {
-        background: #333;
+        background: #30363D;
       }
       .stale-btn:disabled {
         opacity: 0.5;
@@ -361,7 +361,7 @@ const STAGE_ORDER: MaturityStage[] = [
         border-radius: 8px;
         font-size: 15px;
         font-weight: 500;
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
         border: none;
         cursor: pointer;
@@ -379,21 +379,21 @@ const STAGE_ORDER: MaturityStage[] = [
         border-radius: 8px;
         font-size: 15px;
         font-weight: 500;
-        background: #242424;
-        color: #fafafa;
-        border: 1px solid #2a2a2a;
+        background: #1C2128;
+        color: #E6EDF3;
+        border: 1px solid #21262D;
         cursor: pointer;
         transition: background 0.15s;
       }
       .btn-secondary:hover {
-        background: #333;
+        background: #30363D;
       }
 
       /* Not Initialized */
       .init-card {
-        background: #1a1a1a;
+        background: #161B22;
         border-radius: 12px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         padding: 48px 32px;
         text-align: center;
       }
@@ -402,7 +402,7 @@ const STAGE_ORDER: MaturityStage[] = [
         height: 64px;
         margin: 0 auto 16px;
         border-radius: 50%;
-        background: rgba(59, 130, 246, 0.1);
+        background: rgba(88, 166, 255, 0.1);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -410,7 +410,7 @@ const STAGE_ORDER: MaturityStage[] = [
       .init-icon svg {
         width: 32px;
         height: 32px;
-        color: #3b82f6;
+        color: #58A6FF;
       }
       .init-card h2 {
         font-size: 20px;
@@ -431,13 +431,13 @@ const STAGE_ORDER: MaturityStage[] = [
       .loading-state {
         text-align: center;
         padding: 64px 24px;
-        color: #888;
+        color: #8B949E;
         font-size: 15px;
       }
       .error-state {
         text-align: center;
         padding: 64px 24px;
-        color: #ef4444;
+        color: #F85149;
         font-size: 15px;
       }
 
@@ -470,7 +470,7 @@ const STAGE_ORDER: MaturityStage[] = [
       }
       .status-badge.inactive {
         background: rgba(136, 136, 136, 0.15);
-        color: #888;
+        color: #8B949E;
       }
       .status-dot {
         width: 6px;
@@ -482,12 +482,12 @@ const STAGE_ORDER: MaturityStage[] = [
         background: #10B981;
       }
       .status-dot.gray {
-        background: #888;
+        background: #8B949E;
       }
       .auto-card {
-        background: #1a1a1a;
+        background: #161B22;
         border-radius: 12px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         padding: 20px;
       }
       .auto-stats {
@@ -507,11 +507,11 @@ const STAGE_ORDER: MaturityStage[] = [
       .auto-stat-val {
         font-size: 20px;
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .auto-stat-label {
         font-size: 11px;
-        color: #888;
+        color: #8B949E;
         margin-top: 4px;
         white-space: nowrap;
       }
@@ -528,15 +528,15 @@ const STAGE_ORDER: MaturityStage[] = [
       .runs-table th {
         text-align: left;
         padding: 8px 12px;
-        border-bottom: 1px solid #2a2a2a;
-        color: #888;
+        border-bottom: 1px solid #21262D;
+        color: #8B949E;
         font-weight: 500;
         font-size: 11px;
         text-transform: uppercase;
       }
       .runs-table td {
         padding: 8px 12px;
-        border-bottom: 1px solid #242424;
+        border-bottom: 1px solid #1C2128;
       }
       .runs-table tr:last-child td {
         border-bottom: none;
@@ -546,7 +546,7 @@ const STAGE_ORDER: MaturityStage[] = [
         font-size: 11px;
         padding: 2px 8px;
         border-radius: 4px;
-        background: #242424;
+        background: #1C2128;
         color: #a1a1a1;
       }
       .run-status {
@@ -557,10 +557,10 @@ const STAGE_ORDER: MaturityStage[] = [
         color: #10B981;
       }
       .run-status.failed {
-        color: #EF4444;
+        color: #F85149;
       }
       .run-status.running {
-        color: #F59E0B;
+        color: #D29922;
       }
       .auto-actions {
         display: flex;
@@ -605,7 +605,7 @@ const STAGE_ORDER: MaturityStage[] = [
         width: 8px;
         height: 8px;
         border-radius: 50%;
-        background: #3B82F6;
+        background: #58A6FF;
         animation: digest-pulse 2s ease-in-out infinite;
       }
       @keyframes digest-pulse {
@@ -613,19 +613,19 @@ const STAGE_ORDER: MaturityStage[] = [
         50% { opacity: 0.3; }
       }
       .digest-card {
-        background: #1a1a1a;
+        background: #161B22;
         border-radius: 12px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         padding: 20px;
       }
       .digest-empty {
         font-size: 14px;
-        color: #888;
+        color: #8B949E;
         text-align: center;
         padding: 16px;
       }
       .digest-item {
-        border-bottom: 1px solid #242424;
+        border-bottom: 1px solid #1C2128;
         cursor: pointer;
         transition: background 0.15s;
       }
@@ -633,7 +633,7 @@ const STAGE_ORDER: MaturityStage[] = [
         border-bottom: none;
       }
       .digest-item:hover {
-        background: #242424;
+        background: #1C2128;
       }
       .digest-item-header {
         display: flex;
@@ -644,11 +644,11 @@ const STAGE_ORDER: MaturityStage[] = [
       .digest-title {
         font-size: 14px;
         font-weight: 500;
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .digest-date {
         font-size: 12px;
-        color: #888;
+        color: #8B949E;
         flex-shrink: 0;
         margin-left: 16px;
       }
@@ -660,7 +660,7 @@ const STAGE_ORDER: MaturityStage[] = [
       }
       .digest-expand-icon {
         font-size: 12px;
-        color: #888;
+        color: #8B949E;
         margin-left: 8px;
         transition: transform 0.2s;
       }
@@ -676,15 +676,15 @@ const STAGE_ORDER: MaturityStage[] = [
       }
       .digest-loading {
         font-size: 13px;
-        color: #888;
+        color: #8B949E;
         text-align: center;
         padding: 16px;
       }
 
       /* Start Execution Card */
       .start-execution-card {
-        background: #1A1A1A;
-        border: 1px solid #3B82F6;
+        background: #161B22;
+        border: 1px solid #58A6FF;
         border-radius: 12px;
         padding: 24px;
         margin-bottom: 24px;
@@ -704,7 +704,7 @@ const STAGE_ORDER: MaturityStage[] = [
         margin: 0;
       }
       .btn-start-exec {
-        background: #3B82F6;
+        background: #58A6FF;
         color: white;
         border: none;
         padding: 12px 28px;
@@ -716,7 +716,7 @@ const STAGE_ORDER: MaturityStage[] = [
         transition: background 0.15s;
       }
       .btn-start-exec:hover:not(:disabled) {
-        background: #2563EB;
+        background: #1F6FEB;
       }
       .btn-start-exec:disabled {
         opacity: 0.6;
@@ -725,8 +725,8 @@ const STAGE_ORDER: MaturityStage[] = [
 
       /* Execution Progress Bar */
       .execution-panel {
-        background: #1A1A1A;
-        border: 1px solid #3B82F6;
+        background: #161B22;
+        border: 1px solid #58A6FF;
         border-radius: 12px;
         padding: 16px 24px;
         margin-bottom: 24px;
@@ -740,15 +740,15 @@ const STAGE_ORDER: MaturityStage[] = [
       .execution-header h3 {
         font-size: 15px;
         font-weight: 600;
-        color: #FAFAFA;
+        color: #E6EDF3;
         margin: 0;
         flex: 1;
       }
       .execution-spinner {
         width: 18px;
         height: 18px;
-        border: 2px solid #2A2A2A;
-        border-top-color: #3B82F6;
+        border: 2px solid #21262D;
+        border-top-color: #58A6FF;
         border-radius: 50%;
         animation: exec-spin 0.8s linear infinite;
         flex-shrink: 0;
@@ -763,16 +763,16 @@ const STAGE_ORDER: MaturityStage[] = [
         flex-shrink: 0;
       }
       .exec-done { color: #10B981; }
-      .exec-fail { color: #EF4444; }
+      .exec-fail { color: #F85149; }
       .execution-bar-track {
         height: 4px;
-        background: #2A2A2A;
+        background: #21262D;
         border-radius: 2px;
         overflow: hidden;
       }
       .execution-bar-fill {
         height: 100%;
-        background: linear-gradient(90deg, #3B82F6, #10B981);
+        background: linear-gradient(90deg, #58A6FF, #10B981);
         border-radius: 2px;
         transition: width 0.5s ease;
       }
@@ -782,7 +782,7 @@ const STAGE_ORDER: MaturityStage[] = [
         margin-top: 8px;
       }
       .exec-persona {
-        color: #666;
+        color: #6E7681;
         margin-left: 4px;
       }
     `,
@@ -792,13 +792,13 @@ const STAGE_ORDER: MaturityStage[] = [
       <div class="header">
         <div>
           <h1>Maturity Engine</h1>
-          <div class="header-sub">Poslovni razvojni plan u tri faze</div>
+          <div class="header-sub">Business development plan in three phases</div>
         </div>
-        <a routerLink="/dashboard" class="back-link">← Nazad na kontrolnu tablu</a>
+        <a routerLink="/dashboard" class="back-link">← Back to dashboard</a>
       </div>
 
       <!-- Loading -->
-      <div *ngIf="isLoading()" class="loading-state">Učitavanje...</div>
+      <div *ngIf="isLoading()" class="loading-state">Loading...</div>
 
       <!-- Error -->
       <div *ngIf="error()" class="error-state">{{ error() }}</div>
@@ -806,21 +806,21 @@ const STAGE_ORDER: MaturityStage[] = [
       <!-- Initializing in Background (post-onboarding) -->
       <div *ngIf="!isLoading() && !error() && (isInitializingStage() || isInitializing())" class="init-card">
         <div class="execution-spinner" style="width:40px;height:40px;margin:0 auto 16px;border-width:3px"></div>
-        <h2>Pripremam zadatke...</h2>
+        <h2>Preparing tasks...</h2>
         <p *ngIf="initCurrentPersona()">
-          Analiziram koncepte za <strong>{{ getPersonaLabel(initCurrentPersona()) || initCurrentPersona() }}</strong>
+          Analyzing concepts for <strong>{{ getPersonaLabel(initCurrentPersona()) || initCurrentPersona() }}</strong>
           ({{ initPersonaIndex() }}/{{ initTotalPersonas() }})
         </p>
         <p *ngIf="!initCurrentPersona()">
-          AI klasifikator analizira vaše poslovanje i priprema koncepte za svaku C-level personu.
+          AI classifier is analyzing your business and preparing concepts for each C-level persona.
         </p>
         <div class="execution-bar-track" style="margin-top: 16px; max-width: 400px; margin-left: auto; margin-right: auto;">
           <div class="execution-bar-fill"
                [style.width.%]="initTotalPersonas() > 0 ? (initPersonaIndex() / initTotalPersonas()) * 100 : 0">
           </div>
         </div>
-        <p *ngIf="initAssignedSoFar() > 0" style="font-size: 12px; color: #888; margin-top: 8px;">
-          {{ initAssignedSoFar() }} koncepata dodeljeno do sada
+        <p *ngIf="initAssignedSoFar() > 0" style="font-size: 12px; color: #8B949E; margin-top: 8px;">
+          {{ initAssignedSoFar() }} concepts assigned so far
         </p>
       </div>
 
@@ -832,13 +832,13 @@ const STAGE_ORDER: MaturityStage[] = [
               d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
         </div>
-        <h2>Pokrenite Maturity Engine</h2>
+        <h2>Launch the Maturity Engine</h2>
         <p>
-          AI klasifikator će analizirati vaše poslovanje i odrediti koje koncepte svaka
-          persona treba izvršiti u Basic fazi — fondacioni koraci za vaše poslovanje.
+          The AI classifier will analyze your business and determine which concepts each
+          persona needs to execute in the Basic phase — foundational steps for your business.
         </p>
         <button class="btn-primary" (click)="initializeBasic()" [disabled]="isInitializing()">
-          {{ isInitializing() ? 'Inicijalizacija...' : 'Inicijalizuj Basic fazu' }}
+          {{ isInitializing() ? 'Initializing...' : 'Initialize Basic phase' }}
         </button>
       </div>
 
@@ -861,7 +861,7 @@ const STAGE_ORDER: MaturityStage[] = [
                   class="stage-badge"
                   [style.background]="getStageMeta(stage).color + '20'"
                   [style.color]="getStageMeta(stage).color">
-              Aktivna
+              Active
             </span>
           </div>
         </div>
@@ -869,11 +869,11 @@ const STAGE_ORDER: MaturityStage[] = [
         <!-- Start Execution Button — shown when tasks pending and not already executing -->
         <div class="start-execution-card" *ngIf="canStartExecution() && !isExecuting()">
           <div class="start-exec-info">
-            <h3>{{ dashboard()?.progress?.pending || 0 }} zadataka čeka na izvršavanje</h3>
-            <p>Pokrenite automatsko izvršavanje svih zadataka u zavisnosnom redosledu. Nezavisni zadaci se izvršavaju paralelno.</p>
+            <h3>{{ dashboard()?.progress?.pending || 0 }} tasks awaiting execution</h3>
+            <p>Start automatic execution of all tasks in dependency order. Independent tasks execute in parallel.</p>
           </div>
           <button class="btn-start-exec" (click)="startExecution()" [disabled]="isStartingExecution()">
-            {{ isStartingExecution() ? 'Pokretanje...' : 'Pokreni izvršavanje' }}
+            {{ isStartingExecution() ? 'Launching...' : 'Start execution' }}
           </button>
         </div>
 
@@ -881,9 +881,9 @@ const STAGE_ORDER: MaturityStage[] = [
         <div class="execution-panel" *ngIf="isExecuting()">
           <div class="execution-header">
             <div class="execution-spinner"></div>
-            <h3>Izvršavanje u toku</h3>
+            <h3>Execution in progress</h3>
             <span class="exec-stat exec-done">{{ executionDone() }}/{{ executionTotal() }}</span>
-            <span class="exec-stat exec-fail" *ngIf="executionFailed() > 0">{{ executionFailed() }} neuspešno</span>
+            <span class="exec-stat exec-fail" *ngIf="executionFailed() > 0">{{ executionFailed() }} failed</span>
           </div>
           <div class="execution-bar-track">
             <div class="execution-bar-fill"
@@ -913,28 +913,28 @@ const STAGE_ORDER: MaturityStage[] = [
                 <div class="ring-percent" [style.color]="getCurrentStageColor()">
                   {{ progress.completionPercent }}%
                 </div>
-                <div class="ring-label">Kompletno</div>
+                <div class="ring-label">Complete</div>
               </div>
             </div>
             <div class="ring-stats">
               <div style="text-align: center">
                 <div class="ring-stat-val">{{ progress.completed }}</div>
-                <div>Završeno</div>
+                <div>Completed</div>
               </div>
               <div style="text-align: center">
                 <div class="ring-stat-val">{{ progress.pending + progress.inProgress }}</div>
-                <div>Preostalo</div>
+                <div>Remaining</div>
               </div>
               <div style="text-align: center">
                 <div class="ring-stat-val">{{ progress.stale }}</div>
-                <div>Zastarelo</div>
+                <div>Stale</div>
               </div>
             </div>
           </div>
 
           <!-- Per-Persona -->
           <div class="persona-card">
-            <h3>Progres po personi</h3>
+            <h3>Progress per persona</h3>
             <div *ngFor="let key of personaKeys" class="persona-row">
               <div class="persona-label" [style.color]="getPersonaColor(key)">
                 {{ getPersonaLabel(key) }}
@@ -954,10 +954,10 @@ const STAGE_ORDER: MaturityStage[] = [
 
         <!-- Stale Concepts -->
         <div class="stale-section" *ngIf="dashboard()?.staleConcepts as staleConcepts">
-          <h3 class="section-title">Zastareli koncepti</h3>
+          <h3 class="section-title">Stale concepts</h3>
           <div class="stale-card">
             <div *ngIf="staleConcepts.length === 0" class="stale-empty">
-              Nema zastarelih koncepata.
+              No stale concepts.
             </div>
             <div *ngFor="let item of staleConcepts" class="stale-item">
               <div>
@@ -967,7 +967,7 @@ const STAGE_ORDER: MaturityStage[] = [
               <button class="stale-btn"
                       (click)="reExecute(item.conceptId)"
                       [disabled]="reExecutingId() === item.conceptId">
-                {{ reExecutingId() === item.conceptId ? 'Pokretanje...' : 'Ponovo izvrši' }}
+                {{ reExecutingId() === item.conceptId ? 'Launching...' : 'Re-execute' }}
               </button>
             </div>
           </div>
@@ -976,10 +976,10 @@ const STAGE_ORDER: MaturityStage[] = [
         <!-- Autonomous Section (only for AUTONOMOUS stage) -->
         <div class="autonomous-section" *ngIf="dashboard()?.currentStage === 'AUTONOMOUS'">
           <div class="autonomous-header">
-            <h3>Autonomni scheduler</h3>
+            <h3>Autonomous scheduler</h3>
             <span class="status-badge" [class.active]="autoStatus()?.enabled" [class.inactive]="!autoStatus()?.enabled">
               <span class="status-dot" [class.green]="autoStatus()?.enabled" [class.gray]="!autoStatus()?.enabled"></span>
-              {{ autoStatus()?.enabled ? 'Aktivan' : 'Neaktivan' }}
+              {{ autoStatus()?.enabled ? 'Active' : 'Inactive' }}
             </span>
           </div>
           <div class="auto-card">
@@ -987,36 +987,36 @@ const STAGE_ORDER: MaturityStage[] = [
             <div *ngIf="autoStatus()?.lastRun as lastRun" class="auto-stats">
               <div class="auto-stat">
                 <div class="auto-stat-val">{{ lastRun.staleFound }}</div>
-                <div class="auto-stat-label">Zastarelo</div>
+                <div class="auto-stat-label">Stale</div>
               </div>
               <div class="auto-stat">
                 <div class="auto-stat-val">{{ lastRun.reExecuted }}</div>
-                <div class="auto-stat-label">Ponovo izvršeno</div>
+                <div class="auto-stat-label">Re-executed</div>
               </div>
               <div class="auto-stat">
                 <div class="auto-stat-val">{{ lastRun.tasksCompleted }}</div>
-                <div class="auto-stat-label">Završeno</div>
+                <div class="auto-stat-label">Completed</div>
               </div>
               <div class="auto-stat">
                 <div class="auto-stat-val">{{ formatDuration(lastRun.durationMs) }}</div>
-                <div class="auto-stat-label">Trajanje</div>
+                <div class="auto-stat-label">Duration</div>
               </div>
             </div>
 
             <div *ngIf="autoStatus()?.lastRun as lastRun" class="auto-last-run">
-              Poslednje pokretanje: {{ formatDate(lastRun.startedAt) }}
-              · Status: {{ lastRun.status === 'COMPLETED' ? 'Uspešno' : lastRun.status === 'FAILED' ? 'Neuspešno' : 'U toku' }}
+              Last run: {{ formatDate(lastRun.startedAt) }}
+              · Status: {{ lastRun.status === 'COMPLETED' ? 'Successful' : lastRun.status === 'FAILED' ? 'Failed' : 'In progress' }}
             </div>
 
             <!-- Recent runs table -->
             <table class="runs-table" *ngIf="autoStatus()?.recentRuns?.length">
               <thead>
                 <tr>
-                  <th>Tip</th>
+                  <th>Type</th>
                   <th>Status</th>
-                  <th>Zastarelo</th>
-                  <th>Izvršeno</th>
-                  <th>Datum</th>
+                  <th>Stale</th>
+                  <th>Executed</th>
+                  <th>Date</th>
                 </tr>
               </thead>
               <tbody>
@@ -1027,7 +1027,7 @@ const STAGE_ORDER: MaturityStage[] = [
                           [class.completed]="run.status === 'COMPLETED'"
                           [class.failed]="run.status === 'FAILED'"
                           [class.running]="run.status === 'RUNNING'">
-                      {{ run.status === 'COMPLETED' ? 'OK' : run.status === 'FAILED' ? 'Greška' : 'Radi...' }}
+                      {{ run.status === 'COMPLETED' ? 'OK' : run.status === 'FAILED' ? 'Error' : 'Running...' }}
                     </span>
                   </td>
                   <td>{{ run.staleFound }}</td>
@@ -1038,12 +1038,12 @@ const STAGE_ORDER: MaturityStage[] = [
             </table>
 
             <div *ngIf="!autoStatus()?.recentRuns?.length" class="stale-empty">
-              Nema prethodnih autonomnih pokretanja.
+              No previous autonomous runs.
             </div>
 
             <div class="auto-actions">
               <button class="btn-scan" (click)="triggerScan()" [disabled]="isScanning()">
-                {{ isScanning() ? 'Skeniranje...' : 'Pokreni skeniranje' }}
+                {{ isScanning() ? 'Scanning...' : 'Start scan' }}
               </button>
             </div>
           </div>
@@ -1052,15 +1052,15 @@ const STAGE_ORDER: MaturityStage[] = [
         <!-- Weekly Digests (AUTONOMOUS stage only) -->
         <div class="digest-section" *ngIf="dashboard()?.currentStage === 'AUTONOMOUS'">
           <div class="digest-header">
-            <h3>Nedeljni izveštaji</h3>
+            <h3>Weekly reports</h3>
             <span *ngIf="hasNewDigest()" class="digest-new-badge"></span>
           </div>
           <div class="digest-card">
             <div *ngIf="digestsLoading() && digests().length === 0" class="digest-loading">
-              Učitavanje izveštaja...
+              Loading reports...
             </div>
             <div *ngIf="!digestsLoading() && digests().length === 0" class="digest-empty">
-              Nema nedeljnih izveštaja. Prvi će biti generisan u ponedeljak u 9:00.
+              No weekly reports. The first one will be generated on Monday at 9:00 AM.
             </div>
             <div *ngFor="let digest of digests()" class="digest-item" (click)="toggleDigest(digest.id)">
               <div class="digest-item-header">
@@ -1088,9 +1088,9 @@ const STAGE_ORDER: MaturityStage[] = [
                   class="btn-primary"
                   (click)="transition()"
                   [disabled]="isTransitioning()">
-            {{ isTransitioning() ? 'Prelazak...' : 'Napreduj na ' + getNextStageLabel() }}
+            {{ isTransitioning() ? 'Transitioning...' : 'Advance to ' + getNextStageLabel() }}
           </button>
-          <button class="btn-secondary" (click)="refresh()">Osveži podatke</button>
+          <button class="btn-secondary" (click)="refresh()">Refresh data</button>
         </div>
       </ng-container>
     </main>
@@ -1177,7 +1177,7 @@ export class MaturityDashboardComponent implements OnInit, OnDestroy {
           }
         },
         error: () => {
-          this.error.set('Greška pri učitavanju maturity podataka.');
+          this.error.set('Error loading maturity data.');
           this.isLoading.set(false);
         },
       });
@@ -1226,7 +1226,7 @@ export class MaturityDashboardComponent implements OnInit, OnDestroy {
         error: () => {
           this.isInitializing.set(false);
           this.isInitializingStage.set(false);
-          this.error.set('Greška pri inicijalizaciji. Pokušajte ponovo.');
+          this.error.set('Error during initialization. Try again.');
         },
       });
   }
@@ -1243,7 +1243,7 @@ export class MaturityDashboardComponent implements OnInit, OnDestroy {
         },
         error: () => {
           this.isTransitioning.set(false);
-          this.error.set('Prelazak nije moguć. Proverite da li je faza kompletna.');
+          this.error.set('Transition not possible. Check if the phase is complete.');
         },
       });
   }
@@ -1269,12 +1269,12 @@ export class MaturityDashboardComponent implements OnInit, OnDestroy {
       .subscribe({
         next: () => {
           this.reExecutingId.set(null);
-          this.toastService.success('Ponovna analiza pokrenuta.');
+          this.toastService.success('Re-analysis started.');
           this.loadDashboard();
         },
         error: () => {
           this.reExecutingId.set(null);
-          this.toastService.error('Greška pri ponovnom izvršavanju koncepta.');
+          this.toastService.error('Error re-executing concept.');
         },
       });
   }
@@ -1298,24 +1298,24 @@ export class MaturityDashboardComponent implements OnInit, OnDestroy {
           if (data.alreadyRunning) {
             this.isExecuting.set(true);
             this.executionTotal.set(data.pendingCount);
-            this.toastService.info('Izvršavanje je već u toku.');
+            this.toastService.info('Execution already in progress.');
           } else if (data.started) {
             this.isExecuting.set(true);
             this.executionTotal.set(data.pendingCount);
             this.executionDone.set(0);
             this.executionFailed.set(0);
             this.toastService.success(
-              `Pokrenuto izvršavanje ${data.pendingCount} zadataka`,
+              `Started execution of ${data.pendingCount} tasks`,
             );
           } else {
-            this.toastService.info('Nema zadataka za izvršavanje.');
+            this.toastService.info('No tasks to execute.');
           }
         },
         error: (err: unknown) => {
           this.isStartingExecution.set(false);
           const httpErr = err as { error?: { detail?: string; message?: string }; status?: number; message?: string };
           const detail = httpErr?.error?.detail || httpErr?.error?.message || httpErr?.message || 'Unknown error';
-          this.toastService.error(`Greška: [${httpErr?.status ?? '?'}] ${detail}`);
+          this.toastService.error(`Error: [${httpErr?.status ?? '?'}] ${detail}`);
           console.error('Execute stage error:', err);
         },
       });
@@ -1339,7 +1339,7 @@ export class MaturityDashboardComponent implements OnInit, OnDestroy {
 
   private setupWebSocketListeners(): void {
     this.unsubDigestReady = this.wsService.onDigestReady(() => {
-      this.toastService.success('Novi nedeljni izveštaj je spreman!');
+      this.toastService.success('New weekly report is ready!');
       this.hasNewDigest.set(true);
       this.loadDigests();
       if (this.dashboard()?.currentStage === 'AUTONOMOUS') {
@@ -1349,7 +1349,7 @@ export class MaturityDashboardComponent implements OnInit, OnDestroy {
 
     this.unsubScanComplete = this.wsService.onScanComplete((data) => {
       this.toastService.info(
-        `Automatsko skeniranje završeno: ${data.staleFound} zastarelih pronađeno`,
+        `Automatic scan completed: ${data.staleFound} stale found`,
       );
       this.loadDashboard();
       if (this.dashboard()?.currentStage === 'AUTONOMOUS') {
@@ -1370,7 +1370,7 @@ export class MaturityDashboardComponent implements OnInit, OnDestroy {
     this.unsubStageInit = this.wsService.onStageInitialized((data) => {
       this.isInitializingStage.set(false);
       this.toastService.success(
-        `${data.stage} faza inicijalizovana — ${data.assignmentCount} koncepata, ${data.noteCount} zadataka kreirano`,
+        `${data.stage} phase initialized — ${data.assignmentCount} concepts, ${data.noteCount} tasks created`,
       );
       this.loadDashboard();
       // Check if auto-execution already started (safety net if WS event was missed)
@@ -1417,11 +1417,11 @@ export class MaturityDashboardComponent implements OnInit, OnDestroy {
       this.executionCurrent.set(null);
       if (data.failed > 0) {
         this.toastService.info(
-          `Izvršavanje završeno: ${data.executed} uspešno, ${data.failed} neuspešno od ${data.total}`,
+          `Execution completed: ${data.executed} successful, ${data.failed} failed out of ${data.total}`,
         );
       } else {
         this.toastService.success(
-          `Svih ${data.executed} zadataka uspešno izvršeno!`,
+          `All ${data.executed} tasks successfully executed!`,
         );
       }
       // Reload full dashboard to get accurate final state
@@ -1469,7 +1469,7 @@ export class MaturityDashboardComponent implements OnInit, OnDestroy {
         },
         error: () => {
           this.isScanning.set(false);
-          this.error.set('Greška pri pokretanju skeniranja.');
+          this.error.set('Error starting scan.');
         },
       });
   }
@@ -1485,7 +1485,7 @@ export class MaturityDashboardComponent implements OnInit, OnDestroy {
 
   formatDate(iso: string): string {
     const d = new Date(iso);
-    return d.toLocaleDateString('sr-Latn-RS', {
+    return d.toLocaleDateString('en-US', {
       day: 'numeric',
       month: 'short',
       hour: '2-digit',
@@ -1497,7 +1497,7 @@ export class MaturityDashboardComponent implements OnInit, OnDestroy {
     const map: Record<string, string> = {
       staleness_scan: 'Staleness',
       kpi_monitor: 'KPI',
-      weekly_digest: 'Izveštaj',
+      weekly_digest: 'Report',
     };
     return map[type] || type;
   }
@@ -1510,7 +1510,7 @@ export class MaturityDashboardComponent implements OnInit, OnDestroy {
 
   getCurrentStageColor(): string {
     const current = this.dashboard()?.currentStage;
-    return current ? STAGE_META[current]?.color || '#3B82F6' : '#3B82F6';
+    return current ? STAGE_META[current]?.color || '#58A6FF' : '#58A6FF';
   }
 
   isStageReached(stage: MaturityStage): boolean {

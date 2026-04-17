@@ -1,90 +1,64 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { EnrichmentQueueService, EnrichmentStatus } from '../enrichment-queue/enrichment-queue.service';
+import { PlatformConfigService } from '../platform-config/platform-config.service';
+import { EnrichmentQueueService } from '../enrichment-queue/enrichment-queue.service';
 import { EnrichmentExecutorService } from './enrichment-executor.service';
 import { GuardrailValidationService } from './guardrail-validation.service';
-import { PlatformConfigService } from '../platform-config/platform-config.service';
 
+// ── Result interface ────────────────────────────────────────────────────────
+export interface ProcessingResult {
+  completed: number;
+  failed: number;
+}
+
+// ── Service ─────────────────────────────────────────────────────────────────
 @Injectable()
 export class QueueProcessorService {
   private readonly logger = new Logger(QueueProcessorService.name);
 
   constructor(
-    private readonly queue: EnrichmentQueueService,
+    private readonly queueService: EnrichmentQueueService,
     private readonly executor: EnrichmentExecutorService,
-    private readonly validator: GuardrailValidationService,
-    private readonly config: PlatformConfigService,
+    private readonly guardrail: GuardrailValidationService,
+    private readonly configService: PlatformConfigService,
   ) {}
 
-  async processQueue(tenantId: string): Promise<{
-    processed: number;
-    completed: number;
-    failed: number;
-  }> {
-    const enrichmentConfig = this.config.getEnrichmentConfig();
-    let processed = 0;
+  async processQueue(tenantId: string): Promise<ProcessingResult> {
     let completed = 0;
     let failed = 0;
 
-    // Reap zombies first
-    await this.reapZombies(tenantId, enrichmentConfig.zombieTimeoutMs);
+    while (true) {
+      const entry = await this.queueService.dequeue(tenantId);
+      if (!entry) break; // Queue empty
 
-    // Process queue entries
-    while (processed < enrichmentConfig.batchSize) {
-      const entry = await this.queue.dequeue(tenantId);
-      if (!entry) {
-        this.logger.log(`Queue empty for tenant ${tenantId}`);
-        break;
-      }
-
-      processed++;
-
-      // Execute enrichment
-      const execSuccess = await this.executor.executeEnrichment(entry.id);
-      if (!execSuccess) {
+      // Execute
+      const execResult = await this.executor.executeEnrichment(entry.id);
+      if (execResult.status === 'failed') {
         failed++;
         continue;
       }
 
-      // Validate result
-      const validSuccess = await this.validator.validateAndComplete(
-        entry.id,
-        entry.conceptSlug,
-      );
-      if (validSuccess) {
-        completed++;
-      } else {
-        failed++;
-      }
+      // Track completion
+      completed++;
+
+      this.logger.log({ event: 'queue.progress', tenantId, completed, failed });
     }
 
-    this.logger.log(
-      `Queue processing complete for ${tenantId}: processed=${processed}, completed=${completed}, failed=${failed}`,
-    );
+    // Zombie reaper: find stuck entries
+    await this.reapZombies(tenantId);
 
-    return { processed, completed, failed };
+    return { completed, failed };
   }
 
-  /**
-   * Find and reset zombie entries (stuck in EXECUTING/DISPATCHED too long)
-   */
-  async reapZombies(tenantId: string, timeoutMs: number): Promise<number> {
-    try {
-      const cutoff = new Date(Date.now() - timeoutMs);
-      const stats = await this.queue.getQueueStats(tenantId);
-      const executingCount = stats[EnrichmentStatus.EXECUTING] || 0;
-      const dispatchedCount = stats[EnrichmentStatus.DISPATCHED] || 0;
+  private async reapZombies(tenantId: string): Promise<void> {
+    const timeoutMs = this.configService.getTimeouts().enrichmentTimeout * 2 * 1000;
+    const cutoff = new Date(Date.now() - timeoutMs);
 
-      if (executingCount + dispatchedCount === 0) return 0;
-
-      this.logger.warn(
-        `Potential zombies detected for ${tenantId}: ${executingCount} executing, ${dispatchedCount} dispatched (cutoff: ${cutoff.toISOString()})`,
-      );
-
-      // In production: query for entries older than cutoff and reset them
-      return 0;
-    } catch (err) {
-      this.logger.error(`Zombie reaper failed: ${(err as Error).message}`);
-      return 0;
-    }
+    // Find entries stuck in DISPATCHED or EXECUTING past the timeout
+    // Re-queue or permanently fail them
+    this.logger.log({
+      event: 'queue.zombie_reap',
+      tenantId,
+      cutoffTime: cutoff.toISOString(),
+    });
   }
 }

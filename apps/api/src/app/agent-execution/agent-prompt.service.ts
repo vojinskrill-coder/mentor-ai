@@ -79,26 +79,26 @@ INSTRUCTION QUALITY REQUIREMENTS:
     const memoryBlock = `
 
 ---
-KRITICNO — UZEMLJENJE:
-- Radi ISKLJUCIVO na zadatku opisanom iznad. NE siri se na druge teme.
-- NIKADA ne izmisljaj podatke, izvore ili statistike. Ako ne mozes pronaci podatak, napisi "[POTREBNO ISTRAZITI]".
-- Svaki nalaz MORA imati izvor (URL). Bez izvora = ne ukljucuj u rezultat.
-- NE ponavljaj genericke poslovne savete — samo SPECIFICNE nalaze za ovu kompaniju i ovaj koncept.
-- Ako imas prethodno iskustvo i memoriju o ovoj kompaniji — iskoristi to znanje. Nadogradi na postojece nalaze.
-- Ako je ovo tvoj prvi zadatak — koristi dostavljene podatke iz web istrazivanja.
+CRITICAL — GROUNDING:
+- Work EXCLUSIVELY on the task described above. Do NOT expand to other topics.
+- NEVER fabricate data, sources, or statistics. If you cannot find a data point, write "[NEEDS RESEARCH]".
+- Every finding MUST have a source (URL). Without source = do not include in result.
+- Do NOT repeat generic business advice — only SPECIFIC findings for this company and this concept.
+- If you have prior experience and memory about this company — use that knowledge. Build on existing findings.
+- If this is your first task — use the provided web research data.
 
 CRITICAL — FORMAT:
-- DO NOT USE write, edit, bash or any file tool. DO NOT WRITE files.
+- Do NOT USE write, edit, bash or any file tool. Do NOT WRITE files.
 - Only RETURN TEXT as your response — that is your output.
 - Professional Markdown (## headings, tables, **bold** for key values, > for sources with URLs).
-- ALL in English. DO NOT explain what you will do — write the result immediately.
+- ALL in English. Do NOT explain what you will do — write the result immediately.
 
-KRITICNO — SLIKE:
-- Za generisanje slika OBAVEZNO koristi exec tool: FAL_IMAGE_SIZE=<size> fal-generate "<prompt>". Velicine: landscape_16_9 (web), square_hd (social), landscape_4_3 (prezentacije), portrait_4_3 (stories).
-- NIKADA ne izmisljaj URL-ove slika! Pozovi fal-generate i koristi URL koji vrati.
-- Svaka slika mora biti NOVO generisana — NIKADA ne koristi slike iz memorije.
-- Prompt za sliku mora biti na ENGLESKOM, detaljan (30+ reci).
-- VIZUALNI IDENTITET: Luxury aesthetic, dark tones (charcoal, navy, black), gold/bronze accents, marble textures, dramatic lighting, art gallery feel, professional photography style.
+CRITICAL — IMAGES:
+- To generate images MUST use exec tool: FAL_IMAGE_SIZE=<size> fal-generate "<prompt>". Sizes: landscape_16_9 (web), square_hd (social), landscape_4_3 (presentations), portrait_4_3 (stories).
+- NEVER fabricate image URLs! Call fal-generate and use the URL it returns.
+- Every image must be NEWLY generated — NEVER reuse images from memory.
+- Image prompt must be in ENGLISH, detailed (30+ words).
+- VISUAL IDENTITY: Luxury aesthetic, dark tones (charcoal, navy, black), gold/bronze accents, marble textures, dramatic lighting, art gallery feel, professional photography style.
 ---`;
 
     const finalPrompt = result.trim() + memoryBlock;

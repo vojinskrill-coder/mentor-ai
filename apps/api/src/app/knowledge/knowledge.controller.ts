@@ -1,7 +1,8 @@
-import { Controller, Get, Param, Query, Logger, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Param, Query, Logger, NotFoundException, Inject } from '@nestjs/common';
 import { ConceptService } from './services/concept.service';
 import { CitationService } from './services/citation.service';
 import { CurriculumService } from './services/curriculum.service';
+import { VAULT_STORAGE, VaultStorage } from '../vault-storage/vault-storage.interface';
 import type {
   ConceptCategory,
   CurriculumNode,
@@ -23,7 +24,8 @@ export class KnowledgeController {
   constructor(
     private readonly conceptService: ConceptService,
     private readonly citationService: CitationService,
-    private readonly curriculumService: CurriculumService
+    private readonly curriculumService: CurriculumService,
+    @Inject(VAULT_STORAGE) private readonly vaultStorage: VaultStorage,
   ) {}
 
   /**
@@ -67,18 +69,38 @@ export class KnowledgeController {
    *
    * @param id - Concept ID (cpt_ prefix)
    */
+  // Route must be AFTER /concepts/by-name and /concepts/by-slug to prevent shadowing
   @Get('concepts/:id')
   async getConcept(@Param('id') id: string): Promise<ConceptResponse> {
-    this.logger.log({
-      message: 'Getting concept',
-      id,
-    });
+    // Guard: skip if id matches a sub-route name (prevents route shadowing)
+    if (id === 'by-name' || id === 'by-slug' || id === 'summary') {
+      throw new NotFoundException({ type: 'not_found', title: 'Not Found', status: 404, detail: 'Use the specific endpoint' });
+    }
+    this.logger.log({ message: 'Getting concept', id });
 
     const concept = await this.conceptService.findById(id);
 
-    return {
-      data: concept,
-    };
+    // Read content from Obsidian vault (source of truth) if concept belongs to a tenant
+    // ConceptWithRelations doesn't include tenantId, so query it separately
+    const conceptMeta = await this.conceptService.findTenantInfo(id);
+    if (conceptMeta?.tenantId && concept.slug) {
+      try {
+        const vaultContent = await this.readVaultFile(conceptMeta.tenantId, concept.slug);
+        if (vaultContent && vaultContent.length > 500) {
+          (concept as any).extendedDescription = vaultContent;
+          this.logger.log({ message: 'Vault content loaded', slug: concept.slug, length: vaultContent.length });
+        }
+      } catch {
+        // Vault read failed — use PG content
+      }
+    }
+
+    return { data: concept };
+  }
+
+  /** Read concept article from Obsidian vault via VaultStorage abstraction. */
+  private async readVaultFile(tenantId: string, slug: string): Promise<string> {
+    return this.vaultStorage.readFile(tenantId, `wiki/concepts/${slug}.md`);
   }
 
   /**

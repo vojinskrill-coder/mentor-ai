@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TenantModule } from '@mentor-ai/shared/tenant-context';
-import { OnboardingVerificationService } from './onboarding-verification.service';
 import { VaultStorageModule } from '../vault-storage/vault-storage.module';
+import { OnboardingVerificationService } from './onboarding-verification.service';
 
 @Module({
   imports: [TenantModule, VaultStorageModule],

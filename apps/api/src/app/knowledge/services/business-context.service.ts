@@ -125,15 +125,15 @@ export class BusinessContextService {
     }
 
     // Build formatted context
-    let context = '\n--- POSLOVNI KONTEKST (Business Brain Memorija) ---\n';
+    let context = '\n--- BUSINESS CONTEXT (Business Brain Memory) ---\n';
     let tokenCount = this.estimateTokens(context);
     const maxContentTokens = MAX_CONTEXT_TOKENS - 100;
 
     const typeLabels: Record<string, string> = {
-      CLIENT_CONTEXT: 'Klijent',
-      PROJECT_CONTEXT: 'Poslovni uvid',
-      USER_PREFERENCE: 'Odluka',
-      FACTUAL_STATEMENT: 'Poslovna činjenica',
+      CLIENT_CONTEXT: 'Client',
+      PROJECT_CONTEXT: 'Business insight',
+      USER_PREFERENCE: 'Decision',
+      FACTUAL_STATEMENT: 'Business fact',
     };
 
     for (const [type, mems] of grouped) {
@@ -158,10 +158,10 @@ export class BusinessContextService {
       }
     }
 
-    context += '--- KRAJ POSLOVNOG KONTEKSTA ---\n\n';
+    context += '--- END OF BUSINESS CONTEXT ---\n\n';
     context +=
-      'Koristi ovaj kontekst da daš odgovore prilagođene specifičnom poslovanju korisnika. ';
-    context += 'Referiši se na prethodne analize i odluke kada je relevantno.\n';
+      'Use this context to provide responses tailored to the user\'s specific business. ';
+    context += 'Reference previous analyses and decisions when relevant.\n';
 
     this.logger.debug({
       message: 'Business context built',

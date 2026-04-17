@@ -29,6 +29,13 @@ export class ConceptMatchingService {
 
   private readonly DEFAULT_LIMIT = 5;
   private readonly DEFAULT_THRESHOLD = 0.3;
+  private readonly CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+  /** Semantic search cache: key = query text + personaType */
+  private readonly semanticCache = new Map<
+    string,
+    { value: ConceptMatch[]; expiresAt: number }
+  >();
 
   constructor(
     private readonly prisma: PlatformPrismaService,
@@ -70,6 +77,11 @@ export class ConceptMatchingService {
 
     // 2. If no semantic results, fall back to keyword matching
     if (directMatches.length === 0) {
+      this.logger.warn({
+        message: 'Semantic search returned no results — falling back to keyword matching',
+        responseLength: response.length,
+        personaType: options.personaType,
+      });
       directMatches = await this.keywordMatch(response, limit * 2, options.personaType);
     }
 
@@ -92,6 +104,8 @@ export class ConceptMatchingService {
   /**
    * Semantic search via Qdrant embeddings.
    * Returns empty array if Qdrant is not available or embeddings not generated.
+   * Caches results by query + personaType (10-minute TTL).
+   * On embedding failure, returns empty array so caller falls back to keyword matching.
    */
   private async semanticSearch(
     query: string,
@@ -99,6 +113,15 @@ export class ConceptMatchingService {
     threshold: number,
     personaType?: PersonaType
   ): Promise<ConceptMatch[]> {
+    // Check cache
+    const cacheKey = `${query}|${personaType ?? 'none'}`;
+    const cached = this.semanticCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      this.logger.debug({ message: 'Semantic search cache hit', personaType });
+      return cached.value;
+    }
+    if (cached) this.semanticCache.delete(cacheKey);
+
     try {
       const filter = personaType
         ? { department: this.personaToDepartment(personaType) }
@@ -107,6 +130,8 @@ export class ConceptMatchingService {
       const semanticMatches = await this.embeddingService.search(query, limit, filter);
 
       if (semanticMatches.length === 0) {
+        // EmbeddingService.search() returns [] when embedding fails (error flag),
+        // so this path covers both "no results" and "embedding error → fallback to keyword"
         return [];
       }
 
@@ -125,10 +150,23 @@ export class ConceptMatchingService {
         enriched: enriched.length,
       });
 
+      // Cache the result
+      this.semanticCache.set(cacheKey, {
+        value: enriched,
+        expiresAt: Date.now() + this.CACHE_TTL_MS,
+      });
+      // Evict old entries if cache grows too large
+      if (this.semanticCache.size > 100) {
+        const now = Date.now();
+        for (const [key, entry] of this.semanticCache) {
+          if (entry.expiresAt <= now) this.semanticCache.delete(key);
+        }
+      }
+
       return enriched;
     } catch (err) {
-      this.logger.debug({
-        message: 'Semantic search unavailable, will use keyword fallback',
+      this.logger.warn({
+        message: 'Semantic search failed, falling back to keyword matching',
         error: err instanceof Error ? err.message : 'Unknown',
       });
       return [];

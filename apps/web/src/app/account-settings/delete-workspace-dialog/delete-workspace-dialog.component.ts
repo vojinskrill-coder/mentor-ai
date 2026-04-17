@@ -24,8 +24,8 @@ import type { TenantDeletionStatusResponse } from '@mentor-ai/shared/types';
         z-index: 51;
         width: 90%;
         max-width: 440px;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 12px;
         padding: 24px;
       }
@@ -59,8 +59,8 @@ import type { TenantDeletionStatusResponse } from '@mentor-ai/shared/types';
         border-radius: 4px;
       }
       .close-btn:hover {
-        color: #fafafa;
-        background: #242424;
+        color: #E6EDF3;
+        background: #1C2128;
       }
       .close-btn svg {
         width: 20px;
@@ -98,7 +98,7 @@ import type { TenantDeletionStatusResponse } from '@mentor-ai/shared/types';
         line-height: 1.5;
       }
       .info-text strong {
-        color: #fafafa;
+        color: #E6EDF3;
       }
 
       /* Confirm input */
@@ -118,16 +118,16 @@ import type { TenantDeletionStatusResponse } from '@mentor-ai/shared/types';
         width: 100%;
         padding: 10px 12px;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
-        background: #0d0d0d;
-        color: #fafafa;
+        border: 1px solid #21262D;
+        background: #0D1117;
+        color: #E6EDF3;
         font-size: 14px;
         font-family: inherit;
         box-sizing: border-box;
       }
       .confirm-input:focus {
         outline: none;
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
 
       /* Error */
@@ -150,16 +150,16 @@ import type { TenantDeletionStatusResponse } from '@mentor-ai/shared/types';
       .btn-cancel {
         padding: 8px 16px;
         border-radius: 6px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         background: transparent;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 14px;
         font-weight: 500;
         cursor: pointer;
         font-family: inherit;
       }
       .btn-cancel:hover {
-        background: #242424;
+        background: #1C2128;
       }
       .btn-delete {
         display: inline-flex;

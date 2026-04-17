@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
+import { AiGatewayService } from '../ai-gateway/ai-gateway.service';
+import type { ChatMessage } from '@mentor-ai/shared/types';
 import type { BusinessProfile } from './business-profile.service';
 
 export interface GeneratedSouls {
@@ -9,59 +10,71 @@ export interface GeneratedSouls {
   marketing: string;
   content: string;
   sales: string;
+  research: string;
+  designer: string;
+  dev: string;
 }
 
 const AGENT_ROLES: Record<keyof GeneratedSouls, { title: string; focus: string }> = {
   main: {
-    title: 'Glavni poslovni savetnik (CEO perspektiva)',
-    focus: 'Poznaje ceo biznis, donosi strateške odluke, koordinira sve aspekte poslovanja. Razume tržište, klijente, proizvode i finansije.',
+    title: 'Chief Business Advisor (CEO perspective)',
+    focus: 'Knows the entire business, makes strategic decisions, coordinates all aspects. Understands market, clients, products, and finances.',
   },
   financial: {
-    title: 'Finansijski direktor',
-    focus: 'Specijalizovan za finansijsku analizu, ROI kalkulacije, budžetiranje, cash flow, break-even analize i finansijske projekcije.',
+    title: 'Chief Financial Officer',
+    focus: 'Specialized in financial analysis, ROI calculations, budgeting, cash flow, break-even analysis, and financial projections.',
   },
   marketing: {
-    title: 'Direktor marketinga (CMO)',
-    focus: 'Specijalizovan za brend strategiju, digitalni marketing, content plan, SEO, društvene mreže, pozicioniranje i vizuelni identitet.',
+    title: 'Chief Marketing Officer',
+    focus: 'Specialized in brand strategy, digital marketing, content planning, SEO, social media, positioning, and visual identity.',
   },
   content: {
-    title: 'Kreativni direktor',
-    focus: 'Specijalizovan za kreiranje vizuelnog sadržaja, copy writing, brošure, prezentacije, social media content, i sav kreativni materijal. Koristi FAL za generisanje slika.',
+    title: 'Creative Director',
+    focus: 'Specialized in creating visual content, copywriting, brochures, presentations, social media content. Uses MiniMax for image generation.',
   },
   sales: {
-    title: 'Direktor prodaje',
-    focus: 'Specijalizovan za prodajne strategije, CRM, lead generation, objection handling, pricing strategije i relationship building.',
+    title: 'Sales Director',
+    focus: 'Specialized in sales strategies, CRM, lead generation, objection handling, pricing strategies, and relationship building.',
+  },
+  research: {
+    title: 'Research Analyst',
+    focus: 'Specialized in market research, competitive analysis, industry trends, data gathering, and insights synthesis using web search.',
+  },
+  designer: {
+    title: 'Design Director',
+    focus: 'Specialized in visual design, brand identity, UI/UX, presentation design, and visual communication. Uses MiniMax for image generation.',
+  },
+  dev: {
+    title: 'Technology Advisor',
+    focus: 'Specialized in technology strategy, system architecture, tool selection, automation, and digital transformation.',
   },
 };
 
 @Injectable()
 export class SoulGeneratorService {
   private readonly logger = new Logger(SoulGeneratorService.name);
-  private readonly geminiApiKey: string;
 
-  constructor(private readonly configService: ConfigService) {
-    this.geminiApiKey = this.configService.get<string>('GEMINI_API_KEY') ?? '';
-  }
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly aiGateway: AiGatewayService,
+  ) {}
 
   /**
-   * Generate SOUL.MD content for all 5 domain agents based on the business profile.
-   * Each SOUL.MD is written in Serbian and customized to the specific business.
+   * Generate SOUL.MD content for all 8 domain agents based on the business profile.
+   * Each SOUL.MD is in English and customized to the specific business.
    */
   async generateAllSouls(profile: BusinessProfile): Promise<GeneratedSouls> {
-    this.logger.log({ message: 'Generating SOUL.MD files', company: profile.companyName });
+    this.logger.log({ message: 'Generating SOUL.MD files for all agents', company: profile.companyName });
 
     const agentTypes = Object.keys(AGENT_ROLES) as Array<keyof GeneratedSouls>;
     const results = await Promise.all(
       agentTypes.map(agentType => this.generateSoul(agentType, profile))
     );
 
-    const souls: GeneratedSouls = {
-      main: results[0]!,
-      financial: results[1]!,
-      marketing: results[2]!,
-      content: results[3]!,
-      sales: results[4]!,
-    };
+    const souls = {} as GeneratedSouls;
+    for (let i = 0; i < agentTypes.length; i++) {
+      souls[agentTypes[i]!] = results[i]!;
+    }
 
     this.logger.log({
       message: 'All SOUL.MD files generated',
@@ -75,67 +88,71 @@ export class SoulGeneratorService {
   private async generateSoul(agentType: keyof GeneratedSouls, profile: BusinessProfile): Promise<string> {
     const role = AGENT_ROLES[agentType]!;
 
-    const prompt = `Generate a SOUL.MD file for an AI agent in SERBIAN language.
+    const prompt = `Generate a SOUL.MD file for an AI agent in ENGLISH.
 
 AGENT ROLE: ${role.title}
 AGENT FOCUS: ${role.focus}
 
 BUSINESS PROFILE:
-- Kompanija: ${profile.companyName}
-- Industrija: ${profile.industry}
-- Opis: ${profile.description}
-- Proizvodi: ${Array.isArray(profile.products) ? profile.products.join(', ') : String(profile.products || 'N/A')}
-- Usluge: ${Array.isArray(profile.services) ? profile.services.join(', ') : String(profile.services || 'N/A')}
-- Ciljni klijenti: ${Array.isArray(profile.targetClients) ? profile.targetClients.join(', ') : String(profile.targetClients || 'N/A')}
-- Geografija: ${profile.geography}
-- Ton brenda: ${profile.brandVoice}
-- Konkurenti: ${Array.isArray(profile.competitors) ? profile.competitors.join(', ') : String(profile.competitors || 'N/A')}
-- Jedinstvena vrednost: ${profile.uniqueValue}
-- Cenovni rang: ${profile.priceRange}
-- Tim: ${profile.teamDescription}
-- Vizuelni stil: ${profile.visualStyle}
+- Company: ${profile.companyName}
+- Industry: ${profile.industry}
+- Description: ${profile.description}
+- Products: ${Array.isArray(profile.products) ? profile.products.join(', ') : String(profile.products || 'N/A')}
+- Services: ${Array.isArray(profile.services) ? profile.services.join(', ') : String(profile.services || 'N/A')}
+- Target Clients: ${Array.isArray(profile.targetClients) ? profile.targetClients.join(', ') : String(profile.targetClients || 'N/A')}
+- Geography: ${profile.geography}
+- Brand Voice: ${profile.brandVoice}
+- Competitors: ${Array.isArray(profile.competitors) ? profile.competitors.join(', ') : String(profile.competitors || 'N/A')}
+- Unique Value: ${profile.uniqueValue}
+- Price Range: ${profile.priceRange}
+- Team: ${profile.teamDescription}
+- Visual Style: ${profile.visualStyle}
 
-KONTEKST:
+CONTEXT:
 ${profile.rawSummary}
 
-Write the SOUL.MD with these sections in Serbian:
-1. # Ko sam ja — agent's identity and role within ${profile.companyName}
-2. ## Moja ekspertiza — specific domain knowledge for this business
-3. ## Kako radim — working methodology, approach, tools I use
-4. ## O kompaniji ${profile.companyName} — detailed business context
-5. ## Moji klijenti — target audience understanding
-6. ## Vizuelni identitet — brand guidelines (especially important for content/marketing agents)
-7. ## Pravila — constraints, guidelines:
-   - SVE pretrage moraju biti na ENGLESKOM jeziku
-   - Sav output mora biti na SRPSKOM jeziku
-   - Koristiti markdown formatiranje sa tabelama
-   - NE izmišljati podatke — koristiti samo provjerene izvore
-   - NE pisati fajlove (write/edit tool) — samo vraćati tekst
-   - Svaku činjenicu citirati sa izvorom ako je dostupan
+CRITICAL: This SOUL.MD is for ${profile.companyName} ONLY. Do NOT reference any other company's branding, colors, or products.
 
-Return ONLY the SOUL.MD content, no wrapping or explanation. Make it specific and actionable — between 500-800 words (2000-3000 characters). Be concise but include all critical business context.`;
+Write the SOUL.MD with these sections:
+1. # Identity — agent's identity and role within ${profile.companyName}
+2. ## Expertise — specific domain knowledge for this business and industry
+3. ## Methodology — working approach, tools, research methods
+4. ## About ${profile.companyName} — detailed business context, products, market position
+5. ## Target Audience — customer understanding for this specific business
+6. ## Brand Guidelines — visual identity, tone, style (ONLY for ${profile.companyName}, no other company)
+7. ## Rules:
+   - ALL web searches must be in ENGLISH
+   - ALL output must be in ENGLISH
+   - Use markdown formatting with tables where appropriate
+   - NEVER fabricate data — use only verified sources with citations
+   - NEVER reference other companies' branding or visual identity
+   - Every claim must be cited with a source when available
+   - Use MiniMax for image generation when needed (NOT FAL.ai)
+
+Return ONLY the SOUL.MD content. Make it specific to ${profile.companyName} — between 500-1000 words.`;
 
     try {
-      const response = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${this.geminiApiKey}`,
+      let responseText = '';
+      await this.aiGateway.streamCompletionWithContext(
+        [{ role: 'user', content: prompt } as ChatMessage],
         {
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.4, maxOutputTokens: 16000 },
+          tenantId: 'system',
+          userId: 'system',
+          conversationId: `soul-gen-${agentType}`,
+          skipRateLimit: true,
+          skipQuotaCheck: true,
+          useFallback: true,
         },
-        { timeout: 60_000 }
+        (chunk: string) => { responseText += chunk; },
       );
-
-      const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-      const usage = response.data?.usageMetadata;
 
       this.logger.log({
         message: `SOUL.MD generated for ${agentType}`,
-        chars: text.length,
-        inputTokens: usage?.promptTokenCount,
-        outputTokens: usage?.candidatesTokenCount,
+        chars: responseText.length,
+        company: profile.companyName,
       });
 
-      return text || this.getFallbackSoul(agentType, profile);
+      return responseText || this.getFallbackSoul(agentType, profile);
     } catch (error) {
       this.logger.error({
         message: `SOUL.MD generation failed for ${agentType}`,
@@ -149,23 +166,25 @@ Return ONLY the SOUL.MD content, no wrapping or explanation. Make it specific an
     const role = AGENT_ROLES[agentType]!;
     return `# ${role.title} — ${profile.companyName}
 
-Ja sam ${role.title} za ${profile.companyName}.
+I am the ${role.title} for ${profile.companyName}.
 
-## Moja ekspertiza
+## Expertise
 ${role.focus}
 
-## O kompaniji
+## About ${profile.companyName}
 ${profile.description}
-- Industrija: ${profile.industry}
-- Proizvodi: ${Array.isArray(profile.products) ? profile.products.join(', ') : String(profile.products || 'N/A')}
-- Usluge: ${Array.isArray(profile.services) ? profile.services.join(', ') : String(profile.services || 'N/A')}
+- Industry: ${profile.industry}
+- Products: ${Array.isArray(profile.products) ? profile.products.join(', ') : String(profile.products || 'N/A')}
+- Services: ${Array.isArray(profile.services) ? profile.services.join(', ') : String(profile.services || 'N/A')}
+- Target Clients: ${Array.isArray(profile.targetClients) ? profile.targetClients.join(', ') : String(profile.targetClients || 'N/A')}
 
-## Pravila
-- SVE pretrage na ENGLESKOM jeziku
-- Sav output na SRPSKOM jeziku
-- Markdown formatiranje sa tabelama
-- NE izmišljati podatke
-- NE pisati fajlove — samo vraćati tekst
+## Rules
+- ALL searches in ENGLISH
+- ALL output in ENGLISH
+- Use markdown formatting with tables
+- NEVER fabricate data — use only verified sources
+- NEVER reference other companies' branding or products
+- This agent works ONLY for ${profile.companyName}
 `;
   }
 }

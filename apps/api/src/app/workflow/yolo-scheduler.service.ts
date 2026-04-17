@@ -772,7 +772,7 @@ export class YoloSchedulerService {
       }
       const taskNote = await this.notesService.createNote({
         title: conceptName,
-        content: `Primenite ${conceptName} na vaše poslovanje`,
+        content: `Apply ${conceptName} to your business`,
         source: NoteSource.CONVERSATION,
         noteType: NoteType.TASK,
         status: NoteStatus.PENDING,

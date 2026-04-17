@@ -19,11 +19,11 @@ import { ExecutionPanelService } from '../../../core/services/execution-panel.se
 import { ChatWebsocketService } from '../services/chat-websocket.service';
 
 const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> = {
-  web_search: { label: 'Online istraživanje', icon: '🔍', cost: 0.5 },
-  content: { label: 'Kreiranje sadržaja', icon: '✏️', cost: 0.5 },
-  marketing: { label: 'Marketing analiza', icon: '📈', cost: 0.5 },
-  sales: { label: 'Prodajna strategija', icon: '💼', cost: 0.5 },
-  financial: { label: 'Finansijska analiza', icon: '💰', cost: 0.5 },
+  web_search: { label: 'Online research', icon: '🔍', cost: 0.5 },
+  content: { label: 'Content creation', icon: '✏️', cost: 0.5 },
+  marketing: { label: 'Marketing analysis', icon: '📈', cost: 0.5 },
+  sales: { label: 'Sales strategy', icon: '💼', cost: 0.5 },
+  financial: { label: 'Financial analysis', icon: '💰', cost: 0.5 },
 };
 
 @Component({
@@ -35,8 +35,8 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
       .job-panel {
         margin-top: 16px;
         padding: 16px;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 8px;
       }
       .job-panel-header {
@@ -48,12 +48,12 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
       .job-panel-title {
         font-size: 14px;
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
         margin: 0;
       }
       .job-panel-count {
         font-size: 11px;
-        color: #666;
+        color: #6E7681;
       }
       .job-budget-bar {
         display: flex;
@@ -61,23 +61,23 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
         gap: 8px;
         margin-bottom: 16px;
         font-size: 11px;
-        color: #999;
+        color: #8B949E;
       }
       .job-budget-track {
         flex: 1;
         height: 4px;
-        background: #2a2a2a;
+        background: #21262D;
         border-radius: 2px;
         overflow: hidden;
       }
       .job-budget-fill {
         height: 100%;
-        background: #3b82f6;
+        background: #58A6FF;
         border-radius: 2px;
         transition: width 0.3s;
       }
       .job-budget-fill.over-budget {
-        background: #ef4444;
+        background: #F85149;
       }
 
       /* Pipeline layout */
@@ -109,51 +109,51 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
         font-size: 12px;
         font-weight: 700;
         flex-shrink: 0;
-        border: 2px solid #2a2a2a;
-        background: #242424;
-        color: #999;
+        border: 2px solid #21262D;
+        background: #1C2128;
+        color: #8B949E;
       }
       .job-order-badge.planned {
-        border-color: #2a2a2a;
-        color: #999;
+        border-color: #21262D;
+        color: #8B949E;
       }
       .job-order-badge.running {
-        border-color: #3b82f6;
-        color: #3b82f6;
+        border-color: #58A6FF;
+        color: #58A6FF;
         animation: job-pulse 1.5s ease-in-out infinite;
       }
       .job-order-badge.completed {
-        border-color: #22c55e;
-        background: #22c55e;
+        border-color: #3FB950;
+        background: #3FB950;
         color: #fff;
       }
       .job-order-badge.failed {
-        border-color: #ef4444;
-        background: #ef4444;
+        border-color: #F85149;
+        background: #F85149;
         color: #fff;
       }
       .job-order-badge.locked {
-        border-color: #1e1e1e;
-        background: #1a1a1a;
+        border-color: #21262D;
+        background: #161B22;
         color: #555;
       }
       @keyframes job-pulse {
         0%,
         100% {
-          box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+          box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.4);
         }
         50% {
-          box-shadow: 0 0 0 6px rgba(59, 130, 246, 0);
+          box-shadow: 0 0 0 6px rgba(88, 166, 255, 0);
         }
       }
       .job-connector {
         width: 2px;
         flex: 1;
         min-height: 12px;
-        background: #2a2a2a;
+        background: #21262D;
       }
       .job-connector.completed {
-        background: #22c55e;
+        background: #3FB950;
       }
       .job-connector.hidden {
         visibility: hidden;
@@ -166,20 +166,20 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
         margin-bottom: 12px;
       }
       .job-card {
-        background: #242424;
-        border: 1px solid #2a2a2a;
+        background: #1C2128;
+        border: 1px solid #21262D;
         border-radius: 6px;
         padding: 12px;
         transition: border-color 0.15s;
       }
       .job-card.running {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .job-card.completed {
-        border-color: #22c55e;
+        border-color: #3FB950;
       }
       .job-card.failed {
-        border-color: #ef4444;
+        border-color: #F85149;
       }
       .job-card.locked {
         opacity: 0.5;
@@ -196,7 +196,7 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
       .job-agent-label {
         font-size: 13px;
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
         flex: 1;
       }
       .job-status-badge {
@@ -206,24 +206,24 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
         border-radius: 10px;
       }
       .job-status-badge.running {
-        background: rgba(59, 130, 246, 0.15);
+        background: rgba(88, 166, 255, 0.15);
         color: #60a5fa;
       }
       .job-status-badge.completed {
-        background: rgba(34, 197, 94, 0.15);
-        color: #22c55e;
+        background: rgba(63, 185, 80, 0.15);
+        color: #3FB950;
       }
       .job-status-badge.failed {
-        background: rgba(239, 68, 68, 0.15);
-        color: #ef4444;
+        background: rgba(248, 81, 73, 0.15);
+        color: #F85149;
       }
       .job-status-badge.locked {
         background: rgba(100, 100, 100, 0.15);
-        color: #666;
+        color: #6E7681;
       }
       .job-instruction-preview {
         font-size: 12px;
-        color: #888;
+        color: #8B949E;
         line-height: 1.5;
         margin-bottom: 8px;
         display: -webkit-box;
@@ -238,12 +238,12 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
       }
       .job-cost {
         font-size: 11px;
-        color: #666;
+        color: #6E7681;
       }
       .job-execute-btn {
         background: transparent;
-        border: 1px solid #3b82f6;
-        color: #3b82f6;
+        border: 1px solid #58A6FF;
+        color: #58A6FF;
         padding: 4px 14px;
         border-radius: 4px;
         font-size: 11px;
@@ -252,7 +252,7 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
         transition: all 0.15s;
       }
       .job-execute-btn:hover:not(:disabled) {
-        background: #3b82f6;
+        background: #58A6FF;
         color: #fff;
       }
       .job-execute-btn:disabled {
@@ -261,8 +261,8 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
       }
       .job-retry-btn {
         background: transparent;
-        border: 1px solid #f59e0b;
-        color: #f59e0b;
+        border: 1px solid #D29922;
+        color: #D29922;
         padding: 4px 14px;
         border-radius: 4px;
         font-size: 11px;
@@ -271,7 +271,7 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
         transition: all 0.15s;
       }
       .job-retry-btn:hover:not(:disabled) {
-        background: #f59e0b;
+        background: #D29922;
         color: #fff;
       }
       .job-retry-btn:disabled {
@@ -283,13 +283,13 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
         align-items: center;
         gap: 6px;
         font-size: 11px;
-        color: #3b82f6;
+        color: #58A6FF;
       }
       .job-running-spinner {
         width: 12px;
         height: 12px;
-        border: 2px solid #333;
-        border-top-color: #3b82f6;
+        border: 2px solid #30363D;
+        border-top-color: #58A6FF;
         border-radius: 50%;
         animation: job-spin 0.8s linear infinite;
       }
@@ -308,23 +308,23 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
       }
       .job-elapsed {
         font-size: 10px;
-        color: #666;
+        color: #6E7681;
         font-variant-numeric: tabular-nums;
       }
       .job-error-msg {
-        background: rgba(239, 68, 68, 0.1);
-        border: 1px solid rgba(239, 68, 68, 0.3);
+        background: rgba(248, 81, 73, 0.1);
+        border: 1px solid rgba(248, 81, 73, 0.3);
         border-radius: 4px;
         padding: 6px 10px;
         margin-top: 8px;
         font-size: 11px;
-        color: #ef4444;
+        color: #F85149;
       }
 
       /* Expandable result section */
       .job-result-section {
         margin-top: 10px;
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid #21262D;
       }
       .job-result-header {
         display: flex;
@@ -333,7 +333,7 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
         padding: 8px 0 0 0;
         cursor: pointer;
         font-size: 11px;
-        color: #888;
+        color: #8B949E;
       }
       .job-result-header:hover {
         color: #bbb;
@@ -371,13 +371,13 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
         font-size: 18px;
         margin: 28px 0 12px 0;
         padding-bottom: 8px;
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
       }
       .enrichment-content h2 {
         font-size: 15px;
         margin: 24px 0 10px 0;
         padding-bottom: 6px;
-        border-bottom: 1px solid rgba(59, 130, 246, 0.15);
+        border-bottom: 1px solid rgba(88, 166, 255, 0.15);
       }
       .enrichment-content h3 {
         font-size: 14px;
@@ -434,8 +434,8 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
       .enrichment-content blockquote {
         margin: 16px 0;
         padding: 12px 16px;
-        border-left: 3px solid #3b82f6;
-        background: rgba(59, 130, 246, 0.06);
+        border-left: 3px solid #58A6FF;
+        background: rgba(88, 166, 255, 0.06);
         border-radius: 0 6px 6px 0;
         color: #d4d4d4;
         font-style: italic;
@@ -446,7 +446,7 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
       .enrichment-content hr {
         border: none;
         height: 1px;
-        background: linear-gradient(to right, transparent, #2a2a2a 20%, #2a2a2a 80%, transparent);
+        background: linear-gradient(to right, transparent, #21262D 20%, #21262D 80%, transparent);
         margin: 20px 0;
       }
       .enrichment-content code {
@@ -466,8 +466,8 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
       .enrichment-content pre code {
         display: block;
         padding: 14px 18px;
-        background: #0d0d0d;
-        border: 1px solid #1e1e1e;
+        background: #0D1117;
+        border: 1px solid #21262D;
         color: #d4d4d4;
         font-size: 12px;
         line-height: 1.5;
@@ -477,7 +477,7 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
         max-width: 100%;
         border-radius: 10px;
         margin: 16px 0;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         display: block;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
       }
@@ -491,11 +491,11 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
         margin: 14px 0;
         border-radius: 8px;
         overflow: hidden;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         font-size: 12.5px;
       }
       .enrichment-content th {
-        background: #1a1a1a;
+        background: #161B22;
         color: #f5f5f5;
         font-weight: 600;
         text-align: left;
@@ -503,7 +503,7 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
         font-size: 11.5px;
         text-transform: uppercase;
         letter-spacing: 0.04em;
-        border-bottom: 2px solid #2a2a2a;
+        border-bottom: 2px solid #21262D;
       }
       .enrichment-content td {
         padding: 9px 14px;
@@ -518,7 +518,7 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
         background: rgba(255, 255, 255, 0.02);
       }
       .enrichment-content tbody tr:hover {
-        background: rgba(59, 130, 246, 0.04);
+        background: rgba(88, 166, 255, 0.04);
       }
       .enrichment-content del {
         color: #737373;
@@ -529,30 +529,30 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
       .job-summary {
         margin-top: 16px;
         padding: 12px;
-        background: rgba(34, 197, 94, 0.08);
-        border: 1px solid rgba(34, 197, 94, 0.2);
+        background: rgba(63, 185, 80, 0.08);
+        border: 1px solid rgba(63, 185, 80, 0.2);
         border-radius: 6px;
         text-align: center;
         font-size: 12px;
-        color: #22c55e;
+        color: #3FB950;
         font-weight: 500;
       }
 
       /* Global error */
       .job-global-error {
-        background: rgba(239, 68, 68, 0.1);
-        border: 1px solid rgba(239, 68, 68, 0.3);
+        background: rgba(248, 81, 73, 0.1);
+        border: 1px solid rgba(248, 81, 73, 0.3);
         border-radius: 6px;
         padding: 8px 12px;
         margin-top: 12px;
         font-size: 12px;
-        color: #ef4444;
+        color: #F85149;
       }
 
       .job-empty {
         text-align: center;
         padding: 16px;
-        color: #666;
+        color: #6E7681;
         font-size: 12px;
       }
 
@@ -561,14 +561,14 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
         align-items: center;
         gap: 8px;
         padding: 12px 0;
-        color: #999;
+        color: #8B949E;
         font-size: 12px;
       }
       .job-loading-spinner {
         width: 14px;
         height: 14px;
-        border: 2px solid #333;
-        border-top-color: #3b82f6;
+        border: 2px solid #30363D;
+        border-top-color: #58A6FF;
         border-radius: 50%;
         animation: job-spin 0.8s linear infinite;
       }
@@ -577,9 +577,9 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
   template: `
     <div class="job-panel">
       <div class="job-panel-header">
-        <h4 class="job-panel-title">AI Radni Plan</h4>
+        <h4 class="job-panel-title">AI Work Plan</h4>
         @if (jobs().length > 0) {
-          <span class="job-panel-count">{{ completedCount() }}/{{ jobs().length }} završeno</span>
+          <span class="job-panel-count">{{ completedCount() }}/{{ jobs().length }} completed</span>
         }
       </div>
 
@@ -599,10 +599,10 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
       @if (loading()) {
         <div class="job-loading">
           <div class="job-loading-spinner"></div>
-          Učitavam plan...
+          Loading plan...
         </div>
       } @else if (jobs().length === 0) {
-        <div class="job-empty">Nema planiranih zadataka za ovaj izveštaj.</div>
+        <div class="job-empty">No planned tasks for this report.</div>
       } @else {
         <div class="job-pipeline">
           @for (job of jobs(); track job.id; let last = $last) {
@@ -632,13 +632,13 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
                     <span class="job-agent-icon">{{ getIcon(job.agentType) }}</span>
                     <span class="job-agent-label">{{ getLabel(job.agentType) }}</span>
                     @if (job.status === 'RUNNING') {
-                      <span class="job-status-badge running">Izvršava se</span>
+                      <span class="job-status-badge running">Executing</span>
                     } @else if (job.status === 'COMPLETED') {
-                      <span class="job-status-badge completed">Završeno</span>
+                      <span class="job-status-badge completed">Completed</span>
                     } @else if (job.status === 'FAILED') {
-                      <span class="job-status-badge failed">Greška</span>
+                      <span class="job-status-badge failed">Error</span>
                     } @else if (isLocked(job)) {
-                      <span class="job-status-badge locked">Čeka prethodni</span>
+                      <span class="job-status-badge locked">Awaiting previous</span>
                     }
                   </div>
 
@@ -660,7 +660,7 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
                         [disabled]="!canAfford()"
                         (click)="onExecuteJob(job)"
                       >
-                        Izvrši
+                        Execute
                       </button>
                     } @else if (job.status === 'FAILED') {
                       <button
@@ -668,7 +668,7 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
                         [disabled]="retryingJobs().has(job.id)"
                         (click)="onRetryJob(job)"
                       >
-                        {{ retryingJobs().has(job.id) ? 'Ponavljanje...' : 'Ponovi' }}
+                        {{ retryingJobs().has(job.id) ? 'Retrying...' : 'Retry' }}
                       </button>
                     }
                   </div>
@@ -684,7 +684,7 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
                           isResultExpanded(job.id) ? '▼' : '▶'
                         }}</span>
                         <span>{{
-                          isResultExpanded(job.id) ? 'Sakrij rezultat' : 'Prikaži rezultat'
+                          isResultExpanded(job.id) ? 'Hide result' : 'Show result'
                         }}</span>
                       </div>
                       @if (isResultExpanded(job.id)) {
@@ -703,7 +703,7 @@ const AGENT_INFO: Record<string, { label: string; icon: string; cost: number }> 
 
         @if (allCompleted()) {
           <div class="job-summary">
-            Svi zadaci završeni | {{ jobs().length }} agenata | ~{{
+            All tasks completed | {{ jobs().length }} agents | ~{{
               totalEstimatedCost().toFixed(2)
             }}
             EUR
@@ -827,7 +827,7 @@ export class JobPanelComponent implements OnInit, OnDestroy {
           const s = sec % 60;
           current.set(jobId, {
             ...existing,
-            phase: `Agent istražuje... (${m > 0 ? m + 'm ' : ''}${s}s)`,
+            phase: `Agent researching... (${m > 0 ? m + 'm ' : ''}${s}s)`,
           });
           this.runningJobs.set(current);
         }
@@ -847,7 +847,7 @@ export class JobPanelComponent implements OnInit, OnDestroy {
         // Update activity feed
         const eid = this.jobEntryIds.get(jobId);
         if (eid) {
-          this.execPanel.completeEntry(eid, `Završeno za ${Math.floor(data.durationMs / 1000)}s`);
+          this.execPanel.completeEntry(eid, `Completed in ${Math.floor(data.durationMs / 1000)}s`);
           this.jobEntryIds.delete(jobId);
         }
         this.execToJobMap.delete(data.executionId);
@@ -1040,7 +1040,7 @@ export class JobPanelComponent implements OnInit, OnDestroy {
       const current = new Map(this.runningJobs());
       current.set(job.id, {
         executionId,
-        phase: 'Priprema instrukcija...',
+        phase: 'Preparing instructions...',
         startedAt: Date.now(),
       });
       this.runningJobs.set(current);
@@ -1056,7 +1056,7 @@ export class JobPanelComponent implements OnInit, OnDestroy {
         this.pollJobExecution(job.id, executionId);
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Greška pri pokretanju zadatka';
+      const message = err instanceof Error ? err.message : 'Error launching task';
       this.globalError.set(message);
       // Update activity feed with error
       const eid = this.jobEntryIds.get(job.id);
@@ -1076,9 +1076,9 @@ export class JobPanelComponent implements OnInit, OnDestroy {
 
     const entryId = this.execPanel.addEntry(
       'agent-job',
-      `${this.getLabel(job.agentType)} (ponovo)`,
+      `${this.getLabel(job.agentType)} (retry)`,
       'running',
-      'Ponavljanje zadatka...',
+      'Retrying task...',
     );
     this.jobEntryIds.set(job.id, entryId);
 
@@ -1090,7 +1090,7 @@ export class JobPanelComponent implements OnInit, OnDestroy {
       const current = new Map(this.runningJobs());
       current.set(job.id, {
         executionId,
-        phase: 'Priprema instrukcija...',
+        phase: 'Preparing instructions...',
         startedAt: Date.now(),
       });
       this.runningJobs.set(current);
@@ -1103,7 +1103,7 @@ export class JobPanelComponent implements OnInit, OnDestroy {
         this.pollJobExecution(job.id, executionId);
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Greška pri ponovnom pokretanju';
+      const message = err instanceof Error ? err.message : 'Error retrying task';
       this.globalError.set(message);
       const eid = this.jobEntryIds.get(job.id);
       if (eid) {
@@ -1120,7 +1120,7 @@ export class JobPanelComponent implements OnInit, OnDestroy {
   private pollJobExecution(jobId: string, executionId: string): void {
     const retries = (this.pollRetryCounts.get(jobId) ?? 0) + 1;
     if (retries > this.MAX_POLL_RETRIES) {
-      this.stopJobPolling(jobId, 'Zadatak je istekao. Pokušajte ponovo.');
+      this.stopJobPolling(jobId, 'Task timed out. Try again.');
       return;
     }
     this.pollRetryCounts.set(jobId, retries);
@@ -1139,9 +1139,9 @@ export class JobPanelComponent implements OnInit, OnDestroy {
           exec.status === 'EXECUTING'
         ) {
           const phaseMap: Record<string, string> = {
-            PENDING: 'Čeka na red...',
-            FORMATTING: 'Priprema instrukcija...',
-            EXECUTING: 'Agent istražuje i analizira...',
+            PENDING: 'Queued...',
+            FORMATTING: 'Preparing instructions...',
+            EXECUTING: 'Agent researching and analyzing...',
           };
           const phase = phaseMap[exec.status] ?? 'Agent radi...';
           const current = new Map(this.runningJobs());
@@ -1172,9 +1172,9 @@ export class JobPanelComponent implements OnInit, OnDestroy {
           const eid = this.jobEntryIds.get(jobId);
           if (eid) {
             if (exec.status === 'COMPLETED') {
-              this.execPanel.completeEntry(eid, 'Agent završio');
+              this.execPanel.completeEntry(eid, 'Agent completed');
             } else {
-              this.execPanel.failEntry(eid, 'Agent neuspešan');
+              this.execPanel.failEntry(eid, 'Agent failed');
             }
             this.jobEntryIds.delete(jobId);
           }
@@ -1187,7 +1187,7 @@ export class JobPanelComponent implements OnInit, OnDestroy {
         const consecutive = (this.pollErrorCounts.get(jobId) ?? 0) + 1;
         this.pollErrorCounts.set(jobId, consecutive);
         if (consecutive >= this.MAX_CONSECUTIVE_ERRORS) {
-          this.stopJobPolling(jobId, 'Izgubljena veza sa serverom. Pokušajte ponovo.');
+          this.stopJobPolling(jobId, 'Lost connection to server. Try again.');
         } else {
           this.pollJobExecution(jobId, executionId);
         }

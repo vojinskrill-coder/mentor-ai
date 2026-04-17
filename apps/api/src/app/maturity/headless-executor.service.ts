@@ -1,5 +1,7 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Client as SshClient } from 'ssh2';
+import { readFileSync } from 'fs';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { WorkflowService } from '../workflow/workflow.service';
 import { AiGatewayService } from '../ai-gateway/ai-gateway.service';
@@ -7,10 +9,14 @@ import { JobPlannerService } from '../agent-execution/job-planner.service';
 import { AgentExecutionService } from '../agent-execution/agent-execution.service';
 import { OpenClawClientService } from '../agent-execution/openclaw-client.service';
 import { BusinessContextService } from '../knowledge/services/business-context.service';
+import { EmbeddingService } from '../knowledge/services/embedding.service';
+import { ConversationService } from '../conversation/conversation.service';
 import { MaturityEngineService } from './maturity-engine.service';
 import { WsServerHolder } from './ws-server-holder.service';
 import { CrossPersonaIntelligenceService } from './cross-persona-intelligence.service';
 import { AppEventBus, APP_EVENTS } from '../events/app-event-bus.service';
+import { generateEnrichmentSoulMd } from '../vault/enrichment-soul.template';
+import { TenantGuardService } from '../vault/tenant-guard.service';
 
 /**
  * Headless task executor — runs the full auto-popuni pipeline
@@ -18,6 +24,8 @@ import { AppEventBus, APP_EVENTS } from '../events/app-event-bus.service';
  * WITHOUT requiring a WebSocket client.
  *
  * Broadcasts progress events to tenant room if connected clients exist.
+ *
+ * @deprecated Use EnrichmentExecutorService + QueueProcessorService instead. Remove after migration verified.
  */
 @Injectable()
 export class HeadlessExecutorService {
@@ -39,6 +47,15 @@ export class HeadlessExecutorService {
     private readonly openClawClient: OpenClawClientService,
     private readonly appEventBus: AppEventBus,
     private readonly configService: ConfigService,
+    @Optional()
+    @Inject(EmbeddingService)
+    private readonly embeddingService: EmbeddingService | undefined,
+    @Optional()
+    @Inject(ConversationService)
+    private readonly conversationService: ConversationService | undefined,
+    @Optional()
+    @Inject(TenantGuardService)
+    private readonly tenantGuard: TenantGuardService | undefined,
   ) {
     // Align job completion timeout with OpenClaw execution time + retry budget
     const openclawTimeout = parseInt(
@@ -212,7 +229,253 @@ export class HeadlessExecutorService {
         timestamp: new Date().toISOString(),
       });
 
-      // Pre-load tenant + brain context once for all steps
+      // Check if this is a tenant concept that needs MiniMax enrichment.
+      // If the concept belongs to the tenant's vault (not platform), route
+      // to the ConceptEnrichmentService for deep 5000-word research-backed
+      // enrichment instead of the legacy AI Gateway pipeline.
+      if (taskNote.conceptId) {
+        const concept = await this.prisma.concept.findUnique({
+          where: { id: taskNote.conceptId },
+          select: { tenantId: true, confidence: true, tier: true, extendedDescription: true },
+        });
+
+        if (concept?.tenantId === tenantId && (!concept.extendedDescription || concept.extendedDescription.length < 2000)) {
+          // This is a tenant concept needing enrichment — use OpenClaw main agent (MiniMax M2.7)
+          try {
+            const tenant = await this.prisma.tenant.findUnique({
+              where: { id: tenantId },
+              select: { name: true, industry: true, description: true },
+            });
+            const conceptDetail = await this.prisma.concept.findUnique({
+              where: { id: taskNote.conceptId },
+              select: { name: true, slug: true, category: true, definition: true, extendedDescription: true, departmentTags: true },
+            });
+
+            if (conceptDetail) {
+              // === ENGLISH-ONLY GUARD — reject Serbian slugs/names before they reach OpenClaw ===
+              const serbianCheck = /[čćšžđ]/i;
+              if (serbianCheck.test(conceptDetail.name) || serbianCheck.test(conceptDetail.slug || '')) {
+                this.logger.error({
+                  message: 'BLOCKED: Concept has Serbian characters in name/slug — cannot enrich',
+                  tenantId,
+                  conceptId: taskNote.conceptId,
+                  name: conceptDetail.name,
+                  slug: conceptDetail.slug,
+                });
+                return { success: false, error: `Concept "${conceptDetail.name}" has Serbian characters — fix platform data` };
+              }
+
+              // === PRE-ENRICHMENT GUARDRAIL ===
+              if (this.tenantGuard) {
+                const preCheck = await this.tenantGuard.preEnrichmentCheck(tenantId);
+                if (!preCheck.ready) {
+                  this.logger.error({
+                    message: 'Pre-enrichment guardrail FAILED — skipping concept',
+                    tenantId,
+                    conceptId: taskNote.conceptId,
+                    errors: preCheck.errors,
+                  });
+                  return { success: false, error: `Guardrail failed: ${preCheck.errors.join('; ')}` };
+                }
+              }
+
+              // Vault path accessible via workspace symlink (OpenClaw sandboxes read/write to workspace)
+              const vaultPath = `/root/.openclaw/workspace/${tenantId}-vault`;
+              const taskMessage = JSON.stringify({
+                concept: conceptDetail.name,
+                slug: conceptDetail.slug ?? conceptDetail.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+                category: conceptDetail.category,
+                tenantId,
+                vaultPath,
+              });
+
+              // Persistent session per tenant — OpenClaw retains cross-concept knowledge
+              // Compaction triggers after every 20 concepts (handled by OpenClaw via TENANT-PROTOCOL.md)
+              const sessionId = `enrichment-${tenantId}`;
+
+              const result = await this.openClawClient.executeAgent(
+                `**LANGUAGE: ENGLISH ONLY. Not Serbian. Every word must be in English.**
+
+FIRST: read ${vaultPath}/TENANT-PROTOCOL.md — follow it exactly.
+THEN: enrich this concept following the protocol steps.
+
+${taskMessage}`,
+                {
+                  agentId: 'main',
+                  tenantProfile: tenantId,
+                  sessionId,
+                  timeoutSeconds: parseInt(this.configService.get<string>('OPENCLAW_TIMEOUT_SECONDS') ?? '600', 10),
+                  thinking: 'high',
+                },
+              );
+
+              // Map category to department tags for Qdrant
+              const categoryToDept: Record<string, string[]> = {
+                'Marketing': ['Marketing'], '3. Marketing': ['Marketing'],
+                'Sales': ['Sales'], '6. Sales': ['Sales'],
+                'Finance': ['Finance'], '8. Finance': ['Finance'],
+                'Operations': ['Operations'], '9. Operations & Production': ['Operations'],
+                'Strategy': ['Strategy'], '10. Strategy': ['Strategy'],
+                'Value': ['all'], '2. Value': ['all'],
+                'Pricing': ['Finance', 'Sales'], '5. Pricing': ['Finance', 'Sales'],
+                'Business Models': ['Strategy'], '4. Cognitive Biases': ['Marketing', 'Sales'],
+                'Value Delivery': ['Operations'], 'Introduction to Business': ['all'],
+                '11. Human Resources': ['HR'], '12. Working with People': ['HR'],
+                '13. Self-Management': ['all'], '7. Business Development': ['Sales', 'Marketing'],
+                '21. Data Management': ['Technology'],
+              };
+              const deptTags = categoryToDept[conceptDetail.category] ?? ['all'];
+
+              // Check vault regardless of result.success — OpenClaw may write to vault
+              // even when relay reports failure (sub-agent timeouts, etc.)
+              {
+                const slug = conceptDetail.slug ?? conceptDetail.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                const vaultArticlePath = `/root/.openclaw-${tenantId}/vault/wiki/concepts/${slug}.md`;
+
+                // === GUARDRAIL: Validate + Correct Loop ===
+                // Read vault file, validate, send corrections if needed
+                const MAX_CORRECTIONS = 2;
+                let validated = false;
+
+                for (let attempt = 0; attempt <= MAX_CORRECTIONS; attempt++) {
+                  // Read the vault article
+                  let articleContent = '';
+                  try {
+                    articleContent = await this.readRemoteFile(vaultArticlePath);
+                  } catch {
+                    // Try workspace symlink path
+                    try {
+                      articleContent = await this.readRemoteFile(`${vaultPath}/wiki/concepts/${slug}.md`);
+                    } catch {
+                      this.logger.warn({ message: 'Cannot read vault article', slug, attempt });
+                    }
+                  }
+
+                  if (articleContent.length < 500) {
+                    if (attempt < MAX_CORRECTIONS) {
+                      this.logger.log({ message: 'Article not found in vault yet, waiting...', slug, attempt });
+                      await new Promise(r => setTimeout(r, 15000));
+                      continue;
+                    }
+                    break;
+                  }
+
+                  // Validate content
+                  if (this.tenantGuard) {
+                    const check = this.tenantGuard.validateContent(articleContent);
+                    if (check.valid) {
+                      validated = true;
+                      this.logger.log({ message: 'Guardrail PASSED', conceptName: conceptDetail.name, attempt });
+                      break;
+                    }
+
+                    // FAILED — send correction task to OpenClaw
+                    if (attempt < MAX_CORRECTIONS) {
+                      this.logger.warn({
+                        message: 'Guardrail FAILED — sending correction to OpenClaw',
+                        conceptName: conceptDetail.name,
+                        errors: check.errors,
+                        attempt: attempt + 1,
+                      });
+
+                      const correctionPrompt = `**CORRECTION REQUIRED** for article "${conceptDetail.name}" at ${vaultPath}/wiki/concepts/${slug}.md
+
+The article FAILED quality validation with these errors:
+${check.errors.map((e, i) => `${i + 1}. ${e}`).join('\n')}
+
+INSTRUCTIONS:
+1. Read the article at ${vaultPath}/wiki/concepts/${slug}.md
+2. Fix ONLY the specific errors listed above — do not rewrite the entire article
+3. If the error is "Serbian characters" — translate those sections to English
+4. If the error is "Missing Sources section" — add a ## Sources section with real URLs
+5. If the error is "Word count too low" — expand the shortest sections
+6. Write the corrected article back to the same file
+7. Return: {"status":"corrected","errors_fixed":${check.errors.length}}`;
+
+                      try {
+                        await this.openClawClient.executeAgent(correctionPrompt, {
+                          agentId: 'main',
+                          tenantProfile: tenantId,
+                          sessionId: `enrichment-${tenantId}`,
+                          timeoutSeconds: 300,
+                        });
+                      } catch (corrErr) {
+                        this.logger.warn({ message: 'Correction attempt failed', error: (corrErr as Error).message });
+                      }
+
+                      // Wait for correction to be written
+                      await new Promise(r => setTimeout(r, 10000));
+                      continue;
+                    }
+
+                    // Max corrections reached — still failed
+                    this.logger.error({
+                      message: 'Guardrail FAILED after max corrections — marking failed',
+                      conceptName: conceptDetail.name,
+                      errors: check.errors,
+                    });
+                    break;
+                  } else {
+                    // No guardrail service — assume valid
+                    validated = true;
+                    break;
+                  }
+                }
+
+                if (!validated) {
+                  return { success: false, error: 'Content validation failed after corrections' };
+                }
+
+                // === PASSED — Update metadata and mark completed ===
+                await this.prisma.concept.update({
+                  where: { id: taskNote.conceptId },
+                  data: {
+                    confidence: 0.7,
+                    tier: 'semantic',
+                    departmentTags: deptTags,
+                    lastReinforced: new Date(),
+                    updatedAt: new Date(),
+                  },
+                });
+
+                this.logger.log({
+                  message: 'Concept enriched and validated — vault is source of truth',
+                  conceptId: taskNote.conceptId,
+                  conceptName: conceptDetail.name,
+                  slug,
+                });
+
+                /** @deprecated Use GuardrailValidationService.validateAndComplete() instead */
+                await this.prisma.note.update({
+                  where: { id: taskId },
+                  data: { status: 'COMPLETED', updatedAt: new Date() },
+                });
+
+                if (taskNote.conceptId) {
+                  await this.maturityEngine.onConceptCompleted(tenantId, taskNote.conceptId, taskId, userId);
+                }
+
+                this.wsHolder.emitToTenant(tenantId, 'task:ai-complete', {
+                  taskId, conversationId: convId, success: true, auto: true,
+                });
+
+                return { success: true };
+              }
+            }
+          } catch (enrichErr) {
+            this.logger.error({
+              message: 'MiniMax enrichment via OpenClaw failed — NOT falling back to legacy (would produce empty content)',
+              conceptId: taskNote.conceptId,
+              error: (enrichErr as Error).message,
+            });
+            // Do NOT fall through to legacy pipeline — it produces garbage 300-char completions
+            // Return failure so maturity engine can retry later
+            return { success: false, error: `OpenClaw enrichment failed: ${(enrichErr as Error).message}` };
+          }
+        }
+      }
+
+      // Pre-load tenant + brain context once for all steps (legacy pipeline)
       const [cachedTenantData, _brainCtx] = await Promise.all([
         this.prisma.tenant.findUnique({
           where: { id: tenantId },
@@ -257,7 +520,7 @@ export class HeadlessExecutorService {
               prerequisiteContext += `\n### ${po.conceptName}\n${po.outputSummary}`;
             }
             prerequisiteContext += '\n--- END OF PREVIOUS CONTEXT ---';
-            prerequisiteContext += '\nUSE these findings as a FOUNDATION — do not repeat them, BUILD UPON them.';
+            prerequisiteContext += '\nUSE these findings as a FOUNDATION — do not repeat them, BUILD ON them.';
           }
         } catch { /* non-blocking */ }
       }
@@ -326,8 +589,8 @@ export class HeadlessExecutorService {
         try {
           const preCheckResult = await this.executeWithLockRetry(
             () => this.openClawClient.executeAgent(
-              `What do you know about the concept "${taskNote!.title}" for the company ${cachedTenantData?.name || 'Unknown'}? Which aspects have already been covered from previous concepts? What needs to be newly researched? Answer briefly, in 200-300 words.`,
-              { agentId: 'main', tenantProfile: tenantId, timeoutSeconds: 60 }
+              `What do you know about the concept "${taskNote!.title}" for the company ${cachedTenantData?.name || 'Unknown'}? Which aspects are already covered from previous concepts? What needs to be NEWLY researched? Answer briefly, in 200-300 words.`,
+              { agentId: 'main', tenantProfile: tenantId, timeoutSeconds: 300 }
             ),
             'pre-check-main',
           );
@@ -357,7 +620,7 @@ export class HeadlessExecutorService {
         });
       }
 
-      const prompt = `You are a top-tier business expert. Create a DRAFT analysis that will be enriched by AI agent research.
+      const prompt = `You are a top business expert. Create a DRAFT analysis that will be enriched by AI agent research.
 
 TASK: ${taskNote.title}
 ${taskNote.content ? `TASK DESCRIPTION: ${taskNote.content}` : ''}
@@ -366,11 +629,11 @@ ${prerequisiteContext}${crossPersonaContext}${conceptKnowledge}
 ${mainPreCheckContext ? `\n--- WHAT IS ALREADY KNOWN (from the business brain) ---\n${mainPreCheckContext}\n--- END OF KNOWN ---` : ''}
 
 CRITICAL — GROUNDING ON CONCEPT:
-- Your task is EXCLUSIVELY to analyze the concept listed in the KNOWLEDGE BASE above.
+- Your task is EXCLUSIVELY the analysis of the concept listed in the KNOWLEDGE BASE above.
 - EVERY part of the document MUST be directly tied to that concept and its definition.
-- NEVER invent concepts, terms, or data that do not exist in the knowledge base or sources.
-- If you don't know something — write "[NEEDS RESEARCH]" instead of fabricating.
-- DO NOT expand to topics not directly related to the assigned concept.
+- NEVER fabricate concepts, terms, or data that do not exist in the knowledge base or sources.
+- If you do not know something — write "[NEEDS RESEARCH]" instead of making things up.
+- Do NOT expand to topics that are not directly related to the given concept.
 
 THIS IS A DRAFT — it will be enriched by agent research:
 1. Structure the analysis with ## headings, tables
@@ -406,10 +669,10 @@ THIS IS A DRAFT — it will be enriched by agent research:
         auto: true,
       });
 
-      // Save synthesis result
+      // Save synthesis result — NOT marking COMPLETED yet (jobs still need to run)
       await this.prisma.note.update({
         where: { id: taskId },
-        data: { status: 'COMPLETED', userReport: fullContent },
+        data: { status: 'PENDING', userReport: fullContent },
       });
 
       this.wsHolder.emitToTenant(tenantId, 'task:ai-complete', {
@@ -487,7 +750,7 @@ THIS IS A DRAFT — it will be enriched by agent research:
             try {
               let summary = '';
               await this.aiGateway.streamCompletionWithContext(
-                [{ role: 'user', content: `Sumiraj KLJUCNE NALAZE iz ovog istrazivanja u 800-1200 reci. Zadrzi sve konkretne podatke, brojke, izvore (URL-ove) i preporuke. KRITICNO: Zadrzi SVE slike u formatu ![opis](url) — ne brisaj ih i ne menjaj URL-ove. NE gubi nijednu konkretnu cinjenicu.\n\n${output}` }],
+                [{ role: 'user', content: `Summarize the KEY FINDINGS from this research in 800-1200 words. Retain all specific data, numbers, sources (URLs) and recommendations. CRITICAL: Retain ALL images in ![description](url) format — do not delete or change URLs. Do NOT lose any specific fact.\n\n${output}` }],
                 { tenantId, userId, conversationId: convId, businessContext: bizContext, useFallback: true },
                 (chunk: string) => { summary += chunk; },
               );
@@ -519,53 +782,53 @@ ${agentFindings.length > 0 ? `2. AGENT RESEARCH RESULTS:\n${agentFindings}` : '(
 
 TASK — TWO THINGS:
 
-A) CREATE AN OUTSTANDING FINAL DOCUMENT (4000-5000 words) that:
+A) CREATE AN EXCEPTIONAL FINAL DOCUMENT (4000-5000 words) that:
 
 STRUCTURE AND FORMATTING:
-- Use a clear hierarchy: # title, ## sections, ### subsections
-- Each section must have tables with concrete data, numbers, metrics
-- Use **bold** for key values, numbers, and conclusions
+- Use clear hierarchy: # title, ## sections, ### subsections
+- Each section must have tables with specific data, numbers, metrics
+- Use **bold** for key values, numbers and conclusions
 - Use > blockquote for key insights and recommendations
 - Use bullet lists for action items
-- Use horizontal rules (---) to separate major sections
+- Use horizontal lines (---) to separate main sections
 
 CONTENT AND QUALITY:
 - Integrate ALL findings from the draft and ALL agent research — do not skip any finding
-- Prioritize CONCRETE data with sources over generic analyses
-- Every data point, benchmark, or statistic MUST have a source: ([Name](URL))
+- Prioritize SPECIFIC data with sources over generic analyses
+- Every data point, benchmark or statistic MUST have a source: ([Title](URL))
 - Include detailed tables with comparative analyses, metrics, benchmarks
-- For each recommendation provide a CONCRETE action plan with responsible person/team and deadline
-- Include a "Financial Impact" section with concrete projections
+- For each recommendation provide a SPECIFIC action plan with responsible person/team and deadline
+- Include a "Financial Impact" section with specific projections
 - Include a "Risks and Mitigation" section with a risk table
-- Include a "KPIs and Success Measurement" section with concrete target values
-- Include a "Next Steps" section with a time frame (week/month)
+- Include a "KPIs and Success Measurement" section with specific target values
+- Include a "Next Steps" section with timeframe (week/month)
 - Include a "Sources" section at the end with all used URLs
 
 IMAGES:
 - MUST PRESERVE ALL images (![description](url)) from agent findings
 - Copy them EXACTLY as they are — do not change URLs
-- Place them in appropriate locations in the document where they are contextually relevant
+- Place them in appropriate positions in the document where contextually relevant
 
 RULES:
-- Write in English
-- NEVER fabricate data — if data is unavailable, make a reasonable estimate and state the assumption
-- NEVER write "[NEEDS RESEARCH]" or "[NEEDS FURTHER RESEARCH]" — all data has already been researched
-- DO NOT repeat the same information from different agents — synthesize them into a single conclusion
-- Document must be PROFESSIONAL, ready for presentation to C-level executives
-- 4000-5000 words — be thorough, detailed, and comprehensive
-- NEVER write programming code (JavaScript, Python, etc.) — only text, tables, and markdown
+- Write in ENGLISH
+- NEVER fabricate data — if a data point is unavailable, make a reasonable estimate and state the assumption
+- NEVER write "[NEEDS RESEARCH]" or "[NEEDS ADDITIONAL RESEARCH]" — all data has already been researched
+- Do NOT repeat the same information from different agents — synthesize into a unified conclusion
+- Document must be PROFESSIONAL, ready for C-level management presentation
+- 4000-5000 words — be thorough, detailed and comprehensive
+- NEVER write programming code (JavaScript, Python, etc.) — only text, tables and markdown
 - For images use EXCLUSIVELY markdown format: ![image description](url) — NEVER write fal-generate commands or code
 - NEVER write FAL_IMAGE_SIZE, fal-generate, require("fal-ai") or any image generation code
 
 B) AT THE END OF THE DOCUMENT SCORE by 5 criteria (each 1-10):
 ---
-EVALUACIJA:
-- Primenljivost: X/10
-- Specificnost: X/10
-- Kompletnost: X/10
-- Relevantnost: X/10
-- Kvalitet: X/10
-OCENA: X/10
+EVALUATION:
+- Applicability: X/10
+- Specificity: X/10
+- Completeness: X/10
+- Relevance: X/10
+- Quality: X/10
+SCORE: X/10
 ---
 
 Respond EXCLUSIVELY in English.`;
@@ -579,7 +842,7 @@ Respond EXCLUSIVELY in English.`;
 
         // Extract score from consolidated output
         let score: number | null = null;
-        const scoreMatch = consolidated.match(/OCENA:\s*(\d{1,2})\s*\/\s*10/i);
+        const scoreMatch = consolidated.match(/(?:SCORE|OCENA):\s*(\d{1,2})\s*\/\s*10/i);
         if (scoreMatch) {
           const rawScore = parseInt(scoreMatch[1]!, 10);
           if (rawScore >= 1 && rawScore <= 10) {
@@ -607,7 +870,7 @@ Respond EXCLUSIVELY in English.`;
             data: {
               userReport: consolidated,
               aiScore: score,
-              aiFeedback: score !== null ? `AI ocena: ${score}/100` : null,
+              aiFeedback: score !== null ? `AI score: ${score}/100` : null,
             },
           });
 
@@ -1028,9 +1291,82 @@ Respond EXCLUSIVELY in English.`;
     tenant: { name: string; industry: string | null; description: string | null } | null
   ): string {
     if (!tenant) return '';
-    let ctx = `Kompanija: ${tenant.name}`;
-    if (tenant.industry) ctx += ` | Industrija: ${tenant.industry}`;
+    let ctx = `Company: ${tenant.name}`;
+    if (tenant.industry) ctx += ` | Industry: ${tenant.industry}`;
     if (tenant.description) ctx += `\n${tenant.description}`;
     return ctx;
+  }
+
+  /**
+   * Lazy-load ConceptEnrichmentService to avoid circular dependency.
+   * Returns null if VaultModule is not loaded.
+   */
+  private enrichmentServiceCache: { enrichConceptsSequentially: (tenantId: string, ids: string[], ctx: unknown) => Promise<unknown> } | null | undefined;
+  private async getEnrichmentService() {
+    if (this.enrichmentServiceCache !== undefined) return this.enrichmentServiceCache;
+    try {
+      // Dynamic import to avoid circular dependency with VaultModule
+      const { ConceptEnrichmentService } = await import('../vault/concept-enrichment.service');
+      // Can't inject dynamically — return null, caller uses OpenClaw directly
+      this.enrichmentServiceCache = null;
+      return null;
+    } catch {
+      this.enrichmentServiceCache = null;
+      return null;
+    }
+  }
+
+  /** Read a file from the Hetzner relay via SSH */
+  /** Execute a command on the remote server via SSH */
+  private sshExecRemote(command: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const conn = new SshClient();
+      let output = '';
+      const host = this.configService.get<string>('HETZNER_HOST') ?? '91.98.231.87';
+      const user = this.configService.get<string>('HETZNER_USER') ?? 'root';
+      const keyPath = this.configService.get<string>('HETZNER_SSH_KEY') ?? '';
+      conn.on('ready', () => {
+        conn.exec(command, (err, stream) => {
+          if (err) { conn.end(); return reject(err); }
+          stream.on('data', (data: Buffer) => { output += data.toString(); });
+          stream.stderr.on('data', () => {});
+          stream.on('close', () => { conn.end(); resolve(output); });
+        });
+      });
+      conn.on('error', reject);
+      const config: Record<string, unknown> = { host, port: 22, username: user };
+      if (keyPath) {
+        try { config['privateKey'] = readFileSync(keyPath); } catch { return reject(new Error('SSH key not found')); }
+      }
+      conn.connect(config as any);
+    });
+  }
+
+  /** Read a file from the remote server via SSH */
+  private readRemoteFile(remotePath: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const conn = new SshClient();
+      let output = '';
+      const host = this.configService.get<string>('HETZNER_HOST') ?? '91.98.231.87';
+      const user = this.configService.get<string>('HETZNER_USER') ?? 'root';
+      const keyPath = this.configService.get<string>('HETZNER_SSH_KEY') ?? '';
+
+      conn.on('ready', () => {
+        conn.exec(`cat '${remotePath}' 2>/dev/null`, (err, stream) => {
+          if (err) { conn.end(); return reject(err); }
+          stream.on('data', (data: Buffer) => { output += data.toString(); });
+          stream.stderr.on('data', () => { /* ignore stderr */ });
+          stream.on('close', () => { conn.end(); resolve(output); });
+        });
+      });
+
+      conn.on('error', reject);
+
+      const config: Record<string, unknown> = { host, port: 22, username: user };
+      if (keyPath) {
+        try { config['privateKey'] = readFileSync(keyPath); } catch { return reject(new Error('SSH key not found')); }
+      }
+      conn.connect(config as any);
+    });
   }
 }

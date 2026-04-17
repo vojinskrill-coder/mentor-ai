@@ -40,7 +40,7 @@ export class TaskHubService {
     });
   }
 
-  getTasks(query: TaskHubQuery = {}): Observable<{ data: TaskHubResponse }> {
+  getTasks(query: TaskHubQuery = {}): Observable<{ data: TaskHubResponse; runningTaskIds?: string[] }> {
     let params = new HttpParams();
     if (query.status) params = params.set('status', query.status);
     if (query.category) params = params.set('category', query.category);
@@ -49,6 +49,9 @@ export class TaskHubService {
     if (query.page) params = params.set('page', query.page.toString());
     if (query.limit) params = params.set('limit', query.limit.toString());
 
-    return this.http.get<{ data: TaskHubResponse }>('/api/v1/notes/tasks', { params });
+    return this.http.get<{ data: TaskHubResponse; runningTaskIds?: string[] }>(
+      '/api/v1/notes/tasks',
+      { params },
+    );
   }
 }

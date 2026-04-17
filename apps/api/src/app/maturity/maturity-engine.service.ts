@@ -1,7 +1,12 @@
-import { Injectable, Logger, Inject, Optional, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
 import { NoteSource, NoteType, NoteStatus } from '@mentor-ai/shared/prisma';
+import { VaultService } from '../vault/vault.service';
+import { AiGatewayService } from '../ai-gateway/ai-gateway.service';
+import { NotesService } from '../notes/notes.service';
+import { ConversationService } from '../conversation/conversation.service';
+import { EnrichmentQueueService } from '../enrichment-queue/enrichment-queue.service';
 import {
   MaturityStage,
   PersonaType,
@@ -22,7 +27,6 @@ import {
   DEPARTMENT_CATEGORY_MAP,
   FOUNDATION_CATEGORIES,
 } from '../knowledge/config/department-categories';
-import { EnrichmentQueueService } from '../enrichment-queue/enrichment-queue.service';
 
 /** Maps PersonaType to Department for category resolution */
 const PERSONA_TO_DEPARTMENT: Record<PersonaType, Department> = {
@@ -45,7 +49,7 @@ const STAGE_ORDER: MaturityStage[] = [
 @Injectable()
 export class MaturityEngineService {
   private readonly logger = new Logger(MaturityEngineService.name);
-  /** Tracks running stage executions per tenant to prevent concurrent runs */
+  /** @deprecated Use EnrichmentQueueService instead. Remove after migration verified. */
   private readonly runningExecutions = new Set<string>();
   private readonly continuationCount = new Map<string, number>();
   private readonly MAX_CONTINUATIONS = 10;
@@ -67,14 +71,30 @@ export class MaturityEngineService {
     private readonly crossPersonaIntelligence: CrossPersonaIntelligenceService,
     private readonly appEventBus: AppEventBus,
     private readonly configService: ConfigService,
-    @Optional() private readonly enrichmentQueue?: EnrichmentQueueService,
+    @Optional()
+    @Inject(VaultService)
+    private readonly vaultService: VaultService | undefined,
+    @Optional()
+    @Inject(AiGatewayService)
+    private readonly aiGateway: AiGatewayService | undefined,
+    @Optional()
+    @Inject(NotesService)
+    private readonly notesService: NotesService | undefined,
+    @Optional()
+    @Inject(ConversationService)
+    private readonly conversationSvc: ConversationService | undefined,
+    @Optional()
+    @Inject(EnrichmentQueueService)
+    private readonly enrichmentQueueService: EnrichmentQueueService | undefined,
   ) {
     // Run up to 2 tasks in parallel within each wave.
     // Each task has 2-4 agent jobs → 2 tasks = max ~8 concurrent OpenClaw calls.
     // Higher values cause DeepSeek/Brave rate limits and timeouts.
     // Cross-persona cooperation works between chunks (not within).
+    // Sequential execution: 1 concept at a time to prevent OpenClaw relay crashes
+    // OpenClaw recommended: "sequential one-shot sub-agents, not parallel batches"
     this.stageConcurrency = parseInt(
-      this.configService.get<string>('STAGE_MAX_CONCURRENCY') ?? '3', 10,
+      this.configService.get<string>('STAGE_MAX_CONCURRENCY') ?? '1', 10,
     );
   }
 
@@ -105,92 +125,159 @@ export class MaturityEngineService {
         return { assignmentCount: existingCount };
       }
 
-      // Set tenant maturity stage if not set
+      // Set tenant maturity stage
       await this.prisma.tenant.update({
         where: { id: tenantId },
         data: { maturityStage: stage },
       });
 
-      const allPersonas = Object.values(PersonaType) as PersonaType[];
-      let totalAssignments = 0;
+      // Use ALL tenant concepts that don't have stage assignments yet
+      // (concepts were created during onboarding — 100 concepts)
+      const assignedConceptIds = await this.prisma.stageConceptAssignment.findMany({
+        where: { tenantId },
+        select: { conceptId: true },
+      });
+      const assignedSet = new Set(assignedConceptIds.map(a => a.conceptId));
 
-      for (let i = 0; i < allPersonas.length; i++) {
-        const personaType = allPersonas[i]!;
+      const newConcepts = await this.prisma.concept.findMany({
+        where: {
+          tenantId,
+          id: { notIn: [...assignedSet] },
+        },
+        select: { id: true, name: true, category: true, definition: true, departmentTags: true },
+        orderBy: [{ categorySortOrder: 'asc' }, { sortOrder: 'asc' }],
+      });
 
-        // Emit progress so frontend can show "Pripremam CFO... (3/8)"
-        this.wsHolder.emitToTenant(tenantId, 'maturity:init-progress', {
-          stage,
-          persona: personaType,
-          personaIndex: i,
-          totalPersonas: allPersonas.length,
-          assignedSoFar: totalAssignments,
-        });
+      this.logger.log({ message: 'Concepts to process', tenantId, count: newConcepts.length, alreadyAssigned: assignedSet.size });
 
+      let assignmentCount = 0;
+      for (const concept of newConcepts) {
         try {
-          const count = await this.classifyAndAssignForPersona(
-            tenantId,
-            stage,
-            personaType,
-            userId
-          );
-          totalAssignments += count;
+          // Determine persona from department tags
+          const persona = this.departmentToPersona(concept.departmentTags);
+
+          // Create task
+          if (this.notesService) {
+            const note = await this.notesService.createNote({
+              title: `Enrich: ${concept.name}`,
+              content: `Concept: ${concept.name}\nCategory: ${concept.category}\nDefinition: ${concept.definition ?? 'N/A'}`,
+              source: NoteSource.CONVERSATION,
+              noteType: NoteType.TASK,
+              status: NoteStatus.PENDING,
+              userId,
+              tenantId,
+              conceptId: concept.id,
+            });
+
+            // Create conversation for this concept with initial message
+            if (this.conversationSvc) {
+              const conv = await this.conversationSvc.createConversation(tenantId, userId, concept.name, undefined, concept.id);
+              await this.conversationSvc.addMessage(
+                tenantId, conv.id, 'ASSISTANT' as any,
+                `# ${concept.name}\n\n**Category:** ${concept.category}\n\n${concept.definition ?? ''}\n\nThis concept is queued for enrichment by the Business Brain.`,
+              );
+            }
+
+            // Create stage assignment
+            await this.prisma.stageConceptAssignment.create({
+              data: {
+                id: `sca_${createId()}`,
+                tenantId,
+                conceptId: concept.id,
+                stage,
+                status: 'PENDING',
+                personaType: persona,
+                noteId: note.id,
+              },
+            });
+
+            // Mark concept as activated
+            await this.prisma.concept.update({
+              where: { id: concept.id },
+              data: { confidence: 0.5, tier: 'episodic' },
+            });
+
+            assignmentCount++;
+          }
+        } catch (err) {
+          this.logger.warn({
+            message: 'Failed to create assignment for concept',
+            conceptId: concept.id,
+            error: (err as Error).message,
+          });
+        }
+
+        // Emit progress
+        this.wsHolder.emitToTenant(tenantId, 'maturity:init-progress', {
+          stage, assignedSoFar: assignmentCount, totalConcepts: newConcepts.length,
+        });
+      }
+
+      this.logger.log({ message: 'Stage initialization complete', tenantId, stage, assignmentCount });
+
+      // Populate enrichment queue alongside legacy execution (migration: both paths active)
+      if (assignmentCount > 0 && this.enrichmentQueueService) {
+        try {
+          const conceptIds = newConcepts.map(c => c.id);
+          await this.enrichmentQueueService.enqueueBatch(tenantId, conceptIds);
+          this.logger.log({ message: 'Enrichment queue populated', tenantId, queuedCount: conceptIds.length });
         } catch (err) {
           this.logger.error({
-            message: 'Failed to classify for persona',
-            personaType,
-            stage,
+            message: 'Failed to populate enrichment queue (non-blocking)',
+            tenantId,
             error: err instanceof Error ? err.message : 'Unknown',
           });
         }
       }
 
-      // Reconcile: mark assignments COMPLETED if brain-seeded notes already finished
-      await this.reconcileBrainSeededCompletions(tenantId, stage);
+      // Notify frontend
+      this.wsHolder.emitToTenant(tenantId, 'maturity:stage-initialized', {
+        stage, assignmentCount,
+      });
 
-      // Create Note TASK records for all PENDING assignments (bridges gap with Brain tree)
-      const noteCount = await this.createNotesForPendingAssignments(tenantId, stage, userId);
-
-      // Populate enrichment queue for the new DB-backed pipeline
-      if (this.enrichmentQueue) {
-        try {
-          const pendingAssignments = await this.prisma.stageConceptAssignment.findMany({
-            where: { tenantId, stage, status: StageConceptStatus.PENDING },
-            select: { conceptId: true },
+      // Auto-trigger sequential execution
+      if (assignmentCount > 0) {
+        this.logger.log({ message: 'Auto-triggering sequential stage execution', tenantId, stage });
+        this.runStageExecution(tenantId, stage, userId).catch((err) => {
+          this.logger.error({
+            message: 'Auto-triggered stage execution failed',
+            tenantId, stage, error: err instanceof Error ? err.message : 'Unknown',
           });
-          const conceptIds = pendingAssignments.map(a => a.conceptId);
-          await this.enrichmentQueue.enqueueBatch(tenantId, conceptIds);
-          this.logger.log({ message: 'Enrichment queue populated', tenantId, count: conceptIds.length });
-        } catch (e) {
-          this.logger.warn({ message: 'Failed to populate enrichment queue (non-blocking)', error: (e as Error).message });
-        }
+        });
       }
 
-      // Re-count after reconciliation
-      const finalCount = await this.prisma.stageConceptAssignment.count({
-        where: { tenantId, stage },
-      });
-
-      this.logger.log({
-        message: 'Stage initialization complete',
-        tenantId,
-        stage,
-        totalAssignments: finalCount,
-        notesCreated: noteCount,
-      });
-
-      // Notify frontend that stage is ready
-      this.wsHolder.emitToTenant(tenantId, 'maturity:stage-initialized', {
-        stage,
-        assignmentCount: finalCount,
-        noteCount,
-      });
-
-      // Stage is prepared — execution must be triggered explicitly via the dashboard
-      // (POST /api/v1/maturity/stage/:stage/execute)
-      return { assignmentCount: finalCount };
+      return { assignmentCount };
     } finally {
       this.initializingTenants.delete(tenantId);
     }
+  }
+
+  /**
+   * Signal that the enrichment queue is populated and ready for processing.
+   * Actual processing is handled by QueueProcessorService (E4).
+   */
+  startQueueProcessing(tenantId: string): void {
+    this.logger.log({
+      message: 'Queue processing ready — enrichment queue populated for tenant',
+      tenantId,
+      note: 'QueueProcessorService (E4) handles actual dequeue + execution',
+    });
+  }
+
+  /** Maps department tags to the best-fit persona type */
+  private departmentToPersona(departmentTags: string[]): PersonaType {
+    const tag = (departmentTags[0] ?? '').toLowerCase();
+    const map: Record<string, PersonaType> = {
+      finance: PersonaType.CFO,
+      marketing: PersonaType.CMO,
+      technology: PersonaType.CTO,
+      operations: PersonaType.OPERATIONS,
+      legal: PersonaType.LEGAL,
+      creative: PersonaType.CREATIVE,
+      strategy: PersonaType.CSO,
+      sales: PersonaType.SALES,
+    };
+    return map[tag] ?? PersonaType.OPERATIONS;
   }
 
   private async classifyAndAssignForPersona(
@@ -203,9 +290,12 @@ export class MaturityEngineService {
     const deptCategories = DEPARTMENT_CATEGORY_MAP[department] ?? [];
     const visibleCategories = [...new Set([...FOUNDATION_CATEGORIES, ...deptCategories])];
 
-    // Load concepts in this persona's visible categories
+    // Load ONLY tenant-specific concepts in this persona's visible categories.
+    // Platform concepts (tenantId=null) are seed templates — never assigned to stages.
+    // After onboarding, all concepts live in the tenant's vault.
     const concepts = await this.prisma.concept.findMany({
       where: {
+        tenantId,
         OR: visibleCategories.flatMap((cat) => [
           { category: cat },
           { category: { contains: cat } },
@@ -527,15 +617,35 @@ export class MaturityEngineService {
       return { stageCompleted: false };
     }
 
-    // Mark assignment as COMPLETED
-    await this.prisma.stageConceptAssignment.update({
-      where: { id: assignment.id },
-      data: {
-        status: StageConceptStatus.COMPLETED,
-        completedAt: new Date(),
-        noteId,
-      },
+    // Atomically verify note is COMPLETED before marking assignment complete
+    const wasCompleted = await this.prisma.$transaction(async (tx) => {
+      const freshAssignment = await tx.stageConceptAssignment.findUnique({
+        where: { id: assignment.id },
+      });
+      // Verify note is actually COMPLETED before marking assignment complete
+      const resolvedNoteId = freshAssignment?.noteId ?? noteId;
+      const noteToCheck = resolvedNoteId ? await tx.note.findUnique({ where: { id: resolvedNoteId }, select: { status: true } }) : null;
+      if (noteToCheck?.status !== 'COMPLETED') {
+        this.logger.warn({
+          message: `Cannot complete assignment ${assignment.id}: note not in COMPLETED status`,
+          tenantId, conceptId, noteStatus: noteToCheck?.status ?? 'null',
+        });
+        return false;
+      }
+      await tx.stageConceptAssignment.update({
+        where: { id: assignment.id },
+        data: {
+          status: StageConceptStatus.COMPLETED,
+          completedAt: new Date(),
+          noteId,
+        },
+      });
+      return true;
     });
+
+    if (!wasCompleted) {
+      return { stageCompleted: false };
+    }
 
     this.logger.log({
       message: 'Stage concept completed',
@@ -632,7 +742,7 @@ export class MaturityEngineService {
         warnings.push({
           conceptName,
           status: status as StageConceptStatus,
-          message: `Koncept "${conceptName}" još nije završen (status: ${status}). Rezultati mogu biti nepotpuni.`,
+          message: `Concept "${conceptName}" is not yet completed (status: ${status}). Results may be incomplete.`,
         });
       } else if (assignment.noteId) {
         const note = noteMap.get(assignment.noteId);
@@ -793,7 +903,7 @@ export class MaturityEngineService {
       const noteId = `note_${createId()}`;
       const conversationId = `sess_${createId()}`;
 
-      // Create conversation for this concept (so it appears in Razgovori panel)
+      // Create conversation for this concept (so it appears in Conversations panel)
       await this.prisma.conversation.create({
         data: {
           id: conversationId,
@@ -963,21 +1073,34 @@ export class MaturityEngineService {
 
         // Also check: assignments still PENDING but whose notes are COMPLETED
         // (onConceptCompleted might have missed them)
+        // Use $transaction to atomically verify note status before completing assignment
         for (const [conceptId, assignment] of remaining) {
           if (assignment.noteId) {
-            const note = await this.prisma.note.findUnique({
-              where: { id: assignment.noteId },
-              select: { status: true },
-            });
-            if (note?.status === 'COMPLETED') {
+            const wasCompleted = await this.prisma.$transaction(async (tx) => {
+              const note = await tx.note.findUnique({
+                where: { id: assignment.noteId! },
+                select: { status: true },
+              });
+              if (note?.status !== 'COMPLETED') return false;
+
+              const current = await tx.stageConceptAssignment.findUnique({
+                where: { id: assignment.id },
+                select: { status: true },
+              });
+              if (current?.status === StageConceptStatus.COMPLETED) return true; // already done
+
               this.logger.warn({
-                message: 'Wave loop: force-completing assignment (note COMPLETED but assignment still PENDING)',
+                message: 'Wave loop: completing assignment (note COMPLETED verified in transaction)',
                 tenantId, conceptId,
               });
-              await this.prisma.stageConceptAssignment.update({
+              await tx.stageConceptAssignment.update({
                 where: { id: assignment.id },
                 data: { status: StageConceptStatus.COMPLETED, completedAt: new Date() },
               });
+              return true;
+            });
+
+            if (wasCompleted) {
               completedConcepts.add(conceptId);
               remaining.delete(conceptId);
               executed++;
@@ -1027,24 +1150,72 @@ export class MaturityEngineService {
               taskId: assignment.noteId!, tenantId, userId,
             });
             if (result.success) {
-              // ALWAYS force-complete the assignment immediately.
-              // Don't rely on onConceptCompleted which may be delayed by agent job checks.
-              // The wave loop is the authority on assignment completion.
-              await this.prisma.stageConceptAssignment.update({
-                where: { id: assignment.id },
-                data: { status: StageConceptStatus.COMPLETED, completedAt: new Date() },
+              // Atomically verify note is COMPLETED before marking assignment complete.
+              // Prevents state drift if note status update failed mid-execution.
+              await this.prisma.$transaction(async (tx) => {
+                const freshAssign = await tx.stageConceptAssignment.findUnique({
+                  where: { id: assignment.id },
+                });
+                const noteForCheck = freshAssign?.noteId
+                  ? await tx.note.findUnique({ where: { id: freshAssign.noteId }, select: { status: true } })
+                  : null;
+                if (noteForCheck?.status !== 'COMPLETED') {
+                  this.logger.warn({
+                    message: `Cannot complete assignment ${assignment.id}: note not in COMPLETED status (actual: ${noteForCheck?.status ?? 'null'})`,
+                    tenantId, conceptId: assignment.conceptId,
+                  });
+                  return;
+                }
+                await tx.stageConceptAssignment.update({
+                  where: { id: assignment.id },
+                  data: { status: StageConceptStatus.COMPLETED, completedAt: new Date() },
+                });
               });
-              completedConcepts.add(assignment.conceptId);
-              executed++;
+
+              // Verify completion actually happened before tracking
+              const verified = await this.prisma.stageConceptAssignment.findUnique({
+                where: { id: assignment.id },
+                select: { status: true },
+              });
+              if (verified?.status === StageConceptStatus.COMPLETED) {
+                completedConcepts.add(assignment.conceptId);
+                executed++;
+              } else {
+                this.logger.warn({
+                  message: 'Task executor succeeded but note not COMPLETED — marking as failed for retry',
+                  tenantId, conceptId: assignment.conceptId,
+                });
+                failed++;
+                failedConcepts.add(assignment.conceptId);
+              }
             } else {
+              // Check for rate limit errors and apply cooldown
+              const isRateLimit = result.error && /rate.?limit/i.test(result.error);
+              if (isRateLimit) {
+                this.logger.warn({
+                  message: 'Rate limit hit during stage task, applying 5s cooldown',
+                  tenantId, conceptId: assignment.conceptId,
+                });
+                await new Promise((resolve) => setTimeout(resolve, 5_000));
+              }
               failed++;
               failedConcepts.add(assignment.conceptId);
               this.logger.warn({ message: 'Stage task failed', tenantId, conceptId: assignment.conceptId, error: result.error });
             }
           } catch (err) {
+            // Check for rate limit errors in exceptions and apply cooldown
+            const errMsg = err instanceof Error ? err.message : 'Unknown';
+            const isRateLimit = /rate.?limit/i.test(errMsg);
+            if (isRateLimit) {
+              this.logger.warn({
+                message: 'Rate limit exception during stage task, applying 5s cooldown',
+                tenantId, conceptId: assignment.conceptId,
+              });
+              await new Promise((resolve) => setTimeout(resolve, 5_000));
+            }
             failed++;
             failedConcepts.add(assignment.conceptId);
-            this.logger.error({ message: 'Stage task error', tenantId, conceptId: assignment.conceptId, error: err instanceof Error ? err.message : 'Unknown' });
+            this.logger.error({ message: 'Stage task error', tenantId, conceptId: assignment.conceptId, error: errMsg });
           }
 
           // Clear cross-persona intelligence cache so next tasks in subsequent
@@ -1052,8 +1223,11 @@ export class MaturityEngineService {
           this.crossPersonaIntelligence.clearCache(tenantId);
         };
 
-        for (let i = 0; i < ready.length; i += MAX_CONCURRENCY) {
-          const chunk = ready.slice(i, i + MAX_CONCURRENCY);
+        // Parallel execution with concurrency limit, honoring dependencies
+        // OpenClaw can spawn sub-agents — run up to MAX_CONCURRENCY concepts simultaneously
+        const MAX_PARALLEL = this.stageConcurrency; // from config, default 3
+        for (let i = 0; i < ready.length; i += MAX_PARALLEL) {
+          const chunk = ready.slice(i, i + MAX_PARALLEL);
           await Promise.all(chunk.map(executeOne));
 
           this.executionProgress.set(tenantId, { total, executed, failed, current: null });
@@ -1121,11 +1295,105 @@ export class MaturityEngineService {
         }
       } else {
         this.continuationCount.delete(tenantId);
+
+        // All assignments completed — queue next batch of 100 concepts
+        this.logger.log({ message: 'Stage complete — queuing next 100 concepts', tenantId, stage });
+        this.queueNextBatch(tenantId, stage, userId).catch(err => {
+          this.logger.warn({ message: 'Next batch queuing failed (non-blocking)', error: (err as Error).message });
+        });
       }
     } finally {
       this.runningExecutions.delete(tenantId);
       this.executionProgress.delete(tenantId);
     }
+  }
+
+  /**
+   * After a maturity stage completes, select and queue the next 100
+   * most important concepts for enrichment.
+   */
+  private async queueNextBatch(tenantId: string, stage: MaturityStage, userId: string): Promise<void> {
+    if (!this.vaultService || !this.aiGateway) {
+      this.logger.warn('VaultService or AiGateway not available — skipping next batch');
+      return;
+    }
+
+    // Get existing tenant concept slugs
+    const existing = await this.prisma.concept.findMany({
+      where: { tenantId },
+      select: { slug: true },
+    });
+    const existingSlugs = new Set(existing.map(c => c.slug));
+
+    // Get remaining available concepts
+    const available = await this.vaultService.getAvailableCurriculumSlugs();
+    const remaining = available.filter(c => !existingSlugs.has(c.slug));
+
+    if (remaining.length === 0) {
+      this.logger.log({ message: 'No more concepts to queue — curriculum fully covered', tenantId });
+      return;
+    }
+
+    // AI scores remaining concepts for relevance >= 0.7 to this business
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true, industry: true, description: true },
+    });
+
+    const nextBatch: string[] = [];
+    const SCORE_BATCH = 80;
+
+    for (let i = 0; i < remaining.length && nextBatch.length < 100; i += SCORE_BATCH) {
+      const batch = remaining.slice(i, i + SCORE_BATCH);
+      const conceptList = batch.map(c => `${c.slug} | ${c.name} | ${c.category}`).join('\n');
+
+      try {
+        let responseText = '';
+        await this.aiGateway!.streamCompletionWithContext(
+          [{ role: 'user', content: `Score each concept's relevance to this business (0.0-1.0). Only return concepts scoring >= 0.70.
+
+BUSINESS: ${tenant?.name} (${tenant?.industry})
+${(tenant?.description ?? '').substring(0, 500)}
+
+CONCEPTS:
+${conceptList}
+
+Return: slug|score (one per line, only >= 0.70)` } as import('@mentor-ai/shared/types').ChatMessage],
+          { tenantId, userId, conversationId: `next-batch-score-${i}`, skipRateLimit: true, skipQuotaCheck: true, useFallback: true },
+          (chunk: string) => { responseText += chunk; },
+        );
+
+        const nameToSlug = new Map<string, string>();
+        for (const c of batch) {
+          nameToSlug.set(c.slug, c.slug);
+          nameToSlug.set(c.name.toLowerCase(), c.slug);
+        }
+
+        for (const line of responseText.split('\n')) {
+          const parts = line.trim().split('|');
+          if (parts.length < 2) continue;
+          const rawSlug = parts[0]!.trim();
+          const score = parseFloat(parts[parts.length - 1]!.trim());
+          if (isNaN(score) || score < 0.70) continue;
+          const slug = nameToSlug.get(rawSlug) ?? nameToSlug.get(rawSlug.toLowerCase());
+          if (slug && !nextBatch.includes(slug)) nextBatch.push(slug);
+        }
+      } catch {
+        // Fallback: include all from batch
+        for (const c of batch) nextBatch.push(c.slug);
+      }
+    }
+
+    this.logger.log({ message: 'Queuing next batch (relevance filtered)', tenantId, count: nextBatch.length });
+
+    // Create concepts in vault
+    await this.vaultService.createConceptsFromCurriculum(tenantId, nextBatch);
+
+    // Notify frontend
+    this.wsHolder.emitToTenant(tenantId, 'maturity:next-batch-ready', {
+      count: nextBatch.length,
+      stage,
+    });
   }
 
   // ─── Event Handlers ───

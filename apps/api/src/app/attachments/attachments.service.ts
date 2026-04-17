@@ -131,7 +131,7 @@ export class AttachmentsService {
     return attachments
       .filter((a) => a.extractedText)
       .map(
-        (a) => `--- PRILOŽENI FAJL: ${a.originalName} ---\n${a.extractedText}\n--- KRAJ FAJLA ---`
+        (a) => `--- ATTACHED FILE: ${a.originalName} ---\n${a.extractedText}\n--- END OF FILE ---`
       )
       .join('\n\n');
   }

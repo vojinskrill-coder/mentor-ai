@@ -19,10 +19,10 @@ import { AuthService } from '../core/auth/auth.service';
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #0d0d0d;
+        background: #0D1117;
         padding: 16px;
         font-family: 'Inter', system-ui, sans-serif;
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .container {
         width: 100%;
@@ -65,8 +65,8 @@ import { AuthService } from '../core/auth/auth.service';
       .load-spinner {
         width: 32px;
         height: 32px;
-        border: 3px solid #2a2a2a;
-        border-top-color: #3b82f6;
+        border: 3px solid #21262D;
+        border-top-color: #58A6FF;
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
         margin: 0 auto 12px;
@@ -76,8 +76,8 @@ import { AuthService } from '../core/auth/auth.service';
         color: #a1a1a1;
       }
       .card {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 12px;
         padding: 24px;
         margin-bottom: 16px;
@@ -126,7 +126,7 @@ import { AuthService } from '../core/auth/auth.service';
         color: #9e9e9e;
       }
       .manual-code code {
-        background: #242424;
+        background: #1C2128;
         padding: 2px 8px;
         border-radius: 4px;
         font-family: monospace;
@@ -140,18 +140,18 @@ import { AuthService } from '../core/auth/auth.service';
       .code-input {
         width: 100%;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
-        background: #0d0d0d;
+        border: 1px solid #21262D;
+        background: #0D1117;
         padding: 10px;
         text-align: center;
         font-size: 22px;
         letter-spacing: 0.3em;
         font-family: monospace;
-        color: #fafafa;
+        color: #E6EDF3;
         outline: none;
       }
       .code-input:focus {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .field-error {
         font-size: 12px;
@@ -166,7 +166,7 @@ import { AuthService } from '../core/auth/auth.service';
         gap: 8px;
         margin-top: 16px;
         padding: 12px;
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
         border: none;
         border-radius: 8px;
@@ -232,7 +232,7 @@ import { AuthService } from '../core/auth/auth.service';
       .code-box {
         font-family: monospace;
         font-size: 13px;
-        background: #242424;
+        background: #1C2128;
         padding: 8px 12px;
         border-radius: 6px;
         text-align: center;
@@ -249,17 +249,17 @@ import { AuthService } from '../core/auth/auth.service';
         justify-content: center;
         gap: 8px;
         padding: 10px;
-        background: #242424;
-        border: 1px solid #2a2a2a;
+        background: #1C2128;
+        border: 1px solid #21262D;
         border-radius: 8px;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 13px;
         font-weight: 500;
         cursor: pointer;
         font-family: inherit;
       }
       .action-btn:hover {
-        background: #2a2a2a;
+        background: #21262D;
       }
       .action-btn svg {
         width: 16px;

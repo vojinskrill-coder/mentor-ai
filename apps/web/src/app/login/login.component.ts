@@ -18,9 +18,9 @@ import { AuthService } from '../core/auth/auth.service';
         align-items: center;
         justify-content: center;
         padding: 16px;
-        background: #0d0d0d;
+        background: #0D1117;
         font-family: 'Inter', system-ui, sans-serif;
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .container {
         width: 100%;
@@ -40,12 +40,12 @@ import { AuthService } from '../core/auth/auth.service';
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #1a1a1a;
+        background: #161B22;
       }
       .brand-icon svg {
         width: 32px;
         height: 32px;
-        color: #3b82f6;
+        color: #58A6FF;
       }
       .brand h1 {
         font-size: 24px;
@@ -59,16 +59,16 @@ import { AuthService } from '../core/auth/auth.service';
 
       /* Card */
       .login-card {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 12px;
         padding: 24px;
       }
 
       /* Error */
       .error-box {
-        background: rgba(239, 68, 68, 0.1);
-        border: 1px solid rgba(239, 68, 68, 0.2);
+        background: rgba(248, 81, 73, 0.1);
+        border: 1px solid rgba(248, 81, 73, 0.2);
         border-radius: 8px;
         padding: 12px 16px;
         margin-bottom: 16px;
@@ -79,12 +79,12 @@ import { AuthService } from '../core/auth/auth.service';
       .error-box svg {
         width: 20px;
         height: 20px;
-        color: #ef4444;
+        color: #F85149;
         flex-shrink: 0;
       }
       .error-box span {
         font-size: 13px;
-        color: #ef4444;
+        color: #F85149;
       }
 
       /* Google Button */
@@ -95,10 +95,10 @@ import { AuthService } from '../core/auth/auth.service';
         justify-content: center;
         gap: 12px;
         padding: 12px 16px;
-        background: #242424;
-        border: 1px solid #2a2a2a;
+        background: #1C2128;
+        border: 1px solid #21262D;
         border-radius: 8px;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 15px;
         font-weight: 500;
         cursor: pointer;
@@ -138,7 +138,7 @@ import { AuthService } from '../core/auth/auth.service';
       .divider {
         margin-top: 16px;
         padding-top: 16px;
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid #21262D;
       }
 
       /* Dev mode link */
@@ -149,7 +149,7 @@ import { AuthService } from '../core/auth/auth.service';
         justify-content: center;
         gap: 8px;
         padding: 12px 16px;
-        background: #3b82f6;
+        background: #58A6FF;
         border-radius: 8px;
         color: white;
         font-size: 15px;
@@ -173,7 +173,7 @@ import { AuthService } from '../core/auth/auth.service';
         color: #9e9e9e;
       }
       .footer a {
-        color: #3b82f6;
+        color: #58A6FF;
         font-weight: 500;
         text-decoration: none;
         margin-left: 4px;
@@ -197,8 +197,8 @@ import { AuthService } from '../core/auth/auth.service';
               />
             </svg>
           </div>
-          <h1>Dobrodošli u Mentor AI</h1>
-          <p>Prijavite se da pristupite vašem AI poslovnom partneru</p>
+          <h1>Welcome to Neuron OS</h1>
+          <p>Sign in to access your AI business partner</p>
         </div>
 
         <div class="login-card">
@@ -223,7 +223,7 @@ import { AuthService } from '../core/auth/auth.service';
           >
             @if (isLoading()) {
               <span class="btn-spinner"></span>
-              <span>Prijavljivanje...</span>
+              <span>Signing in...</span>
             } @else {
               <svg viewBox="0 0 24 24">
                 <path
@@ -243,7 +243,7 @@ import { AuthService } from '../core/auth/auth.service';
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                 />
               </svg>
-              <span>Nastavi sa Google</span>
+              <span>Continue with Google</span>
             }
           </button>
 
@@ -257,14 +257,14 @@ import { AuthService } from '../core/auth/auth.service';
                   d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
                 />
               </svg>
-              Nastavi (Dev režim)
+              Continue (Dev mode)
             </button>
           </div>
         </div>
 
         <p class="footer">
-          Nemate nalog?
-          <a routerLink="/register">Kreirajte radni prostor</a>
+          Don't have an account?
+          <a routerLink="/register">Create workspace</a>
         </p>
       </div>
     </div>

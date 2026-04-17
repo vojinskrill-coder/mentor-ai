@@ -18,6 +18,10 @@ const prisma = new PrismaClient();
 
 // ─── Helpers ──────────────────────────────────────────────
 
+/**
+ * Generate a URL-safe slug from text.
+ * Handles both Serbian (with diacritics) and English input.
+ */
 function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -28,7 +32,24 @@ function slugify(text: string): string {
     .replace(/[ć]/g, 'c')
     .replace(/[č]/g, 'c')
     .replace(/[š]/g, 's')
+    .replace(/&/g, 'and')
     .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 120);
+}
+
+/**
+ * Generate an English slug from a label.
+ * Used to produce clean English slugs from curriculum labels.
+ */
+function englishSlugify(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/['']/g, '')
+    .replace(/[^a-z0-9\s-]/g, '')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
@@ -333,26 +354,62 @@ async function main() {
     if (unmatched > 0) {
       console.log(`Unmatched: ${unmatched} concepts (no curriculum node found)`);
     }
+  }
 
-    // ─── Pass 1.6: Use English curriculum labels as concept names + slugs ──
-    console.log('\n=== Pass 1.6: Setting English names from curriculum ===');
+  // ─── Pass 1.6: Update slugs to English using curriculum labels ──
+
+  console.log('\n=== Pass 1.6: Generating English slugs from curriculum labels ===');
+
+  if (curriculumNodes.length > 0) {
     const currNodeById = new Map<string, CurriculumNode>(
       curriculumNodes.map((n) => [n.id, n])
     );
-    let namesUpdated = 0;
+
+    // Rebuild slug set with English slugs
+    const englishSlugSet = new Set<string>();
+    let slugsUpdated = 0;
+
     for (const concept of concepts) {
       if (concept.curriculumId) {
         const currNode = currNodeById.get(concept.curriculumId);
         if (currNode) {
-          // ROOT FIX: curriculum.json is the English source of truth.
+          // Use the English label from curriculum.json as the concept name AND slug
+          // This is the ROOT FIX: curriculum.json is the English source of truth.
           // The filename is Serbian — we replace it with the curriculum label.
           concept.name = currNode.label;
-          concept.slug = slugify(currNode.label);
-          namesUpdated++;
+          let newSlug = englishSlugify(currNode.label);
+
+          // Handle duplicates
+          if (englishSlugSet.has(newSlug)) {
+            // Disambiguate with parent label
+            if (currNode.parentId) {
+              const parent = currNodeById.get(currNode.parentId);
+              if (parent) {
+                newSlug = newSlug + '-' + englishSlugify(parent.label);
+              }
+            }
+          }
+          if (englishSlugSet.has(newSlug)) {
+            newSlug = newSlug + '-' + currNode.sortOrder;
+          }
+
+          if (concept.slug !== newSlug) {
+            slugsUpdated++;
+          }
+          concept.slug = newSlug;
+          englishSlugSet.add(newSlug);
+          continue;
         }
       }
+
+      // No curriculum match — keep the existing (Serbian) slug but ensure uniqueness
+      if (englishSlugSet.has(concept.slug)) {
+        concept.slug = concept.slug + '-' + createId().slice(0, 6);
+      }
+      englishSlugSet.add(concept.slug);
     }
-    console.log(`Updated ${namesUpdated} concept names to English from curriculum`);
+
+    console.log(`Updated ${slugsUpdated} slugs to English`);
   }
 
   // ─── Pass 2: Build relationships from wikilinks ────────

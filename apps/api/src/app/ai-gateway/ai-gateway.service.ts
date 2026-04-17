@@ -921,7 +921,17 @@ export class AiGatewayService {
   ): Promise<void> {
     const apiKey = await this.llmConfigService.getDecryptedApiKey(LlmProviderType.DEEPSEEK);
 
-    if (!apiKey) {
+    // Allow swapping the DeepSeek backend with any OpenAI-compatible endpoint
+    // (e.g. a local llama.cpp / Ollama / ngrok-tunnelled model server) via
+    // the DEEPSEEK_ENDPOINT env var. Defaults to the public DeepSeek API.
+    // The API key is sent as a Bearer token even for local endpoints —
+    // local servers can ignore it. If both are absent we fall back to a
+    // dummy key so the local-endpoint case still works without a real key.
+    const baseUrl =
+      this.configService.get<string>('DEEPSEEK_ENDPOINT') ?? 'https://api.deepseek.com/v1';
+    const isLocalEndpoint = !baseUrl.includes('api.deepseek.com');
+
+    if (!apiKey && !isLocalEndpoint) {
       throw new InternalServerErrorException({
         type: 'api_key_not_found',
         title: 'API Key Not Found',
@@ -930,14 +940,17 @@ export class AiGatewayService {
       });
     }
 
-    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${apiKey ?? 'local'}`,
       },
       body: JSON.stringify({
-        model: modelId,
+        // For local OpenAI-compatible endpoints (ngrok, Ollama, llama.cpp)
+        // the model is selected by the URL path, not the body field — but
+        // sending modelId is harmless and matches the OpenAI spec.
+        model: this.configService.get<string>('DEEPSEEK_MODEL_ID') ?? modelId,
         messages,
         stream: true,
         max_tokens: 8192,
@@ -967,6 +980,38 @@ export class AiGatewayService {
 
     const decoder = new TextDecoder();
     let buffer = '';
+    // State for stripping <think>…</think> blocks. MiniMax M2 (and other
+    // reasoning models served behind OpenAI-compatible APIs) put their
+    // chain-of-thought directly into delta.content wrapped in <think>
+    // tags. The user shouldn't see those tags rendered as raw text.
+    // We track whether we're currently inside a <think> block across
+    // chunks, since the tag may straddle a chunk boundary.
+    let insideThink = false;
+    const stripThinkTags = (chunk: string): string => {
+      let out = '';
+      let i = 0;
+      while (i < chunk.length) {
+        if (insideThink) {
+          const close = chunk.indexOf('</think>', i);
+          if (close === -1) {
+            // Whole rest of chunk is still inside the think block.
+            return out;
+          }
+          insideThink = false;
+          i = close + '</think>'.length;
+        } else {
+          const open = chunk.indexOf('<think>', i);
+          if (open === -1) {
+            out += chunk.slice(i);
+            return out;
+          }
+          out += chunk.slice(i, open);
+          insideThink = true;
+          i = open + '<think>'.length;
+        }
+      }
+      return out;
+    };
 
     try {
       while (true) {
@@ -984,9 +1029,26 @@ export class AiGatewayService {
 
             try {
               const parsed = JSON.parse(data) as OpenRouterResponse;
-              const content = parsed.choices[0]?.delta?.content;
-              if (content) {
-                onChunk(content);
+              const delta = parsed.choices[0]?.delta as
+                | { content?: string; reasoning_content?: string }
+                | undefined;
+              // Some OpenAI-compatible "thinking" models (e.g. llama.cpp
+              // running Gemma/gpt-oss) stream chain-of-thought as
+              // `reasoning_content` and only emit the final answer as
+              // `content`. Others (MiniMax M2) put both inside `content`
+              // wrapped in <think>…</think> tags. We:
+              //   1. prefer `content` if present, otherwise fall back
+              //      to `reasoning_content` (so the user still sees
+              //      progress on pure-reasoning models)
+              //   2. strip <think>…</think> blocks from any content
+              //      stream so the user doesn't see raw tags
+              const raw = delta?.content ?? delta?.reasoning_content ?? '';
+              if (!raw) continue;
+              const piece = delta?.content !== undefined
+                ? stripThinkTags(raw)
+                : raw; // reasoning_content is its own channel — pass as-is
+              if (piece) {
+                onChunk(piece);
               }
             } catch {
               // Skip malformed JSON lines

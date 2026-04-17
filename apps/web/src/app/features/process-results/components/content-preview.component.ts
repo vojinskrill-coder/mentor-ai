@@ -132,11 +132,11 @@ export interface ContentData {
     .channel-tabs { display: flex; gap: 4px; }
     .ch-tab {
       padding: 6px 16px; border-radius: 6px; font-size: 12px; font-weight: 500;
-      cursor: pointer; background: transparent; border: 1px solid #2A2A2A; color: #9CA3AF;
+      cursor: pointer; background: transparent; border: 1px solid #21262D; color: #9CA3AF;
     }
-    .ch-tab.active { background: #3B82F6; border-color: #3B82F6; color: #FAFAFA; }
+    .ch-tab.active { background: #58A6FF; border-color: #58A6FF; color: #E6EDF3; }
 
-    .seo-bar { display: flex; gap: 16px; padding: 8px 12px; background: #242424; border-radius: 6px; }
+    .seo-bar { display: flex; gap: 16px; padding: 8px 12px; background: #1C2128; border-radius: 6px; }
     .seo-score { font-size: 12px; font-weight: 600; }
     .seo-score.seo-good { color: #22c55e; }
     .seo-score.seo-ok { color: #C9A96E; }
@@ -144,53 +144,53 @@ export interface ContentData {
     .word-count, .readability { color: #6B7280; font-size: 12px; }
 
     .meta-preview {
-      background: #242424; border-radius: 6px; padding: 12px;
+      background: #1C2128; border-radius: 6px; padding: 12px;
       border-left: 3px solid #C9A96E;
     }
-    .meta-title { color: #3B82F6; font-size: 14px; font-weight: 500; }
+    .meta-title { color: #58A6FF; font-size: 14px; font-weight: 500; }
     .meta-desc { color: #9CA3AF; font-size: 12px; margin-top: 4px; }
     .meta-keywords { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
     .keyword-tag {
-      background: #3B82F620; color: #3B82F6; padding: 2px 8px;
+      background: #58A6FF20; color: #58A6FF; padding: 2px 8px;
       border-radius: 4px; font-size: 10px;
     }
 
     .html-content {
-      background: #1A1A1A; border-radius: 8px; padding: 20px;
-      color: #FAFAFA; font-size: 14px; line-height: 1.7;
+      background: #161B22; border-radius: 8px; padding: 20px;
+      color: #E6EDF3; font-size: 14px; line-height: 1.7;
       max-height: 500px; overflow-y: auto;
     }
 
-    .instagram-preview { background: #1A1A1A; border-radius: 8px; padding: 16px; }
-    .ig-image-area { aspect-ratio: 1; max-width: 400px; background: #242424; border-radius: 4px; overflow: hidden; margin-bottom: 12px; }
+    .instagram-preview { background: #161B22; border-radius: 8px; padding: 16px; }
+    .ig-image-area { aspect-ratio: 1; max-width: 400px; background: #1C2128; border-radius: 4px; overflow: hidden; margin-bottom: 12px; }
     .ig-image { width: 100%; height: 100%; object-fit: cover; }
-    .ig-caption { color: #FAFAFA; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+    .ig-caption { color: #E6EDF3; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
     .ig-hashtags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
-    .hashtag { color: #3B82F6; font-size: 12px; }
+    .hashtag { color: #58A6FF; font-size: 12px; }
 
-    .linkedin-preview { background: #1A1A1A; border-radius: 8px; padding: 16px; }
-    .li-post { color: #FAFAFA; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+    .linkedin-preview { background: #161B22; border-radius: 8px; padding: 16px; }
+    .li-post { color: #E6EDF3; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
     .li-article {
-      margin-top: 12px; padding: 12px; background: #242424; border-radius: 6px;
-      border: 1px solid #2A2A2A;
+      margin-top: 12px; padding: 12px; background: #1C2128; border-radius: 6px;
+      border: 1px solid #21262D;
     }
-    .li-article-title { color: #FAFAFA; font-weight: 600; font-size: 14px; }
+    .li-article-title { color: #E6EDF3; font-weight: 600; font-size: 14px; }
 
     .image-gallery { margin-top: 8px; }
-    .gallery-title { color: #FAFAFA; font-size: 13px; margin: 0 0 8px; }
+    .gallery-title { color: #E6EDF3; font-size: 13px; margin: 0 0 8px; }
     .gallery-grid { display: flex; gap: 8px; overflow-x: auto; }
     .gallery-item { position: relative; flex-shrink: 0; }
     .gallery-img { width: 120px; height: 80px; object-fit: cover; border-radius: 4px; }
     .gallery-placement {
       position: absolute; bottom: 4px; left: 4px;
-      background: #0D0D0Dcc; color: #FAFAFA; font-size: 9px;
+      background: #0D1117cc; color: #E6EDF3; font-size: 9px;
       padding: 1px 4px; border-radius: 2px;
     }
 
     .published-urls { margin-top: 8px; }
-    .urls-title { color: #FAFAFA; font-size: 13px; margin: 0 0 8px; }
+    .urls-title { color: #E6EDF3; font-size: 13px; margin: 0 0 8px; }
     .pub-link {
-      display: flex; gap: 8px; align-items: center; color: #3B82F6;
+      display: flex; gap: 8px; align-items: center; color: #58A6FF;
       text-decoration: none; font-size: 12px; margin-bottom: 4px;
     }
     .pub-channel { font-weight: 600; }

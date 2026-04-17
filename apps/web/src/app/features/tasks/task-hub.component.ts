@@ -8,6 +8,7 @@ import { TaskHubService } from './services/task-hub.service';
 import { ProposalService } from './services/proposal.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ExecutionPanelService } from '../../core/services/execution-panel.service';
+import { PageLoadingService } from '../../core/services/page-loading.service';
 import { ChatWebsocketService } from '../chat/services/chat-websocket.service';
 import type { TaskHubItem, DomainSummary, BrainProposalItem, BridgeAgentStatusPayload } from '@mentor-ai/shared/types';
 import { AgentGraphComponent } from './components/agent-graph.component';
@@ -57,8 +58,8 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         gap: 6px;
         padding: 6px 12px;
         border-radius: 999px;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         font-size: 14px;
         font-weight: 500;
         color: #a1a1a1;
@@ -66,24 +67,24 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         transition: border-color 0.15s, color 0.15s;
       }
       .domain-pill:hover {
-        border-color: #3a3a3a;
-        color: #fafafa;
+        border-color: #30363D;
+        color: #E6EDF3;
       }
       .domain-pill.active {
-        border-color: #3b82f6;
-        color: #3b82f6;
-        background: rgba(59, 130, 246, 0.08);
+        border-color: #58A6FF;
+        color: #58A6FF;
+        background: rgba(88, 166, 255, 0.08);
       }
       .domain-count {
-        background: #242424;
+        background: #1C2128;
         padding: 1px 6px;
         border-radius: 999px;
         font-size: 13px;
         font-weight: 600;
       }
       .domain-pill.active .domain-count {
-        background: rgba(59, 130, 246, 0.2);
-        color: #3b82f6;
+        background: rgba(88, 166, 255, 0.2);
+        color: #58A6FF;
       }
 
       /* Filter bar */
@@ -112,33 +113,33 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         width: 100%;
         padding: 8px 12px 8px 36px;
         border-radius: 6px;
-        border: 1px solid #2a2a2a;
-        background: #1a1a1a;
-        color: #fafafa;
+        border: 1px solid #21262D;
+        background: #161B22;
+        color: #E6EDF3;
         font-size: 14px;
         font-family: inherit;
         outline: none;
         transition: border-color 0.15s;
       }
       .search-input::placeholder { color: #9e9e9e; }
-      .search-input:focus { border-color: #3b82f6; }
+      .search-input:focus { border-color: #58A6FF; }
       .filter-select {
         padding: 8px 12px;
         border-radius: 6px;
-        border: 1px solid #2a2a2a;
-        background: #1a1a1a;
-        color: #fafafa;
+        border: 1px solid #21262D;
+        background: #161B22;
+        color: #E6EDF3;
         font-size: 14px;
         font-family: inherit;
         outline: none;
         cursor: pointer;
       }
-      .filter-select:focus { border-color: #3b82f6; }
+      .filter-select:focus { border-color: #58A6FF; }
       .filter-loading {
         width: 16px;
         height: 16px;
-        border: 2px solid #2a2a2a;
-        border-top-color: #3b82f6;
+        border: 2px solid #21262D;
+        border-top-color: #58A6FF;
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
       }
@@ -160,20 +161,20 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         align-items: center;
         gap: 12px;
         padding: 12px 16px;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 8px;
         cursor: pointer;
         transition: border-color 0.12s, background 0.12s;
         position: relative;
       }
       .task-card:hover {
-        border-color: #3a3a3a;
-        background: #1e1e1e;
+        border-color: #30363D;
+        background: #21262D;
       }
       .task-card.selected {
-        border-color: #3b82f6;
-        background: rgba(59, 130, 246, 0.05);
+        border-color: #58A6FF;
+        background: rgba(88, 166, 255, 0.05);
       }
       .status-icon {
         width: 18px;
@@ -181,8 +182,8 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         flex-shrink: 0;
       }
       .status-icon.pending { color: #eab308; }
-      .status-icon.review { color: #3b82f6; }
-      .status-icon.completed { color: #22c55e; }
+      .status-icon.review { color: #58A6FF; }
+      .status-icon.completed { color: #3FB950; }
       .task-info {
         flex: 1;
         min-width: 0;
@@ -206,7 +207,7 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         align-items: center;
         padding: 2px 8px;
         border-radius: 999px;
-        background: #242424;
+        background: #1C2128;
         font-size: 13px;
         font-weight: 500;
         color: #a1a1a1;
@@ -220,16 +221,16 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         width: 7px;
         height: 7px;
         border-radius: 50%;
-        border: 1.5px solid #3a3a3a;
+        border: 1.5px solid #30363D;
       }
       .agent-dot.planned { background: transparent; }
       .agent-dot.running {
-        background: #3b82f6;
-        border-color: #3b82f6;
+        background: #58A6FF;
+        border-color: #58A6FF;
         animation: pulse-dot 1.5s ease-in-out infinite;
       }
-      .agent-dot.completed { background: #22c55e; border-color: #22c55e; }
-      .agent-dot.failed { background: #ef4444; border-color: #ef4444; }
+      .agent-dot.completed { background: #3FB950; border-color: #3FB950; }
+      .agent-dot.failed { background: #F85149; border-color: #F85149; }
       @keyframes pulse-dot {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.4; }
@@ -241,9 +242,9 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         font-size: 13px;
         font-weight: 600;
       }
-      .score-high { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+      .score-high { background: rgba(63, 185, 80, 0.15); color: #4ade80; }
       .score-medium { background: rgba(234, 179, 8, 0.15); color: #fbbf24; }
-      .score-low { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+      .score-low { background: rgba(248, 81, 73, 0.15); color: #f87171; }
       .task-arrow {
         width: 16px;
         height: 16px;
@@ -252,7 +253,7 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         transition: color 0.15s;
       }
       .task-card:hover .task-arrow { color: #a1a1a1; }
-      .task-card.selected .task-arrow { color: #3b82f6; }
+      .task-card.selected .task-arrow { color: #58A6FF; }
 
       /* Skeleton loading */
       .skeleton-card {
@@ -260,13 +261,13 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         align-items: center;
         gap: 12px;
         padding: 12px 16px;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 8px;
       }
       .skel {
         border-radius: 6px;
-        background: linear-gradient(90deg, #1a1a1a 25%, #242424 50%, #1a1a1a 75%);
+        background: linear-gradient(90deg, #161B22 25%, #1C2128 50%, #161B22 75%);
         background-size: 200% 100%;
         animation: shimmer 1.5s infinite linear;
       }
@@ -314,7 +315,7 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         padding: 10px 20px;
         border-radius: 8px;
         border: none;
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
         font-size: 14px;
         font-weight: 500;
@@ -332,8 +333,8 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         align-items: center;
         gap: 12px;
         padding: 12px 16px;
-        background: rgba(239, 68, 68, 0.1);
-        border: 1px solid rgba(239, 68, 68, 0.2);
+        background: rgba(248, 81, 73, 0.1);
+        border: 1px solid rgba(248, 81, 73, 0.2);
         border-radius: 8px;
         margin-bottom: 16px;
         color: #f87171;
@@ -345,14 +346,14 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         padding: 6px 12px;
         border-radius: 6px;
         border: none;
-        background: rgba(239, 68, 68, 0.2);
+        background: rgba(248, 81, 73, 0.2);
         color: #f87171;
         font-size: 14px;
         font-weight: 500;
         cursor: pointer;
         font-family: inherit;
       }
-      .retry-btn:hover { background: rgba(239, 68, 68, 0.3); }
+      .retry-btn:hover { background: rgba(248, 81, 73, 0.3); }
 
       /* Filter overlay */
       .filter-overlay { position: relative; }
@@ -381,19 +382,19 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         line-height: 1;
       }
       .agent-job-btn.completed {
-        background: rgba(34, 197, 94, 0.15);
-        color: #22c55e;
-        border-color: rgba(34, 197, 94, 0.3);
+        background: rgba(63, 185, 80, 0.15);
+        color: #3FB950;
+        border-color: rgba(63, 185, 80, 0.3);
       }
       .agent-job-btn.failed {
-        background: rgba(239, 68, 68, 0.15);
-        color: #ef4444;
-        border-color: rgba(239, 68, 68, 0.3);
+        background: rgba(248, 81, 73, 0.15);
+        color: #F85149;
+        border-color: rgba(248, 81, 73, 0.3);
       }
       .agent-job-btn.planned, .agent-job-btn.running {
-        background: rgba(59, 130, 246, 0.15);
-        color: #3b82f6;
-        border-color: rgba(59, 130, 246, 0.3);
+        background: rgba(88, 166, 255, 0.15);
+        color: #58A6FF;
+        border-color: rgba(88, 166, 255, 0.3);
       }
       .agent-job-btn:hover:not(:disabled) {
         transform: scale(1.2);
@@ -412,24 +413,24 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
       .stop-btn {
         padding: 10px 20px;
         border-radius: 8px;
-        border: 1px solid #ef4444;
-        background: rgba(239, 68, 68, 0.1);
-        color: #ef4444;
+        border: 1px solid #F85149;
+        background: rgba(248, 81, 73, 0.1);
+        color: #F85149;
         font-size: 15px;
         font-weight: 600;
         cursor: pointer;
         transition: all 0.15s;
         white-space: nowrap;
       }
-      .stop-btn:hover:not(:disabled) { background: rgba(239, 68, 68, 0.2); }
+      .stop-btn:hover:not(:disabled) { background: rgba(248, 81, 73, 0.2); }
       .stop-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
       .retry-all-btn {
         padding: 10px 20px;
         border-radius: 8px;
-        border: 1px solid #3b82f6;
-        background: rgba(59, 130, 246, 0.1);
-        color: #3b82f6;
+        border: 1px solid #58A6FF;
+        background: rgba(88, 166, 255, 0.1);
+        color: #58A6FF;
         font-size: 15px;
         font-weight: 600;
         cursor: pointer;
@@ -440,7 +441,7 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         white-space: nowrap;
       }
       .retry-all-btn:hover:not(:disabled) {
-        background: rgba(59, 130, 246, 0.2);
+        background: rgba(88, 166, 255, 0.2);
         border-color: #60a5fa;
       }
       .retry-all-btn:disabled {
@@ -450,8 +451,8 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
       .spinner {
         width: 14px;
         height: 14px;
-        border: 2px solid rgba(59, 130, 246, 0.3);
-        border-top-color: #3b82f6;
+        border: 2px solid rgba(88, 166, 255, 0.3);
+        border-top-color: #58A6FF;
         border-radius: 50%;
         animation: spin 0.6s linear infinite;
         display: inline-block;
@@ -462,8 +463,8 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
       .proposal-section {
         margin-top: 8px;
         padding: 10px 12px;
-        background: rgba(59, 130, 246, 0.06);
-        border: 1px solid rgba(59, 130, 246, 0.15);
+        background: rgba(88, 166, 255, 0.06);
+        border: 1px solid rgba(88, 166, 255, 0.15);
         border-radius: 8px;
         font-size: 13px;
         line-height: 1.5;
@@ -474,7 +475,7 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         gap: 6px;
         font-size: 12px;
         font-weight: 600;
-        color: #3b82f6;
+        color: #58A6FF;
         margin-bottom: 4px;
       }
       .proposal-text {
@@ -490,7 +491,7 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         gap: 12px;
         margin-top: 8px;
         font-size: 12px;
-        color: #666;
+        color: #6E7681;
       }
       .proposal-cost {
         color: #4ade80;
@@ -500,10 +501,191 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         display: inline-flex;
         padding: 2px 8px;
         border-radius: 999px;
-        background: rgba(59, 130, 246, 0.1);
+        background: rgba(88, 166, 255, 0.1);
         color: #60a5fa;
         font-size: 11px;
         font-weight: 500;
+      }
+      .deliverable-icons {
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+      }
+      .deliverable-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: rgba(74, 222, 128, 0.1);
+        border: 1px solid rgba(74, 222, 128, 0.25);
+        color: #4ade80;
+        font-size: 10px;
+        font-weight: 600;
+      }
+      .deliverable-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 4px;
+      }
+      .deliverable-row {
+        display: flex;
+        gap: 8px;
+        padding: 6px 8px;
+        background: rgba(74, 222, 128, 0.05);
+        border: 1px solid rgba(74, 222, 128, 0.18);
+        border-radius: 6px;
+      }
+      .deliverable-icon {
+        font-size: 16px;
+        line-height: 1.2;
+        flex-shrink: 0;
+      }
+      .deliverable-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+      .deliverable-name {
+        font-size: 12px;
+        font-weight: 600;
+        color: #4ade80;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        word-break: break-all;
+      }
+      .deliverable-desc {
+        font-size: 11px;
+        color: #9ca3af;
+        line-height: 1.4;
+      }
+      .status-icon.incomplete {
+        color: #f59e0b;
+      }
+      .incomplete-banner {
+        margin-top: 6px;
+        padding: 6px 10px;
+        background: rgba(245, 158, 11, 0.08);
+        border: 1px solid rgba(245, 158, 11, 0.25);
+        border-radius: 6px;
+        font-size: 11px;
+        color: #fbbf24;
+      }
+
+      /* Running state for PENDING tasks that the backend told us are active */
+      .task-card.is-running {
+        background: linear-gradient(90deg, rgba(88, 166, 255, 0.04), rgba(88, 166, 255, 0.1), rgba(88, 166, 255, 0.04));
+        background-size: 200% 100%;
+        border-left: 2px solid #58A6FF;
+        animation: running-bg-sweep 2.4s ease-in-out infinite;
+      }
+      @keyframes running-bg-sweep {
+        0%   { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+      }
+      .status-icon.running-spinner {
+        display: inline-block;
+        width: 18px;
+        height: 18px;
+        border: 2px solid rgba(88, 166, 255, 0.25);
+        border-top-color: #58A6FF;
+        border-radius: 50%;
+        animation: running-spin 0.9s linear infinite;
+        flex-shrink: 0;
+      }
+      @keyframes running-spin {
+        to { transform: rotate(360deg); }
+      }
+      .running-badge {
+        display: inline-flex;
+        align-items: center;
+        margin-left: 8px;
+        padding: 1px 8px;
+        border-radius: 999px;
+        background: rgba(88, 166, 255, 0.14);
+        color: #58A6FF;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        animation: running-badge-pulse 1.5s ease-in-out infinite;
+      }
+      @keyframes running-badge-pulse {
+        0%, 100% { opacity: 1; }
+        50%      { opacity: 0.55; }
+      }
+      .live-agents {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 6px;
+      }
+      .live-agent-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: rgba(156, 163, 175, 0.08);
+        border: 1px solid rgba(156, 163, 175, 0.2);
+        color: #9ca3af;
+        font-size: 10px;
+        font-weight: 500;
+      }
+      .live-agent-pill.running {
+        background: rgba(88, 166, 255, 0.12);
+        border-color: rgba(88, 166, 255, 0.35);
+        color: #58A6FF;
+      }
+      .live-agent-pill.completed {
+        background: rgba(74, 222, 128, 0.1);
+        border-color: rgba(74, 222, 128, 0.3);
+        color: #4ade80;
+      }
+      .live-agent-pill .live-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+      .live-agent-pill.running .live-dot {
+        animation: live-dot-pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes live-dot-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50%      { opacity: 0.4; transform: scale(1.4); }
+      }
+      .task-progress {
+        margin-top: 6px;
+      }
+      .task-progress-bar {
+        height: 4px;
+        background: rgba(156, 163, 175, 0.15);
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .task-progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #58A6FF, #4ade80);
+        border-radius: 999px;
+        transition: width 0.4s ease;
+      }
+      .task-progress-label {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 3px;
+        font-size: 10px;
+        color: #9ca3af;
+      }
+      .progress-percent {
+        font-weight: 600;
+        color: #58A6FF;
+      }
+      .progress-message {
+        margin-top: 2px;
+        font-size: 10px;
+        color: #6b7280;
+        font-style: italic;
       }
       .proposal-actions {
         display: flex;
@@ -517,7 +699,7 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         padding: 6px 14px;
         border-radius: 6px;
         border: none;
-        background: #3b82f6;
+        background: #58A6FF;
         color: #fff;
         font-size: 13px;
         font-weight: 500;
@@ -532,22 +714,22 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         gap: 4px;
         padding: 6px 14px;
         border-radius: 6px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         background: transparent;
         color: #a1a1a1;
         font-size: 13px;
         cursor: pointer;
         transition: border-color 0.15s, color 0.15s;
       }
-      .btn-discuss:hover { border-color: #3a3a3a; color: #fafafa; }
+      .btn-discuss:hover { border-color: #30363D; color: #E6EDF3; }
       .btn-reject {
         display: inline-flex;
         align-items: center;
         padding: 6px 10px;
         border-radius: 6px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         background: transparent;
-        color: #666;
+        color: #6E7681;
         font-size: 13px;
         cursor: pointer;
         transition: color 0.15s;
@@ -572,14 +754,14 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         align-items: center;
         justify-content: space-between;
         padding-bottom: 12px;
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
         margin-bottom: 12px;
         flex-shrink: 0;
       }
       .panel-title {
         font-size: 16px;
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -590,8 +772,8 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         font-size: 12px;
         font-weight: 600;
       }
-      .panel-count.proposals { background: rgba(59,130,246,0.15); color: #3b82f6; }
-      .panel-count.tasks { background: rgba(34,197,94,0.15); color: #4ade80; }
+      .panel-count.proposals { background: rgba(88,166,255,0.15); color: #58A6FF; }
+      .panel-count.tasks { background: rgba(63,185,80,0.15); color: #4ade80; }
       .panel-scroll {
         flex: 1;
         overflow-y: auto;
@@ -605,7 +787,7 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         gap: 3px;
         padding: 1px 6px;
         border-radius: 4px;
-        background: rgba(59,130,246,0.1);
+        background: rgba(88,166,255,0.1);
         color: #60a5fa;
         font-size: 10px;
         font-weight: 600;
@@ -613,8 +795,8 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
 
       /* ── Global Activity Bar ── */
       .activity-bar {
-        background: #141414;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 8px;
         padding: 10px 14px;
         margin-bottom: 12px;
@@ -628,25 +810,25 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
         margin-bottom: 6px;
         font-size: 13px;
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .activity-dot {
         width: 8px;
         height: 8px;
         border-radius: 50%;
-        background: #22c55e;
+        background: #3FB950;
         animation: pulse-dot 1.5s infinite;
       }
       @keyframes pulse-dot {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.3; }
       }
-      .activity-dot.idle { background: #666; animation: none; }
+      .activity-dot.idle { background: #6E7681; animation: none; }
       .activity-entry {
         font-size: 12px;
         color: #a1a1a1;
         padding: 2px 0;
-        border-bottom: 1px solid #1a1a1a;
+        border-bottom: 1px solid #161B22;
       }
       .activity-entry:last-child { border-bottom: none; }
       .activity-agent {
@@ -663,8 +845,8 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
       .task-expanded {
         margin-top: 8px;
         padding: 12px;
-        background: #141414;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 8px;
       }
       .task-content-preview {
@@ -681,50 +863,36 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
     <div class="page">
       <div class="page-header">
         <div>
-          <h1 class="page-title">Zadaci</h1>
-          <p class="page-desc">Pregledajte i pratite zadatke sa AI agentima.</p>
+          <h1 class="page-title">Tasks</h1>
+          <p class="page-desc">Review and track tasks with AI agents.</p>
         </div>
-        <div style="display:flex;gap:8px;">
-          <button class="retry-all-btn" [disabled]="isRetryingAll()" (click)="retryAllPending()">
-            @if (isRetryingAll()) { <span class="spinner"></span> Izvršava se... } @else { Pokreni neizvršene }
-          </button>
-          <button class="stop-btn" [disabled]="isStopping()" (click)="stopAllAgents()">
-            @if (isStopping()) { Zaustavljam... } @else { Zaustavi agente }
-          </button>
-        </div>
+        <!-- Agent control buttons removed — execution managed by maturity engine -->
       </div>
 
       @if (error()) {
         <div class="error-banner">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           <span>{{ error() }}</span>
-          <button class="retry-btn" (click)="loadTasks()">Ponovo</button>
-        </div>
-      }
-
-      @if (domainSummary().length > 0 && !isLoading()) {
-        <div class="domain-banner">
-          <button class="domain-pill" [class.active]="!activeCategory()" (click)="filterByCategory(null)">
-            Sve <span class="domain-count">{{ totalCount() }}</span>
-          </button>
-          @for (domain of domainSummary(); track domain.category) {
-            <button class="domain-pill" [class.active]="activeCategory() === domain.category" (click)="filterByCategory(domain.category)">
-              {{ stripCategoryNumber(domain.category) }} <span class="domain-count">{{ domain.total }}</span>
-            </button>
-          }
+          <button class="retry-btn" (click)="loadTasks()">Retry</button>
         </div>
       }
 
       <div class="filter-bar">
         <div class="search-wrap">
           <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-          <input class="search-input" placeholder="Pretraži zadatke..." [ngModel]="searchTerm()" (ngModelChange)="onSearchChange($event)" />
+          <input class="search-input" placeholder="Search tasks..." [ngModel]="searchTerm()" (ngModelChange)="onSearchChange($event)" />
         </div>
         <select class="filter-select" [ngModel]="statusFilter()" (ngModelChange)="onStatusChange($event)">
-          <option value="">Svi statusi</option>
-          <option value="PENDING">Na čekanju</option>
-          <option value="READY_FOR_REVIEW">Za pregled</option>
-          <option value="COMPLETED">Završeno</option>
+          <option value="">All statuses</option>
+          <option value="PENDING">Pending</option>
+          <option value="READY_FOR_REVIEW">For review</option>
+          <option value="COMPLETED">Completed</option>
+        </select>
+        <select class="filter-select" [ngModel]="activeCategory() ?? ''" (ngModelChange)="filterByCategory($event || null)">
+          <option value="">All categories ({{ totalCount() }})</option>
+          @for (domain of domainSummary(); track domain.category) {
+            <option [value]="domain.category">{{ stripCategoryNumber(domain.category) }} ({{ domain.total }})</option>
+          }
         </select>
         @if (isFiltering()) { <div class="filter-loading"></div> }
       </div>
@@ -732,18 +900,18 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
       <!-- ═══ DUAL PANEL LAYOUT ═══ -->
       <div class="dual-panels">
 
-        <!-- LEFT: AI Preporučeni zadaci -->
+        <!-- LEFT: AI Recommended tasks -->
         <div class="panel">
           <div class="panel-header">
             <span class="panel-title">
-              <span class="ai-badge">AI</span> Preporučeni
+              <span class="ai-badge">AI</span> Recommended
             </span>
             <span class="panel-count proposals">{{ proposals().length }}</span>
           </div>
           <div class="panel-scroll">
             @if (proposals().length === 0 && !isLoading()) {
               <div class="empty-state" style="padding:24px 0;">
-                <p style="color:#666;font-size:13px;text-align:center;">Mozak još razmišlja... Predlozi će se pojaviti ovde.</p>
+                <p style="color:#6E7681;font-size:13px;text-align:center;">Brain is still thinking... Suggestions will appear here.</p>
               </div>
             }
             @for (proposal of proposals(); track proposal.id) {
@@ -757,6 +925,13 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
                       <span class="proposal-cost">~{{ proposal.estimatedCost | number:'1.2-2' }}</span>
                     }
                     <span>{{ proposal.priority }}</span>
+                    @if (proposal.expectedDeliverables.length) {
+                      <span class="deliverable-icons" title="Will produce: {{ proposal.expectedDeliverables.length }} file(s)">
+                        @for (d of proposal.expectedDeliverables; track d.filename) {
+                          <span class="deliverable-pill">{{ deliverableIcon(d.type) }} .{{ d.type }}</span>
+                        }
+                      </span>
+                    }
                     <span style="margin-left:auto;font-size:11px;color:#444;">
                       {{ expandedProposalId() === proposal.id ? '▲' : '▼' }}
                     </span>
@@ -765,24 +940,45 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
                   <!-- Expanded content -->
                   @if (expandedProposalId() === proposal.id) {
                     <div class="proposal-section" style="margin-top:8px;">
-                      <div class="proposal-label"><span>Zašto je ovo važno</span></div>
+                      <div class="proposal-label"><span>Why this is important</span></div>
                       <div style="font-size:13px;color:#ccc;line-height:1.6;white-space:pre-wrap;">{{ proposal.reasoning }}</div>
 
                       @if (proposal.proposedAction && proposal.proposedAction !== proposal.reasoning) {
-                        <div class="proposal-label" style="margin-top:10px;"><span>Šta treba uraditi</span></div>
+                        <div class="proposal-label" style="margin-top:10px;"><span>What needs to be done</span></div>
                         <div style="font-size:13px;color:#ccc;line-height:1.6;white-space:pre-wrap;">{{ proposal.proposedAction }}</div>
                       }
 
-                      <div class="proposal-actions" style="margin-top:12px;">
-                        <button class="btn-pokreni" [disabled]="approvingProposalId() === proposal.id" (click)="approveProposal(proposal, $event)">
-                          @if (approvingProposalId() === proposal.id) {
-                            <span class="spinner" style="width:12px;height:12px;"></span> Pokreće se...
-                          } @else {
-                            Pokreni
+                      @if (proposal.expectedDeliverables.length) {
+                        <div class="proposal-label" style="margin-top:10px;"><span>You will get</span></div>
+                        <div class="deliverable-list">
+                          @for (d of proposal.expectedDeliverables; track d.filename) {
+                            <div class="deliverable-row">
+                              <span class="deliverable-icon">{{ deliverableIcon(d.type) }}</span>
+                              <div class="deliverable-meta">
+                                <div class="deliverable-name">{{ d.filename }}</div>
+                                <div class="deliverable-desc">{{ d.description }}</div>
+                              </div>
+                            </div>
                           }
-                        </button>
-                        <button class="btn-discuss" (click)="discussProposal(proposal, $event)">Razgovaraj</button>
-                        <button class="btn-reject" (click)="rejectProposal(proposal, $event)">Odbij</button>
+                        </div>
+                      }
+
+                      <div class="proposal-actions" style="margin-top:12px;">
+                        @if (proposal.expectedDeliverables && proposal.expectedDeliverables.length > 0) {
+                          <button class="btn-pokreni" [disabled]="approvingProposalId() === proposal.id" (click)="approveProposal(proposal, $event)">
+                            @if (approvingProposalId() === proposal.id) {
+                              <span class="spinner" style="width:12px;height:12px;"></span> Starting...
+                            } @else {
+                              Run
+                            }
+                          </button>
+                        } @else {
+                          <button class="btn-pokreni" disabled title="Discuss this proposal first to lock in concrete deliverables before running">
+                            Discuss to lock plan
+                          </button>
+                        }
+                        <button class="btn-discuss" (click)="discussProposal(proposal, $event)">Discuss</button>
+                        <button class="btn-reject" (click)="rejectProposal(proposal, $event)">Reject</button>
                       </div>
                     </div>
                   }
@@ -792,10 +988,10 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
           </div>
         </div>
 
-        <!-- RIGHT: Zadaci -->
+        <!-- RIGHT: Tasks -->
         <div class="panel">
           <div class="panel-header">
-            <span class="panel-title">Zadaci</span>
+            <span class="panel-title">Tasks</span>
             <span class="panel-count tasks">{{ tasks().length }}</span>
           </div>
           <div class="panel-scroll">
@@ -808,16 +1004,29 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
               }
             } @else if (tasks().length > 0) {
               @for (task of tasks(); track task.id) {
-                <div class="task-card" [class.selected]="selectedId() === task.id" (click)="selectTask(task)">
+                <div class="task-card"
+                     [class.selected]="selectedId() === task.id"
+                     [class.is-running]="isTaskRunning(task.id) && task.status === 'PENDING'"
+                     (click)="selectTask(task)">
                   @if (task.status === 'COMPLETED') {
                     <svg class="status-icon completed" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  } @else if (task.status === 'INCOMPLETE') {
+                    <svg class="status-icon incomplete" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                   } @else if (task.status === 'READY_FOR_REVIEW') {
                     <svg class="status-icon review" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  } @else if (isTaskRunning(task.id)) {
+                    <!-- Animated spinner for tasks backend told us are actively running -->
+                    <span class="status-icon running-spinner" title="Task is running"></span>
                   } @else {
                     <svg class="status-icon pending" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   }
                   <div class="task-info">
-                    <div class="task-title">{{ task.title }}</div>
+                    <div class="task-title">
+                      {{ task.title }}
+                      @if (isTaskRunning(task.id) && task.status === 'PENDING') {
+                        <span class="running-badge">RUNNING</span>
+                      }
+                    </div>
                     <div class="task-meta">
                       @if (task.conceptName) {
                         <span class="concept-pill">{{ task.conceptName }}</span>
@@ -830,6 +1039,34 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
                         </div>
                       }
                     </div>
+                    <!-- Live agent activity pills — populated from AGENT_STATUS events in real time -->
+                    @if (liveAgentsForTask(task.id).length > 0) {
+                      <div class="live-agents">
+                        @for (a of liveAgentsForTask(task.id); track a.agent) {
+                          <span class="live-agent-pill" [class.running]="a.status === 'running'" [class.completed]="a.status === 'completed'" [title]="a.message">
+                            <span class="live-dot"></span>{{ agentLabel(a.agent) }}
+                          </span>
+                        }
+                      </div>
+                    }
+                    <!-- Progress bar driven by task:progress events -->
+                    @if (progressForTask(task.id); as prog) {
+                      <div class="task-progress">
+                        <div class="task-progress-bar">
+                          <div class="task-progress-fill" [style.width.%]="prog.percent"></div>
+                        </div>
+                        <div class="task-progress-label">
+                          <span class="progress-phase">{{ prog.phase }}</span>
+                          <span class="progress-percent">{{ prog.percent }}%</span>
+                        </div>
+                        @if (prog.message) {
+                          <div class="progress-message">{{ prog.message }}</div>
+                        }
+                      </div>
+                    }
+                    @if (task.status === 'INCOMPLETE') {
+                      <div class="incomplete-banner">⚠️ Task ran but expected deliverables are missing — see details</div>
+                    }
                   </div>
                   @if (task.aiScore != null) {
                     <span class="score-badge" [class]="getScoreClass(task.aiScore)">{{ task.aiScore }}</span>
@@ -842,7 +1079,10 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
                     @if (task.content) {
                       <div class="task-content-preview">{{ task.content }}</div>
                     }
-                    <app-agent-graph [statusEvents]="agentStatusEvents()"></app-agent-graph>
+                    <app-agent-graph
+                      [statusEvents]="agentStatusEvents()"
+                      [taskId]="task.id"
+                    ></app-agent-graph>
                     <app-agent-contributions
                       [enrichments]="task.agentEnrichments"
                       [noteId]="task.id"
@@ -857,8 +1097,8 @@ import { AgentContributionsComponent } from './components/agent-contributions.co
                 <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                 </svg>
-                <h3>Još nema zadataka</h3>
-                <p>Odobrite predlog mozga ili započnite razgovor.</p>
+                <h3>No tasks yet</h3>
+                <p>Approve a brain suggestion or start a conversation.</p>
               </div>
             }
           </div>
@@ -876,6 +1116,7 @@ export class TaskHubComponent implements OnInit, OnDestroy {
   private readonly chatWs = inject(ChatWebsocketService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly pageLoading = inject(PageLoadingService);
 
   readonly proposals = signal<BrainProposalItem[]>([]);
   readonly agentStatusEvents = signal<BridgeAgentStatusPayload[]>([]);
@@ -884,6 +1125,35 @@ export class TaskHubComponent implements OnInit, OnDestroy {
     this.agentStatusEvents().some(e =>
       e.status !== 'completed' && e.status !== 'failed'
     )
+  );
+
+  /**
+   * Set of task IDs that the backend has told us are actively running right
+   * now. Populated from:
+   *   - onBridgeTaskCreated  → add to running set (fresh approval)
+   *   - onBridgeTaskProgress → add to running set (explicit progress event)
+   *   - onBridgeAgentStatus  → add to running set (agent working on this task)
+   *   - onBridgeTaskComplete → remove from running set
+   *
+   * Used by the task card template to render a spinner + running badge on
+   * PENDING tasks, giving the user immediate feedback when they click
+   * "Confirm plan and run" — previously the task just showed a static
+   * yellow clock icon forever.
+   */
+  readonly runningTaskIds = signal<Set<string>>(new Set());
+
+  /**
+   * Per-task live agent activity — map of taskId → most recent agent status
+   * messages. Used to show "Research agent running..." directly on the task
+   * card in real time, even before agentJobs are persisted to the DB.
+   */
+  readonly liveAgentActivityByTask = signal<Map<string, { agent: string; status: string; message: string; timestamp: string }[]>>(
+    new Map(),
+  );
+
+  /** Per-task progress percentage from task:progress events. */
+  readonly taskProgressByTask = signal<Map<string, { percent: number; phase: string; message: string }>>(
+    new Map(),
   );
   readonly expandedProposalId = signal<string | null>(null);
   readonly approvingProposalId = signal<string | null>(null);
@@ -913,14 +1183,17 @@ export class TaskHubComponent implements OnInit, OnDestroy {
 
   private unsubBridgeEvents: Array<() => void> = [];
 
+  private isInitialLoad = true;
+
   ngOnInit(): void {
+    this.pageLoading.start();
     this.loadTasks();
     this.loadProposals();
 
     // Auto-refresh every 15s — include proposals
     this.autoRefreshInterval = setInterval(() => {
       if (!this.isFiltering()) {
-        this.loadTasks();
+        this.loadTasks(false, true);  // silent — no loading flash
         this.loadProposals();
       }
     }, 15_000);
@@ -937,7 +1210,7 @@ export class TaskHubComponent implements OnInit, OnDestroy {
     bridgeRefresh$
       .pipe(debounceTime(500), takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
-        this.loadTasks();
+        this.loadTasks(false, true);  // silent — no loading flash
         this.loadProposals();
       });
 
@@ -945,14 +1218,95 @@ export class TaskHubComponent implements OnInit, OnDestroy {
     this.unsubBridgeEvents.push(
       this.chatWs.onProposalNew(() => bridgeRefresh$.next()),
       this.chatWs.onProposalApproved(() => bridgeRefresh$.next()),
-      this.chatWs.onBridgeTaskCreated(() => bridgeRefresh$.next()),
-      this.chatWs.onBridgeTaskComplete(() => bridgeRefresh$.next()),
+      this.chatWs.onBridgeTaskCreated((data) => {
+        // Mark the task as actively running THE MOMENT it's created so the
+        // user sees a spinner immediately on approval — without waiting for
+        // the first agent_status or the next refresh.
+        if (data?.noteId) {
+          this.runningTaskIds.update((set) => new Set(set).add(data.noteId));
+        }
+        bridgeRefresh$.next();
+      }),
+      this.chatWs.onBridgeTaskComplete((data) => {
+        // Clear running + live activity + progress for completed tasks.
+        if (data?.noteId) {
+          this.runningTaskIds.update((set) => {
+            const next = new Set(set);
+            next.delete(data.noteId);
+            return next;
+          });
+          this.liveAgentActivityByTask.update((map) => {
+            const next = new Map(map);
+            next.delete(data.noteId);
+            return next;
+          });
+          this.taskProgressByTask.update((map) => {
+            const next = new Map(map);
+            next.delete(data.noteId);
+            return next;
+          });
+          // Defensive: mark any lingering agent timeline events for THIS
+          // task as completed. The backend now also fires a final
+          // AGENT_STATUS=completed event in completeTask, so this is
+          // redundant for fresh runs — but keeps the agent graph clean
+          // even if a task completes via auto-fallback or some path that
+          // skips the AGENT_STATUS emit. Without this, the agent-graph
+          // .running CSS would stick on the last reported sub-agent
+          // forever even though the task itself shows COMPLETED.
+          this.agentStatusEvents.update((events) =>
+            events.map((e) =>
+              e.taskId === data.noteId && e.status !== 'completed' && e.status !== 'failed'
+                ? { ...e, status: 'completed' as const }
+                : e,
+            ),
+          );
+        }
+        bridgeRefresh$.next();
+      }),
       this.chatWs.onBridgeTaskContribution(() => bridgeRefresh$.next()),
+      this.chatWs.onBridgeTaskProgress((data) => {
+        // Live progress bar on task card.
+        if (data?.noteId) {
+          this.taskProgressByTask.update((map) => {
+            const next = new Map(map);
+            next.set(data.noteId, {
+              percent: data.percent ?? 0,
+              phase: data.phase ?? '',
+              message: data.message ?? '',
+            });
+            return next;
+          });
+          // Progress also implies running
+          this.runningTaskIds.update((set) => new Set(set).add(data.noteId));
+        }
+      }),
       this.chatWs.onBridgeAgentStatus((data) => {
-        this.agentStatusEvents.update(events => {
+        // Keep the global timeline (used by agent-graph)
+        this.agentStatusEvents.update((events) => {
           const updated = [...events, data];
-          return updated.length > 100 ? updated.slice(-100) : updated; // Keep last 100
+          return updated.length > 100 ? updated.slice(-100) : updated;
         });
+        // If the event is scoped to a task, update the task's live activity
+        // and mark it as running. The backend emits with taskId = noteId.
+        const taskId = (data as any)?.taskId || (data as any)?.noteId;
+        if (taskId) {
+          this.runningTaskIds.update((set) => new Set(set).add(taskId));
+          this.liveAgentActivityByTask.update((map) => {
+            const next = new Map(map);
+            const existing = next.get(taskId) ?? [];
+            // Upsert by agent — keep only most recent status per agent
+            const filtered = existing.filter((e) => e.agent !== data.agent);
+            filtered.push({
+              agent: data.agent,
+              status: data.status,
+              message: data.message,
+              timestamp: data.timestamp,
+            });
+            // Cap per-task history at 8 most recent agents
+            next.set(taskId, filtered.slice(-8));
+            return next;
+          });
+        }
       }),
     );
   }
@@ -964,10 +1318,10 @@ export class TaskHubComponent implements OnInit, OnDestroy {
     this.unsubBridgeEvents.forEach((unsub) => unsub());
   }
 
-  loadTasks(isFilter = false): void {
+  loadTasks(isFilter = false, silent = false): void {
     if (isFilter) {
       this.isFiltering.set(true);
-    } else {
+    } else if (!silent) {
       this.isLoading.set(true);
     }
     this.error.set(null);
@@ -983,20 +1337,42 @@ export class TaskHubComponent implements OnInit, OnDestroy {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (res) => {
-          this.tasks.set(res.data.tasks);
+          // Smart merge: only update if data actually changed (prevents flicker)
+          const newTasks = res.data.tasks;
+          const oldTasks = this.tasks();
+          const changed = newTasks.length !== oldTasks.length ||
+            newTasks.some((t: any, i: number) => t.id !== oldTasks[i]?.id || t.status !== oldTasks[i]?.status);
+          if (changed) this.tasks.set(newTasks);
+
           this.domainSummary.set(res.data.domainSummary);
+
+          // Hydrate runningTaskIds from the server-side in-memory tracker so
+          // the running spinner survives page reloads / navigation. Merge
+          // with whatever is already in the local set (live WS events take
+          // precedence and may include very recent additions not yet
+          // visible to the auto-refresh).
+          const serverRunning = res.runningTaskIds ?? [];
+          if (serverRunning.length > 0) {
+            this.runningTaskIds.update((set) => {
+              const next = new Set(set);
+              for (const id of serverRunning) next.add(id);
+              return next;
+            });
+          }
+
           this.isLoading.set(false);
           this.isFiltering.set(false);
-          // Auto-select first task if nothing selected
-          const first = res.data.tasks[0];
+          if (this.isInitialLoad) { this.pageLoading.stop(); this.isInitialLoad = false; }
+          const first = newTasks[0];
           if (!this.selectedId() && first) {
             this.selectTask(first);
           }
         },
         error: () => {
-          this.error.set('Greška pri učitavanju zadataka.');
+          this.error.set('Error loading tasks.');
           this.isLoading.set(false);
           this.isFiltering.set(false);
+          if (this.isInitialLoad) { this.pageLoading.stop(); this.isInitialLoad = false; }
         },
       });
   }
@@ -1054,7 +1430,7 @@ export class TaskHubComponent implements OnInit, OnDestroy {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
-          this.toastService.success(`${job.agentType} ponovo pokrenut`);
+          this.toastService.success(`${job.agentType} restarted`);
           // Poll for completion
           const poll = setInterval(() => this.loadTasks(), 5_000);
           setTimeout(() => {
@@ -1069,7 +1445,7 @@ export class TaskHubComponent implements OnInit, OnDestroy {
           const updated = new Set(this.rerunningJobs());
           updated.delete(job.id);
           this.rerunningJobs.set(updated);
-          this.toastService.error('Greška: ' + (err.error?.detail || err.message || 'Nepoznata'));
+          this.toastService.error('Error: ' + (err.error?.detail || err.message || 'Unknown'));
         },
       });
   }
@@ -1082,12 +1458,12 @@ export class TaskHubComponent implements OnInit, OnDestroy {
         next: (result) => {
           this.isStopping.set(false);
           this.isRetryingAll.set(false);
-          this.toastService.success(`Zaustavljeno: ${result.stoppedExecutions} izvršavanja, ${result.stoppedJobs} poslova`);
+          this.toastService.success(`Stopped: ${result.stoppedExecutions} executions, ${result.stoppedJobs} jobs`);
           this.loadTasks();
         },
         error: () => {
           this.isStopping.set(false);
-          this.toastService.error('Greška pri zaustavljanju');
+          this.toastService.error('Error stopping agents');
         },
       });
   }
@@ -1099,10 +1475,10 @@ export class TaskHubComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (result) => {
           if (result.totalJobs === 0) {
-            this.toastService.info('Nema neizvršenih zadataka.');
+            this.toastService.info('No pending tasks.');
             this.isRetryingAll.set(false);
           } else {
-            this.toastService.success(`Pokrenuto ${result.totalJobs} zadataka u talasima po 5.`);
+            this.toastService.success(`Started ${result.totalJobs} tasks in waves of 5.`);
             const poll = setInterval(() => {
               this.loadTasks();
             }, 10_000);
@@ -1114,7 +1490,7 @@ export class TaskHubComponent implements OnInit, OnDestroy {
         },
         error: (err) => {
           this.isRetryingAll.set(false);
-          this.toastService.error('Greška pri pokretanju: ' + (err.message || 'Nepoznata greška'));
+          this.toastService.error('Error starting: ' + (err.message || 'Unknown error'));
         },
       });
   }
@@ -1144,13 +1520,13 @@ export class TaskHubComponent implements OnInit, OnDestroy {
       .subscribe({
         next: () => {
           this.approvingProposalId.set(null);
-          this.toastService.success(`Pokrenuto: ${proposal.title}`);
+          this.toastService.success(`Started: ${proposal.title}`);
           this.loadProposals();
           this.loadTasks();
         },
         error: () => {
           this.approvingProposalId.set(null);
-          this.toastService.error('Greška pri odobravanju predloga.');
+          this.toastService.error('Error approving proposal.');
         },
       });
   }
@@ -1171,16 +1547,16 @@ export class TaskHubComponent implements OnInit, OnDestroy {
 
   rejectProposal(proposal: BrainProposalItem, event: Event): void {
     event.stopPropagation();
-    const reason = prompt('Razlog odbijanja (opciono):');
+    const reason = prompt('Reason for rejection (optional):');
     if (reason === null) return; // User clicked Cancel — abort
     this.proposalService.rejectProposal(proposal.id, reason || undefined)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
-          this.toastService.info(`Odbijeno: ${proposal.title}`);
+          this.toastService.info(`Rejected: ${proposal.title}`);
           this.loadProposals();
         },
-        error: () => this.toastService.error('Greška pri odbijanju predloga.'),
+        error: () => this.toastService.error('Error rejecting proposal.'),
       });
   }
 
@@ -1192,29 +1568,76 @@ export class TaskHubComponent implements OnInit, OnDestroy {
     this.taskHubService.executeAction(event.noteId, event.agentType, event.actionId)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () => this.toastService.success('Akcija pokrenuta'),
-        error: () => this.toastService.error('Greška pri pokretanju akcije'),
+        next: () => this.toastService.success('Action started'),
+        error: () => this.toastService.error('Error starting action'),
       });
   }
 
   formatCanvasBlock(block: string): string {
     const labels: Record<string, string> = {
-      KEY_PARTNERS: 'Partneri',
-      KEY_ACTIVITIES: 'Aktivnosti',
-      KEY_RESOURCES: 'Resursi',
-      VALUE_PROPOSITION: 'Vrednost',
-      CUSTOMER_RELATIONSHIPS: 'Odnosi',
-      CHANNELS: 'Kanali',
-      CUSTOMER_SEGMENTS: 'Segmenti',
-      REVENUE_STREAMS: 'Prihodi',
-      COST_STRUCTURE: 'Troškovi',
+      KEY_PARTNERS: 'Partners',
+      KEY_ACTIVITIES: 'Activities',
+      KEY_RESOURCES: 'Resources',
+      VALUE_PROPOSITION: 'Value',
+      CUSTOMER_RELATIONSHIPS: 'Relationships',
+      CHANNELS: 'Channels',
+      CUSTOMER_SEGMENTS: 'Segments',
+      REVENUE_STREAMS: 'Revenue',
+      COST_STRUCTURE: 'Costs',
     };
     return labels[block] ?? block;
+  }
+
+  /** True when the given task is actively running (backend has told us so via WS events). */
+  isTaskRunning(taskId: string): boolean {
+    return this.runningTaskIds().has(taskId);
+  }
+
+  /** Live agent activity for a task (up to 8 most recent agents). */
+  liveAgentsForTask(taskId: string): Array<{ agent: string; status: string; message: string; timestamp: string }> {
+    return this.liveAgentActivityByTask().get(taskId) ?? [];
+  }
+
+  /** Latest progress for a task (percent + phase + message). */
+  progressForTask(taskId: string): { percent: number; phase: string; message: string } | null {
+    return this.taskProgressByTask().get(taskId) ?? null;
+  }
+
+  /** Human-friendly label for an agent role. */
+  agentLabel(agent: string): string {
+    const labels: Record<string, string> = {
+      main: 'Direktor',
+      direktor: 'Direktor',
+      research: 'Istraživanje',
+      financial: 'Finansije',
+      content: 'Sadržaj',
+      marketing: 'Marketing',
+      sales: 'Prodaja',
+      designer: 'Dizajn',
+      dev: 'Razvoj',
+    };
+    return labels[agent.toLowerCase()] ?? agent;
+  }
+
+  /** Pure-CSS-friendly emoji icon for each deliverable type — used in proposal cards. */
+  deliverableIcon(type: string): string {
+    const icons: Record<string, string> = {
+      xlsx: '📊',
+      csv: '📊',
+      pdf: '📄',
+      docx: '📝',
+      pptx: '🎯',
+      png: '🖼️',
+      jpg: '🖼️',
+      jpeg: '🖼️',
+      svg: '🖼️',
+    };
+    return icons[type] ?? '📎';
   }
 
   formatEventTime(ts: string): string {
     if (!ts) return '';
     const d = new Date(ts);
-    return d.toLocaleTimeString('sr-Latn', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
 }

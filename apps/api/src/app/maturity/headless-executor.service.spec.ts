@@ -86,6 +86,9 @@ describe('HeadlessExecutorService', () => {
       mockOpenClawClient as any,
       mockAppEventBus as any,
       mockConfigService as any,
+      undefined, // embeddingService (optional)
+      undefined, // conversationService (optional)
+      undefined, // tenantGuard (optional)
     );
   });
 

@@ -19,8 +19,8 @@ interface AgentNode {
 
       .graph-container {
         padding: 12px;
-        background: #141414;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 8px;
         margin-top: 10px;
       }
@@ -37,15 +37,15 @@ interface AgentNode {
         gap: 6px;
         padding: 4px 10px;
         border-radius: 6px;
-        border: 1px solid #2a2a2a;
-        background: #1a1a1a;
+        border: 1px solid #21262D;
+        background: #161B22;
         font-size: 12px;
         color: #a1a1a1;
         transition: all 0.2s;
       }
 
       .agent-node.running {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
         color: #60a5fa;
         animation: pulse 1.5s ease-in-out infinite;
       }
@@ -62,7 +62,7 @@ interface AgentNode {
         color: #facc15;
       }
       .agent-node.waiting {
-        border-color: #2a2a2a;
+        border-color: #21262D;
         color: #666;
       }
 
@@ -91,7 +91,7 @@ interface AgentNode {
         border-radius: 50%;
         display: inline-block;
       }
-      .status-dot.running { background: #3b82f6; }
+      .status-dot.running { background: #58A6FF; }
       .status-dot.completed { background: #22c55e; }
       .status-dot.failed { background: #ef4444; }
       .status-dot.spawning { background: #eab308; }
@@ -109,7 +109,7 @@ interface AgentNode {
         display: flex;
         gap: 8px;
         padding: 2px 0;
-        border-bottom: 1px solid #1a1a1a;
+        border-bottom: 1px solid #161B22;
       }
       .feed-time { color: #444; min-width: 40px; }
       .feed-agent { color: #60a5fa; min-width: 70px; }
@@ -157,12 +157,31 @@ interface AgentNode {
   `,
 })
 export class AgentGraphComponent {
-  /** All status events received for this task */
+  /** All status events received globally */
   readonly statusEvents = input<BridgeAgentStatusPayload[]>([]);
 
-  /** Unique agents from status events */
+  /**
+   * Optional task ID filter. When set, the graph only renders events where
+   * `taskId` matches this input — so each expanded task shows only ITS OWN
+   * agents, not the global timeline of unrelated tasks.
+   */
+  readonly taskId = input<string | null>(null);
+
+  /** Events filtered to this specific task (if taskId is set). */
+  private readonly filteredEvents = computed(() => {
+    const all = this.statusEvents();
+    const tid = this.taskId();
+    if (!tid) return all;
+    return all.filter((e) => {
+      const eventTaskId = (e as unknown as { taskId?: string; noteId?: string }).taskId
+        ?? (e as unknown as { taskId?: string; noteId?: string }).noteId;
+      return eventTaskId === tid;
+    });
+  });
+
+  /** Unique agents from status events (scoped to this task if taskId is set) */
   readonly agents = computed(() => {
-    const events = this.statusEvents();
+    const events = this.filteredEvents();
     const agentMap = new Map<string, AgentNode>();
 
     for (const event of events) {
@@ -178,18 +197,18 @@ export class AgentGraphComponent {
     return Array.from(agentMap.values());
   });
 
-  /** Director's latest status */
+  /** Director's latest status (scoped to this task if taskId is set) */
   readonly directorStatus = computed(() => {
-    const events = this.statusEvents();
+    const events = this.filteredEvents();
     const directorEvent = [...events].reverse().find(
       (e) => e.agent === 'direktor' || e.agent === 'main',
     );
     return directorEvent?.status ?? 'running';
   });
 
-  /** Activity log (most recent first, max 20) */
+  /** Activity log (most recent first, max 20) — scoped to this task if taskId is set */
   readonly activityLog = computed(() => {
-    return [...this.statusEvents()].reverse().slice(0, 20);
+    return [...this.filteredEvents()].reverse().slice(0, 20);
   });
 
   agentIcon(name: string): string {

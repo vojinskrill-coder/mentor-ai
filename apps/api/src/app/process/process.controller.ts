@@ -169,11 +169,26 @@ export class ProcessController {
   //  Workflow CRUD
   // ════════════════════════════════════════════
 
-  /** List all workflows for the tenant */
+  /** List workflows for the tenant — only those enabled in catalog settings */
   @Get()
   async listWorkflows(@CurrentUser() user: CurrentUserPayload) {
+    // Find which process slugs are enabled in the tenant's catalog
+    const enabledItems = await this.prisma.tenantCatalogItem.findMany({
+      where: { tenantId: user.tenantId, enabled: true, catalogItem: { type: 'process' } },
+      select: { catalogItem: { select: { slug: true } } },
+    });
+
+    const enabledSlugs = enabledItems.map(i => i.catalogItem.slug);
+
+    // If no catalog items exist yet (not seeded), show all (backward compat)
+    const allCatalogProcesses = await this.prisma.catalogItem.count({ where: { type: 'process' } });
+    const filterBySlug = allCatalogProcesses > 0 && enabledSlugs.length > 0;
+
     const workflows = await this.prisma.processWorkflow.findMany({
-      where: { tenantId: user.tenantId },
+      where: {
+        tenantId: user.tenantId,
+        ...(filterBySlug ? { slug: { in: enabledSlugs } } : {}),
+      },
       include: { steps: { orderBy: { order: 'asc' } } },
       orderBy: { createdAt: 'desc' },
     });

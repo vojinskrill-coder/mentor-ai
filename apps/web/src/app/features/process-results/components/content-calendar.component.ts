@@ -70,24 +70,24 @@ interface CalendarDay {
 
     .calendar-header { display: flex; align-items: center; justify-content: space-between; }
     .nav-btn {
-      background: none; border: none; color: #3B82F6; cursor: pointer;
+      background: none; border: none; color: #58A6FF; cursor: pointer;
       font-size: 16px; padding: 4px 8px;
     }
-    .month-label { color: #FAFAFA; font-size: 14px; font-weight: 600; }
+    .month-label { color: #E6EDF3; font-size: 14px; font-weight: 600; }
 
     .weekday-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
     .weekday { color: #6B7280; font-size: 10px; text-align: center; padding: 4px; }
 
     .days-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
     .day-cell {
-      aspect-ratio: 1; background: #1A1A1A; border-radius: 4px; padding: 4px;
+      aspect-ratio: 1; background: #161B22; border-radius: 4px; padding: 4px;
       cursor: pointer; display: flex; flex-direction: column; align-items: center;
       border: 1px solid transparent; min-height: 40px;
     }
-    .day-cell:hover { border-color: #2A2A2A; }
-    .day-cell.has-items { border-color: #2A2A2A; }
+    .day-cell:hover { border-color: #21262D; }
+    .day-cell.has-items { border-color: #21262D; }
     .day-cell.other-month { opacity: 0.3; }
-    .day-num { color: #FAFAFA; font-size: 11px; }
+    .day-num { color: #E6EDF3; font-size: 11px; }
     .day-dots { display: flex; gap: 2px; margin-top: 2px; }
     .dot { width: 6px; height: 6px; border-radius: 50%; }
     .dot-published { background: #22c55e; }
@@ -95,17 +95,17 @@ interface CalendarDay {
     .dot-draft { background: #6B7280; }
 
     .day-detail {
-      background: #242424; border-radius: 6px; padding: 12px; margin-top: 8px;
+      background: #1C2128; border-radius: 6px; padding: 12px; margin-top: 8px;
     }
-    .detail-date { color: #FAFAFA; font-size: 13px; margin: 0 0 8px; }
+    .detail-date { color: #E6EDF3; font-size: 13px; margin: 0 0 8px; }
     .detail-item { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
     .detail-status { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; }
     .status-published { background: #22c55e20; color: #22c55e; }
     .status-scheduled { background: #C9A96E20; color: #C9A96E; }
     .status-draft { background: #6B728020; color: #6B7280; }
-    .detail-channel { color: #3B82F6; font-size: 11px; font-weight: 600; }
-    .detail-title { color: #FAFAFA; font-size: 12px; flex: 1; }
-    .detail-link { color: #3B82F6; font-size: 11px; text-decoration: none; }
+    .detail-channel { color: #58A6FF; font-size: 11px; font-weight: 600; }
+    .detail-title { color: #E6EDF3; font-size: 12px; flex: 1; }
+    .detail-link { color: #58A6FF; font-size: 11px; text-decoration: none; }
   `],
 })
 export class ContentCalendarComponent {

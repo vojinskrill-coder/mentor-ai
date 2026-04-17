@@ -23,6 +23,14 @@ async function bootstrap() {
     credentials: true,
   });
 
+  // Log all incoming requests for debugging
+  app.use((req: any, _res: any, next: any) => {
+    if (req.url.includes('brochure')) {
+      Logger.log(`[REQ] ${req.method} ${req.url} Content-Length: ${req.headers['content-length'] ?? 'none'}`, 'RequestLogger');
+    }
+    next();
+  });
+
   // Global exception filter — RFC 7807 ProblemDetails for all errors
   app.useGlobalFilters(new AllExceptionsFilter());
 

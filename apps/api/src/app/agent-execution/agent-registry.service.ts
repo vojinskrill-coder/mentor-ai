@@ -25,19 +25,19 @@ IMAGE GENERATION — CRITICAL RULES:
    - CONTEXTUAL: include purpose (hero banner, social post, brochure page, infographic)
    - BRANDED: include company visual identity
    - DETAILED: 30+ words describing the exact visual
-5. NEVER write "[Generisati sliku]" or "[FAL.ai]" — ALWAYS use ![description](url) markdown format
+5. NEVER write "[Generate image]" or "[FAL.ai]" — ALWAYS use ![description](url) markdown format
 6. Images will be automatically generated from your alt text descriptions — just write the markdown`;
 
   private static readonly RESEARCH_USAGE_INSTRUCTIONS = `
-YOU WILL RECEIVE pre-researched web data in a "REZULTATI WEB ISTRAZIVANJA" section.
+YOU WILL RECEIVE pre-researched web data in a "WEB RESEARCH RESULTS" section.
 CRITICAL RULES FOR USING RESEARCH DATA:
 1. You MUST use the provided research data as your PRIMARY source of facts
 2. CITE every fact with its source: ([Title](URL)) — inline, right after the sentence
 3. Build your analysis ON TOP of the research data — do NOT ignore it
 4. Do NOT claim "no data available" — the research section ALWAYS contains relevant information
 5. Do NOT fabricate data — use ONLY what is provided in research + your analytical reasoning
-6. NEVER write "[POTREBNO ISTRAZITI]" or "[POTREBNO DODATNO ISTRAZITI]" — all research is ALREADY PROVIDED. If a specific data point is missing, make a reasonable analytical inference based on available data and state your assumption
-7. Write ALL output in Serbian, professional markdown with tables`;
+6. NEVER write "[NEEDS RESEARCH]" or "[NEEDS ADDITIONAL RESEARCH]" — all research is ALREADY PROVIDED. If a specific data point is missing, make a reasonable analytical inference based on available data and state your assumption
+7. Write ALL output in English, professional markdown with tables`;
 
   private readonly agents = new Map<AgentType, AgentDefinition>([
     [
@@ -45,8 +45,8 @@ CRITICAL RULES FOR USING RESEARCH DATA:
       {
         type: AgentType.WEB_SEARCH,
         openClawAgentId: 'web-search',
-        label: 'Online istrazivanje',
-        description: 'Pretrazuje internet za relevantne informacije, trendove i izvore',
+        label: 'Online research',
+        description: 'Searches the internet for relevant information, trends, and sources',
         icon: '🔍',
         estimatedCostEur: 0.5,
         systemPrompt: `You write a direct execution instruction for a web research agent. The agent has tools: web_search, web_fetch.
@@ -59,8 +59,8 @@ Write in English. Output ONLY the instruction text.`,
       {
         type: AgentType.CONTENT,
         openClawAgentId: 'content',
-        label: 'Kreiranje sadrzaja',
-        description: 'Kreira gotov sadrzaj sa tekstom i slikama',
+        label: 'Content creation',
+        description: 'Creates finished content with text and images',
         icon: '✏️',
         estimatedCostEur: 0.5,
         systemPrompt: `You write a direct execution instruction for a content creation agent. Images are generated automatically from markdown ![description](url) syntax — the agent just writes the markdown.
@@ -72,14 +72,14 @@ ${AgentRegistryService.IMAGE_GENERATION_INSTRUCTIONS}
 Given the task report, business context, and previous agents' outputs, write an instruction that tells the agent:
 1. USE the provided web research data as your primary source of facts and data
 2. Create content based on research (headlines, body, CTAs, key takeaways)
-3. Write RICH text content in Serbian — 4000-5000 words. CRITICAL: you MUST complete the entire document — finish every section, every table, every sentence. NEVER stop mid-sentence or mid-table. End with a clear conclusion
+3. Write RICH text content in English — 4000-5000 words. CRITICAL: you MUST complete the entire document — finish every section, every table, every sentence. NEVER stop mid-sentence or mid-table. End with a clear conclusion
 4. Generate AS MANY images as the task requires — match the number of visuals to the content needs:
    - If task asks for specific visuals (brochure pages, social posts, portfolio) — create EACH ONE
    - If task is analytical — 1-2 supporting visuals are enough
    - Each image MUST depict exactly what is described — NOT generic stock imagery
 5. SPECIFY in your instruction what EACH image should show based on the ACTUAL task content, and what SIZE to use (blog=landscape_16_9, social=square_hd, brochure=landscape_4_3, story=portrait_4_3)
 6. Format as clean markdown with ## headings, tables, **bold**, bullet points
-7. Include "Sledeci koraci" section with actionable recommendations
+7. Include "Next Steps" section with actionable recommendations
 
 CROSS-COLLABORATION:
 - If previous agents provided data, USE it — do NOT repeat, ADD content perspective
@@ -98,8 +98,8 @@ Write in English. Output ONLY the instruction text, under 600 words.`,
       {
         type: AgentType.MARKETING,
         openClawAgentId: 'marketing',
-        label: 'Marketing analiza',
-        description: 'Analizira trziste i kreira marketing strategiju',
+        label: 'Marketing analysis',
+        description: 'Analyzes the market and creates marketing strategy',
         icon: '📈',
         estimatedCostEur: 0.5,
         systemPrompt: `You write a direct execution instruction for a marketing strategy agent. The agent has tools: exec (for image generation).
@@ -115,7 +115,7 @@ Given the task report, business context, and previous agents' outputs, write an 
 4. Build competitive positioning with specific competitor comparisons
 5. Create actionable recommendations with measurable KPIs
 6. If visual content is relevant: generate marketing visual
-7. Write RICH output in Serbian — 4000-5000 words. CRITICAL: you MUST complete the entire document — finish every section, every table, every sentence. NEVER stop mid-sentence or mid-table. End with a clear conclusion, markdown with tables
+7. Write RICH output in English — 4000-5000 words. CRITICAL: you MUST complete the entire document — finish every section, every table, every sentence. NEVER stop mid-sentence or mid-table. End with a clear conclusion, markdown with tables
 
 CROSS-COLLABORATION:
 - Reference and BUILD ON findings from previous agents
@@ -135,8 +135,8 @@ Write in English. Output ONLY the instruction text, under 500 words.`,
       {
         type: AgentType.SALES,
         openClawAgentId: 'sales',
-        label: 'Prodajna strategija',
-        description: 'Kreira prodajne planove i strategije',
+        label: 'Sales strategy',
+        description: 'Creates sales plans and strategies',
         icon: '💼',
         estimatedCostEur: 0.5,
         systemPrompt: `You write a direct execution instruction for a sales strategy agent. The agent receives pre-researched web data — DO NOT do own web searches. Use provided data as primary source.
@@ -150,7 +150,7 @@ Given the task report, business context, and ALL previous agent outputs, write a
 3. Target customer profile with specific segments
 4. Objection handling based on competitor data
 5. Pricing strategy referencing financial analysis from previous agents
-6. Write RICH output in Serbian — 4000-5000 words. CRITICAL: you MUST complete the entire document — finish every section, every table, every sentence. NEVER stop mid-sentence or mid-table. End with a clear conclusion, markdown with tables
+6. Write RICH output in English — 4000-5000 words. CRITICAL: you MUST complete the entire document — finish every section, every table, every sentence. NEVER stop mid-sentence or mid-table. End with a clear conclusion, markdown with tables
 7. Include "Prodajni Plan" with concrete steps and timelines
 
 CROSS-COLLABORATION:
@@ -170,8 +170,8 @@ Write in English. Output ONLY the instruction text, under 400 words.`,
       {
         type: AgentType.FINANCIAL,
         openClawAgentId: 'financial',
-        label: 'Finansijska analiza',
-        description: 'Racunanje ROI, budzetska analiza i finansijsko planiranje',
+        label: 'Financial analysis',
+        description: 'ROI calculation, budget analysis and financial planning',
         icon: '💰',
         estimatedCostEur: 0.5,
         systemPrompt: `You write a direct execution instruction for a financial analyst agent. The agent receives pre-researched web data — DO NOT do own web searches. Use provided data as primary source.
@@ -184,7 +184,7 @@ Given the task report, business context, and previous agents' outputs, write an 
 4. Include scenario analysis (optimistic/realistic/pessimistic)
 5. Risk assessment with probability, financial impact, mitigation
 6. Cash flow analysis when relevant (CCC, working capital, payment terms)
-7. Write RICH output in Serbian — 4000-5000 words. CRITICAL: you MUST complete the entire document — finish every section, every table, every sentence. NEVER stop mid-sentence or mid-table. End with a clear conclusion, multiple tables
+7. Write RICH output in English — 4000-5000 words. CRITICAL: you MUST complete the entire document — finish every section, every table, every sentence. NEVER stop mid-sentence or mid-table. End with a clear conclusion, multiple tables
 8. Include "Finansijski Plan" with quarterly/annual projections
 
 CROSS-COLLABORATION:

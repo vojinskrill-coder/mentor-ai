@@ -14,7 +14,7 @@ import { AuthService } from '../core/auth/auth.service';
         justify-content: center;
         min-height: 100vh;
         padding: 16px;
-        background: #0d0d0d;
+        background: #0D1117;
       }
       .container {
         width: 100%;
@@ -24,7 +24,7 @@ import { AuthService } from '../core/auth/auth.service';
       .shield-icon {
         width: 64px;
         height: 64px;
-        color: #3b82f6;
+        color: #58A6FF;
         margin: 0 auto 24px;
       }
       h1 {
@@ -41,7 +41,7 @@ import { AuthService } from '../core/auth/auth.service';
       .info-box {
         padding: 16px;
         border-radius: 8px;
-        background: #1a1a1a;
+        background: #161B22;
         font-size: 14px;
         color: #9e9e9e;
         line-height: 1.5;
@@ -55,9 +55,9 @@ import { AuthService } from '../core/auth/auth.service';
         width: 100%;
         padding: 12px 16px;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
-        background: #1a1a1a;
-        color: #fafafa;
+        border: 1px solid #21262D;
+        background: #161B22;
+        color: #E6EDF3;
         font-size: 14px;
         font-weight: 500;
         cursor: pointer;
@@ -65,7 +65,7 @@ import { AuthService } from '../core/auth/auth.service';
         transition: background 0.15s;
       }
       .google-btn:hover:not(:disabled) {
-        background: #242424;
+        background: #1C2128;
       }
       .google-btn:disabled {
         opacity: 0.5;
@@ -82,8 +82,8 @@ import { AuthService } from '../core/auth/auth.service';
       .btn-spinner {
         width: 20px;
         height: 20px;
-        border: 2px solid #2a2a2a;
-        border-top-color: #3b82f6;
+        border: 2px solid #21262D;
+        border-top-color: #58A6FF;
         border-radius: 50%;
         animation: spin 0.6s linear infinite;
       }
@@ -93,7 +93,7 @@ import { AuthService } from '../core/auth/auth.service';
         gap: 6px;
         margin-top: 24px;
         font-size: 14px;
-        color: #3b82f6;
+        color: #58A6FF;
         text-decoration: none;
       }
       .back-link:hover {

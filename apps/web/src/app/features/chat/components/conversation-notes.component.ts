@@ -48,37 +48,37 @@ import { environment } from '../../../../environments/environment';
         display: flex;
         gap: 4px;
         padding: 0 16px 12px;
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
       }
       .filter-btn {
         padding: 4px 12px;
         border-radius: 12px;
         font-size: 12px;
         background: none;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         color: #9e9e9e;
         cursor: pointer;
       }
       .filter-btn:hover {
         color: #a1a1a1;
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .filter-btn.active {
-        background: #3b82f6;
-        color: #fafafa;
-        border-color: #3b82f6;
+        background: #58A6FF;
+        color: #E6EDF3;
+        border-color: #58A6FF;
       }
 
       /* ── Task Card ── */
       .task-card {
-        background: #1a1a1a;
+        background: #161B22;
         border-radius: 8px;
         margin-bottom: 8px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         overflow: hidden;
       }
       .task-card:hover {
-        border-color: #333;
+        border-color: #30363D;
       }
 
       .task-card-header {
@@ -94,7 +94,7 @@ import { environment } from '../../../../environments/environment';
         width: 16px;
         height: 16px;
         cursor: pointer;
-        accent-color: #3b82f6;
+        accent-color: #58A6FF;
         flex-shrink: 0;
       }
 
@@ -120,13 +120,13 @@ import { environment } from '../../../../environments/environment';
       }
       .badge-review {
         background: #3d2e0a;
-        color: #f59e0b;
+        color: #D29922;
       }
 
       .task-title {
         font-size: 13px;
         font-weight: 500;
-        color: #fafafa;
+        color: #E6EDF3;
         flex: 1;
         min-width: 0;
         overflow: hidden;
@@ -151,16 +151,16 @@ import { environment } from '../../../../environments/environment';
         flex-shrink: 0;
       }
       .score-high {
-        background: rgba(34, 197, 94, 0.15);
-        color: #22c55e;
+        background: rgba(63, 185, 80, 0.15);
+        color: #3FB950;
       }
       .score-medium {
         background: rgba(234, 179, 8, 0.15);
         color: #eab308;
       }
       .score-low {
-        background: rgba(239, 68, 68, 0.15);
-        color: #ef4444;
+        background: rgba(248, 81, 73, 0.15);
+        color: #F85149;
       }
 
       .expand-icon {
@@ -183,7 +183,7 @@ import { environment } from '../../../../environments/environment';
         flex-shrink: 0;
       }
       .delete-btn:hover {
-        color: #ef4444;
+        color: #F85149;
       }
 
       /* ── Lifecycle Stepper ── */
@@ -192,7 +192,7 @@ import { environment } from '../../../../environments/environment';
         align-items: center;
         gap: 4px;
         padding: 10px 12px;
-        border-top: 1px solid #242424;
+        border-top: 1px solid #1C2128;
         font-size: 10px;
         color: #707070;
       }
@@ -205,33 +205,33 @@ import { environment } from '../../../../environments/environment';
         width: 8px;
         height: 8px;
         border-radius: 50%;
-        background: #2a2a2a;
+        background: #21262D;
         flex-shrink: 0;
       }
       .step-dot.active {
-        background: #3b82f6;
+        background: #58A6FF;
       }
       .step-dot.done {
-        background: #22c55e;
+        background: #3FB950;
       }
       .step-label {
         white-space: nowrap;
       }
       .step-label.active {
-        color: #3b82f6;
+        color: #58A6FF;
         font-weight: 600;
       }
       .step-label.done {
-        color: #22c55e;
+        color: #3FB950;
       }
       .step-line {
         width: 12px;
         height: 1px;
-        background: #2a2a2a;
+        background: #21262D;
         flex-shrink: 0;
       }
       .step-line.done {
-        background: #22c55e;
+        background: #3FB950;
       }
 
       /* ── Expanded Body ── */
@@ -249,7 +249,7 @@ import { environment } from '../../../../environments/environment';
         color: #a1a1a1;
         line-height: 1.5;
         padding: 8px;
-        background: #0d0d0d;
+        background: #0D1117;
         border-radius: 6px;
         margin-bottom: 10px;
       }
@@ -286,20 +286,20 @@ import { environment } from '../../../../environments/environment';
         align-items: flex-start;
         gap: 8px;
         padding: 8px;
-        background: #0d0d0d;
+        background: #0D1117;
         border-radius: 6px;
         margin-bottom: 4px;
         cursor: pointer;
       }
       .subtask-item:hover {
-        background: #141414;
+        background: #161B22;
       }
 
       .subtask-step-num {
         font-size: 11px;
         font-weight: 600;
-        color: #3b82f6;
-        background: rgba(59, 130, 246, 0.1);
+        color: #58A6FF;
+        background: rgba(88, 166, 255, 0.1);
         padding: 1px 6px;
         border-radius: 4px;
         flex-shrink: 0;
@@ -308,7 +308,7 @@ import { environment } from '../../../../environments/environment';
       .subtask-check {
         width: 14px;
         height: 14px;
-        color: #22c55e;
+        color: #3FB950;
         flex-shrink: 0;
         margin-top: 1px;
       }
@@ -341,7 +341,7 @@ import { environment } from '../../../../environments/environment';
       .report-section {
         margin-top: 12px;
         padding-top: 12px;
-        border-top: 1px solid #242424;
+        border-top: 1px solid #1C2128;
       }
       .report-label {
         font-size: 11px;
@@ -376,28 +376,28 @@ import { environment } from '../../../../environments/environment';
         border-radius: 10px;
       }
       .report-score-pill.high {
-        background: rgba(34, 197, 94, 0.15);
-        color: #22c55e;
+        background: rgba(63, 185, 80, 0.15);
+        color: #3FB950;
       }
       .report-score-pill.medium {
         background: rgba(234, 179, 8, 0.15);
         color: #eab308;
       }
       .report-score-pill.low {
-        background: rgba(239, 68, 68, 0.15);
-        color: #ef4444;
+        background: rgba(248, 81, 73, 0.15);
+        color: #F85149;
       }
       .report-collapse-chevron {
         font-size: 10px;
-        color: #666;
+        color: #6E7681;
       }
       .report-textarea {
         width: 100%;
-        background: #0d0d0d;
-        border: 1px solid #2a2a2a;
+        background: #0D1117;
+        border: 1px solid #21262D;
         border-radius: 6px;
         padding: 8px 12px;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 12px;
         font-family: inherit;
         resize: vertical;
@@ -406,7 +406,7 @@ import { environment } from '../../../../environments/environment';
       }
       .report-textarea:focus {
         outline: none;
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .report-textarea::placeholder {
         color: #707070;
@@ -421,7 +421,7 @@ import { environment } from '../../../../environments/environment';
 
       .existing-report {
         padding: 8px;
-        background: #0d0d0d;
+        background: #0D1117;
         border-radius: 6px;
       }
 
@@ -429,7 +429,7 @@ import { environment } from '../../../../environments/environment';
       .score-section {
         margin-top: 12px;
         padding-top: 12px;
-        border-top: 1px solid #242424;
+        border-top: 1px solid #1C2128;
       }
       .score-bar-container {
         display: flex;
@@ -440,7 +440,7 @@ import { environment } from '../../../../environments/environment';
       .score-bar-bg {
         flex: 1;
         height: 8px;
-        background: #242424;
+        background: #1C2128;
         border-radius: 4px;
         overflow: hidden;
       }
@@ -450,13 +450,13 @@ import { environment } from '../../../../environments/environment';
         transition: width 0.3s;
       }
       .score-bar-fill.high {
-        background: #22c55e;
+        background: #3FB950;
       }
       .score-bar-fill.medium {
         background: #eab308;
       }
       .score-bar-fill.low {
-        background: #ef4444;
+        background: #F85149;
       }
 
       .score-number {
@@ -465,25 +465,25 @@ import { environment } from '../../../../environments/environment';
         flex-shrink: 0;
       }
       .score-number.high {
-        color: #22c55e;
+        color: #3FB950;
       }
       .score-number.medium {
         color: #eab308;
       }
       .score-number.low {
-        color: #ef4444;
+        color: #F85149;
       }
 
       .score-feedback {
         padding: 8px;
-        background: #0d0d0d;
+        background: #0D1117;
         border-radius: 6px;
       }
 
       /* ── Buttons ── */
       .btn-primary {
-        background: #3b82f6;
-        color: #fafafa;
+        background: #58A6FF;
+        color: #E6EDF3;
         border: none;
         border-radius: 6px;
         padding: 6px 16px;
@@ -491,7 +491,7 @@ import { environment } from '../../../../environments/environment';
         cursor: pointer;
       }
       .btn-primary:hover {
-        background: #2563eb;
+        background: #1F6FEB;
       }
       .btn-primary:disabled {
         opacity: 0.5;
@@ -517,14 +517,14 @@ import { environment } from '../../../../environments/environment';
       .btn-secondary {
         background: none;
         color: #a1a1a1;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         border-radius: 6px;
         padding: 6px 16px;
         font-size: 12px;
         cursor: pointer;
       }
       .btn-secondary:hover {
-        color: #fafafa;
+        color: #E6EDF3;
         border-color: #707070;
       }
       .btn-score {
@@ -547,7 +547,7 @@ import { environment } from '../../../../environments/environment';
       .view-in-chat-btn {
         background: none;
         border: none;
-        color: #3b82f6;
+        color: #58A6FF;
         cursor: pointer;
         font-size: 10px;
         padding: 0;
@@ -566,7 +566,7 @@ import { environment } from '../../../../environments/environment';
       }
 
       .add-note-section {
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid #21262D;
         padding: 12px 16px;
       }
       .add-note-form {
@@ -575,27 +575,27 @@ import { environment } from '../../../../environments/environment';
         gap: 8px;
       }
       .note-input {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 6px;
         padding: 8px 12px;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 13px;
         font-family: inherit;
       }
       .note-input:focus {
         outline: none;
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .note-input::placeholder {
         color: #707070;
       }
       .note-textarea {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 6px;
         padding: 8px 12px;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 13px;
         font-family: inherit;
         resize: vertical;
@@ -603,7 +603,7 @@ import { environment } from '../../../../environments/environment';
       }
       .note-textarea:focus {
         outline: none;
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .note-textarea::placeholder {
         color: #707070;
@@ -626,8 +626,8 @@ import { environment } from '../../../../environments/environment';
         align-items: center;
         justify-content: space-between;
         padding: 8px 16px;
-        background: #1a1a1a;
-        border-bottom: 1px solid #2a2a2a;
+        background: #161B22;
+        border-bottom: 1px solid #21262D;
       }
       .run-agents-bar span {
         font-size: 12px;
@@ -639,8 +639,8 @@ import { environment } from '../../../../environments/environment';
         align-items: center;
       }
       .run-agents-btn {
-        background: #3b82f6;
-        color: #fafafa;
+        background: #58A6FF;
+        color: #E6EDF3;
         border: none;
         border-radius: 6px;
         padding: 6px 16px;
@@ -649,7 +649,7 @@ import { environment } from '../../../../environments/environment';
         cursor: pointer;
       }
       .run-agents-btn:hover {
-        background: #2563eb;
+        background: #1F6FEB;
       }
       .run-agents-btn:disabled {
         opacity: 0.5;
@@ -658,7 +658,7 @@ import { environment } from '../../../../environments/environment';
       .select-link {
         background: none;
         border: none;
-        color: #3b82f6;
+        color: #58A6FF;
         cursor: pointer;
         font-size: 11px;
         padding: 0;
@@ -668,8 +668,8 @@ import { environment } from '../../../../environments/environment';
       }
       .pdf-export-btn {
         background: none;
-        border: 1px solid #3b82f6;
-        color: #3b82f6;
+        border: 1px solid #58A6FF;
+        color: #58A6FF;
         border-radius: 6px;
         padding: 6px 14px;
         font-size: 12px;
@@ -677,8 +677,8 @@ import { environment } from '../../../../environments/environment';
         cursor: pointer;
       }
       .pdf-export-btn:hover {
-        background: #3b82f6;
-        color: #fafafa;
+        background: #58A6FF;
+        color: #E6EDF3;
       }
       .pdf-export-btn:disabled {
         opacity: 0.5;
@@ -690,16 +690,16 @@ import { environment } from '../../../../environments/environment';
         align-items: center;
         gap: 8px;
         padding: 10px 16px;
-        background: #1a1a1a;
-        border-bottom: 1px solid #2a2a2a;
+        background: #161B22;
+        border-bottom: 1px solid #21262D;
         font-size: 12px;
         color: #60a5fa;
       }
       .executing-spinner {
         width: 14px;
         height: 14px;
-        border: 2px solid #2a2a2a;
-        border-top-color: #3b82f6;
+        border: 2px solid #21262D;
+        border-top-color: #58A6FF;
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
         flex-shrink: 0;
@@ -708,7 +708,7 @@ import { environment } from '../../../../environments/environment';
         display: inline-block;
         width: 12px;
         height: 12px;
-        border: 2px solid #2a2a2a;
+        border: 2px solid #21262D;
         border-top-color: #eab308;
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
@@ -723,8 +723,8 @@ import { environment } from '../../../../environments/environment';
 
       /* ── Mission Control (Parallel Popuni) ── */
       .mission-control {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 10px;
         margin: 12px;
         overflow: hidden;
@@ -734,17 +734,17 @@ import { environment } from '../../../../environments/environment';
         align-items: center;
         gap: 8px;
         padding: 12px 16px;
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
       }
       .mission-control-icon {
-        color: #3b82f6;
+        color: #58A6FF;
         display: flex;
         flex-shrink: 0;
       }
       .mission-control-title {
         font-size: 13px;
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .mission-control-count {
         margin-left: auto;
@@ -753,11 +753,11 @@ import { environment } from '../../../../environments/environment';
       }
       .mission-control-progress-bar {
         height: 3px;
-        background: #242424;
+        background: #1C2128;
       }
       .mission-control-progress-fill {
         height: 100%;
-        background: #3b82f6;
+        background: #58A6FF;
         transition: width 0.4s ease;
       }
       .mission-control-tasks {
@@ -771,7 +771,7 @@ import { environment } from '../../../../environments/environment';
         font-size: 13px;
       }
       .mission-task-row:hover {
-        background: #242424;
+        background: #1C2128;
       }
       .mission-task-done {
         opacity: 0.7;
@@ -789,8 +789,8 @@ import { environment } from '../../../../environments/environment';
       .mission-spinner {
         width: 14px;
         height: 14px;
-        border: 2px solid #2a2a2a;
-        border-top-color: #3b82f6;
+        border: 2px solid #21262D;
+        border-top-color: #58A6FF;
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
       }
@@ -799,17 +799,17 @@ import { environment } from '../../../../environments/environment';
         font-size: 10px;
       }
       .status-completed {
-        color: #22c55e;
+        color: #3FB950;
         font-weight: bold;
         font-size: 14px;
       }
       .status-failed {
-        color: #ef4444;
+        color: #F85149;
         font-weight: bold;
         font-size: 14px;
       }
       .mission-task-title {
-        color: #fafafa;
+        color: #E6EDF3;
         flex: 1;
         min-width: 0;
         overflow: hidden;
@@ -830,19 +830,19 @@ import { environment } from '../../../../environments/environment';
         font-size: 12px;
       }
       .score-high {
-        color: #22c55e;
-        background: rgba(34, 197, 94, 0.1);
+        color: #3FB950;
+        background: rgba(63, 185, 80, 0.1);
       }
       .score-mid {
         color: #eab308;
         background: rgba(234, 179, 8, 0.1);
       }
       .score-low {
-        color: #ef4444;
-        background: rgba(239, 68, 68, 0.1);
+        color: #F85149;
+        background: rgba(248, 81, 73, 0.1);
       }
       .mission-error {
-        color: #ef4444;
+        color: #F85149;
         font-size: 11px;
         max-width: 120px;
         overflow: hidden;
@@ -854,7 +854,7 @@ import { environment } from '../../../../environments/environment';
       .comments-section {
         margin-top: 12px;
         padding-top: 12px;
-        border-top: 1px solid #242424;
+        border-top: 1px solid #1C2128;
       }
       .comments-header {
         display: flex;
@@ -881,7 +881,7 @@ import { environment } from '../../../../environments/environment';
       }
       .comment-item {
         padding: 8px;
-        background: #0d0d0d;
+        background: #0D1117;
         border-radius: 6px;
         margin-bottom: 4px;
       }
@@ -900,7 +900,7 @@ import { environment } from '../../../../environments/environment';
         font-size: 9px;
         padding: 1px 4px;
         border-radius: 3px;
-        background: rgba(59, 130, 246, 0.1);
+        background: rgba(88, 166, 255, 0.1);
         color: #60a5fa;
       }
       .comment-time {
@@ -937,15 +937,15 @@ import { environment } from '../../../../environments/environment';
         color: #a1a1a1;
       }
       .comment-action-btn.danger:hover {
-        color: #ef4444;
+        color: #F85149;
       }
       .comment-edit-textarea {
         width: 100%;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 4px;
         padding: 6px 8px;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 12px;
         font-family: inherit;
         resize: vertical;
@@ -954,7 +954,7 @@ import { environment } from '../../../../environments/environment';
       }
       .comment-edit-textarea:focus {
         outline: none;
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .comment-edit-actions {
         display: flex;
@@ -969,24 +969,24 @@ import { environment } from '../../../../environments/environment';
       }
       .comment-input {
         flex: 1;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 6px;
         padding: 6px 10px;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 12px;
         font-family: inherit;
       }
       .comment-input:focus {
         outline: none;
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .comment-input::placeholder {
         color: #707070;
       }
       .comment-send-btn {
-        background: #3b82f6;
-        color: #fafafa;
+        background: #58A6FF;
+        color: #E6EDF3;
         border: none;
         border-radius: 6px;
         padding: 6px 12px;
@@ -995,7 +995,7 @@ import { environment } from '../../../../environments/environment';
         flex-shrink: 0;
       }
       .comment-send-btn:hover {
-        background: #2563eb;
+        background: #1F6FEB;
       }
       .comment-send-btn:disabled {
         opacity: 0.5;
@@ -1006,7 +1006,7 @@ import { environment } from '../../../../environments/environment';
         width: 100%;
         background: none;
         border: none;
-        color: #3b82f6;
+        color: #58A6FF;
         font-size: 11px;
         cursor: pointer;
         padding: 6px 0;
@@ -1021,13 +1021,13 @@ import { environment } from '../../../../environments/environment';
         align-items: center;
         gap: 10px;
         padding: 14px 16px;
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
         background: #111;
       }
       .folder-title {
         font-size: 15px;
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
         flex: 1;
       }
       .folder-count {
@@ -1039,9 +1039,9 @@ import { environment } from '../../../../environments/environment';
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        background: rgba(59, 130, 246, 0.1);
+        background: rgba(88, 166, 255, 0.1);
         color: #60a5fa;
-        border: 1px solid rgba(59, 130, 246, 0.3);
+        border: 1px solid rgba(88, 166, 255, 0.3);
         border-radius: 6px;
         padding: 5px 12px;
         font-size: 11px;
@@ -1049,8 +1049,8 @@ import { environment } from '../../../../environments/environment';
         margin-top: 8px;
       }
       .execute-btn:hover {
-        background: rgba(59, 130, 246, 0.2);
-        border-color: #3b82f6;
+        background: rgba(88, 166, 255, 0.2);
+        border-color: #58A6FF;
       }
       .execute-btn:disabled {
         opacity: 0.5;
@@ -1060,7 +1060,7 @@ import { environment } from '../../../../environments/environment';
         display: inline-block;
         width: 12px;
         height: 12px;
-        border: 2px solid rgba(59, 130, 246, 0.3);
+        border: 2px solid rgba(88, 166, 255, 0.3);
         border-top-color: #60a5fa;
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
@@ -1071,7 +1071,7 @@ import { environment } from '../../../../environments/environment';
         margin-top: 10px;
         padding: 10px 12px;
         background: #111;
-        border: 1px solid rgba(34, 197, 94, 0.2);
+        border: 1px solid rgba(63, 185, 80, 0.2);
         border-radius: 6px;
       }
       .execution-progress-header {
@@ -1087,7 +1087,7 @@ import { environment } from '../../../../environments/environment';
         display: inline-block;
         width: 10px;
         height: 10px;
-        border: 2px solid rgba(34, 197, 94, 0.3);
+        border: 2px solid rgba(63, 185, 80, 0.3);
         border-top-color: #4ade80;
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
@@ -1097,7 +1097,7 @@ import { environment } from '../../../../environments/environment';
         overflow-y: auto;
         word-break: break-word;
         padding: 6px 8px;
-        background: #0d0d0d;
+        background: #0D1117;
         border-radius: 4px;
       }
       .execution-complete-badge {
@@ -1105,8 +1105,8 @@ import { environment } from '../../../../environments/environment';
         align-items: center;
         gap: 6px;
         padding: 4px 10px;
-        background: rgba(34, 197, 94, 0.1);
-        border: 1px solid rgba(34, 197, 94, 0.3);
+        background: rgba(63, 185, 80, 0.1);
+        border: 1px solid rgba(63, 185, 80, 0.3);
         border-radius: 4px;
         font-size: 11px;
         color: #4ade80;
@@ -1165,7 +1165,7 @@ import { environment } from '../../../../environments/environment';
         overflow-y: auto;
         word-break: break-word;
         padding: 6px 8px;
-        background: #0d0d0d;
+        background: #0D1117;
         border-radius: 4px;
       }
 
@@ -1194,15 +1194,15 @@ import { environment } from '../../../../environments/environment';
       .ai-content h1 {
         font-size: 1.35em;
         font-weight: 700;
-        color: #fafafa;
+        color: #E6EDF3;
         margin: 16px 0 6px;
         padding-bottom: 4px;
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
       }
       .ai-content h2 {
         font-size: 1.2em;
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
         margin: 14px 0 5px;
         padding-bottom: 3px;
         border-bottom: 1px solid rgba(42, 42, 42, 0.5);
@@ -1227,7 +1227,7 @@ import { environment } from '../../../../environments/environment';
         line-height: 1.65;
       }
       .ai-content strong {
-        color: #fafafa;
+        color: #E6EDF3;
         font-weight: 600;
       }
       .ai-content em {
@@ -1276,11 +1276,11 @@ import { environment } from '../../../../environments/environment';
         font-size: 0.9em;
         border-radius: 6px;
         overflow: hidden;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
       }
       .ai-content thead th {
-        background: #1a1a1a;
-        color: #fafafa;
+        background: #161B22;
+        color: #E6EDF3;
         font-weight: 600;
         text-align: left;
         padding: 7px 10px;
@@ -1288,11 +1288,11 @@ import { environment } from '../../../../environments/environment';
       }
       .ai-content tbody td {
         padding: 7px 10px;
-        border-bottom: 1px solid #1e1e1e;
+        border-bottom: 1px solid #21262D;
         color: #d4d4d4;
       }
       .ai-content tbody tr:hover {
-        background: rgba(59, 130, 246, 0.04);
+        background: rgba(88, 166, 255, 0.04);
       }
       .ai-content tbody tr:last-child td {
         border-bottom: none;
@@ -1308,7 +1308,7 @@ import { environment } from '../../../../environments/environment';
       }
       .ai-content pre {
         background: #111;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         border-radius: 6px;
         padding: 10px 14px;
         overflow-x: auto;
@@ -1323,11 +1323,11 @@ import { environment } from '../../../../environments/environment';
       }
 
       .ai-content blockquote {
-        border-left: 3px solid #3b82f6;
+        border-left: 3px solid #58A6FF;
         margin: 10px 0;
         padding: 6px 12px;
         color: #b0b0b0;
-        background: rgba(59, 130, 246, 0.04);
+        background: rgba(88, 166, 255, 0.04);
         border-radius: 0 6px 6px 0;
       }
       .ai-content blockquote p {
@@ -1345,7 +1345,7 @@ import { environment } from '../../../../environments/environment';
 
       .ai-content hr {
         border: none;
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid #21262D;
         margin: 14px 0;
       }
       .ai-content del {
@@ -1358,7 +1358,7 @@ import { environment } from '../../../../environments/environment';
         align-items: center;
         gap: 4px;
         font-size: 10px;
-        color: #a855f7;
+        color: #BC8CFF;
         background: rgba(168, 85, 247, 0.1);
         padding: 2px 6px;
         border-radius: 4px;
@@ -1385,9 +1385,9 @@ import { environment } from '../../../../environments/environment';
               />
             </svg>
           </span>
-          <span class="mission-control-title">Paralelno izvršavanje</span>
+          <span class="mission-control-title">Parallel execution</span>
           <span class="mission-control-count">
-            {{ parallelCompletedCount() }}/{{ parallelTaskStates().length }} završeno
+            {{ parallelCompletedCount() }}/{{ parallelTaskStates().length }} completed
           </span>
         </div>
         <div class="mission-control-progress-bar">
@@ -1436,19 +1436,19 @@ import { environment } from '../../../../environments/environment';
               <span class="mission-task-status">
                 @switch (task.status) {
                   @case ('queued') {
-                    U redu...
+                    Queued...
                   }
                   @case ('running-workflow') {
-                    Generisanje plana...
+                    Generating plan...
                   }
                   @case ('running-steps') {
-                    Korak {{ task.currentStep }}/{{ task.totalSteps }}
+                    Step {{ task.currentStep }}/{{ task.totalSteps }}
                   }
                   @case ('synthesizing') {
-                    Sinteza...
+                    Synthesizing...
                   }
                   @case ('scoring') {
-                    Ocenjivanje...
+                    Scoring...
                   }
                   @case ('completed') {
                     @if (task.score != null) {
@@ -1461,11 +1461,11 @@ import { environment } from '../../../../environments/environment';
                         {{ task.score }}
                       </span>
                     } @else {
-                      Gotovo
+                      Done
                     }
                   }
                   @case ('failed') {
-                    <span class="mission-error">{{ task.error ?? 'Greška' }}</span>
+                    <span class="mission-error">{{ task.error ?? 'Error' }}</span>
                   }
                 }
               </span>
@@ -1476,19 +1476,19 @@ import { environment } from '../../../../environments/environment';
     } @else if (isGeneratingPlan()) {
       <div class="executing-bar">
         <span class="executing-spinner"></span>
-        Generisanje plana...
+        Generating plan...
       </div>
     } @else if (isExecuting()) {
       <div class="executing-bar">
         <span class="executing-spinner"></span>
-        Agenti rade...
+        Agents working...
       </div>
     }
 
     @if (folderName()) {
       <div class="folder-header">
         <svg
-          style="width: 18px; height: 18px; color: #3B82F6;"
+          style="width: 18px; height: 18px; color: #58A6FF;"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -1502,13 +1502,13 @@ import { environment } from '../../../../environments/environment';
         </svg>
         <span class="folder-title">{{ folderName() }}</span>
         <span class="folder-count"
-          >{{ notes().length }} zadatak{{ notes().length !== 1 ? 'a' : '' }}</span
+          >{{ notes().length }} task{{ notes().length !== 1 ? 's' : '' }}</span
         >
       </div>
     }
 
     <!-- Filter bar -->
-    <div class="filter-bar" role="tablist" aria-label="Filter zadataka">
+    <div class="filter-bar" role="tablist" aria-label="Filter tasks">
       <button
         class="filter-btn"
         [class.active]="activeFilter() === 'all'"
@@ -1516,7 +1516,7 @@ import { environment } from '../../../../environments/environment';
         role="tab"
         [attr.aria-selected]="activeFilter() === 'all'"
       >
-        Sve
+        All
       </button>
       <button
         class="filter-btn"
@@ -1525,7 +1525,7 @@ import { environment } from '../../../../environments/environment';
         role="tab"
         [attr.aria-selected]="activeFilter() === 'TASK'"
       >
-        Zadaci
+        Tasks
       </button>
       <button
         class="filter-btn"
@@ -1534,7 +1534,7 @@ import { environment } from '../../../../environments/environment';
         role="tab"
         [attr.aria-selected]="activeFilter() === 'READY_FOR_REVIEW'"
       >
-        Pregled
+        Review
       </button>
       <button
         class="filter-btn"
@@ -1543,23 +1543,23 @@ import { environment } from '../../../../environments/environment';
         role="tab"
         [attr.aria-selected]="activeFilter() === 'NOTE'"
       >
-        Beleške
+        Notes
       </button>
     </div>
 
     @if (selectedTaskIds().size > 0) {
       <div class="run-agents-bar">
         <span
-          >{{ selectedTaskIds().size }} zadatak{{
-            selectedTaskIds().size > 1 ? 'a' : ''
+          >{{ selectedTaskIds().size }} task{{
+            selectedTaskIds().size > 1 ? 's' : ''
           }}
-          izabrano</span
+          selected</span
         >
         <div class="run-agents-actions">
-          <button class="select-link" (click)="deselectAll()">Poništi izbor</button>
+          <button class="select-link" (click)="deselectAll()">Deselect all</button>
           @if (pdfNoteIds().length > 0) {
             <button class="pdf-export-btn" [disabled]="pdfExporting()" (click)="onPdfExport()">
-              {{ pdfExporting() ? 'Generisanje...' : 'Eksportuj PDF' }}
+              {{ pdfExporting() ? 'Generating...' : 'Export PDF' }}
             </button>
           }
           @if (pendingSelectedIds().length > 0) {
@@ -1568,31 +1568,31 @@ import { environment } from '../../../../environments/environment';
               [disabled]="isExecuting() || isGeneratingPlan() || isParallelExecuting()"
               (click)="onRunAgents()"
             >
-              Pokreni agente
+              Run agents
             </button>
           }
         </div>
         @if (pdfError()) {
-          <div style="color: #ef4444; font-size: 11px; padding: 0 16px 4px;">{{ pdfError() }}</div>
+          <div style="color: #F85149; font-size: 11px; padding: 0 16px 4px;">{{ pdfError() }}</div>
         }
       </div>
     } @else if (pendingTaskCount() > 0) {
       <div class="run-agents-bar">
         <span
-          >{{ pendingTaskCount() }} zadatak{{ pendingTaskCount() > 1 ? 'a' : '' }} na čekanju</span
+          >{{ pendingTaskCount() }} task{{ pendingTaskCount() > 1 ? 's' : '' }} pending</span
         >
-        <button class="select-link" (click)="selectAllPending()">Izaberi sve</button>
+        <button class="select-link" (click)="selectAllPending()">Select all</button>
       </div>
     }
 
     <div class="notes-container">
       @if (loading()) {
-        <div class="loading-spinner">Učitavanje beleški...</div>
+        <div class="loading-spinner">Loading notes...</div>
       } @else if (filteredNotes().length === 0) {
         <div class="empty-notes">
-          <p>Još nema beleški</p>
+          <p>No notes yet</p>
           <p style="font-size: 11px; margin-top: 4px;">
-            Beleške i zadaci će se pojaviti ovde tokom razgovora
+            Notes and tasks will appear here during the conversation
           </p>
         </div>
       } @else {
@@ -1607,7 +1607,7 @@ import { environment } from '../../../../environments/environment';
                   [checked]="selectedTaskIds().has(note.id)"
                   (change)="toggleSelection(note.id); $event.stopPropagation()"
                   (click)="$event.stopPropagation()"
-                  [title]="note.status === 'COMPLETED' ? 'Izaberi za PDF' : 'Izaberi za agente'"
+                  [title]="note.status === 'COMPLETED' ? 'Select for PDF' : 'Select for agents'"
                 />
               }
               <span
@@ -1622,7 +1622,7 @@ import { environment } from '../../../../environments/environment';
                 {{ note.title }}
               </span>
               @if (note.reusedFromNoteId) {
-                <span class="reuse-badge" title="Korišćen postojeći rezultat">♻️</span>
+                <span class="reuse-badge" title="Reused existing result">♻️</span>
               }
               @if (note.aiScore !== null && note.aiScore !== undefined) {
                 <span
@@ -1651,7 +1651,7 @@ import { environment } from '../../../../environments/environment';
                 class="delete-btn"
                 [disabled]="deletingInProgress().has(note.id)"
                 (click)="deleteNote(note.id); $event.stopPropagation()"
-                title="Obriši"
+                title="Delete"
               >
                 @if (deletingInProgress().has(note.id)) {
                   <span
@@ -1682,7 +1682,7 @@ import { environment } from '../../../../environments/environment';
                 <div class="lifecycle-stepper">
                   <span class="step-marker">
                     <span class="step-dot" [class.done]="true"></span>
-                    <span class="step-label done">Kreiran</span>
+                    <span class="step-label done">Created</span>
                   </span>
                   <span
                     class="step-line"
@@ -1698,7 +1698,7 @@ import { environment } from '../../../../environments/environment';
                       class="step-label"
                       [class.active]="executingTaskId() === note.id"
                       [class.done]="note.status === 'COMPLETED'"
-                      >Izvršava se</span
+                      >Executing</span
                     >
                   </span>
                   <span
@@ -1715,7 +1715,7 @@ import { environment } from '../../../../environments/environment';
                       class="step-label"
                       [class.active]="note.status === 'COMPLETED' && !note.aiScore"
                       [class.done]="note.aiScore !== null && note.aiScore !== undefined"
-                      >Pregled</span
+                      >Review</span
                     >
                   </span>
                   <span
@@ -1730,7 +1730,7 @@ import { environment } from '../../../../environments/environment';
                     <span
                       class="step-label"
                       [class.done]="note.aiScore !== null && note.aiScore !== undefined"
-                      >Ocenjen</span
+                      >Scored</span
                     >
                   </span>
                 </div>
@@ -1745,7 +1745,7 @@ import { environment } from '../../../../environments/environment';
 
                 @if (note.expectedOutcome) {
                   <div class="expected-outcome">
-                    <div class="expected-outcome-label">Očekivani ishod</div>
+                    <div class="expected-outcome-label">Expected outcome</div>
                     <div class="ai-content" [innerHTML]="note.expectedOutcome | markdown"></div>
                   </div>
                 }
@@ -1757,7 +1757,7 @@ import { environment } from '../../../../environments/environment';
                     (click)="onExecuteTask(note.id)"
                   >
                     @if (executingTaskId() === note.id) {
-                      <span class="execute-spinner"></span> AI radi...
+                      <span class="execute-spinner"></span> AI working...
                     } @else {
                       <svg
                         style="width:12px;height:12px;"
@@ -1778,7 +1778,7 @@ import { environment } from '../../../../environments/environment';
                           d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                         />
                       </svg>
-                      Izvrši
+                      Execute
                     }
                   </button>
                 }
@@ -1788,7 +1788,7 @@ import { environment } from '../../../../environments/environment';
                   <div class="execution-progress">
                     <div class="execution-progress-header">
                       <span class="execution-progress-spinner"></span>
-                      AI radi na zadatku...
+                      AI working on task...
                     </div>
                     <div
                       class="execution-progress-content ai-content"
@@ -1807,7 +1807,7 @@ import { environment } from '../../../../environments/environment';
                     (click)="onSubmitTaskResult(note.id)"
                   >
                     @if (submittingResultId() === note.id) {
-                      <span class="submit-result-spinner"></span> Ocenjujem...
+                      <span class="submit-result-spinner"></span> Scoring...
                     } @else {
                       <svg
                         style="width:12px;height:12px;"
@@ -1822,7 +1822,7 @@ import { environment } from '../../../../environments/environment';
                           d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                         />
                       </svg>
-                      Potvrdi rezultat
+                      Confirm result
                     }
                   </button>
                 }
@@ -1832,7 +1832,7 @@ import { environment } from '../../../../environments/environment';
                   <div class="result-progress">
                     <div class="result-progress-header">
                       <span class="submit-result-spinner"></span>
-                      Optimizujem i ocenjujem...
+                      Optimizing and scoring...
                     </div>
                     <div
                       class="result-progress-content ai-content"
@@ -1846,7 +1846,7 @@ import { environment } from '../../../../environments/environment';
                   <span>{{ formatDate(note.createdAt) }}</span>
                   @if (note.messageId) {
                     <button class="view-in-chat-btn" (click)="emitViewMessage(note)">
-                      Pogledaj u razgovoru
+                      View in chat
                     </button>
                   }
                 </div>
@@ -1855,7 +1855,7 @@ import { environment } from '../../../../environments/environment';
                 @if (note.children && note.children.length > 0) {
                   <div class="subtasks-section">
                     <div class="subtasks-label">
-                      Povezani rezultati ({{ note.children.length }})
+                      Related results ({{ note.children.length }})
                     </div>
                     @for (child of note.children; track child.id) {
                       <div>
@@ -1875,7 +1875,7 @@ import { environment } from '../../../../environments/environment';
                                   d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
                                 />
                               </svg>
-                              Rezultati istraživanja
+                              Research results
                             </span>
                           } @else if (child.workflowStepNumber !== null) {
                             <span class="subtask-step-num">{{ child.workflowStepNumber }}</span>
@@ -1914,10 +1914,10 @@ import { environment } from '../../../../environments/environment';
                           <!-- Sub-task report -->
                           @if (child.status === 'COMPLETED' && !child.userReport) {
                             <div class="report-section" style="padding-left: 32px;">
-                              <div class="report-label">Vaš izveštaj</div>
+                              <div class="report-label">Your report</div>
                               <textarea
                                 class="report-textarea"
-                                placeholder="Opišite šta ste uradili, šta ste naučili, ostvarene rezultate..."
+                                placeholder="Describe what you did, what you learned, results achieved..."
                                 [value]="getReportText(child.id)"
                                 (input)="setReportText(child.id, asTextareaValue($event))"
                                 [disabled]="isExecuting() || isParallelExecuting()"
@@ -1934,8 +1934,8 @@ import { environment } from '../../../../environments/environment';
                                 >
                                   {{
                                     generatingReportId() === child.id
-                                      ? 'AI generiše...'
-                                      : 'AI popuni'
+                                      ? 'AI generating...'
+                                      : 'AI fill'
                                   }}
                                 </button>
                                 <button
@@ -1950,8 +1950,8 @@ import { environment } from '../../../../environments/environment';
                                 >
                                   {{
                                     submittingInProgress().has(child.id)
-                                      ? 'Šaljem...'
-                                      : 'Pošalji izveštaj'
+                                      ? 'Sending...'
+                                      : 'Send report'
                                   }}
                                 </button>
                               </div>
@@ -1959,7 +1959,7 @@ import { environment } from '../../../../environments/environment';
                           }
                           @if (child.userReport) {
                             <div class="report-section" style="padding-left: 32px;">
-                              <div class="report-label">Vaš izveštaj</div>
+                              <div class="report-label">Your report</div>
                               <div
                                 class="existing-report ai-content"
                                 [innerHTML]="child.userReport | markdown"
@@ -1999,9 +1999,9 @@ import { environment } from '../../../../environments/environment';
                                     (click)="scoreReport(child.id)"
                                   >
                                     @if (scoringInProgress().has(child.id)) {
-                                      <span class="scoring-spinner"></span> Ocenjujem...
+                                      <span class="scoring-spinner"></span> Scoring...
                                     } @else {
-                                      Dobij AI ocenu
+                                      Get AI score
                                     }
                                   </button>
                                 </div>
@@ -2017,10 +2017,10 @@ import { environment } from '../../../../environments/environment';
                 <!-- Parent task report -->
                 @if (note.noteType === 'TASK' && note.status === 'COMPLETED' && !note.userReport) {
                   <div class="report-section">
-                    <div class="report-label">Vaš izveštaj</div>
+                    <div class="report-label">Your report</div>
                     <textarea
                       class="report-textarea"
-                      placeholder="Opišite šta ste uradili, šta ste naučili, ostvarene rezultate..."
+                      placeholder="Describe what you did, what you learned, results achieved..."
                       [value]="getReportText(note.id)"
                       (input)="setReportText(note.id, asTextareaValue($event))"
                       [disabled]="isExecuting() || isParallelExecuting()"
@@ -2033,7 +2033,7 @@ import { environment } from '../../../../environments/environment';
                         "
                         (click)="onGenerateReport(note.id)"
                       >
-                        {{ generatingReportId() === note.id ? 'AI generiše...' : 'AI popuni' }}
+                        {{ generatingReportId() === note.id ? 'AI generating...' : 'AI fill' }}
                       </button>
                       <button
                         class="btn-primary"
@@ -2045,7 +2045,7 @@ import { environment } from '../../../../environments/environment';
                         "
                         (click)="submitReport(note.id)"
                       >
-                        {{ submittingInProgress().has(note.id) ? 'Šaljem...' : 'Pošalji izveštaj' }}
+                        {{ submittingInProgress().has(note.id) ? 'Sending...' : 'Send report' }}
                       </button>
                     </div>
                   </div>
@@ -2054,7 +2054,7 @@ import { environment } from '../../../../environments/environment';
                 @if (note.userReport) {
                   <div class="report-section">
                     <div class="report-collapse-header" (click)="toggleReportExpand(note.id)">
-                      <span class="report-label">Vaš izveštaj</span>
+                      <span class="report-label">Your report</span>
                       <div class="report-collapse-right">
                         @if (note.aiScore !== null && note.aiScore !== undefined) {
                           <span
@@ -2132,19 +2132,19 @@ import { environment } from '../../../../environments/environment';
                   <div class="comments-section">
                     <div class="comments-header" (click)="toggleComments(note.id)">
                       <span class="comments-label">
-                        Komentari
+                        Comments
                         @if (getCommentTotal(note.id) > 0) {
                           ({{ getCommentTotal(note.id) }})
                         }
                       </span>
                       <button class="comments-toggle">
-                        {{ commentsExpanded().has(note.id) ? 'Sakrij' : 'Prikaži' }}
+                        {{ commentsExpanded().has(note.id) ? 'Hide' : 'Show' }}
                       </button>
                     </div>
                     @if (commentsExpanded().has(note.id)) {
                       @if (loadingComments().has(note.id)) {
                         <div style="font-size: 11px; color: #9e9e9e; padding: 4px 0;">
-                          Učitavanje komentara...
+                          Loading comments...
                         </div>
                       } @else {
                         @for (comment of getComments(note.id); track comment.id) {
@@ -2156,7 +2156,7 @@ import { environment } from '../../../../environments/environment';
                               }
                               <span class="comment-time">{{ formatDate(comment.createdAt) }}</span>
                               @if (comment.updatedAt !== comment.createdAt) {
-                                <span class="comment-edited">(izmenjeno)</span>
+                                <span class="comment-edited">(edited)</span>
                               }
                             </div>
                             @if (editingCommentId() === comment.id) {
@@ -2171,7 +2171,7 @@ import { environment } from '../../../../environments/environment';
                                   style="padding: 3px 10px; font-size: 10px;"
                                   (click)="cancelEditComment()"
                                 >
-                                  Otkaži
+                                  Cancel
                                 </button>
                                 <button
                                   class="btn-primary"
@@ -2179,7 +2179,7 @@ import { environment } from '../../../../environments/environment';
                                   [disabled]="!editCommentText()"
                                   (click)="saveEditComment(note.id)"
                                 >
-                                  Sačuvaj
+                                  Save
                                 </button>
                               </div>
                             } @else {
@@ -2189,13 +2189,13 @@ import { environment } from '../../../../environments/environment';
                                   class="comment-action-btn"
                                   (click)="startEditComment(comment)"
                                 >
-                                  Izmeni
+                                  Edit
                                 </button>
                                 <button
                                   class="comment-action-btn danger"
                                   (click)="deleteComment(note.id, comment.id)"
                                 >
-                                  Obriši
+                                  Delete
                                 </button>
                               </div>
                             }
@@ -2203,14 +2203,14 @@ import { environment } from '../../../../environments/environment';
                         }
                         @if (hasMoreComments(note.id)) {
                           <button class="load-more-btn" (click)="loadMoreComments(note.id)">
-                            Učitaj još...
+                            Load more...
                           </button>
                         }
                       }
                       <div class="comment-input-row">
                         <input
                           class="comment-input"
-                          placeholder="Dodaj komentar..."
+                          placeholder="Add comment..."
                           [value]="getCommentInput(note.id)"
                           (input)="setCommentInput(note.id, asInputValue($event))"
                           (keydown.enter)="submitComment(note.id)"
@@ -2220,7 +2220,7 @@ import { environment } from '../../../../environments/environment';
                           [disabled]="!getCommentInput(note.id) || submittingComment().has(note.id)"
                           (click)="submitComment(note.id)"
                         >
-                          Pošalji
+                          Send
                         </button>
                       </div>
                     }
@@ -2239,30 +2239,30 @@ import { environment } from '../../../../environments/environment';
         <div class="add-note-form">
           <input
             class="note-input"
-            placeholder="Naslov"
+            placeholder="Title"
             [value]="newTitle()"
             (input)="newTitle.set(asInputValue($event))"
           />
           <textarea
             class="note-textarea"
-            placeholder="Sadržaj..."
+            placeholder="Content..."
             [value]="newContent()"
             (input)="newContent.set(asTextareaValue($event))"
           ></textarea>
           <div class="form-actions">
-            <button class="btn-secondary" (click)="showAddForm.set(false)">Otkaži</button>
+            <button class="btn-secondary" (click)="showAddForm.set(false)">Cancel</button>
             <button
               class="btn-primary"
               [disabled]="!newTitle() || addingNote$()"
               (click)="addNote()"
             >
-              {{ addingNote$() ? 'Dodajem...' : 'Dodaj belešku' }}
+              {{ addingNote$() ? 'Adding...' : 'Add note' }}
             </button>
           </div>
         </div>
       } @else {
         <button class="btn-secondary" style="width: 100%;" (click)="showAddForm.set(true)">
-          + Dodaj belešku
+          + Add note
         </button>
       }
     </div>
@@ -2741,7 +2741,7 @@ export class ConversationNotesComponent {
       setTimeout(() => URL.revokeObjectURL(url), 10000);
       this.selectedTaskIds.set(new Set());
     } catch {
-      this.pdfError.set('Greška prilikom generisanja PDF-a');
+      this.pdfError.set('Error generating PDF');
     } finally {
       this.pdfExporting.set(false);
     }

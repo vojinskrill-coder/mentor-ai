@@ -1,255 +1,238 @@
 import { Logger } from '@nestjs/common';
-import { Client, SFTPWrapper } from 'ssh2';
+import { Client } from 'ssh2';
 import { VaultStorageBase } from './vault-storage.base';
 import { VaultStorageError } from './vault-storage.error';
-import { PlatformConfigService } from '../platform-config/platform-config.service';
-import * as fs from 'fs';
 
+export interface SshVaultStorageConfig {
+  host: string;
+  port?: number;
+  username: string;
+  privateKey?: Buffer | string;
+  /** Base path on the remote server (e.g. /root) */
+  basePath: string;
+}
+
+/**
+ * SSH/SFTP-backed VaultStorage.
+ *
+ * Design decisions:
+ *  - writeFiles() opens ONE connection, one SFTP session, writes ALL files, then closes.
+ *  - Exec-based helpers (readFile, fileExists, listFiles) each open a short-lived connection
+ *    (matches the existing pattern in VaultProvisionerService).
+ */
 export class SshVaultStorage extends VaultStorageBase {
   private readonly logger = new Logger(SshVaultStorage.name);
+  private readonly sshConfig: Record<string, unknown>;
 
-  constructor(private readonly configService: PlatformConfigService) {
-    super();
+  constructor(private readonly config: SshVaultStorageConfig) {
+    super(config.basePath);
+    this.sshConfig = {
+      host: config.host,
+      port: config.port ?? 22,
+      username: config.username,
+      ...(config.privateKey ? { privateKey: config.privateKey } : {}),
+    };
   }
 
-  private getConfig(tenantId: string) {
-    return this.configService.getVaultConfig(tenantId);
+  // ── single-file write (opens one SFTP connection) ──────────────────
+
+  protected async doWriteFile(tenantId: string, fullPath: string, content: string): Promise<void> {
+    const files = new Map<string, string>();
+    files.set(fullPath, content);
+    return this.doWriteFiles(tenantId, files);
   }
 
-  private resolvePath(tenantId: string, filePath: string): string {
-    this.sanitizePath(tenantId, filePath);
-    const config = this.getConfig(tenantId);
-    return `${config.tenantPath}/${filePath}`;
-  }
+  // ── batch write: ONE connection, ONE sftp session ──────────────────
 
-  private async withSftp<T>(
-    tenantId: string,
-    operation: string,
-    fn: (sftp: SFTPWrapper) => Promise<T>,
-  ): Promise<T> {
-    const config = this.getConfig(tenantId);
-    const conn = new Client();
+  protected doWriteFiles(tenantId: string, files: Map<string, string>): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const conn = new Client();
 
-    return new Promise<T>((resolve, reject) => {
-      conn
-        .on('ready', () => {
-          conn.sftp((err, sftp) => {
-            if (err) {
-              conn.end();
-              return reject(
-                new VaultStorageError(
-                  `SFTP session failed: ${err.message}`,
-                  tenantId,
-                  '',
-                  operation,
-                  err,
-                ),
-              );
-            }
-            fn(sftp)
-              .then((result) => {
-                conn.end();
-                resolve(result);
-              })
-              .catch((fnErr) => {
-                conn.end();
-                reject(fnErr);
-              });
-          });
-        })
-        .on('error', (err) => {
-          reject(
-            new VaultStorageError(
-              `SSH connection failed: ${err.message}`,
-              tenantId,
-              '',
-              operation,
-              err,
-            ),
-          );
-        })
-        .connect({
-          host: config.sshHost,
-          port: config.sshPort,
-          username: config.sshUser,
-          privateKey: fs.readFileSync(config.sshKeyPath),
-        });
-    });
-  }
-
-  async writeFile(
-    tenantId: string,
-    filePath: string,
-    content: string,
-  ): Promise<void> {
-    const remotePath = this.resolvePath(tenantId, filePath);
-    await this.withSftp(tenantId, 'write', async (sftp) => {
-      return new Promise<void>((resolve, reject) => {
-        const stream = sftp.createWriteStream(remotePath);
-        stream.on('close', () => resolve());
-        stream.on('error', (err: Error) =>
-          reject(
-            new VaultStorageError(
-              `Write failed: ${err.message}`,
-              tenantId,
-              filePath,
-              'write',
-              err,
-            ),
-          ),
-        );
-        stream.end(content);
-      });
-    });
-  }
-
-  async readFile(tenantId: string, filePath: string): Promise<string> {
-    const remotePath = this.resolvePath(tenantId, filePath);
-    return this.withSftp(tenantId, 'read', async (sftp) => {
-      return new Promise<string>((resolve, reject) => {
-        let data = '';
-        const stream = sftp.createReadStream(remotePath);
-        stream.on('data', (chunk: Buffer) => (data += chunk.toString()));
-        stream.on('end', () => resolve(data));
-        stream.on('error', (err: Error) =>
-          reject(
-            new VaultStorageError(
-              `Read failed: ${err.message}`,
-              tenantId,
-              filePath,
-              'read',
-              err,
-            ),
+      conn.on('error', (err) => {
+        reject(
+          new VaultStorageError(
+            `SSH connection failed: ${err.message}`,
+            tenantId,
+            '',
+            'writeFiles',
+            err,
           ),
         );
       });
-    });
-  }
 
-  async fileExists(tenantId: string, filePath: string): Promise<boolean> {
-    const remotePath = this.resolvePath(tenantId, filePath);
-    try {
-      await this.withSftp(tenantId, 'exists', async (sftp) => {
-        return new Promise<void>((resolve, reject) => {
-          sftp.stat(remotePath, (err) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        });
-      });
-      return true;
-    } catch {
-      return false;
-    }
-  }
+      conn.on('ready', () => {
+        // Collect all parent directories and ensure they exist first
+        const dirs = new Set<string>();
+        for (const fullPath of files.keys()) {
+          const dir = fullPath.substring(0, fullPath.lastIndexOf('/'));
+          if (dir) dirs.add(dir);
+        }
 
-  async listFiles(tenantId: string, dirPath: string): Promise<string[]> {
-    const remotePath = this.resolvePath(tenantId, dirPath);
-    return this.withSftp(tenantId, 'list', async (sftp) => {
-      return new Promise<string[]>((resolve, reject) => {
-        sftp.readdir(remotePath, (err, list) => {
-          if (err)
+        const mkdirCmd = dirs.size > 0 ? `mkdir -p ${[...dirs].join(' ')}` : 'true';
+
+        conn.exec(mkdirCmd, (execErr, mkdirStream) => {
+          if (execErr) {
+            conn.end();
             return reject(
-              new VaultStorageError(
-                `List failed: ${err.message}`,
-                tenantId,
-                dirPath,
-                'list',
-                err,
-              ),
+              new VaultStorageError(`mkdir failed: ${execErr.message}`, tenantId, '', 'writeFiles', execErr),
             );
-          resolve(list.map((item) => item.filename));
-        });
-      });
-    });
-  }
+          }
 
-  async writeFiles(
-    tenantId: string,
-    files: Array<{ path: string; content: string }>,
-  ): Promise<void> {
-    // Single SSH connection for batch writes
-    const config = this.getConfig(tenantId);
-    const conn = new Client();
-
-    return new Promise<void>((resolve, reject) => {
-      conn
-        .on('ready', () => {
-          conn.sftp(async (err, sftp) => {
-            if (err) {
-              conn.end();
-              return reject(
-                new VaultStorageError(
-                  `SFTP session failed: ${err.message}`,
-                  tenantId,
-                  '',
-                  'writeFiles',
-                  err,
-                ),
-              );
-            }
-            try {
-              for (const file of files) {
-                const remotePath = this.resolvePath(tenantId, file.path);
-                await new Promise<void>((res, rej) => {
-                  const stream = sftp.createWriteStream(remotePath);
-                  stream.on('close', () => res());
-                  stream.on('error', (e: Error) => rej(e));
-                  stream.end(file.content);
-                });
+          mkdirStream.on('close', () => {
+            // Now open SFTP and write all files
+            conn.sftp((sftpErr, sftp) => {
+              if (sftpErr) {
+                conn.end();
+                return reject(
+                  new VaultStorageError(`SFTP session failed: ${sftpErr.message}`, tenantId, '', 'writeFiles', sftpErr),
+                );
               }
-              conn.end();
-              resolve();
-            } catch (writeErr) {
-              conn.end();
-              reject(writeErr);
-            }
+
+              const entries = [...files.entries()];
+              let idx = 0;
+
+              const writeNext = () => {
+                if (idx >= entries.length) {
+                  sftp.end();
+                  conn.end();
+                  return resolve();
+                }
+
+                const entry = entries[idx++]!;
+                const [path, content] = entry;
+                const ws = sftp.createWriteStream(path);
+                ws.on('close', writeNext);
+                ws.on('error', (e: Error) => {
+                  sftp.end();
+                  conn.end();
+                  reject(
+                    new VaultStorageError(`Write failed: ${path} — ${e.message}`, tenantId, path, 'writeFiles', e),
+                  );
+                });
+                ws.end(Buffer.from(content, 'utf-8'));
+              };
+
+              writeNext();
+            });
           });
-        })
-        .on('error', (connErr) => {
-          reject(
-            new VaultStorageError(
-              `SSH connection failed: ${connErr.message}`,
-              tenantId,
-              '',
-              'writeFiles',
-              connErr,
-            ),
-          );
-        })
-        .connect({
-          host: config.sshHost,
-          port: config.sshPort,
-          username: config.sshUser,
-          privateKey: fs.readFileSync(config.sshKeyPath),
+
+          // Drain mkdir streams
+          mkdirStream.resume();
+          mkdirStream.stderr.resume();
         });
+      });
+
+      conn.connect(this.sshConfig);
     });
   }
 
-  async createDirectories(tenantId: string, dirs: string[]): Promise<void> {
-    for (const dir of dirs) {
-      this.sanitizePath(tenantId, dir);
-      const config = this.getConfig(tenantId);
-      const remotePath = `${config.tenantPath}/${dir}`;
-      await this.withSftp(tenantId, 'mkdir', async (sftp) => {
-        return new Promise<void>((resolve, reject) => {
-          sftp.mkdir(remotePath, (err) => {
-            if (err && (err as any).code !== 4) {
-              // code 4 = already exists
-              return reject(
-                new VaultStorageError(
-                  `mkdir failed: ${err.message}`,
-                  tenantId,
-                  dir,
-                  'mkdir',
-                  err,
-                ),
-              );
+  // ── read via ssh exec cat ──────────────────────────────────────────
+
+  protected async doReadFile(tenantId: string, fullPath: string): Promise<string> {
+    try {
+      return await this.exec(`cat ${this.shellEscape(fullPath)}`);
+    } catch (err) {
+      throw new VaultStorageError(
+        `Read failed: ${fullPath}`,
+        tenantId,
+        fullPath,
+        'read',
+        err instanceof Error ? err : undefined,
+      );
+    }
+  }
+
+  // ── exists via ssh exec test -f ────────────────────────────────────
+
+  protected async doFileExists(tenantId: string, fullPath: string): Promise<boolean> {
+    try {
+      const result = await this.exec(`test -f ${this.shellEscape(fullPath)} && echo 1 || echo 0`);
+      return result.trim() === '1';
+    } catch (err) {
+      throw new VaultStorageError(
+        `Exists check failed: ${fullPath}`,
+        tenantId,
+        fullPath,
+        'exists',
+        err instanceof Error ? err : undefined,
+      );
+    }
+  }
+
+  // ── list via ssh exec ls ───────────────────────────────────────────
+
+  protected async doListFiles(tenantId: string, fullPath: string): Promise<string[]> {
+    try {
+      const result = await this.exec(`ls ${this.shellEscape(fullPath)} 2>/dev/null || true`);
+      return result
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+    } catch (err) {
+      throw new VaultStorageError(
+        `List failed: ${fullPath}`,
+        tenantId,
+        fullPath,
+        'list',
+        err instanceof Error ? err : undefined,
+      );
+    }
+  }
+
+  // ── mkdir -p via single ssh exec ───────────────────────────────────
+
+  protected async doCreateDirectories(tenantId: string, dirs: string[]): Promise<void> {
+    if (dirs.length === 0) return;
+    try {
+      await this.exec(`mkdir -p ${dirs.map((d) => this.shellEscape(d)).join(' ')}`);
+    } catch (err) {
+      throw new VaultStorageError(
+        `mkdir -p failed`,
+        tenantId,
+        dirs.join(', '),
+        'mkdir',
+        err instanceof Error ? err : undefined,
+      );
+    }
+  }
+
+  // ── low-level SSH exec ─────────────────────────────────────────────
+
+  private exec(command: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const conn = new Client();
+      let output = '';
+
+      conn.on('error', reject);
+
+      conn.on('ready', () => {
+        conn.exec(command, (err, stream) => {
+          if (err) {
+            conn.end();
+            return reject(err);
+          }
+          stream.on('data', (data: Buffer) => {
+            output += data.toString();
+          });
+          stream.stderr.on('data', (data: Buffer) => {
+            this.logger.warn(`[ssh stderr] ${data.toString().trim()}`);
+          });
+          stream.on('close', (code: number) => {
+            conn.end();
+            if (code !== 0 && code !== null) {
+              return reject(new Error(`SSH command exited with code ${code}: ${command.substring(0, 120)}`));
             }
-            resolve();
+            resolve(output);
           });
         });
       });
-    }
+
+      conn.connect(this.sshConfig);
+    });
+  }
+
+  /** Minimal shell escaping — wrap in single quotes, escape embedded quotes. */
+  private shellEscape(s: string): string {
+    return `'${s.replace(/'/g, "'\\''")}'`;
   }
 }

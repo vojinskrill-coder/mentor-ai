@@ -1,135 +1,145 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
 import { TemplateService } from './template.service';
 import { TemplateResolutionError } from './template.error';
 
+/**
+ * Sample variables that satisfy every placeholder used across the 6 vault templates.
+ *
+ * Templates with placeholders:
+ *   SCHEMA.template.md       — {{companyName}}
+ *   TENANT-PROTOCOL.template.md — {{tenantId}}, {{companyName}}, {{industry}}, {{vaultPath}}
+ *   SOUL.template.md         — {{companyName}}, {{industry}}, {{tenantId}}, {{vaultPath}}
+ *   bootstrap.template.md    — {{companyName}}, {{industry}}, {{website}}, {{description}},
+ *                               {{visualStyle}}, {{brandColors}}, {{targetAudience}},
+ *                               {{vaultPath}}, {{tenantId}}
+ *   GUARDRAILS.template.md   — (none)
+ *   FLOW.template.md         — (none)
+ */
+const SAMPLE_VARS: Record<string, string> = {
+  companyName: 'Test Corp',
+  tenantId: 'tnt_test',
+  industry: 'Technology',
+  description: 'A test company',
+  language: 'English',
+  website: 'https://testcorp.example.com',
+  vaultPath: '/root/.openclaw-tnt_test/vault',
+  visualStyle: 'Modern minimalist',
+  brandColors: '#000000, #FFFFFF',
+  targetAudience: 'Enterprise CTOs',
+};
+
 describe('TemplateService', () => {
   let service: TemplateService;
-  let tmpDir: string;
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'template-test-'));
+  beforeAll(() => {
     service = new TemplateService();
-    // Override the template dir
-    (service as any).templateDir = tmpDir;
   });
 
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+  // ── Core placeholder resolution ──
+
+  it('should replace all placeholders with provided values', () => {
+    const result = service.resolve('SCHEMA.template.md', SAMPLE_VARS);
+    expect(result).toContain('Test Corp');
+    expect(result).not.toContain('{{companyName}}');
   });
 
-  it('should resolve a simple template', () => {
-    fs.writeFileSync(
-      path.join(tmpDir, 'test.md'),
-      'Hello {{NAME}}, welcome to {{COMPANY}}!',
-    );
-    const result = service.resolve('test.md', {
-      NAME: 'John',
-      COMPANY: 'Acme',
-    });
-    expect(result).toBe('Hello John, welcome to Acme!');
-  });
-
-  it('should resolve multiple occurrences of the same placeholder', () => {
-    fs.writeFileSync(
-      path.join(tmpDir, 'test.md'),
-      '{{NAME}} is {{NAME}}',
-    );
-    const result = service.resolve('test.md', { NAME: 'Alice' });
-    expect(result).toBe('Alice is Alice');
-  });
-
-  it('should throw TemplateResolutionError on unresolved placeholders', () => {
-    fs.writeFileSync(
-      path.join(tmpDir, 'test.md'),
-      'Hello {{NAME}}, tenant: {{TENANT_ID}}',
-    );
-    expect(() =>
-      service.resolve('test.md', { NAME: 'John' }),
-    ).toThrow(TemplateResolutionError);
-  });
-
-  it('should include unresolved placeholder names in error', () => {
-    fs.writeFileSync(
-      path.join(tmpDir, 'test.md'),
-      '{{MISSING_A}} and {{MISSING_B}}',
-    );
+  it('should throw TemplateResolutionError listing unresolved placeholders when variable is missing', () => {
+    // Provide empty variables for a template that requires {{companyName}}
     try {
-      service.resolve('test.md', {});
-      fail('Should have thrown');
+      service.resolve('SCHEMA.template.md', {});
+      fail('Expected TemplateResolutionError');
     } catch (err) {
       expect(err).toBeInstanceOf(TemplateResolutionError);
       const tErr = err as TemplateResolutionError;
-      expect(tErr.unresolvedPlaceholders).toContain('{{MISSING_A}}');
-      expect(tErr.unresolvedPlaceholders).toContain('{{MISSING_B}}');
+      expect(tErr.unresolvedPlaceholders).toContain('companyName');
+      expect(tErr.message).toContain('SCHEMA.template.md');
     }
   });
 
-  it('should throw on missing template file', () => {
-    expect(() => service.resolve('nonexistent.md', {})).toThrow(
-      'Template not found',
-    );
+  // ── resolveAll ──
+
+  it('should return 6 entries from resolveAll (one per template)', () => {
+    const map = service.resolveAll(SAMPLE_VARS);
+    expect(map.size).toBe(6);
+    expect(map.has('SCHEMA.md')).toBe(true);
+    expect(map.has('TENANT-PROTOCOL.md')).toBe(true);
+    expect(map.has('GUARDRAILS.md')).toBe(true);
+    expect(map.has('SOUL.md')).toBe(true);
+    expect(map.has('FLOW.md')).toBe(true);
+    expect(map.has('bootstrap.md')).toBe(true);
   });
 
-  it('should resolve content directly', () => {
-    const result = service.resolveContent('Hi {{USER}}', { USER: 'Bob' });
-    expect(result).toBe('Hi Bob');
+  // ── Determinism ──
+
+  it('should produce identical output for identical inputs (determinism)', () => {
+    const first = service.resolve('SOUL.template.md', SAMPLE_VARS);
+    const second = service.resolve('SOUL.template.md', SAMPLE_VARS);
+    expect(first).toBe(second);
   });
 
-  it('should resolveAll templates in a directory', () => {
-    fs.mkdirSync(path.join(tmpDir, 'vault'), { recursive: true });
-    fs.writeFileSync(
-      path.join(tmpDir, 'vault', 'soul.md'),
-      '{{AGENT_NAME}} soul',
-    );
-    fs.writeFileSync(
-      path.join(tmpDir, 'vault', 'config.md'),
-      '{{AGENT_NAME}} config',
-    );
-    const results = service.resolveAll({ AGENT_NAME: 'TestBot' }, 'vault');
-    expect(results.size).toBe(2);
-    for (const [, content] of results) {
-      expect(content).toContain('TestBot');
+  // ── Special characters in values ──
+
+  it('should handle special characters in variable values', () => {
+    const vars = { ...SAMPLE_VARS, companyName: `O'Brien & Sons "LLC"` };
+    const result = service.resolve('SCHEMA.template.md', vars);
+    expect(result).toContain(`O'Brien & Sons "LLC"`);
+    expect(result).not.toContain('{{companyName}}');
+  });
+
+  // ── Per-template resolution with sample data ──
+
+  it('should resolve SCHEMA.template.md — contains company name and 5,000 words reference', () => {
+    const result = service.resolve('SCHEMA.template.md', SAMPLE_VARS);
+    expect(result).toContain('Test Corp');
+    expect(result).toMatch(/5[,.]?000/); // "5,000" or "5000"
+  });
+
+  it('should resolve TENANT-PROTOCOL.template.md — contains tenantId and ENGLISH', () => {
+    const result = service.resolve('TENANT-PROTOCOL.template.md', SAMPLE_VARS);
+    expect(result).toContain('tnt_test');
+    expect(result).toContain('ENGLISH');
+  });
+
+  it('should resolve SOUL.template.md — contains company name, no unresolved placeholders', () => {
+    const result = service.resolve('SOUL.template.md', SAMPLE_VARS);
+    expect(result).toContain('Test Corp');
+    expect(result).not.toContain('{{companyName}}');
+    expect(result).not.toMatch(/\{\{[^}]+\}\}/);
+  });
+
+  it('should resolve GUARDRAILS.template.md — static, no placeholders', () => {
+    const result = service.resolve('GUARDRAILS.template.md', SAMPLE_VARS);
+    expect(result).toContain('GUARDRAILS');
+    expect(result).not.toMatch(/\{\{[^}]+\}\}/);
+  });
+
+  it('should resolve FLOW.template.md — static, no placeholders', () => {
+    const result = service.resolve('FLOW.template.md', SAMPLE_VARS);
+    expect(result).toContain('Pipeline');
+    expect(result).not.toMatch(/\{\{[^}]+\}\}/);
+  });
+
+  it('should resolve bootstrap.template.md — contains all company details', () => {
+    const result = service.resolve('bootstrap.template.md', SAMPLE_VARS);
+    expect(result).toContain('Test Corp');
+    expect(result).toContain('Technology');
+    expect(result).toContain('A test company');
+    expect(result).not.toMatch(/\{\{[^}]+\}\}/);
+  });
+
+  // ── No hardcoded tenant IDs or IPs after resolution ──
+
+  it('should not contain hardcoded tenant IDs or IPs after resolution', () => {
+    const map = service.resolveAll(SAMPLE_VARS);
+    for (const [filename, content] of map) {
+      // Should not have hardcoded Hetzner IP anywhere
+      expect(content).not.toContain('91.98.231.87');
+
+      // TENANT-PROTOCOL has "NEVER reference … tnt_rljn1gj4cgxoph0hxfohv6l4" as a
+      // guardrail instruction — that's intentional, not a leaked hardcode.
+      // All other templates must not contain it.
+      if (filename !== 'TENANT-PROTOCOL.md') {
+        expect(content).not.toContain('tnt_rljn1gj4cgxoph0hxfohv6l4');
+      }
     }
-  });
-
-  it('should throw on missing template directory for resolveAll', () => {
-    expect(() => service.resolveAll({}, 'nonexistent')).toThrow(
-      'Template directory not found',
-    );
-  });
-
-  it('should handle empty vars map', () => {
-    fs.writeFileSync(path.join(tmpDir, 'plain.md'), 'No placeholders here');
-    const result = service.resolve('plain.md', {});
-    expect(result).toBe('No placeholders here');
-  });
-
-  it('should handle templates with no content', () => {
-    fs.writeFileSync(path.join(tmpDir, 'empty.md'), '');
-    const result = service.resolve('empty.md', {});
-    expect(result).toBe('');
-  });
-
-  it('should resolve nested directory templates', () => {
-    fs.mkdirSync(path.join(tmpDir, 'deep', 'nested'), { recursive: true });
-    fs.writeFileSync(
-      path.join(tmpDir, 'deep', 'nested', 'file.md'),
-      '{{VAR}} works',
-    );
-    const results = service.resolveAll({ VAR: 'Nested' }, 'deep');
-    expect(results.size).toBe(1);
-    const values = [...results.values()];
-    expect(values[0]).toBe('Nested works');
-  });
-
-  it('should preserve non-placeholder curly braces', () => {
-    fs.writeFileSync(
-      path.join(tmpDir, 'code.md'),
-      'function() { return {{VALUE}}; }',
-    );
-    const result = service.resolve('code.md', { VALUE: '42' });
-    expect(result).toBe('function() { return 42; }');
   });
 });

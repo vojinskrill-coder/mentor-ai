@@ -8,7 +8,7 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { HttpException, Logger, OnModuleInit, UnauthorizedException, Inject, forwardRef } from '@nestjs/common';
+import { HttpException, Logger, OnModuleInit, UnauthorizedException, Inject, forwardRef, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { verify, JwtPayload as JwtPayloadBase } from 'jsonwebtoken';
 import jwksClient from 'jwks-rsa';
@@ -130,6 +130,9 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     private readonly openClawClient: OpenClawClientService,
     @Inject(forwardRef(() => HeadlessExecutorService))
     private readonly headlessExecutor: HeadlessExecutorService,
+    @Optional()
+    @Inject('ConversationHooksService')
+    private readonly conversationHooks: { beforeMessage: (params: any) => Promise<any>; afterMessage: (params: any) => Promise<void> } | null,
   ) {
     this.auth0Domain = this.configService.get<string>('AUTH0_DOMAIN') ?? '';
     this.auth0Audience = this.configService.get<string>('AUTH0_AUDIENCE') ?? '';
@@ -865,7 +868,8 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     conversationId: string,
     content: string,
     attachmentIds?: string[],
-    isRegenerate?: boolean
+    isRegenerate?: boolean,
+    proposalId?: string
   ): Promise<void> {
     // 1. Extract attachment text if provided
     let attachmentContext = '';
@@ -873,6 +877,50 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
       attachmentContext = await this.attachmentsService
         .getExtractedText(attachmentIds, authenticatedClient.tenantId)
         .catch(() => '');
+    }
+
+    // 1b. PROPOSAL CONTEXT INJECTION (Bug fix: "No specific task detected")
+    //
+    // When the user is discussing an AI Task / proposal, the frontend builds
+    // the proposal context as a local-only assistant message. It is never
+    // persisted, never reaches the brain. The user's follow-up questions
+    // arrive at the brain with zero context, so the brain either says
+    // "no task detected" or hallucinates from unrelated long-term memory
+    // (e.g. answering a "what do I get?" question with Golden Flux content
+    // from a recent Instagram process).
+    //
+    // Fix: when the frontend passes proposalId, fetch the proposal from
+    // the bridge service and prepend its title/reasoning/proposed-action
+    // as a context block to every message in this conversation. The brain
+    // gets the same grounding the user sees in the UI.
+    let proposalContext = '';
+    if (proposalId) {
+      try {
+        const proposal = await this.prisma.brainProposal.findUnique({
+          where: { id: proposalId },
+        });
+        if (proposal && proposal.tenantId === authenticatedClient.tenantId) {
+          const lines: string[] = [
+            '[PROPOSAL CONTEXT — the user is discussing this AI-recommended task with you]',
+            `Title: ${proposal.title}`,
+          ];
+          if (proposal.reasoning) lines.push(`Reasoning: ${proposal.reasoning}`);
+          if (proposal.proposedAction) lines.push(`Proposed action: ${proposal.proposedAction}`);
+          if (proposal.canvasBlock) lines.push(`Canvas block: ${proposal.canvasBlock}`);
+          if (proposal.type) lines.push(`Type: ${proposal.type}`);
+          lines.push(
+            '',
+            'Stay strictly on this task. Do not bring in unrelated content from previous conversations or background processes. If the user asks "what do I get", answer in terms of the concrete deliverables for THIS task.',
+          );
+          proposalContext = lines.join('\n') + '\n\n---\n\n';
+        }
+      } catch (err) {
+        this.logger.warn({
+          message: 'Failed to fetch proposal context, continuing without it',
+          proposalId,
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
     }
 
     // 2. Save user message (skip on regeneration)
@@ -902,10 +950,10 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
       });
     }
 
-    // 3. Forward to OpenClaw — no enrichment, no context building
-    const messageToSend = attachmentContext
-      ? `${attachmentContext}\n\n${content}`
-      : content;
+    // 3. Forward to OpenClaw — proposal context first (if any), then
+    //    attachment text, then user content. The proposal context block
+    //    is the critical fix for "no task detected" / wrong-topic answers.
+    const messageToSend = `${proposalContext}${attachmentContext ? `${attachmentContext}\n\n` : ''}${content}`;
 
     let fullContent = '';
     let chunkIndex = 0;
@@ -1009,10 +1057,10 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
   @SubscribeMessage('chat:message-send')
   async handleMessage(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: ChatMessageSend & { attachmentIds?: string[]; _isRegenerate?: boolean }
+    @MessageBody() payload: ChatMessageSend & { attachmentIds?: string[]; _isRegenerate?: boolean; proposalId?: string }
   ) {
     const authenticatedClient = client as AuthenticatedSocket;
-    const { conversationId, content, attachmentIds: rawAttachmentIds } = payload;
+    const { conversationId, content, attachmentIds: rawAttachmentIds, proposalId } = payload;
 
     // Validate and sanitize attachmentIds
     const attachmentIds: string[] | undefined =
@@ -1058,7 +1106,7 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     if (relayMode) {
       try {
         await this.handleMessageRelay(
-          client, authenticatedClient, conversationId, content, attachmentIds, payload._isRegenerate
+          client, authenticatedClient, conversationId, content, attachmentIds, payload._isRegenerate, proposalId
         );
       } catch (error) {
         this.logger.error({
@@ -1152,30 +1200,34 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
       // Pre-AI enrichment: concept search + memory context + web search + business brain + cross-conversation insights in parallel
       const enrichmentStart = Date.now();
       const webSearchEnabled = (payload as any).webSearchEnabled !== false;
-      const [relevantConcepts, memoryContext, webSearchResults, businessBrainContext, conceptInsights] =
-        await Promise.all([
+      const enrichmentFailures: Array<{ service: string; error: string; type: 'transient' | 'fatal' }> = [];
+
+      const classifyEnrichmentError = (err: unknown): 'transient' | 'fatal' => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (/ECONNRESET|ETIMEDOUT|ENOTFOUND|timeout|socket hang up|429|503|502/i.test(msg)) {
+          return 'transient';
+        }
+        if (/auth|unauthorized|forbidden|api.?key|config.*missing|not.?configured/i.test(msg)) {
+          return 'fatal';
+        }
+        return 'transient';
+      };
+
+      const enrichmentResults = await Promise.allSettled([
           this.conceptMatchingService
             .findRelevantConcepts(content, {
               limit: 5,
               threshold: 0.5,
               personaType: conversation.personaType ?? undefined,
-            })
-            .catch(() => [] as import('@mentor-ai/shared/types').ConceptMatch[]),
+            }),
           this.memoryContextBuilder
-            .buildContext(content, authenticatedClient.userId, authenticatedClient.tenantId)
-            .catch(() => ({
-              context: '',
-              attributions: [] as import('@mentor-ai/shared/types').MemoryAttribution[],
-              estimatedTokens: 0,
-            })),
+            .buildContext(content, authenticatedClient.userId, authenticatedClient.tenantId),
           webSearchEnabled && this.webSearchService.isAvailable()
             ? this.webSearchService
                 .searchAndExtract(content, 3)
-                .catch(() => [] as import('@mentor-ai/shared/types').EnrichedSearchResult[])
             : Promise.resolve([] as import('@mentor-ai/shared/types').EnrichedSearchResult[]),
           this.businessContextService
-            .getBusinessContext(authenticatedClient.tenantId, content)
-            .catch(() => ''),
+            .getBusinessContext(authenticatedClient.tenantId, content),
           // Cross-conversation insights: load prior analyses about the same concept
           conversation.conceptId
             ? this.conversationService
@@ -1186,9 +1238,76 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
                   conversationId,
                   3
                 )
-                .catch(() => [] as Array<{ conversationId: string; title: string; summary: string }>)
             : Promise.resolve([] as Array<{ conversationId: string; title: string; summary: string }>),
         ]);
+
+      const enrichmentNames = ['concept_matching', 'memory_context', 'web_search', 'business_context', 'concept_insights'] as const;
+
+      // Extract results with fallbacks, logging any failures
+      const relevantConcepts = enrichmentResults[0].status === 'fulfilled'
+        ? enrichmentResults[0].value
+        : (() => {
+            const errType = classifyEnrichmentError(enrichmentResults[0].reason);
+            const errMsg = enrichmentResults[0].reason instanceof Error ? enrichmentResults[0].reason.message : String(enrichmentResults[0].reason);
+            enrichmentFailures.push({ service: enrichmentNames[0], error: errMsg, type: errType });
+            this.logger[errType === 'fatal' ? 'error' : 'warn']({ message: `Enrichment failed: ${enrichmentNames[0]}`, error: errMsg, type: errType, conversationId });
+            return [] as import('@mentor-ai/shared/types').ConceptMatch[];
+          })();
+
+      const memoryContext = enrichmentResults[1].status === 'fulfilled'
+        ? enrichmentResults[1].value
+        : (() => {
+            const errType = classifyEnrichmentError(enrichmentResults[1].reason);
+            const errMsg = enrichmentResults[1].reason instanceof Error ? enrichmentResults[1].reason.message : String(enrichmentResults[1].reason);
+            enrichmentFailures.push({ service: enrichmentNames[1], error: errMsg, type: errType });
+            this.logger[errType === 'fatal' ? 'error' : 'warn']({ message: `Enrichment failed: ${enrichmentNames[1]}`, error: errMsg, type: errType, conversationId });
+            return { context: '', attributions: [] as import('@mentor-ai/shared/types').MemoryAttribution[], estimatedTokens: 0 };
+          })();
+
+      const webSearchResults = enrichmentResults[2].status === 'fulfilled'
+        ? enrichmentResults[2].value
+        : (() => {
+            const errType = classifyEnrichmentError(enrichmentResults[2].reason);
+            const errMsg = enrichmentResults[2].reason instanceof Error ? enrichmentResults[2].reason.message : String(enrichmentResults[2].reason);
+            enrichmentFailures.push({ service: enrichmentNames[2], error: errMsg, type: errType });
+            this.logger[errType === 'fatal' ? 'error' : 'warn']({ message: `Enrichment failed: ${enrichmentNames[2]}`, error: errMsg, type: errType, conversationId });
+            return [] as import('@mentor-ai/shared/types').EnrichedSearchResult[];
+          })();
+
+      const businessBrainContext = enrichmentResults[3].status === 'fulfilled'
+        ? enrichmentResults[3].value
+        : (() => {
+            const errType = classifyEnrichmentError(enrichmentResults[3].reason);
+            const errMsg = enrichmentResults[3].reason instanceof Error ? enrichmentResults[3].reason.message : String(enrichmentResults[3].reason);
+            enrichmentFailures.push({ service: enrichmentNames[3], error: errMsg, type: errType });
+            this.logger[errType === 'fatal' ? 'error' : 'warn']({ message: `Enrichment failed: ${enrichmentNames[3]}`, error: errMsg, type: errType, conversationId });
+            return '';
+          })();
+
+      const conceptInsights = enrichmentResults[4].status === 'fulfilled'
+        ? enrichmentResults[4].value
+        : (() => {
+            const errType = classifyEnrichmentError(enrichmentResults[4].reason);
+            const errMsg = enrichmentResults[4].reason instanceof Error ? enrichmentResults[4].reason.message : String(enrichmentResults[4].reason);
+            enrichmentFailures.push({ service: enrichmentNames[4], error: errMsg, type: errType });
+            this.logger[errType === 'fatal' ? 'error' : 'warn']({ message: `Enrichment failed: ${enrichmentNames[4]}`, error: errMsg, type: errType, conversationId });
+            return [] as Array<{ conversationId: string; title: string; summary: string }>;
+          })();
+
+      // Check if critical enrichments (concepts or memory) failed
+      const criticalEnrichmentDegraded = enrichmentFailures.some(
+        (f) => f.service === 'concept_matching' || f.service === 'memory_context'
+      );
+
+      if (enrichmentFailures.length > 0) {
+        this.logger.warn({
+          message: 'Enrichment completed with failures',
+          conversationId,
+          failureCount: enrichmentFailures.length,
+          failures: enrichmentFailures,
+          criticalDegraded: criticalEnrichmentDegraded,
+        });
+      }
 
       perf.enrichmentParallel = Date.now() - enrichmentStart;
 
@@ -1202,10 +1321,10 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
       }
 
       if (relevantConcepts.length > 0) {
-        enrichedContext += '\n\n--- BAZA ZNANJA (koristi za analizu i preporuke) ---\n';
+        enrichedContext += '\n\n--- KNOWLEDGE BASE (use for analysis and recommendations) ---\n';
         for (const concept of relevantConcepts.slice(0, 5)) {
-          enrichedContext += `\nKONCEPT: ${concept.conceptName} (${concept.category})`;
-          enrichedContext += `\nDEFINICIJA: ${concept.definition}`;
+          enrichedContext += `\nCONCEPT: ${concept.conceptName} (${concept.category})`;
+          enrichedContext += `\nDEFINITION: ${concept.definition}`;
           try {
             const full = await this.conceptService.findById(concept.conceptId);
             if (full.extendedDescription) {
@@ -1216,21 +1335,21 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
                 firstParagraphEnd > 0 && firstParagraphEnd < 800
                   ? desc.substring(0, firstParagraphEnd)
                   : desc.substring(0, 800);
-              enrichedContext += `\nDETALJNO: ${trimmed}`;
+              enrichedContext += `\nDETAILED: ${trimmed}`;
             }
             if (full.relatedConcepts && full.relatedConcepts.length > 0) {
               const related = full.relatedConcepts
                 .slice(0, 3)
                 .map((r) => `${r.concept.name} (${r.relationshipType})`)
                 .join(', ');
-              enrichedContext += `\nPOVEZANI: ${related}`;
+              enrichedContext += `\nRELATED: ${related}`;
             }
           } catch {
             /* skip if concept not found */
           }
           enrichedContext += '\n';
         }
-        enrichedContext += '--- KRAJ BAZE ZNANJA ---\n';
+        enrichedContext += '--- END OF KNOWLEDGE BASE ---\n';
         enrichedContext +=
           'Apply these concepts in your response. When referencing a concept, use the [[Concept Name]] tag.\n';
       }
@@ -1238,13 +1357,13 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
       // Inject cross-conversation insights (Sprint 2 Epic 2.1)
       // Enables the AI to build on prior analyses about the same concept
       if (conceptInsights.length > 0) {
-        enrichedContext += '\n\n--- PRETHODNE ANALIZE O OVOM KONCEPTU ---\n';
+        enrichedContext += '\n\n--- PREVIOUS ANALYSES ON THIS CONCEPT ---\n';
         enrichedContext +=
-          'Ovi uvidi su iz prethodnih konverzacija na istu temu. Nadogradi se na njih, ne ponavljaj.\n';
+          'These insights are from previous conversations on the same topic. Build on them, do not repeat.\n';
         for (const insight of conceptInsights) {
           enrichedContext += `\n[${insight.title}]\n${insight.summary}\n`;
         }
-        enrichedContext += '--- KRAJ PRETHODNIH ANALIZA ---\n';
+        enrichedContext += '--- END OF PREVIOUS ANALYSES ---\n';
       }
 
       if (memoryContext.context) {
@@ -1283,7 +1402,7 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
       }
 
       const finalContext = researchBrief
-        ? `${enrichedContext}\n\n--- RESEARCH BRIEF ---\n${researchBrief}\n--- END OF BRIEF ---\nUse the brief as a basis for an expert response. Do not mention the brief — just give a comprehensive answer.`
+        ? `${enrichedContext}\n\n--- RESEARCH BRIEF ---\n${researchBrief}\n--- END OF BRIEF ---\nUse this brief as the foundation for an expert response. Do not mention the brief — just provide a comprehensive answer.`
         : enrichedContext;
 
       perf.finalContextChars = finalContext.length;
@@ -1298,7 +1417,7 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
       if (this.openClawClient.isConfigured()) {
         // Build message for OpenClaw main agent with all enriched context
         const contextBlock = finalContext
-          ? `\n--- KONTEKST ---\n${finalContext.substring(0, 6000)}\n--- KRAJ KONTEKSTA ---\n`
+          ? `\n--- CONTEXT ---\n${finalContext.substring(0, 6000)}\n--- END OF CONTEXT ---\n`
           : '';
         const mainMessage = `${contextBlock}\n${content}`;
 
@@ -1387,18 +1506,9 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
       // Extract confidence from result
       const confidence = completionResult.confidence;
 
-      // Post-AI: inject citation markers into response
-      let contentWithCitations = fullContent;
-      let citations: ConceptCitation[] = [];
-
-      if (relevantConcepts.length > 0) {
-        const citationResult = this.citationInjectorService.injectCitations(
-          fullContent,
-          relevantConcepts
-        );
-        contentWithCitations = citationResult.content;
-        citations = citationResult.citations;
-      }
+      // Citations disabled — content shown as-is without citation markers
+      const contentWithCitations = fullContent;
+      const citations: ConceptCitation[] = [];
 
       // Parse memory attributions from the AI response
       const memoryAttributions =
@@ -1434,7 +1544,7 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
       const suggestedActions: SuggestedAction[] = [];
       if (relevantConcepts.length > 0) {
         suggestedActions.push(
-          { type: 'create_tasks', label: 'Create tasks', icon: 'tasks' },
+          { type: 'create_tasks', label: 'Kreiraj zadatke', icon: 'tasks' },
           { type: 'deep_dive', label: 'Explore deeper', icon: 'explore' }
         );
         if (relevantConcepts.length > 1) {
@@ -1472,6 +1582,8 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
               ? webSearchResults.map((r) => ({ title: r.title, link: r.link }))
               : undefined,
           suggestedActions: suggestedActions.length > 0 ? suggestedActions : undefined,
+          enrichmentDegraded: criticalEnrichmentDegraded || undefined,
+          enrichmentFailures: enrichmentFailures.length > 0 ? enrichmentFailures : undefined,
         },
       });
 
@@ -1735,7 +1847,7 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     if (messageCount < 2) return; // Need at least 1 exchange
 
     // Load tenant for business-specific context
-    let tenantName = 'client';
+    let tenantName = 'klijent';
     let tenantIndustry = 'general';
     try {
       const tenant = await this.prisma.tenant.findUnique({
@@ -1752,7 +1864,7 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
     let conceptHint = '';
     if (relevantConcepts && relevantConcepts.length > 0) {
       conceptHint =
-        '\nPovezani koncepti: ' +
+        '\nRelated concepts: ' +
         relevantConcepts
           .slice(0, 3)
           .map((c) => c.conceptName)
@@ -1763,14 +1875,14 @@ export class ConversationGateway implements OnGatewayConnection, OnGatewayDiscon
 Extract 1-3 concrete, actionable tasks from the conversation. Focus on practical next steps the user can take.${conceptHint}
 
 RULES:
-- "title": action-oriented title, max 80 characters (e.g., "Analyze monthly marketing costs")
-- "content": concrete description of what needs to be done, why, and what the expected result is (150-400 characters)
+- "title": action-oriented title, max 80 characters (e.g., "Analyze monthly marketing expenses")
+- "content": concrete description of what needs to be done, why, and the expected outcome (150-400 characters)
 - Tasks must be SPECIFIC to "${tenantName}" — not generic business advice
 - Only actionable items — not general observations
 - If there are no meaningful tasks, return an empty array
 - Write EXCLUSIVELY in English`;
 
-    const taskUserPrompt = `KORISNIK: ${userMessage}
+    const taskUserPrompt = `USER: ${userMessage}
 
 AI RESPONSE: ${aiResponse.length > 2000 ? aiResponse.substring(0, 2000) + '...' : aiResponse}
 
@@ -2052,9 +2164,9 @@ If no tasks: []`;
         select: { role: true, content: true },
       });
       if (recentMessages.length > 0) {
-        conversationContext = '\n\nISTORIJA KONVERZACIJE (kontekst iz kojeg nastaju zadaci):\n';
+        conversationContext = '\n\nCONVERSATION HISTORY (context from which tasks originate):\n';
         for (const msg of recentMessages.reverse()) {
-          const role = msg.role === 'USER' ? 'KORISNIK' : 'AI';
+          const role = msg.role === 'USER' ? 'USER' : 'AI';
           const content =
             msg.content.length > 800 ? msg.content.substring(0, 800) + '...' : msg.content;
           conversationContext += `${role}: ${content}\n`;
@@ -2074,10 +2186,10 @@ If no tasks: []`;
     }
 
     // LLM extraction with full context
-    const extractSystemPrompt = `You are a business consultant who creates concrete, actionable tasks for the company "${tenant?.name ?? 'client'}" in the "${tenant?.industry ?? 'general'}" industry.
+    const extractSystemPrompt = `You are a business consultant creating concrete, actionable tasks for the company "${tenant?.name ?? 'client'}" in the "${tenant?.industry ?? 'general'}" industry.
 ${tenant?.description ? `Company description: ${tenant.description}` : ''}
 
-Your job: Based on what the user ASKED and what the AI RESPONDED, extract concrete business tasks.
+Your job: Based on what the user REQUESTED and what the AI RESPONDED, extract concrete business tasks.
 
 RULES FOR EACH TASK:
 1. "title" — action-oriented title (verb + action, max 80 characters): "Analyze...", "Create...", "Define..."
@@ -2085,11 +2197,11 @@ RULES FOR EACH TASK:
    - Goal: what specifically needs to be achieved (1-2 sentences)
    - Context: why this is important for the business (1-2 sentences)
    - Steps: 3-5 concrete steps for implementation
-   - Expected result: measurable outcome or deliverable
-3. "conceptMatch" — if the task matches one of the RELATED BUSINESS CONCEPTS, specify the concept name (exact match)
+   - Expected outcome: measurable result or deliverable
+3. "conceptMatch" — if the task matches one of the RELATED BUSINESS CONCEPTS, provide the concept name (exact match)
 
 CRITICAL:
-- Tasks MUST be directly related to what the user ASKED in the conversation
+- Tasks MUST be directly related to what the user REQUESTED in the conversation
 - Each task must be SPECIFIC to "${tenant?.name ?? 'this company'}" — not generic
 - Extract only actionable items — not general observations or advice
 - Minimum 3, maximum 8 tasks
@@ -2319,7 +2431,7 @@ Respond ONLY with a valid JSON array:
 
       // Send chat message listing created tasks
       const taskList = createdTasks.map((t, i) => `${i + 1}. **${t.title}**`).join('\n');
-      const taskMsg = `Created ${createdTasks.length} task${createdTasks.length > 1 ? 's' : ''}:\n\n${taskList}\n\nStarting automatic execution. Results will be available in the tasks panel.`;
+      const taskMsg = `I created ${createdTasks.length} task${createdTasks.length > 1 ? 's' : ''}:\n\n${taskList}\n\nStarting automatic execution. Results will be available in the tasks panel.`;
       try {
         await this.conversationService.addMessage(tenantId, conversationId, MessageRole.ASSISTANT, taskMsg);
         client.emit('chat:message-chunk', { content: taskMsg, index: 0 });
@@ -2771,7 +2883,7 @@ Respond ONLY with a valid JSON array:
     try {
       if (!payload.taskIds?.length) {
         client.emit('workflow:error', {
-          message: 'No selected tasks',
+          message: 'No tasks selected',
           conversationId: payload.conversationId,
         });
         return;
@@ -3675,7 +3787,7 @@ Respond ONLY with a valid JSON array:
         client.emit('task:ai-error', {
           taskId: payload.taskId,
           conversationId: convId,
-          message: result.error ?? 'Izvrsavanje neuspesno',
+          message: result.error ?? 'Execution failed',
         });
       }
 
@@ -3714,11 +3826,11 @@ Respond ONLY with a valid JSON array:
     if (task.conceptId) {
       try {
         const concept = await this.conceptService.findById(task.conceptId);
-        conceptContext = `\n\nKONCEPT: ${concept.name} (${concept.category})\nDEFINICIJA: ${concept.definition}`;
+        conceptContext = `\n\nCONCEPT: ${concept.name} (${concept.category})\nDEFINITION: ${concept.definition}`;
       } catch { /* */ }
     }
 
-    const prompt = `You are a senior business consultant. Optimize and score the result.\n${conceptContext}\n\nTASK: ${task.title}\n${task.content ? 'DESCRIPTION: ' + task.content : ''}\n${task.expectedOutcome ? 'EXPECTED OUTCOME: ' + task.expectedOutcome : ''}\n\nOUTPUT:\n${task.userReport}\n\nCreate an OPTIMIZED RESULT and at the end:\n---\nEVALUACIJA:\n- Primenljivost: X/10\n- Specificnost: X/10\n- Kompletnost: X/10\n- Relevantnost: X/10\n- Kvalitet: X/10\nOCENA: X/10\n---\nEnglish language.`;
+    const prompt = `You are a senior business consultant. Optimize and evaluate the result.\n${conceptContext}\n\nTASK: ${task.title}\n${task.content ? 'DESCRIPTION: ' + task.content : ''}\n${task.expectedOutcome ? 'EXPECTED OUTCOME: ' + task.expectedOutcome : ''}\n\nOUTPUT:\n${task.userReport}\n\nCreate an OPTIMIZED RESULT and then at the end:\n---\nEVALUATION:\n- Applicability: X/10\n- Specificity: X/10\n- Completeness: X/10\n- Relevance: X/10\n- Quality: X/10\nSCORE: X/10\n---`;
 
     let fullResult = '';
     let chunkIndex = 0;
@@ -3732,7 +3844,7 @@ Respond ONLY with a valid JSON array:
     );
 
     let score: number | null = null;
-    const scoreMatch = fullResult.match(/OCENA:\s*(\d{1,2})\s*\/\s*10/i);
+    const scoreMatch = fullResult.match(/(?:SCORE|OCENA):\s*(\d{1,2})\s*\/\s*10/i);
     if (scoreMatch) {
       const rawScore = parseInt(scoreMatch[1]!, 10);
       if (rawScore >= 1 && rawScore <= 10) score = rawScore * 10;
@@ -3740,7 +3852,7 @@ Respond ONLY with a valid JSON array:
 
     await this.prisma.note.update({
       where: { id: taskId },
-      data: { userReport: fullResult, aiScore: score, aiFeedback: score !== null ? `AI ocena: ${score}/100` : null, status: 'COMPLETED' },
+      data: { userReport: fullResult, aiScore: score, aiFeedback: score !== null ? `AI score: ${score}/100` : null, status: 'COMPLETED' },
     });
 
     this.logger.log({ message: 'Task scoring completed', taskId, score, resultLength: fullResult.length });
@@ -3829,7 +3941,7 @@ Respond ONLY with a valid JSON array:
         message:
           error instanceof Error
             ? error.message
-            : 'Scoring the result failed. Please try again.',
+            : 'Scoring results failed. Please try again.',
       });
     }
   }
@@ -4636,16 +4748,16 @@ Respond ONLY with a valid JSON array:
         }
       }
 
-      const systemPrompt = `You are a business assistant who helps the user explore and understand business topics.
-Respond precisely in English.
+      const systemPrompt = `You are a business assistant helping the user explore and understand business topics.
+Respond precisely and thoroughly.
 
 FORMATTING (REQUIRED):
-- Organize the response with ## heading for each section
+- Organize your response with ## headings for each section
 - Use **bold** for key terms
-- Use bullet lists for enumeration
+- Use bullet lists for enumerations
 - Use tables for numerical data or comparisons
 - Use callout blocks: > **Key Insight:** ... or > **Summary:** ...
-- If you have web sources, cite INLINE: ([Name](URL))
+- If you have web sources, cite INLINE: ([Title](URL))
 
 ${businessContext}${brainMemoryContext ? '\n' + brainMemoryContext : ''}${webContext}`;
 
@@ -4740,12 +4852,12 @@ Company: ${tenant.name}`;
 
 --- RESPONSE RULES ---
 1. ALWAYS personalize responses for "${tenant.name}" (${tenant.industry ?? 'general business'}) — do not give generic advice
-2. Use data from BUSINESS CONTEXT, KNOWLEDGE BASE, and MEMORY for concrete recommendations
-3. When using concept knowledge, mark it as [[Concept Name]]
-4. Be concrete: instead of "you should consider..." say what exactly needs to be done and why
-5. If you have web sources, cite INLINE: ([Source Name](URL))
+2. Use data from the BUSINESS CONTEXT, KNOWLEDGE BASE, and MEMORY for concrete recommendations
+3. When using knowledge from a concept, tag it as [[Concept Name]]
+4. Be concrete: instead of "you should consider..." say exactly what needs to be done and why
+5. If you have web sources, cite INLINE: ([Source Title](URL))
 6. Respond EXCLUSIVELY in English
-7. Minimum 300 words for questions requiring analysis — do not give shallow answers
+7. Minimum 300 words for questions that require analysis — do not give superficial answers
 --- END OF RULES ---`;
 
       // Formatting rules + capabilities only for interactive chat (not task execution)
@@ -4753,34 +4865,34 @@ Company: ${tenant.name}`;
         context += `
 
 --- FORMATTING (STRICTLY REQUIRED — every response MUST use these formats) ---
-1. SECTIONS: Organize every response with ## heading for each section.
+1. SECTIONS: Organize every response with ## headings for each section.
 
 2. CALLOUT BLOCKS (use MINIMUM 2 different types per response):
-> **Key Insight:** The most important conclusion or recommendation goes here.
-> **Warning:** Risk, danger, or problem goes here.
+> **Key Insight:** Place the most important conclusion or recommendation here.
+> **Warning:** Place risks, dangers, or problems here.
 > **Metric:** Relevant numbers and KPIs for the given area.
 > **Summary:** Brief conclusion with a concrete recommendation.
 
 3. TABLES WITH NUMBERS (REQUIRED whenever you have numerical data):
-| Category | Value    | Change |
-|----------|----------|--------|
-| Example  | 100,000€ | +15%   |
+| Category   | Value    | Change  |
+|------------|----------|---------|
+| Example    | 100,000€ | +15%    |
 
 4. OTHER RULES:
 - Use **bold** for all key terms
-- Use bullet lists for enumeration, NOT long paragraphs
+- Use bullet lists for enumerations, NOT long paragraphs
 - NEVER write a response without at least one callout block
 - Use tables whenever you have numerical data or comparisons
 --- END OF FORMATTING ---
 
---- APPLICATION FEATURES you can use ---
+--- APPLICATION CAPABILITIES you can use ---
 - Task creation: Suggest concrete tasks to the user based on the conversation
 - Web search: Use web search for current data and statistics
 - Business context: You have access to all memories and the company's business profile
 - Workflows: You can generate multi-step plans for complex tasks
 - Concepts: You can recommend relevant business concepts from the knowledge base
-When the user asks what you can do or needs help, mention these features.
---- END OF FEATURES ---`;
+When the user asks what you can do or requests help, mention these capabilities.
+--- END OF CAPABILITIES ---`;
       }
 
       this.logger.log({
@@ -4884,7 +4996,7 @@ When the user asks what you can do or needs help, mention these features.
 
       let webKnowledge = '';
       for (const r of uniqueWeb.slice(0, 8)) {
-        webKnowledge += `\n- ${r.title}: ${r.snippet ?? ''}${r.pageContent ? ` | ${r.pageContent.substring(0, 300)}` : ''}\n  Izvor: ${r.link}\n`;
+        webKnowledge += `\n- ${r.title}: ${r.snippet ?? ''}${r.pageContent ? ` | ${r.pageContent.substring(0, 300)}` : ''}\n  Source: ${r.link}\n`;
       }
 
       // Internal LLM call to synthesize research brief
@@ -4902,8 +5014,8 @@ BRIEF FORMAT:
 1. KEY QUESTIONS: What are the main aspects of the user's question?
 2. FINDINGS: For each aspect — what do the data from the knowledge base and web say?
 3. GAPS: What information is missing?
-4. RESPONSE STRUCTURE: Suggest a logical arrangement of sections for the final answer
-5. KONKRETNI PODACI: Navedi sve brojke, statistike, primere iz izvora`;
+4. RESPONSE STRUCTURE: Suggest a logical arrangement of sections for the final response
+5. CONCRETE DATA: List all numbers, statistics, examples from sources`;
 
       const briefMessages = [{ role: 'user' as const, content: briefPrompt }];
 

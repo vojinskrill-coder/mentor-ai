@@ -30,12 +30,12 @@ import type { RemovalStrategy } from '../services/team-members.service';
         z-index: 10;
         width: 100%;
         max-width: 440px;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 12px;
         padding: 24px;
         box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-        color: #fafafa;
+        color: #E6EDF3;
         font-family: 'Inter', system-ui, sans-serif;
       }
       .dialog-header {
@@ -61,8 +61,8 @@ import type { RemovalStrategy } from '../services/team-members.service';
         cursor: pointer;
       }
       .close-btn:hover {
-        background: #242424;
-        color: #fafafa;
+        background: #1C2128;
+        color: #E6EDF3;
       }
       .close-btn svg {
         width: 20px;
@@ -118,7 +118,7 @@ import type { RemovalStrategy } from '../services/team-members.service';
         gap: 12px;
         padding: 12px;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         background: transparent;
         cursor: pointer;
         transition:
@@ -129,12 +129,12 @@ import type { RemovalStrategy } from '../services/team-members.service';
         background: rgba(255, 255, 255, 0.02);
       }
       .strategy-option.selected {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
         background: rgba(59, 130, 246, 0.05);
       }
       .strategy-option input[type='radio'] {
         margin-top: 2px;
-        accent-color: #3b82f6;
+        accent-color: #58A6FF;
       }
       .strategy-option-title {
         font-size: 13px;
@@ -166,16 +166,16 @@ import type { RemovalStrategy } from '../services/team-members.service';
       .cancel-btn {
         padding: 10px 20px;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         background: transparent;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 14px;
         font-weight: 500;
         cursor: pointer;
         font-family: inherit;
       }
       .cancel-btn:hover {
-        background: #242424;
+        background: #1C2128;
       }
       .remove-btn {
         padding: 10px 20px;

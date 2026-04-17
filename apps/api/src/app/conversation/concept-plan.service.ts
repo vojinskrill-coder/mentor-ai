@@ -91,7 +91,7 @@ export class ConceptPlanService {
     // 3. Create parent TASK in task panel
     const parentNote = await this.notesService.createNote({
       title: conceptName,
-      content: `Automatski plan za koncept: ${conceptName}\n\nKoraci: ${steps.length}`,
+      content: `Automatic plan for concept: ${conceptName}\n\nSteps: ${steps.length}`,
       source: NoteSource.CONVERSATION,
       noteType: NoteType.TASK,
       status: NoteStatus.PENDING,
@@ -128,7 +128,7 @@ export class ConceptPlanService {
     const stepList = steps
       .map((s) => `${s.stepNumber}. **${s.title}** — ${s.description}`)
       .join('\n');
-    const planMessage = `Pripremio sam plan rada za koncept **${conceptName}**. Plan sadrži ${steps.length} koraka:\n\n${stepList}\n\nPokrenuo sam automatsko izvršavanje. Rezultati će se pojaviti u panelu zadataka.`;
+    const planMessage = `I have prepared a work plan for the concept **${conceptName}**. The plan contains ${steps.length} steps:\n\n${stepList}\n\nI have started automatic execution. Results will appear in the task panel.`;
     await this.sendChatMessage(tenantId, conversationId, planMessage);
 
     this.logger.log({
@@ -177,7 +177,7 @@ export class ConceptPlanService {
     await this.sendChatMessage(
       tenantId,
       conversationId,
-      `Plan za **${conceptName}** je zavrsen. Rezultati su dostupni u panelu zadataka.`
+      `Plan for **${conceptName}** is complete. Results are available in the task panel.`
     );
 
     this.logger.log({
@@ -223,7 +223,7 @@ export class ConceptPlanService {
           const snippet = n.content.length > 300 ? n.content.substring(0, 300) + '...' : n.content;
           const childInfo =
             n.children && n.children.length > 0
-              ? ` (${n.children.filter((c) => c.status === 'COMPLETED' || c.status === 'READY_FOR_REVIEW').length}/${n.children.length} koraka zavrseno)`
+              ? ` (${n.children.filter((c) => c.status === 'COMPLETED' || c.status === 'READY_FOR_REVIEW').length}/${n.children.length} steps completed)`
               : '';
           return `- "${n.title}" [${n.status}]${childInfo}: ${snippet}`;
         })
@@ -234,8 +234,8 @@ export class ConceptPlanService {
     if (pending.length > 0) {
       pendingContext = pending
         .map((n) => {
-          const isBare = n.content.startsWith('Istraži koncept:');
-          const label = isBare ? ' [nije započeto]' : '';
+          const isBare = n.content.startsWith('Istraži koncept:') || n.content.startsWith('Explore concept:');
+          const label = isBare ? ' [not started]' : '';
           const snippet =
             !isBare && n.content.length > 200
               ? n.content.substring(0, 200) + '...'
@@ -260,24 +260,24 @@ export class ConceptPlanService {
     }
 
     // 5. LLM call
-    const systemPrompt = `Ti si poslovni savetnik. Analiziraj šta je korisnik već uradio za koncept "${conceptName}" i predloži sledeće korake.
+    const systemPrompt = `You are a business advisor. Analyze what the user has already done for the concept "${conceptName}" and suggest next steps.
 
-${completed.length > 0 ? `ZAVRŠENO (NE predlaži ponovo):\n${completedContext}\n` : ''}
-${pending.length > 0 ? `U TOKU / NEZAPOČETO:\n${pendingContext}\n` : ''}
-PLAN KONCEPTA (svi mogući koraci):
+${completed.length > 0 ? `COMPLETED (do NOT suggest again):\n${completedContext}\n` : ''}
+${pending.length > 0 ? `IN PROGRESS / NOT STARTED:\n${pendingContext}\n` : ''}
+CONCEPT PLAN (all possible steps):
 ${workflowContext}
 
-${businessContext ? `POSLOVNI KONTEKST:\n${businessContext}\n` : ''}
-KAKO ANALIZIRATI I PREDLOŽITI:
-- Analiziraj rezultate završenih koraka i identifikuj gde postoji NAJVEĆI GAP između onoga što korisnik ima i onoga što mu treba
-- Ne predlaži korake koji su varijacije već završenog — predloži korake koji NADOGRAĐUJU rezultate
-- Svaki predlog mora biti SPECIFIČAN za kompaniju i rezultate prethodno urađenog posla
-- Ako su završeni koraci otkrili konkretan problem ili priliku, predloži korak koji to ADRESIRA
+${businessContext ? `BUSINESS CONTEXT:\n${businessContext}\n` : ''}
+HOW TO ANALYZE AND SUGGEST:
+- Analyze results of completed steps and identify where the BIGGEST GAP exists between what the user has and what they need
+- Do not suggest steps that are variations of already completed ones — suggest steps that BUILD ON results
+- Each suggestion must be SPECIFIC to the company and results of previously done work
+- If completed steps revealed a specific problem or opportunity, suggest a step that ADDRESSES it
 
-Predloži 2-3 konkretna sledeća koraka. Budi specifičan za kompaniju i industriju.
-Fokusiraj se na ono što je NAJVAŽNIJE za korisnika u ovom trenutku.
-Za svaki predlog objasni ZAŠTO je važan i ŠTA će korisnik dobiti.
-Piši na srpskom jeziku. Minimum 400 reči.`;
+Suggest 2-3 specific next steps. Be specific for the company and industry.
+Focus on what is MOST IMPORTANT for the user at this moment.
+For each suggestion explain WHY it is important and WHAT the user will gain.
+Write in English. Minimum 400 words.`;
 
     let llmResponse = '';
     try {
@@ -286,7 +286,7 @@ Piši na srpskom jeziku. Minimum 400 reči.`;
           { role: 'system', content: systemPrompt } as ChatMessage,
           {
             role: 'user',
-            content: `Predloži sledeće korake za koncept "${conceptName}".`,
+            content: `Suggest next steps for the concept "${conceptName}".`,
           } as ChatMessage,
         ],
         { tenantId, userId, skipRateLimit: true, skipQuotaCheck: true, useFallback: true },

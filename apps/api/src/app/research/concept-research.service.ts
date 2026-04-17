@@ -331,34 +331,34 @@ export class ConceptResearchService {
 
     // Turn 1: Situational analysis
     prompts.push(
-      `Analiziraj koncept "${conceptName}" u kontekstu mog poslovanja.\n` +
-        'Odgovori na sledeća pitanja:\n' +
-        '1. Kako se ovaj koncept trenutno primenjuje (ili ne primenjuje) u mom poslovanju?\n' +
-        '2. Koji su ključni izazovi vezani za ovaj koncept u mojoj industriji?\n' +
-        '3. Koje prilike za poboljšanje postoje?\n' +
-        'Budi specifičan — koristi podatke o mojoj kompaniji i industriji iz konteksta.'
+      `Analyze the concept "${conceptName}" in the context of my business.\n` +
+        'Answer the following questions:\n' +
+        '1. How is this concept currently applied (or not applied) in my business?\n' +
+        '2. What are the key challenges related to this concept in my industry?\n' +
+        '3. What improvement opportunities exist?\n' +
+        'Be specific — use data about my company and industry from the context.'
     );
 
     // Turn 2: Strategic recommendations
     prompts.push(
-      `Na osnovu prethodne analize, predloži 3-5 konkretnih, izvršivih koraka za primenu koncepta "${conceptName}".\n` +
-        'Za svaki korak navedi:\n' +
-        '- Konkretan opis akcije\n' +
-        '- Očekivani rezultat i metriku uspeha\n' +
-        '- Vremenski okvir (kratkoročno/srednjoročno/dugoročno)\n' +
-        '- Potrebne resurse\n' +
-        'Budi veoma konkretan i prilagodi preporuke mom poslovanju.'
+      `Based on the previous analysis, suggest 3-5 specific, executable steps for applying the concept "${conceptName}".\n` +
+        'For each step state:\n' +
+        '- Specific action description\n' +
+        '- Expected result and success metric\n' +
+        '- Timeframe (short-term/mid-term/long-term)\n' +
+        '- Required resources\n' +
+        'Be very specific and tailor recommendations to my business.'
     );
 
     if (turnCount >= 3) {
       // Turn 3: Implementation prioritization
       prompts.push(
-        'Prioritizuj predložene korake po hitnosti i poslovnom uticaju.\n' +
-          'Za top 3 prioriteta:\n' +
-          '1. Napravi mini-plan akcije sa prvim konkretnim korakom\n' +
-          '2. Identifikuj potencijalne prepreke i kako ih prevazići\n' +
-          '3. Predloži KPI za merenje napretka\n' +
-          'Fokusiraj se na ono što mogu da započnem odmah.'
+        'Prioritize the suggested steps by urgency and business impact.\n' +
+          'For the top 3 priorities:\n' +
+          '1. Create a mini action plan with the first concrete step\n' +
+          '2. Identify potential obstacles and how to overcome them\n' +
+          '3. Suggest KPIs for measuring progress\n' +
+          'Focus on what I can start immediately.'
       );
     }
 
@@ -412,31 +412,31 @@ export class ConceptResearchService {
     ]);
 
     // Build context string (same structure as gateway buildBusinessContext + enrichment)
-    let enrichedContext = '--- POSLOVNI KONTEKST ---\n';
+    let enrichedContext = '--- BUSINESS CONTEXT ---\n';
     if (tenant) {
-      enrichedContext += `Kompanija: ${tenant.name}`;
-      if (tenant.industry) enrichedContext += ` | Industrija: ${tenant.industry}`;
+      enrichedContext += `Company: ${tenant.name}`;
+      if (tenant.industry) enrichedContext += ` | Industry: ${tenant.industry}`;
       enrichedContext += '\n';
-      if (tenant.description) enrichedContext += `Opis: ${tenant.description}\n`;
+      if (tenant.description) enrichedContext += `Description: ${tenant.description}\n`;
     }
     if (onboardingNote?.content) {
-      enrichedContext += `\nPoslovna analiza:\n${onboardingNote.content}\n`;
+      enrichedContext += `\nBusiness analysis:\n${onboardingNote.content}\n`;
     }
-    enrichedContext += '--- KRAJ POSLOVNOG KONTEKSTA ---\n';
+    enrichedContext += '--- END OF BUSINESS CONTEXT ---\n';
     enrichedContext +=
-      'Koristi ovaj poslovni kontekst za personalizaciju odgovora. Odgovaraj ISKLJUČIVO na srpskom jeziku.\n';
+      'Use this business context to personalize your responses. Respond EXCLUSIVELY in English.\n';
 
     // Feature awareness capabilities
-    enrichedContext += '\n--- TVOJE MOGUĆNOSTI ---\n';
-    enrichedContext += 'Možeš da:\n';
-    enrichedContext += '- Pretražuješ web za najnovije informacije, podatke i trendove\n';
-    enrichedContext += '- Kreiraš konkretne zadatke i planove akcije za poslovne koncepte\n';
-    enrichedContext += '- Analiziraš i oceniš rezultate rada i dobiješ AI score\n';
-    enrichedContext += '- Povežeš teme sa relevantnim poslovnim konceptima iz baze znanja\n';
-    enrichedContext += '- Generišeš workflow korake za izvršavanje složenih zadataka\n';
+    enrichedContext += '\n--- YOUR CAPABILITIES ---\n';
+    enrichedContext += 'You can:\n';
+    enrichedContext += '- Search the web for the latest information, data and trends\n';
+    enrichedContext += '- Create specific tasks and action plans for business concepts\n';
+    enrichedContext += '- Analyze and score work results and get an AI score\n';
+    enrichedContext += '- Connect topics with relevant business concepts from the knowledge base\n';
+    enrichedContext += '- Generate workflow steps for executing complex tasks\n';
     enrichedContext +=
-      'Kada korisnik traži nešto što zahteva ove mogućnosti, koristi ih proaktivno.\n';
-    enrichedContext += '--- KRAJ MOGUĆNOSTI ---\n';
+      'When the user asks for something that requires these capabilities, use them proactively.\n';
+    enrichedContext += '--- END OF CAPABILITIES ---\n';
 
     // Business brain memories
     if (businessBrainContext) {
@@ -445,45 +445,45 @@ export class ConceptResearchService {
 
     // Cross-concept awareness: inject prior research summaries
     if (priorResearchSummaries && priorResearchSummaries.length > 0) {
-      enrichedContext += '\n\n--- PRETHODNO ISTRAŽENI KONCEPTI (NE PONAVLJAJ) ---\n';
+      enrichedContext += '\n\n--- PREVIOUSLY RESEARCHED CONCEPTS (DO NOT REPEAT) ---\n';
       for (const prior of priorResearchSummaries.slice(-15)) {
-        enrichedContext += `KONCEPT: ${prior.conceptName} (${prior.category})\n`;
-        enrichedContext += `REZIME: ${prior.keySummary}\n`;
+        enrichedContext += `CONCEPT: ${prior.conceptName} (${prior.category})\n`;
+        enrichedContext += `SUMMARY: ${prior.keySummary}\n`;
         if (prior.taskTitles.length > 0) {
-          enrichedContext += `KREIRANI ZADACI: ${prior.taskTitles.join(', ')}\n`;
+          enrichedContext += `CREATED TASKS: ${prior.taskTitles.join(', ')}\n`;
         }
         enrichedContext += '\n';
       }
-      enrichedContext += '--- KRAJ PRETHODNIH ISTRAŽIVANJA ---\n';
+      enrichedContext += '--- END OF PREVIOUS RESEARCH ---\n';
       enrichedContext +=
-        'KRITIČNO: NE ponavljaj analize iz prethodnih istraživanja. Fokusiraj se na NOVE uvide specifične za trenutni koncept.\n';
+        'CRITICAL: Do NOT repeat analyses from previous research. Focus on NEW insights specific to the current concept.\n';
     }
 
     // Already-created task titles for dedup awareness
     if (alreadyCreatedTaskTitles && alreadyCreatedTaskTitles.length > 0) {
-      enrichedContext += '\n--- VEĆ KREIRANI ZADACI (NE DUPLIRAJ) ---\n';
+      enrichedContext += '\n--- ALREADY CREATED TASKS (DO NOT DUPLICATE) ---\n';
       enrichedContext += alreadyCreatedTaskTitles.join(', ') + '\n';
-      enrichedContext += '--- KRAJ LISTE ZADATAKA ---\n';
+      enrichedContext += '--- END OF TASK LIST ---\n';
     }
 
     // Curriculum concept knowledge
     if (relevantConcepts.length > 0) {
-      enrichedContext += '\n\n--- BAZA ZNANJA ---\n';
+      enrichedContext += '\n\n--- KNOWLEDGE BASE ---\n';
       for (const rc of relevantConcepts.slice(0, 5)) {
-        enrichedContext += `\nKONCEPT: ${rc.conceptName}\n`;
-        enrichedContext += `DEFINICIJA: ${rc.definition}\n`;
+        enrichedContext += `\nCONCEPT: ${rc.conceptName}\n`;
+        enrichedContext += `DEFINITION: ${rc.definition}\n`;
         try {
           const full = await this.conceptService.findById(rc.conceptId);
           if (full.extendedDescription) {
-            enrichedContext += `DETALJNO: ${full.extendedDescription}\n`;
+            enrichedContext += `DETAILED: ${full.extendedDescription}\n`;
           }
         } catch {
           /* skip if concept not found */
         }
       }
-      enrichedContext += '--- KRAJ BAZE ZNANJA ---\n';
+      enrichedContext += '--- END OF KNOWLEDGE BASE ---\n';
       enrichedContext +=
-        'Primeni ove koncepte u odgovoru. Kada referenciraš koncept, koristi [[Naziv Koncepta]] oznaku.\n';
+        'Apply these concepts in your response. When referencing a concept, use [[Concept Name]] notation.\n';
     }
 
     // Memory context
@@ -516,15 +516,15 @@ export class ConceptResearchService {
     alreadyCreatedTaskTitles?: string[]
   ): Promise<CreatedTaskInfo[]> {
     // Use LLM to extract structured tasks from the AI response
-    const extractPrompt = `Na osnovu sledećeg AI odgovora, ekstrahuj konkretne zadatke kao JSON niz.
-Svaki zadatak mora imati "title" (kratak, max 80 karaktera) i "content" (opis, max 500 karaktera).
-Izdvoji samo konkretne, izvršive stavke — ne opšte observacije.
+    const extractPrompt = `Based on the following AI response, extract concrete tasks as a JSON array.
+Each task must have "title" (short, max 80 characters) and "content" (description, max 500 characters).
+Extract only concrete, executable items — not general observations.
 
-AI ODGOVOR:
+AI RESPONSE:
 ${aiResponse}
 
-Odgovori SAMO sa validnim JSON nizom: [{"title":"...","content":"..."}]
-Ako nema zadataka, odgovori sa: []`;
+Respond ONLY with a valid JSON array: [{"title":"...","content":"..."}]
+If there are no tasks, respond with: []`;
 
     let extractedContent = '';
     await this.aiGatewayService.streamCompletionWithContext(
@@ -634,7 +634,7 @@ Ako nema zadataka, odgovori sa: []`;
       // Resolve concept name if we don't have it yet
       if (!taskConceptName && taskConceptId) {
         try {
-          const conceptMap = await this.conceptService.findByIds([taskConceptId]);
+          const conceptMap = await this.conceptService.findByIds([taskConceptId], tenantId);
           const info = conceptMap.get(taskConceptId);
           if (info) taskConceptName = info.name;
         } catch {

@@ -18,7 +18,7 @@ import { GraphViewComponent } from './graph-view.component';
 
     .popup {
       width: 80vw; height: 80vh;
-      background: #06080C;
+      background: #0D1117;
       border: 1px solid rgba(255,255,255,0.06);
       border-radius: 16px;
       overflow: hidden;
@@ -50,7 +50,7 @@ import { GraphViewComponent } from './graph-view.component';
     <div class="backdrop" (click)="onBackdropClick($event)">
       <div class="popup" (click)="$event.stopPropagation()">
         <span class="title">Knowledge Graph</span>
-        <button class="close-btn" (click)="closed.emit()" title="Zatvori (Esc)">✕</button>
+        <button class="close-btn" (click)="closed.emit()" title="Close (Esc)">✕</button>
         <app-graph-view
           [embedded]="false"
           (noteActivated)="noteActivated.emit($event)">

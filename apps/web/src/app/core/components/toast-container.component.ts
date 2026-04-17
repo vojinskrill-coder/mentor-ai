@@ -27,9 +27,9 @@ import { ToastService } from '../services/toast.service';
         font-size: 13px;
         font-weight: 500;
         font-family: 'Inter', system-ui, sans-serif;
-        color: var(--color-text-primary, #fafafa);
-        background: var(--color-bg-elevated, #242424);
-        border: 1px solid var(--color-border-subtle, #2a2a2a);
+        color: var(--color-text-primary, #E6EDF3);
+        background: var(--color-bg-elevated, #1C2128);
+        border: 1px solid var(--color-border-subtle, #21262D);
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
         pointer-events: auto;
         min-width: 260px;
@@ -53,7 +53,7 @@ import { ToastService } from '../services/toast.service';
       }
       .toast.success .toast-icon { color: var(--color-success, #22c55e); }
       .toast.error .toast-icon { color: var(--color-error, #ef4444); }
-      .toast.info .toast-icon { color: var(--color-info, #3b82f6); }
+      .toast.info .toast-icon { color: var(--color-info, #58A6FF); }
       .toast-msg {
         flex: 1;
         line-height: 1.4;
@@ -70,7 +70,7 @@ import { ToastService } from '../services/toast.service';
         justify-content: center;
       }
       .toast-close:hover {
-        color: var(--color-text-primary, #fafafa);
+        color: var(--color-text-primary, #E6EDF3);
         background: rgba(255, 255, 255, 0.05);
       }
       .toast-close svg {

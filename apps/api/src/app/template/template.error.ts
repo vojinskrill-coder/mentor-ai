@@ -1,9 +1,15 @@
+/**
+ * Thrown when a template contains unresolved {{placeholders}} after variable substitution.
+ */
 export class TemplateResolutionError extends Error {
-  constructor(
-    message: string,
-    public readonly unresolvedPlaceholders: string[],
-  ) {
-    super(message);
+  public readonly unresolvedPlaceholders: string[];
+
+  constructor(templateName: string, unresolvedPlaceholders: string[]) {
+    const list = unresolvedPlaceholders.join(', ');
+    super(
+      `Template "${templateName}" has unresolved placeholders: ${list}`,
+    );
     this.name = 'TemplateResolutionError';
+    this.unresolvedPlaceholders = unresolvedPlaceholders;
   }
 }

@@ -48,22 +48,24 @@ const RELATIONSHIP_SCORES: Record<RelationshipType, number> = {
  * Keywords in tenant industry string matched against category relevance.
  */
 const INDUSTRY_CATEGORY_RELEVANCE: Record<string, string[]> = {
-  digital: ['Digitalni Marketing', 'Tehnologija', 'Inovacije', 'Marketing'],
-  tech: ['Tehnologija', 'Inovacije', 'Digitalni Marketing', 'Sistemi'],
-  software: ['Tehnologija', 'Inovacije', 'Digitalni Marketing', 'Sistemi'],
-  retail: ['Prodaja', 'Marketing', 'Odnosi sa Klijentima', 'Operacije'],
-  ecommerce: ['Digitalni Marketing', 'Prodaja', 'Marketing', 'Tehnologija'],
-  finance: ['Finansije', 'Računovodstvo', 'Strategija'],
-  consulting: ['Strategija', 'Menadžment', 'Liderstvo', 'Odnosi sa Klijentima'],
-  manufacturing: ['Operacije i Proizvodnja', 'Sistemi', 'Menadžment'],
-  healthcare: ['Operacije', 'Menadžment', 'Ljudski Resursi'],
-  education: ['Menadžment', 'Ljudski Resursi', 'Liderstvo'],
-  marketing: ['Marketing', 'Digitalni Marketing', 'Prodaja'],
-  services: ['Odnosi sa Klijentima', 'Prodaja', 'Marketing', 'Operacije'],
-  startup: ['Preduzetništvo', 'Startup', 'Inovacije', 'Poslovni Modeli'],
-  food: ['Operacije', 'Prodaja', 'Marketing', 'Finansije'],
-  'real estate': ['Finansije', 'Prodaja', 'Strategija'],
-  media: ['Marketing', 'Digitalni Marketing', 'Inovacije'],
+  digital: ['Digital Marketing', 'Technology', 'Marketing'],
+  tech: ['Technology', 'Digital Marketing', 'Systems'],
+  software: ['Technology', 'Digital Marketing', 'Systems'],
+  retail: ['Sales', 'Marketing', 'Customer Relations', 'Operations'],
+  ecommerce: ['Digital Marketing', 'Sales', 'Marketing', 'Technology'],
+  finance: ['Finance', 'Strategy'],
+  consulting: ['Strategy', 'Management', 'Customer Relations'],
+  manufacturing: ['Operations & Production', 'Systems', 'Management'],
+  healthcare: ['Operations', 'Management', 'Human Resources'],
+  education: ['Management', 'Human Resources'],
+  marketing: ['Marketing', 'Digital Marketing', 'Sales'],
+  services: ['Customer Relations', 'Sales', 'Marketing', 'Operations'],
+  startup: ['Startup', 'Business Models', 'Entrepreneurship'],
+  food: ['Operations', 'Sales', 'Marketing', 'Finance'],
+  'real estate': ['Finance', 'Sales', 'Strategy'],
+  media: ['Marketing', 'Digital Marketing'],
+  saas: ['Technology', 'Digital Marketing', 'Sales', 'Startup'],
+  legal: ['Management', 'Finance', 'Systems', 'Data Management'],
 };
 
 @Injectable()
@@ -161,9 +163,9 @@ export class ConceptRelevanceService {
 
     // Universal categories that apply to any business
     const universalCategories = [
-      'Menadžment',
-      'Finansije',
-      'Prodaja',
+      'Management',
+      'Finance',
+      'Sales',
       'Marketing',
       'Strategija',
       'Liderstvo',

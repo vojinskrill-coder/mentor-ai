@@ -18,6 +18,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { combineLatest, firstValueFrom, take } from 'rxjs';
 import { ConversationService } from './services/conversation.service';
 import { ChatWebsocketService } from './services/chat-websocket.service';
+import { BrainTreeRefreshService } from './services/brain-tree-refresh.service';
 import { NotesApiService } from './services/notes-api.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { ChatMessageComponent } from './components/chat-message.component';
@@ -52,6 +53,7 @@ import { ConversationNotesComponent } from './components/conversation-notes.comp
 import { TopicPickerComponent } from './components/topic-picker.component';
 import { FeatureTourComponent } from './components/feature-tour.component';
 import { ExecutionPanelService } from '../../core/services/execution-panel.service';
+import { PageLoadingService } from '../../core/services/page-loading.service';
 import type { CurriculumNode } from '@mentor-ai/shared/types';
 
 interface WorkflowStatusEntry {
@@ -108,15 +110,15 @@ interface WorkflowStatusEntry {
         min-height: 0;
         overflow: hidden;
         width: 100%;
-        background: #0d0d0d;
-        color: #fafafa;
+        background: #0D1117;
+        color: #E6EDF3;
         font-family: 'Inter', system-ui, sans-serif;
       }
       .sidebar {
         width: clamp(240px, 17vw, 320px);
         min-width: 200px;
-        background: #0d0d0d;
-        border-right: 1px solid #2a2a2a;
+        background: #0D1117;
+        border-right: 1px solid #21262D;
         display: flex;
         flex-direction: column;
         overflow: hidden;
@@ -134,7 +136,7 @@ interface WorkflowStatusEntry {
       }
       .sidebar-resize:hover,
       .sidebar-resize.active {
-        background: rgba(59, 130, 246, 0.3);
+        background: rgba(88, 166, 255, 0.3);
       }
       .sidebar.collapsed {
         width: 0;
@@ -154,8 +156,8 @@ interface WorkflowStatusEntry {
         flex-shrink: 0;
       }
       .sidebar-toggle:hover {
-        color: #fafafa;
-        background: #1a1a1a;
+        color: #E6EDF3;
+        background: #161B22;
       }
       .sidebar-toggle svg {
         width: 20px;
@@ -166,8 +168,8 @@ interface WorkflowStatusEntry {
         top: 12px;
         left: 12px;
         z-index: 50;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         color: #9e9e9e;
         cursor: pointer;
         padding: 8px;
@@ -179,9 +181,9 @@ interface WorkflowStatusEntry {
         transition: all 0.2s;
       }
       .sidebar-expand-btn:hover {
-        color: #fafafa;
-        background: #242424;
-        border-color: #3b82f6;
+        color: #E6EDF3;
+        background: #1C2128;
+        border-color: #58A6FF;
       }
       .sidebar-expand-btn svg {
         width: 20px;
@@ -220,7 +222,7 @@ interface WorkflowStatusEntry {
         align-items: center;
         justify-content: space-between;
         padding: 0 clamp(12px, 1vw, 20px);
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
       }
       .sidebar-header h1 {
         font-size: clamp(14px, 0.9vw, 17px);
@@ -235,7 +237,7 @@ interface WorkflowStatusEntry {
         align-items: center;
         justify-content: center;
         gap: clamp(6px, 0.5vw, 10px);
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
         border: none;
         padding: clamp(8px, 0.6vw, 12px) clamp(12px, 1vw, 20px);
@@ -253,7 +255,7 @@ interface WorkflowStatusEntry {
       }
       .sidebar-footer {
         padding: clamp(10px, 0.8vw, 16px);
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid #21262D;
         display: flex;
         flex-direction: column;
         gap: 4px;
@@ -269,8 +271,8 @@ interface WorkflowStatusEntry {
         border-radius: 4px;
       }
       .sidebar-footer a:hover {
-        color: #fafafa;
-        background: #1a1a1a;
+        color: #E6EDF3;
+        background: #161B22;
       }
       .chat-main {
         flex: 1;
@@ -278,7 +280,7 @@ interface WorkflowStatusEntry {
         max-width: none;
         display: flex;
         flex-direction: column;
-        background: #0d0d0d;
+        background: #0D1117;
         overflow: hidden;
       }
       .chat-header {
@@ -287,7 +289,7 @@ interface WorkflowStatusEntry {
         align-items: center;
         justify-content: space-between;
         padding: 0 clamp(12px, 1vw, 20px);
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
       }
       .chat-header-left {
         display: flex;
@@ -298,6 +300,66 @@ interface WorkflowStatusEntry {
         font-size: clamp(14px, 0.9vw, 17px);
         font-weight: 500;
       }
+      .confirm-plan-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 16px;
+        margin: 0 16px 8px;
+        background: rgba(88, 166, 255, 0.08);
+        border: 1px solid rgba(88, 166, 255, 0.2);
+        border-radius: 10px;
+        gap: 12px;
+      }
+      .confirm-plan-label {
+        font-size: 12px;
+        color: #8B8BA3;
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .confirm-plan-label strong { color: #F5F5F7; }
+      .confirm-plan-btn {
+        flex-shrink: 0;
+        background: #58A6FF;
+        color: #E6EDF3;
+        border: none;
+        padding: 8px 18px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: background 0.2s;
+      }
+      .confirm-plan-btn:hover { background: #2563eb; }
+      .confirm-plan-btn:disabled { opacity: 0.6; cursor: wait; }
+      .confirm-plan-actions {
+        display: flex;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+      .continue-discuss-btn {
+        background: transparent;
+        color: #9ca3af;
+        border: 1px solid rgba(156, 163, 175, 0.35);
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.2s, color 0.2s, border-color 0.2s;
+      }
+      .continue-discuss-btn:hover {
+        background: rgba(156, 163, 175, 0.08);
+        color: #E6EDF3;
+        border-color: rgba(156, 163, 175, 0.6);
+      }
+      .continue-discuss-btn:disabled { opacity: 0.5; cursor: not-allowed; }
       .switch-btn {
         background: none;
         border: none;
@@ -309,7 +371,7 @@ interface WorkflowStatusEntry {
         gap: clamp(4px, 0.4vw, 8px);
       }
       .switch-btn:hover:not(:disabled) {
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .switch-btn:disabled {
         opacity: 0.4;
@@ -334,19 +396,19 @@ interface WorkflowStatusEntry {
         transition: color 0.2s;
       }
       .connection-label.connected {
-        color: #22c55e;
+        color: #3FB950;
       }
       .connection-label.disconnected {
-        color: #ef4444;
+        color: #F85149;
       }
       .connection-label.reconnecting {
         color: #f59e0b;
       }
       .connection-dot.connected {
-        background: #22c55e;
+        background: #3FB950;
       }
       .connection-dot.disconnected {
-        background: #ef4444;
+        background: #F85149;
       }
       .connection-dot.reconnecting {
         background: #f59e0b;
@@ -365,8 +427,8 @@ interface WorkflowStatusEntry {
       /* Disconnect toast */
       .disconnect-toast {
         padding: 8px 16px;
-        background: #1a1a1a;
-        border-bottom: 1px solid #2a2a2a;
+        background: #161B22;
+        border-bottom: 1px solid #21262D;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -374,7 +436,7 @@ interface WorkflowStatusEntry {
         flex-shrink: 0;
       }
       .disconnect-toast.error {
-        border-left: 3px solid #ef4444;
+        border-left: 3px solid #F85149;
         color: #fca5a5;
       }
       .disconnect-toast.warning {
@@ -382,7 +444,7 @@ interface WorkflowStatusEntry {
         color: #fde68a;
       }
       .disconnect-toast.success {
-        border-left: 3px solid #22c55e;
+        border-left: 3px solid #3FB950;
         color: #86efac;
       }
       .disconnect-toast-close {
@@ -395,7 +457,7 @@ interface WorkflowStatusEntry {
         padding: 0 4px;
       }
       .disconnect-toast-close:hover {
-        color: #fafafa;
+        color: #E6EDF3;
       }
 
       /* Onboarding task preparation banner */
@@ -404,8 +466,8 @@ interface WorkflowStatusEntry {
         align-items: center;
         gap: 10px;
         padding: 10px 16px;
-        background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(59, 130, 246, 0.04));
-        border-bottom: 1px solid rgba(59, 130, 246, 0.25);
+        background: linear-gradient(135deg, rgba(88, 166, 255, 0.12), rgba(88, 166, 255, 0.04));
+        border-bottom: 1px solid rgba(88, 166, 255, 0.25);
         font-size: 13px;
         flex-shrink: 0;
         animation: fadeSlideIn 0.3s ease;
@@ -416,7 +478,7 @@ interface WorkflowStatusEntry {
       .onboarding-prep-spinner {
         width: 18px;
         height: 18px;
-        color: #3b82f6;
+        color: #58A6FF;
         flex-shrink: 0;
         animation: spin 1s linear infinite;
       }
@@ -431,13 +493,13 @@ interface WorkflowStatusEntry {
         font-size: 12px;
         font-weight: 500;
         cursor: pointer;
-        border: 1px solid rgba(59, 130, 246, 0.4);
-        background: rgba(59, 130, 246, 0.15);
+        border: 1px solid rgba(88, 166, 255, 0.4);
+        background: rgba(88, 166, 255, 0.15);
         color: #93c5fd;
         transition: all 0.15s ease;
       }
       .onboarding-prep-btn:hover {
-        background: rgba(59, 130, 246, 0.3);
+        background: rgba(88, 166, 255, 0.3);
         color: #bfdbfe;
       }
 
@@ -466,9 +528,9 @@ interface WorkflowStatusEntry {
         width: 36px;
         height: 36px;
         border-radius: 50%;
-        background: #242424;
-        border: 1px solid #3a3a3a;
-        color: #fafafa;
+        background: #1C2128;
+        border: 1px solid #30363D;
+        color: #E6EDF3;
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -489,8 +551,8 @@ interface WorkflowStatusEntry {
         }
       }
       .scroll-to-bottom:hover {
-        background: #3a3a3a;
-        border-color: #3b82f6;
+        background: #30363D;
+        border-color: #58A6FF;
       }
       .scroll-to-bottom svg {
         width: 18px;
@@ -505,10 +567,10 @@ interface WorkflowStatusEntry {
         align-items: center;
         gap: 8px;
         padding: 8px 16px;
-        background: #242424;
-        border: 1px solid #3a3a3a;
+        background: #1C2128;
+        border: 1px solid #30363D;
         border-radius: 20px;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 13px;
         font-weight: 500;
         cursor: pointer;
@@ -519,8 +581,8 @@ interface WorkflowStatusEntry {
         animation: scrollBtnFadeIn 0.2s ease-out;
       }
       .stop-generation-btn:hover {
-        background: #3a3a3a;
-        border-color: #ef4444;
+        background: #30363D;
+        border-color: #F85149;
       }
       .stop-generation-btn svg {
         width: 14px;
@@ -552,7 +614,7 @@ interface WorkflowStatusEntry {
         width: 80px;
         height: 80px;
         margin: 0 auto 24px;
-        background: #1a1a1a;
+        background: #161B22;
         border-radius: 16px;
         display: flex;
         align-items: center;
@@ -573,7 +635,7 @@ interface WorkflowStatusEntry {
         display: inline-flex;
         align-items: center;
         gap: clamp(6px, 0.5vw, 10px);
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
         border: none;
         padding: clamp(10px, 0.8vw, 16px) clamp(18px, 1.5vw, 32px);
@@ -592,8 +654,8 @@ interface WorkflowStatusEntry {
         margin-top: 24px;
       }
       .suggestion-card {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 12px;
         padding: 16px;
         text-align: left;
@@ -602,8 +664,8 @@ interface WorkflowStatusEntry {
         transition: all 0.2s;
       }
       .suggestion-card:hover {
-        background: #242424;
-        border-color: #3b82f6;
+        background: #1C2128;
+        border-color: #58A6FF;
         transform: translateY(-2px);
       }
       .suggestion-card-icon {
@@ -613,7 +675,7 @@ interface WorkflowStatusEntry {
       .suggestion-card-title {
         font-size: clamp(12px, 0.8vw, 15px);
         font-weight: 500;
-        color: #fafafa;
+        color: #E6EDF3;
         margin-bottom: 4px;
       }
       .suggestion-card-desc {
@@ -630,8 +692,8 @@ interface WorkflowStatusEntry {
       }
       .domain-pill {
         padding: clamp(6px, 0.5vw, 10px) clamp(12px, 1vw, 20px);
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 20px;
         font-size: clamp(12px, 0.8vw, 15px);
         font-weight: 500;
@@ -641,9 +703,9 @@ interface WorkflowStatusEntry {
         transition: all 0.15s;
       }
       .domain-pill:hover {
-        background: #242424;
-        border-color: #3b82f6;
-        color: #fafafa;
+        background: #1C2128;
+        border-color: #58A6FF;
+        color: #E6EDF3;
       }
       .empty-or {
         font-size: 12px;
@@ -653,8 +715,8 @@ interface WorkflowStatusEntry {
       }
       .persona-selector-panel {
         padding: 12px 16px;
-        border-bottom: 1px solid #2a2a2a;
-        background: #1a1a1a;
+        border-bottom: 1px solid #21262D;
+        background: #161B22;
         animation: panelSlideDown 0.2s ease;
       }
       @keyframes panelSlideDown {
@@ -681,9 +743,9 @@ interface WorkflowStatusEntry {
         top: 16px;
         right: 16px;
         z-index: 9999;
-        background: #1a1a1a;
-        border: 1px solid #ef4444;
-        border-left: 3px solid #ef4444;
+        background: #161B22;
+        border: 1px solid #F85149;
+        border-left: 3px solid #F85149;
         padding: 12px 16px;
         border-radius: 8px;
         display: flex;
@@ -700,9 +762,9 @@ interface WorkflowStatusEntry {
         top: 16px;
         right: 16px;
         z-index: 9999;
-        background: #1a1a1a;
-        border: 1px solid #3b82f6;
-        border-left: 3px solid #3b82f6;
+        background: #161B22;
+        border: 1px solid #58A6FF;
+        border-left: 3px solid #58A6FF;
         padding: 12px 16px;
         border-radius: 8px;
         display: flex;
@@ -719,9 +781,9 @@ interface WorkflowStatusEntry {
         top: 16px;
         right: 16px;
         z-index: 9999;
-        background: #1a1a1a;
-        border: 1px solid #22c55e;
-        border-left: 3px solid #22c55e;
+        background: #161B22;
+        border: 1px solid #3FB950;
+        border-left: 3px solid #3FB950;
         padding: 12px 16px;
         border-radius: 8px;
         display: flex;
@@ -755,19 +817,19 @@ interface WorkflowStatusEntry {
         flex-shrink: 0;
       }
       .toast-dismiss:hover {
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .right-panel {
         width: clamp(320px, 22vw, 440px);
         min-width: clamp(320px, 22vw, 440px);
-        background: #0d0d0d;
-        border-left: 1px solid #2a2a2a;
+        background: #0D1117;
+        border-left: 1px solid #21262D;
         display: flex;
         flex-direction: column;
       }
       .source-header {
         padding: 12px 16px;
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
         font-size: 11px;
         font-weight: 600;
         color: #9e9e9e;
@@ -778,7 +840,7 @@ interface WorkflowStatusEntry {
       .tab-bar {
         display: flex;
         gap: 0;
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
       }
       .tab {
         padding: 8px 20px;
@@ -793,15 +855,15 @@ interface WorkflowStatusEntry {
         color: #d4d4d4;
       }
       .tab.active {
-        color: #fafafa;
-        border-bottom-color: #3b82f6;
+        color: #E6EDF3;
+        border-bottom-color: #58A6FF;
         font-weight: 600;
       }
       .tab-activity-dot {
         display: inline-block;
         width: 7px;
         height: 7px;
-        background: #3b82f6;
+        background: #58A6FF;
         border-radius: 50%;
         margin-left: 5px;
         animation: pulse-dot 1.5s ease-in-out infinite;
@@ -830,8 +892,8 @@ interface WorkflowStatusEntry {
         align-items: center;
         gap: 12px;
         padding: 8px 16px;
-        background: #1a1a1a;
-        border-bottom: 1px solid #2a2a2a;
+        background: #161B22;
+        border-bottom: 1px solid #21262D;
         font-size: 11px;
         flex-shrink: 0;
       }
@@ -844,14 +906,14 @@ interface WorkflowStatusEntry {
       .brain-progress-bar {
         flex: 1;
         height: 4px;
-        background: #242424;
+        background: #1C2128;
         border-radius: 2px;
         overflow: hidden;
         min-width: 60px;
       }
       .brain-progress-fill {
         height: 100%;
-        background: #3b82f6;
+        background: #58A6FF;
         border-radius: 2px;
         transition: width 0.5s;
       }
@@ -860,7 +922,7 @@ interface WorkflowStatusEntry {
         white-space: nowrap;
       }
       .brain-stat strong {
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .auto-ai-toggle {
         display: flex;
@@ -879,7 +941,7 @@ interface WorkflowStatusEntry {
         width: 36px;
         height: 20px;
         border-radius: 10px;
-        background: #2a2a2a;
+        background: #21262D;
         cursor: pointer;
         position: relative;
         transition: background 0.2s;
@@ -887,7 +949,7 @@ interface WorkflowStatusEntry {
         padding: 0;
       }
       .toggle-track.active {
-        background: #3b82f6;
+        background: #58A6FF;
       }
       .toggle-track:disabled {
         opacity: 0.5;
@@ -897,7 +959,7 @@ interface WorkflowStatusEntry {
         width: 16px;
         height: 16px;
         border-radius: 50%;
-        background: #fafafa;
+        background: #E6EDF3;
         position: absolute;
         top: 2px;
         left: 2px;
@@ -913,8 +975,8 @@ interface WorkflowStatusEntry {
         align-items: center;
         gap: 12px;
         padding: 10px 16px;
-        background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(59, 130, 246, 0.03));
-        border: 1px solid rgba(59, 130, 246, 0.2);
+        background: linear-gradient(135deg, rgba(88, 166, 255, 0.08), rgba(88, 166, 255, 0.03));
+        border: 1px solid rgba(88, 166, 255, 0.2);
         border-radius: 8px;
         margin: 8px 16px;
         font-size: 13px;
@@ -923,7 +985,7 @@ interface WorkflowStatusEntry {
       .next-step-icon {
         width: 20px;
         height: 20px;
-        color: #3b82f6;
+        color: #58A6FF;
         flex-shrink: 0;
       }
       .next-step-text {
@@ -945,7 +1007,7 @@ interface WorkflowStatusEntry {
         transition: all 0.15s ease;
       }
       .next-step-btn.primary {
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
       }
       .next-step-btn.primary:hover {
@@ -954,10 +1016,10 @@ interface WorkflowStatusEntry {
       .next-step-btn.secondary {
         background: transparent;
         color: #9e9e9e;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
       }
       .next-step-btn.secondary:hover {
-        color: #fafafa;
+        color: #E6EDF3;
         border-color: #525252;
       }
       .next-step-close {
@@ -970,7 +1032,7 @@ interface WorkflowStatusEntry {
         line-height: 1;
       }
       .next-step-close:hover {
-        color: #fafafa;
+        color: #E6EDF3;
       }
       @keyframes fadeSlideIn {
         from {
@@ -985,7 +1047,7 @@ interface WorkflowStatusEntry {
 
       .domain-dashboard {
         padding: 20px 24px;
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
       }
       .domain-stats {
         display: flex;
@@ -993,8 +1055,8 @@ interface WorkflowStatusEntry {
         margin-bottom: 16px;
       }
       .stat-card {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 8px;
         padding: 12px 16px;
         flex: 1;
@@ -1009,7 +1071,7 @@ interface WorkflowStatusEntry {
       .stat-value {
         font-size: 20px;
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .stat-value.completed {
         color: #10b981;
@@ -1026,7 +1088,7 @@ interface WorkflowStatusEntry {
         align-items: center;
         gap: 8px;
         padding: 10px 18px;
-        background: #3b82f6;
+        background: #58A6FF;
         color: #fff;
         border: none;
         border-radius: 8px;
@@ -1046,16 +1108,16 @@ interface WorkflowStatusEntry {
         align-items: center;
         gap: 8px;
         padding: 10px 18px;
-        background: #242424;
-        color: #fafafa;
-        border: 1px solid #2a2a2a;
+        background: #1C2128;
+        color: #E6EDF3;
+        border: 1px solid #21262D;
         border-radius: 8px;
         font-size: 13px;
         font-weight: 500;
         cursor: pointer;
       }
       .add-investigation-btn:hover {
-        background: #2a2a2a;
+        background: #21262D;
       }
       .yolo-btn {
         display: inline-flex;
@@ -1063,7 +1125,7 @@ interface WorkflowStatusEntry {
         justify-content: center;
         padding: 8px 10px;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         background: none;
         color: #9e9e9e;
         cursor: pointer;
@@ -1078,8 +1140,8 @@ interface WorkflowStatusEntry {
       }
 
       .plan-inline-panel {
-        background: #1a1a1a;
-        border-bottom: 1px solid #2a2a2a;
+        background: #161B22;
+        border-bottom: 1px solid #21262D;
         display: flex;
         flex-direction: column;
         flex-shrink: 0;
@@ -1092,19 +1154,19 @@ interface WorkflowStatusEntry {
       }
       .plan-header {
         padding: 10px 16px;
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
         display: flex;
         align-items: center;
         gap: 12px;
         cursor: pointer;
       }
       .plan-header:hover {
-        background: #242424;
+        background: #1C2128;
       }
       .plan-header h3 {
         font-size: 14px;
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
         flex: 1;
       }
       .plan-collapse-icon {
@@ -1141,7 +1203,7 @@ interface WorkflowStatusEntry {
         display: flex;
         gap: 12px;
         padding: 10px 0;
-        border-bottom: 1px solid #242424;
+        border-bottom: 1px solid #1C2128;
       }
       .plan-step:last-child {
         border-bottom: none;
@@ -1158,7 +1220,7 @@ interface WorkflowStatusEntry {
         font-weight: 600;
       }
       .step-pending {
-        background: #242424;
+        background: #1C2128;
         color: #9e9e9e;
       }
       .step-in-progress {
@@ -1179,7 +1241,7 @@ interface WorkflowStatusEntry {
       .step-title {
         font-size: 13px;
         font-weight: 500;
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .step-desc {
         font-size: 12px;
@@ -1195,12 +1257,12 @@ interface WorkflowStatusEntry {
         font-size: 10px;
         padding: 1px 6px;
         border-radius: 4px;
-        background: #242424;
+        background: #1C2128;
         color: #9e9e9e;
       }
       .plan-btn-cancel {
         background: none;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         color: #a1a1a1;
         border-radius: 6px;
         padding: 4px 12px;
@@ -1210,12 +1272,12 @@ interface WorkflowStatusEntry {
         flex-shrink: 0;
       }
       .plan-btn-cancel:hover {
-        color: #fafafa;
+        color: #E6EDF3;
         border-color: #4a4a4a;
       }
       .plan-btn-approve {
-        background: #3b82f6;
-        color: #fafafa;
+        background: #58A6FF;
+        color: #E6EDF3;
         border: none;
         border-radius: 6px;
         padding: 4px 12px;
@@ -1250,8 +1312,8 @@ interface WorkflowStatusEntry {
         flex-direction: column;
         gap: 4px;
         padding: 10px 16px;
-        background: #1a1a1a;
-        border-bottom: 1px solid #2a2a2a;
+        background: #161B22;
+        border-bottom: 1px solid #21262D;
         flex-shrink: 0;
       }
       .workflow-status-entry {
@@ -1262,7 +1324,7 @@ interface WorkflowStatusEntry {
         font-size: 12px;
         padding: 8px 12px;
         border-radius: 6px;
-        background: #0d0d0d;
+        background: #0D1117;
       }
       .ws-detail-row {
         display: flex;
@@ -1272,14 +1334,14 @@ interface WorkflowStatusEntry {
         min-width: 0;
       }
       .wse-executing {
-        border-left: 3px solid #3b82f6;
+        border-left: 3px solid #58A6FF;
       }
       .wse-completed {
-        border-left: 3px solid #22c55e;
+        border-left: 3px solid #3FB950;
         animation: fadeOutEntry 1.5s ease 3s forwards;
       }
       .wse-failed {
-        border-left: 3px solid #ef4444;
+        border-left: 3px solid #F85149;
         animation: fadeOutEntry 1.5s ease 3s forwards;
       }
       .wse-cancelled {
@@ -1300,7 +1362,7 @@ interface WorkflowStatusEntry {
         }
       }
       .ws-title {
-        color: #fafafa;
+        color: #E6EDF3;
         font-weight: 600;
         font-size: 13px;
         max-width: 200px;
@@ -1312,14 +1374,14 @@ interface WorkflowStatusEntry {
       .ws-progress-bar {
         flex: 1;
         height: 4px;
-        background: #242424;
+        background: #1C2128;
         border-radius: 2px;
         overflow: hidden;
         min-width: 60px;
       }
       .ws-progress-fill {
         height: 100%;
-        background: #3b82f6;
+        background: #58A6FF;
         border-radius: 2px;
         transition: width 0.3s;
       }
@@ -1336,11 +1398,11 @@ interface WorkflowStatusEntry {
         white-space: nowrap;
       }
       .ws-badge-done {
-        color: #22c55e;
+        color: #3FB950;
         font-weight: 600;
       }
       .ws-badge-fail {
-        color: #ef4444;
+        color: #F85149;
         font-weight: 600;
       }
 
@@ -1378,7 +1440,7 @@ interface WorkflowStatusEntry {
       }
       .skeleton-bubble {
         border-radius: 12px;
-        background: linear-gradient(90deg, #1a1a1a 25%, #242424 50%, #1a1a1a 75%);
+        background: linear-gradient(90deg, #161B22 25%, #1C2128 50%, #161B22 75%);
         background-size: 200% 100%;
         animation: shimmer 1.5s ease-in-out infinite;
       }
@@ -1402,8 +1464,8 @@ interface WorkflowStatusEntry {
         padding: 8px 14px;
         margin: 8px 0;
         max-width: 100%;
-        background: #1a1a1a;
-        border-left: 3px solid #3b82f6;
+        background: #161B22;
+        border-left: 3px solid #58A6FF;
         border-radius: 0 6px 6px 0;
         font-size: 12px;
         color: #a1a1a1;
@@ -1416,8 +1478,8 @@ interface WorkflowStatusEntry {
 
       /* Created Task Navigation Card */
       .task-nav-card {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 10px;
         margin-bottom: 16px;
         overflow: hidden;
@@ -1431,12 +1493,12 @@ interface WorkflowStatusEntry {
         font-size: 12px;
         font-weight: 600;
         color: #a1a1a1;
-        border-bottom: 1px solid #242424;
+        border-bottom: 1px solid #1C2128;
       }
       .task-nav-icon {
         width: 16px;
         height: 16px;
-        color: #3b82f6;
+        color: #58A6FF;
         flex-shrink: 0;
       }
       .task-nav-dismiss {
@@ -1460,8 +1522,8 @@ interface WorkflowStatusEntry {
         padding: 10px 14px;
         background: none;
         border: none;
-        border-bottom: 1px solid #1e1e1e;
-        color: #fafafa;
+        border-bottom: 1px solid #21262D;
+        color: #E6EDF3;
         font-size: 13px;
         cursor: pointer;
         text-align: left;
@@ -1473,10 +1535,10 @@ interface WorkflowStatusEntry {
         border-bottom: none;
       }
       .task-nav-btn:hover {
-        background: #242424;
+        background: #1C2128;
       }
       .task-nav-btn.cross-concept {
-        border-left: 3px solid #3b82f6;
+        border-left: 3px solid #58A6FF;
       }
       .task-nav-title {
         flex: 1;
@@ -1489,7 +1551,7 @@ interface WorkflowStatusEntry {
         align-items: center;
         gap: 4px;
         font-size: 11px;
-        color: #3b82f6;
+        color: #58A6FF;
         flex-shrink: 0;
         white-space: nowrap;
       }
@@ -1506,7 +1568,7 @@ interface WorkflowStatusEntry {
 
       @keyframes highlightFlash {
         0% {
-          outline: 2px solid #3b82f6;
+          outline: 2px solid #58A6FF;
           outline-offset: 4px;
         }
         100% {
@@ -1522,10 +1584,10 @@ interface WorkflowStatusEntry {
       .step-confirmation {
         margin: 16px 0;
         padding: 16px;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 12px;
-        border-left: 3px solid #3b82f6;
+        border-left: 3px solid #58A6FF;
       }
       .confirmation-header {
         display: flex;
@@ -1536,14 +1598,14 @@ interface WorkflowStatusEntry {
       .confirmation-label {
         font-size: 0.8rem;
         font-weight: 600;
-        color: #3b82f6;
+        color: #58A6FF;
         text-transform: uppercase;
         letter-spacing: 0.05em;
       }
       .confirmation-title {
         font-size: 1rem;
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
         margin: 0 0 4px 0;
       }
       .confirmation-desc {
@@ -1571,10 +1633,10 @@ interface WorkflowStatusEntry {
       .confirmation-input {
         width: 100%;
         padding: 10px 12px;
-        background: #0d0d0d;
-        border: 1px solid #2a2a2a;
+        background: #0D1117;
+        border: 1px solid #21262D;
         border-radius: 8px;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 0.875rem;
         font-family: inherit;
         resize: vertical;
@@ -1585,7 +1647,7 @@ interface WorkflowStatusEntry {
       }
       .confirmation-input:focus {
         outline: none;
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .confirmation-input::placeholder {
         color: #525252;
@@ -1608,9 +1670,9 @@ interface WorkflowStatusEntry {
         border: 1px solid transparent;
       }
       .confirm-btn.primary {
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .confirm-btn.primary:hover:not(:disabled) {
         background: #2563eb;
@@ -1623,12 +1685,12 @@ interface WorkflowStatusEntry {
       .confirm-btn.cancel {
         background: transparent;
         color: #a3a3a3;
-        border-color: #2a2a2a;
+        border-color: #21262D;
       }
       .confirm-btn.cancel:hover {
-        background: #1a1a1a;
-        color: #ef4444;
-        border-color: #ef4444;
+        background: #161B22;
+        color: #F85149;
+        border-color: #F85149;
       }
 
       .return-link-container {
@@ -1640,7 +1702,7 @@ interface WorkflowStatusEntry {
         align-items: center;
         gap: 6px;
         background: none;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         color: #60a5fa;
         padding: 8px 16px;
         border-radius: 8px;
@@ -1649,8 +1711,8 @@ interface WorkflowStatusEntry {
         transition: all 0.15s ease;
       }
       .return-link:hover {
-        background: #1a1a1a;
-        border-color: #3b82f6;
+        background: #161B22;
+        border-color: #58A6FF;
         color: #93c5fd;
       }
       .return-link svg {
@@ -1663,7 +1725,7 @@ interface WorkflowStatusEntry {
     @for (err of errorMessages$(); track err.id; let i = $index) {
       <div class="error-toast" role="alert" [style.top.px]="16 + i * 64">
         <svg
-          style="width: 20px; height: 20px; color: #EF4444; flex-shrink: 0;"
+          style="width: 20px; height: 20px; color: #F85149; flex-shrink: 0;"
           fill="currentColor"
           viewBox="0 0 20 20"
         >
@@ -1673,7 +1735,7 @@ interface WorkflowStatusEntry {
             clip-rule="evenodd"
           />
         </svg>
-        <span style="font-size: 13px; color: #FAFAFA;">{{ err.message }}</span>
+        <span style="font-size: 13px; color: #E6EDF3;">{{ err.message }}</span>
         <button
           (click)="dismissErrorById(err.id)"
           style="background: none; border: none; color: #a1a1a1; cursor: pointer; margin-left: auto;"
@@ -1698,7 +1760,7 @@ interface WorkflowStatusEntry {
         [style.top.px]="16 + (errorMessages$().length + i) * 64"
       >
         <svg
-          style="width: 20px; height: 20px; color: #3B82F6; flex-shrink: 0;"
+          style="width: 20px; height: 20px; color: #58A6FF; flex-shrink: 0;"
           fill="currentColor"
           viewBox="0 0 20 20"
         >
@@ -1708,11 +1770,11 @@ interface WorkflowStatusEntry {
             clip-rule="evenodd"
           />
         </svg>
-        <span style="font-size: 13px; color: #FAFAFA;">{{ info.message }}</span>
+        <span style="font-size: 13px; color: #E6EDF3;">{{ info.message }}</span>
         <button
           (click)="dismissInfoById(info.id)"
           style="background: none; border: none; color: #a1a1a1; cursor: pointer; margin-left: auto;"
-          aria-label="Zatvori"
+          aria-label="Close"
         >
           <svg style="width: 16px; height: 16px;" fill="currentColor" viewBox="0 0 20 20">
             <path
@@ -1760,7 +1822,7 @@ interface WorkflowStatusEntry {
           [class.active]="isResizingSidebar"
           (mousedown)="onSidebarResizeStart($event)"></div>
         <div class="sidebar-header">
-          <h1>Prikaz stabla</h1>
+          <h1>Tree view</h1>
           <button class="sidebar-toggle" (click)="toggleSidebar()">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -1797,7 +1859,7 @@ interface WorkflowStatusEntry {
                 d="M12 4v16m8-8H4"
               />
             </svg>
-            Novi razgovor
+            New conversation
           </button>
         </div>
 
@@ -1806,6 +1868,7 @@ interface WorkflowStatusEntry {
           [locked]="isCurrentConversationExecuting$()"
           [newConversationIds]="newConversationIds$()"
           [loadingItemId]="loadingConversationId$()"
+          [awaitingFirstMessageConvId]="awaitingFirstUserMessageConvId$()"
           (conversationSelected)="selectConversation($event)"
           (newChatRequested)="createConversationUnderConcept($event)"
           (conceptSelected)="onConceptSelected($event)"
@@ -1817,6 +1880,7 @@ interface WorkflowStatusEntry {
 
       <!-- Main Chat Area -->
       <main class="chat-main">
+
         @if (isLoadingConversation$() && !activeConversation$()) {
           <!-- M5: Show skeleton only on initial load (no active conversation yet) to avoid flash on switch -->
           <div class="skeleton-messages">
@@ -1838,16 +1902,16 @@ interface WorkflowStatusEntry {
                 [class.reconnecting]="connectionState$() === 'reconnecting'"
                 [title]="
                   connectionState$() === 'connected'
-                    ? 'Povezano'
+                    ? 'Connected'
                     : connectionState$() === 'reconnecting'
-                      ? 'Ponovno povezivanje...'
-                      : 'Veza prekinuta'
+                      ? 'Reconnecting...'
+                      : 'Connection lost'
                 "
               >
               </span>
               @if (folderName$() && !activeConversation$()) {
                 <svg
-                  style="width: 18px; height: 18px; color: #3B82F6;"
+                  style="width: 18px; height: 18px; color: #58A6FF;"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -1861,10 +1925,7 @@ interface WorkflowStatusEntry {
                 </svg>
                 <h2>{{ folderName$() }}</h2>
               } @else {
-                <h2>{{ activeConversation$()?.title || 'Novi razgovor' }}</h2>
-                @if (currentPersonaType$()) {
-                  <app-persona-badge [personaType]="currentPersonaType$()" />
-                }
+                <h2>{{ activeConversation$()?.title || 'New conversation' }}</h2>
               }
             </div>
             @if (activeConversation$()) {
@@ -1888,37 +1949,7 @@ interface WorkflowStatusEntry {
                     }
                   </button>
                 </div>
-                <button
-                  class="switch-btn"
-                  [disabled]="isCurrentConversationExecuting$()"
-                  (click)="togglePersonaSelector()"
-                >
-                  <svg
-                    style="width: 16px; height: 16px;"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                    />
-                  </svg>
-                  {{ showPersonaSelector$() ? 'Hide Personas' : 'Switch Persona' }}
-                </button>
-                <div class="auto-ai-toggle">
-                  <span class="auto-ai-label">Auto AI</span>
-                  <button
-                    class="toggle-track"
-                    [class.active]="autoAiPopuni$()"
-                    [disabled]="isTogglingAutoPopuni$()"
-                    (click)="toggleAutoAiPopuni()"
-                  >
-                    <span class="toggle-thumb"></span>
-                  </button>
-                </div>
+                <!-- Switch Persona and Auto AI removed from menu -->
               </div>
             }
           </header>
@@ -1959,7 +1990,7 @@ interface WorkflowStatusEntry {
                   class="onboarding-prep-btn"
                   (click)="activeTab$.set('notes'); $event.stopPropagation()"
                 >
-                  Prikaži zadatke
+                  Show tasks
                 </button>
               }
             </div>
@@ -2000,10 +2031,10 @@ interface WorkflowStatusEntry {
                       />
                     </svg>
                     <h3>
-                      {{ isExecutingWorkflow$() ? 'Izvršavanje plana...' : 'Plan izvršavanja' }}
+                      {{ isExecutingWorkflow$() ? 'Executing plan...' : 'Execution plan' }}
                     </h3>
                     <div class="plan-meta">
-                      <span>{{ currentPlan$()!.steps.length }} koraka</span>
+                      <span>{{ currentPlan$()!.steps.length }} steps</span>
                       <span>~{{ currentPlan$()!.totalEstimatedMinutes }} min</span>
                     </div>
                     @if (!planCollapsed$()) {
@@ -2012,21 +2043,21 @@ interface WorkflowStatusEntry {
                           class="plan-btn-cancel"
                           (click)="cancelExecution(); $event.stopPropagation()"
                         >
-                          Prekini
+                          Cancel
                         </button>
                       } @else {
                         <button
                           class="plan-btn-cancel"
                           (click)="rejectPlan(); $event.stopPropagation()"
                         >
-                          Otkaži
+                          Cancel
                         </button>
                         <button
                           class="plan-btn-approve"
                           [disabled]="isApprovingPlan$()"
                           (click)="approvePlan(); $event.stopPropagation()"
                         >
-                          {{ isApprovingPlan$() ? 'Pokrećem...' : 'Pokreni' }}
+                          {{ isApprovingPlan$() ? 'Starting...' : 'Start' }}
                         </button>
                       }
                     }
@@ -2125,13 +2156,11 @@ interface WorkflowStatusEntry {
                       >
                       @if (yoloProgress$()!.currentTasks.length > 0) {
                         <span class="ws-current"
-                          >{{ yoloProgress$()!.currentTasks.length }} aktivn{{
-                            yoloProgress$()!.currentTasks.length > 1 ? 'a' : 'o'
-                          }}</span
+                          >{{ yoloProgress$()!.currentTasks.length }} active</span
                         >
                       }
                       @if (yoloProgress$()!.failed > 0) {
-                        <span class="ws-badge-fail">{{ yoloProgress$()!.failed }} neuspešno</span>
+                        <span class="ws-badge-fail">{{ yoloProgress$()!.failed }} failed</span>
                       }
                       @if (yoloProgress$()!.discoveredCount > 0) {
                         <span style="color: #10B981; font-size: 11px; font-weight: 600;"
@@ -2168,13 +2197,13 @@ interface WorkflowStatusEntry {
                         <span class="ws-current">{{ entry.currentStepTitle }}</span>
                       }
                       @if (entry.status === 'completed') {
-                        <span class="ws-badge-done">Završeno</span>
+                        <span class="ws-badge-done">Completed</span>
                       }
                       @if (entry.status === 'failed') {
-                        <span class="ws-badge-fail">Greška</span>
+                        <span class="ws-badge-fail">Error</span>
                       }
                       @if (entry.status === 'cancelled') {
-                        <span class="ws-badge-fail">Otkazano</span>
+                        <span class="ws-badge-fail">Cancelled</span>
                       }
                     </div>
                   }
@@ -2192,9 +2221,14 @@ interface WorkflowStatusEntry {
                         [isLastAssistantMessage]="
                           message.id === lastAssistantMessageId$() && !isStreaming$()
                         "
+                        [isProposalDiscussion]="!!activeProposalId$()"
+                        [proposalConfirming]="confirmingPlan$()"
+                        [proposalBusy]="confirmingPlan$() || isStreaming$() || isLoading$()"
                         (citationClick)="onCitationClick($event)"
                         (actionClick)="onSuggestedAction($event)"
                         (regenerateClick)="regenerateResponse()"
+                        (confirmProposalClick)="confirmProposalPlan()"
+                        (discussFurtherClick)="focusChatInput()"
                         style="display: block; margin-bottom: 16px;"
                       />
                     }
@@ -2209,10 +2243,10 @@ interface WorkflowStatusEntry {
                           <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
                         </svg>
                         @if (currentStepTitle$()) {
-                          Korak {{ currentStepIndex$() + 1 }}/{{ totalStepsCount$() }}:
+                          Step {{ currentStepIndex$() + 1 }}/{{ totalStepsCount$() }}:
                           {{ currentStepTitle$() }}
                         } @else {
-                          Pripremam izvršavanje...
+                          Preparing execution...
                         }
                       </div>
                     }
@@ -2336,7 +2370,7 @@ interface WorkflowStatusEntry {
                               d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
                             />
                           </svg>
-                          Kreirani zadaci
+                          Created tasks
                           <button
                             class="task-nav-dismiss"
                             (click)="createdTaskNotifications$.set([])"
@@ -2395,7 +2429,7 @@ interface WorkflowStatusEntry {
                                     d="M9 5l7 7-7 7"
                                   />
                                 </svg>
-                                Otvori
+                                Open
                               </span>
                             }
                           </button>
@@ -2427,7 +2461,7 @@ interface WorkflowStatusEntry {
                         >
                           <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
                         </svg>
-                        Generišem plan izvršavanja...
+                        Generating execution plan...
                       </div>
                     }
 
@@ -2439,7 +2473,7 @@ interface WorkflowStatusEntry {
                             height="20"
                             viewBox="0 0 24 24"
                             fill="none"
-                            stroke="#3B82F6"
+                            stroke="#58A6FF"
                             stroke-width="2"
                             stroke-linecap="round"
                             stroke-linejoin="round"
@@ -2448,7 +2482,7 @@ interface WorkflowStatusEntry {
                             <polyline points="12 6 12 12 16 14"></polyline>
                           </svg>
                           <span class="confirmation-label"
-                            >Korak {{ stepInput.stepIndex + 1 }}/{{ stepInput.totalSteps }}:
+                            >Step {{ stepInput.stepIndex + 1 }}/{{ stepInput.totalSteps }}:
                             {{ stepInput.conceptName }}</span
                           >
                         </div>
@@ -2462,9 +2496,9 @@ interface WorkflowStatusEntry {
                               (click)="continueWorkflowStep()"
                             >
                               @if (isProcessingStep$()) {
-                                <span class="btn-spinner"></span> Obrađujem...
+                                <span class="btn-spinner"></span> Processing...
                               } @else {
-                                Nastavi
+                                Continue
                                 <svg
                                   width="16"
                                   height="16"
@@ -2485,7 +2519,7 @@ interface WorkflowStatusEntry {
                               [disabled]="isProcessingStep$()"
                               (click)="cancelExecution()"
                             >
-                              Otkaži
+                              Cancel
                             </button>
                           </div>
                         } @else {
@@ -2504,7 +2538,7 @@ interface WorkflowStatusEntry {
                                 d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
                               ></path>
                             </svg>
-                            <span>Unesite odgovor u polje za poruke ispod</span>
+                            <span>Enter your answer in the message field below</span>
                           </div>
                         }
                       </div>
@@ -2526,7 +2560,7 @@ interface WorkflowStatusEntry {
                             <line x1="19" y1="12" x2="5" y2="12"></line>
                             <polyline points="12 19 5 12 12 5"></polyline>
                           </svg>
-                          Vrati se na prethodnu konverzaciju
+                          Return to previous conversation
                         </button>
                       </div>
                     }
@@ -2541,7 +2575,7 @@ interface WorkflowStatusEntry {
                             height="20"
                             viewBox="0 0 24 24"
                             fill="none"
-                            stroke="#3B82F6"
+                            stroke="#58A6FF"
                             stroke-width="2"
                             stroke-linecap="round"
                             stroke-linejoin="round"
@@ -2550,7 +2584,7 @@ interface WorkflowStatusEntry {
                             <polyline points="12 6 12 12 16 14"></polyline>
                           </svg>
                           <span class="confirmation-label"
-                            >Korak {{ nextStepInfo$()!.stepIndex + 1 }}/{{
+                            >Step {{ nextStepInfo$()!.stepIndex + 1 }}/{{
                               nextStepInfo$()!.totalSteps
                             }}:</span
                           >
@@ -2572,13 +2606,13 @@ interface WorkflowStatusEntry {
                               d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
                             ></path>
                           </svg>
-                          <span>Imate li dodatne informacije ili odgovore za ovaj korak?</span>
+                          <span>Do you have additional information or answers for this step?</span>
                         </div>
                         <textarea
                           class="confirmation-input"
                           [value]="userStepInput$()"
                           (input)="userStepInput$.set($any($event.target).value)"
-                          placeholder="Unesite vaše odgovore, podatke o kompaniji, specifične zahteve..."
+                          placeholder="Enter your answers, company data, specific requirements..."
                           rows="4"
                         ></textarea>
                         <div class="confirmation-actions">
@@ -2588,9 +2622,9 @@ interface WorkflowStatusEntry {
                             (click)="continueWorkflow()"
                           >
                             @if (isProcessingStep$()) {
-                              <span class="btn-spinner"></span> Obrađujem...
+                              <span class="btn-spinner"></span> Processing...
                             } @else {
-                              {{ userStepInput$() ? 'Izvrši sa odgovorom' : 'Preskoči i izvrši' }}
+                              {{ userStepInput$() ? 'Execute with answer' : 'Skip and execute' }}
                               <svg
                                 width="16"
                                 height="16"
@@ -2611,7 +2645,7 @@ interface WorkflowStatusEntry {
                             [disabled]="isProcessingStep$()"
                             (click)="cancelExecution()"
                           >
-                            Otkaži
+                            Cancel
                           </button>
                         </div>
                       </div>
@@ -2624,7 +2658,7 @@ interface WorkflowStatusEntry {
                       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <rect x="6" y="6" width="12" height="12" rx="2" stroke-width="2" />
                       </svg>
-                      Zaustavi generisanje
+                      Stop generation
                     </button>
                   } @else {
                     <button class="scroll-to-bottom" (click)="scrollToBottom()">
@@ -2644,7 +2678,7 @@ interface WorkflowStatusEntry {
               <!-- Brain Status Dashboard (D6) -->
               @if (brainStats$().totalDomains > 0) {
                 <div class="brain-status-bar">
-                  <span class="brain-status-label">Mozak</span>
+                  <span class="brain-status-label">Brain</span>
                   <div class="brain-progress-bar">
                     <div
                       class="brain-progress-fill"
@@ -2655,26 +2689,14 @@ interface WorkflowStatusEntry {
                     ><strong
                       >{{ brainStats$().completedDomains }}/{{ brainStats$().totalDomains }}</strong
                     >
-                    domena</span
+                    domains</span
                   >
                   @if (brainStats$().pendingTasks > 0) {
                     <span class="brain-stat" style="color: #F59E0B;"
-                      ><strong>{{ brainStats$().pendingTasks }}</strong> na čekanju</span
+                      ><strong>{{ brainStats$().pendingTasks }}</strong> pending</span
                     >
                   }
-                  @if (isPlatformOwner$()) {
-                    <div class="auto-ai-toggle">
-                      <span class="auto-ai-label">Auto AI</span>
-                      <button
-                        class="toggle-track"
-                        [class.active]="autoAiPopuni$()"
-                        [disabled]="isTogglingAutoPopuni$()"
-                        (click)="toggleAutoAiPopuni()"
-                      >
-                        <span class="toggle-thumb"></span>
-                      </button>
-                    </div>
-                  }
+                  <!-- Auto AI toggle removed -->
                 </div>
               }
               <!-- Notes View (conversation mode) -->
@@ -2726,6 +2748,7 @@ interface WorkflowStatusEntry {
                 <button class="next-step-close" (click)="dismissNextStep()">&times;</button>
               </div>
             }
+
             <!-- Chat Input (always visible at bottom when conversation is active) -->
             <div style="flex-shrink: 0;">
               <app-chat-input
@@ -2743,15 +2766,15 @@ interface WorkflowStatusEntry {
             <div class="domain-dashboard">
               <div class="domain-stats">
                 <div class="stat-card">
-                  <div class="stat-label">Završeno</div>
+                  <div class="stat-label">Completed</div>
                   <div class="stat-value completed">{{ domainCompletedCount$() }}</div>
                 </div>
                 <div class="stat-card">
-                  <div class="stat-label">Na čekanju</div>
+                  <div class="stat-label">Pending</div>
                   <div class="stat-value pending">{{ domainPendingCount$() }}</div>
                 </div>
                 <div class="stat-card">
-                  <div class="stat-label">Ukupno</div>
+                  <div class="stat-label">Total</div>
                   <div class="stat-value">
                     {{ domainCompletedCount$() + domainPendingCount$() }}
                   </div>
@@ -2780,7 +2803,7 @@ interface WorkflowStatusEntry {
                       d="M13 10V3L4 14h7v7l9-11h-7z"
                     />
                   </svg>
-                  Pokreni Brain
+                  Run Brain
                 </button>
                 <button
                   class="yolo-btn"
@@ -2790,7 +2813,7 @@ interface WorkflowStatusEntry {
                     domainPendingCount$() === 0
                   "
                   (click)="onRunBrainYolo()"
-                  title="YOLO režim (bez pregleda plana)"
+                  title="YOLO mode (without plan review)"
                 >
                   <svg
                     style="width: 16px; height: 16px;"
@@ -2820,14 +2843,14 @@ interface WorkflowStatusEntry {
                       d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                     />
                   </svg>
-                  Istraži koncept
+                  Explore concept
                 </button>
               </div>
             </div>
             <!-- Brain Status Dashboard (D6) — folder view -->
             @if (brainStats$().totalDomains > 0) {
               <div class="brain-status-bar">
-                <span class="brain-status-label">Mozak</span>
+                <span class="brain-status-label">Brain</span>
                 <div class="brain-progress-bar">
                   <div
                     class="brain-progress-fill"
@@ -2838,24 +2861,13 @@ interface WorkflowStatusEntry {
                   ><strong
                     >{{ brainStats$().completedDomains }}/{{ brainStats$().totalDomains }}</strong
                   >
-                  domena</span
+                  domains</span
                 >
                 @if (brainStats$().pendingTasks > 0) {
                   <span class="brain-stat" style="color: #F59E0B;"
-                    ><strong>{{ brainStats$().pendingTasks }}</strong> na čekanju</span
+                    ><strong>{{ brainStats$().pendingTasks }}</strong> pending</span
                   >
                 }
-                <div class="auto-ai-toggle">
-                  <span class="auto-ai-label">Auto AI</span>
-                  <button
-                    class="toggle-track"
-                    [class.active]="autoAiPopuni$()"
-                    [disabled]="isTogglingAutoPopuni$()"
-                    (click)="toggleAutoAiPopuni()"
-                  >
-                    <span class="toggle-thumb"></span>
-                  </button>
-                </div>
               </div>
             }
             <div class="notes-view">
@@ -2887,7 +2899,7 @@ interface WorkflowStatusEntry {
             <div class="empty-content">
               <div class="empty-icon">
                 <svg
-                  style="width: 40px; height: 40px; color: #3B82F6;"
+                  style="width: 40px; height: 40px; color: #58A6FF;"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -2900,10 +2912,10 @@ interface WorkflowStatusEntry {
                   />
                 </svg>
               </div>
-              <h2 class="empty-title">Dobrodošli u Mentor AI</h2>
+              <h2 class="empty-title">Welcome to Neuron OS</h2>
               <p class="empty-desc">
-                Vaš AI poslovni partner sa ekspertizom u finansijama, marketingu, tehnologiji,
-                operacijama, pravu i kreativnom razvoju.
+                Your AI business partner with expertise in finance, marketing, technology,
+                operations, law, and creative development.
               </p>
               <button class="start-btn" (click)="createNewConversation()">
                 <svg
@@ -2919,50 +2931,50 @@ interface WorkflowStatusEntry {
                     d="M12 4v16m8-8H4"
                   />
                 </svg>
-                Novi razgovor
+                New conversation
               </button>
               <div class="suggestion-grid">
                 <button
                   class="suggestion-card"
                   (click)="
                     onSuggestionClick(
-                      'Analiziraj moje tržište i identifikuj ključne prilike za rast'
+                      'Analyze my market and identify key growth opportunities'
                     )
                   "
                 >
                   <div class="suggestion-card-icon">📊</div>
-                  <div class="suggestion-card-title">Analiza tržišta</div>
+                  <div class="suggestion-card-title">Market analysis</div>
                   <div class="suggestion-card-desc">
-                    Identifikuj prilike za rast i konkurentsku poziciju
+                    Identify growth opportunities and competitive position
                   </div>
                 </button>
                 <button
                   class="suggestion-card"
-                  (click)="onSuggestionClick('Napravi profil idealnog kupca za moj biznis')"
+                  (click)="onSuggestionClick('Create an ideal customer profile for my business')"
                 >
                   <div class="suggestion-card-icon">👤</div>
-                  <div class="suggestion-card-title">Profilisanje kupaca</div>
-                  <div class="suggestion-card-desc">Definiši idealnog kupca i segmente</div>
+                  <div class="suggestion-card-title">Customer profiling</div>
+                  <div class="suggestion-card-desc">Define ideal customer and segments</div>
                 </button>
                 <button
                   class="suggestion-card"
                   (click)="
                     onSuggestionClick(
-                      'Pomozi mi da napravim finansijski plan za narednih 12 meseci'
+                      'Help me create a financial plan for the next 12 months'
                     )
                   "
                 >
                   <div class="suggestion-card-icon">💰</div>
-                  <div class="suggestion-card-title">Finansijski plan</div>
-                  <div class="suggestion-card-desc">Projekcije prihoda, troškova i budžeta</div>
+                  <div class="suggestion-card-title">Financial plan</div>
+                  <div class="suggestion-card-desc">Revenue, expense, and budget projections</div>
                 </button>
                 <button
                   class="suggestion-card"
-                  (click)="onSuggestionClick('Kreiraj marketing strategiju za moj proizvod')"
+                  (click)="onSuggestionClick('Create a marketing strategy for my product')"
                 >
                   <div class="suggestion-card-icon">🚀</div>
-                  <div class="suggestion-card-title">Marketing strategija</div>
-                  <div class="suggestion-card-desc">Plan za promociju i pozicioniranje brenda</div>
+                  <div class="suggestion-card-title">Marketing strategy</div>
+                  <div class="suggestion-card-desc">Plan for promotion and brand positioning</div>
                 </button>
               </div>
             </div>
@@ -2970,18 +2982,13 @@ interface WorkflowStatusEntry {
         }
       </main>
 
-      <!-- Right Panel: Source / Citation Details -->
-      @if (selectedConceptId$()) {
-        <aside class="right-panel">
-          <div class="source-header">Izvor</div>
-          <app-concept-panel
-            [conceptId]="selectedConceptId$()"
-            [isOpen]="true"
-            (close)="closeConceptPanel()"
-            (conceptClick)="onRelatedConceptClick($event)"
-          />
-        </aside>
-      }
+      <!-- Concept Panel (overlay, no separate Source panel) -->
+      <app-concept-panel
+        [conceptId]="selectedConceptId$()"
+        [isOpen]="!!selectedConceptId$()"
+        (close)="closeConceptPanel()"
+        (conceptClick)="onRelatedConceptClick($event)"
+      />
     </div>
 
     <app-feature-tour (tourComplete)="onTourComplete()" />
@@ -2990,6 +2997,7 @@ interface WorkflowStatusEntry {
 export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   private readonly conversationService = inject(ConversationService);
   private readonly chatWsService = inject(ChatWebsocketService);
+  private readonly treeRefresh = inject(BrainTreeRefreshService);
   private readonly http = inject(HttpClient);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -2997,6 +3005,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   private readonly authService = inject(AuthService);
   private readonly execPanel = inject(ExecutionPanelService);
   private readonly notesApi = inject(NotesApiService);
+  private readonly pageLoading = inject(PageLoadingService);
 
   @ViewChild(FeatureTourComponent) featureTour?: FeatureTourComponent;
   @ViewChild(ConceptTreeComponent) conceptTree?: ConceptTreeComponent;
@@ -3017,6 +3026,27 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   });
   readonly isLoading$ = signal(false);
   readonly isStreaming$ = signal(false);
+  private busySafetyTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Reset busy indicators with a safety timeout. Prevents stuck indicators. */
+  private startBusySafety(timeoutMs = 30_000): void {
+    if (this.busySafetyTimer) clearTimeout(this.busySafetyTimer);
+    this.busySafetyTimer = setTimeout(() => {
+      if (this.isLoading$() || this.isStreaming$()) {
+        console.warn('Busy safety timeout — resetting stuck indicators');
+        this.isLoading$.set(false);
+        this.isStreaming$.set(false);
+      }
+      this.busySafetyTimer = null;
+    }, timeoutMs);
+  }
+
+  private clearBusySafety(): void {
+    if (this.busySafetyTimer) {
+      clearTimeout(this.busySafetyTimer);
+      this.busySafetyTimer = null;
+    }
+  }
   readonly showScrollToBottom$ = signal(false);
   readonly sidebarCollapsed$ = signal(false);
   readonly sidebarWidth$ = signal(parseInt(localStorage.getItem('treeViewWidth') ?? '280', 10));
@@ -3166,8 +3196,61 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     );
   });
 
-  // Multi-step orchestration: research phase indicator
-  readonly researchPhase$ = signal<'thinking' | 'researching'>('thinking');
+  // Multi-step orchestration: research phase indicator.
+  // Drives the TypingIndicatorComponent's rotating status messages so the
+  // user sees contextual text ("Čitam proposal...", "Pripremam plan...",
+  // "Formiram pitanja...") instead of a generic "thinking..." label.
+  readonly researchPhase$ = signal<
+    'thinking' | 'researching' | 'generating' | 'preparing-discussion'
+  >('thinking');
+  /**
+   * Active proposal being discussed in this conversation.
+   * Kept as separate signals for backwards compatibility with code that
+   * reads them, but the SOURCE OF TRUTH for the discussion lifecycle is
+   * `proposalDiscussionState$` below — a single explicit state machine.
+   */
+  readonly activeProposalId$ = signal<string | null>(null);
+  readonly activeProposalTitle$ = signal<string | null>(null);
+  readonly confirmingPlan$ = signal(false);
+
+  /**
+   * State machine for the proposal discussion lifecycle.
+   * Architectural fix for the bug cluster around the floating control bar
+   * disappearing, race conditions in openProposalChat, and loadConversation
+   * clearing proposal context mid-flight.
+   *
+   * Transitions:
+   *   IDLE       — no proposal discussion active (default)
+   *   OPENING    — openProposalChat() in progress (creating + loading conv)
+   *   READY      — discussion ready, user can type and click buttons
+   *   CONFIRMING — user clicked Confirm, awaiting the structured AI response
+   *                + the approve PATCH call
+   *   APPROVED   — proposal approved, task created, transitioning back to IDLE
+   *
+   * Single source of truth for:
+   *   - Floating bar visibility (any non-IDLE)
+   *   - Button enablement (READY only)
+   *   - loadConversation cleanup safety (don't clear if non-IDLE)
+   *   - openProposalChat dedup guard (only run if IDLE)
+   */
+  readonly proposalDiscussionState$ = signal<
+    'IDLE' | 'OPENING' | 'READY' | 'CONFIRMING' | 'APPROVED'
+  >('IDLE');
+
+  /**
+   * Conversation ID that is waiting for the user's FIRST manual message.
+   * Set when openProposalChat() opens a new proposal discussion.
+   * Cleared in sendMessage() the first time the user sends a real input
+   * (i.e., not the auto-injected bootstrap message). The concept tree
+   * renders a blue dot on the corresponding row while this is set, so
+   * the owner can see at-a-glance that the brain is waiting for them.
+   */
+  readonly awaitingFirstUserMessageConvId$ = signal<string | null>(null);
+
+  // (isPreparingProposalDiscussion$ removed — replaced by Claude-style
+  // in-chat typing indicator at the bottom of the messages list, which is
+  // driven by the existing `isLoading$ && !isStreaming$` condition. The
+  // rotating "preparing-discussion" messages are picked up via researchPhase$.)
 
   // Auto AI Popuni toggle (brain config)
   readonly autoAiPopuni$ = signal(false);
@@ -3277,6 +3360,12 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           return;
         }
 
+        // Open chat with concept context — from graph node click
+        if (queryParams['concept']) {
+          this.openConceptChat(queryParams['concept']);
+          return;
+        }
+
         // Now load conversation — yoloPending is already set
         if (params['conversationId']) {
           this.loadConversation(params['conversationId']);
@@ -3330,6 +3419,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
   async loadConversation(conversationId: string): Promise<void> {
     this.isLoadingConversation$.set(true);
+    this.pageLoading.start();
     try {
       // Clear plan state from previous conversation (unless this conversation has its own active workflow or a workflow is selected in status bar)
       if (
@@ -3341,15 +3431,31 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       const conversation = await this.conversationService.getConversation(conversationId);
       this.activeConversation$.set(conversation);
       this.isLoadingConversation$.set(false);
+      this.pageLoading.stop();
       // H4: Only reset to chat tab if currently in folder mode (not when switching between conversations with notes open)
       if (this.folderName$()) {
         this.activeTab$.set('chat');
       }
-      // Reset transient UI state from any previous conversation
+      // Reset transient UI state from any previous conversation.
       this.isLoading$.set(false);
       this.isStreaming$.set(false);
+      this.clearBusySafety();
       this.streamingContent$.set('');
       this.createdTaskNotifications$.set([]);
+
+      // CRITICAL: only clear proposal context when we're in IDLE state.
+      // If we're in OPENING/READY/CONFIRMING (i.e. user is actively in a
+      // proposal discussion that's still in progress), preserve the
+      // proposal signals — clearing them mid-flight is exactly what made
+      // the floating bar disappear after each loadConversation cycle.
+      if (this.proposalDiscussionState$() === 'IDLE') {
+        this.activeProposalId$.set(null);
+        this.activeProposalTitle$.set(null);
+        this.confirmingPlan$.set(false);
+      }
+      // Don't clear awaitingFirstUserMessageConvId$ here — it survives the
+      // loadConversation cycle so the dot persists from openProposalChat()
+      // until the user actually sends their first manual message.
       // M9: Reset execution state when switching conversations
       this.executingTaskId$.set(null);
       this.taskExecutionStreamContent$.set('');
@@ -3372,7 +3478,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           await this.chatWsService.waitForConnection();
           this.chatWsService.emitStartYolo(conversationId);
         } catch {
-          this.showError('WebSocket konekcija neuspešna — YOLO mod nije mogao da se pokrene');
+          this.showError('WebSocket connection failed — YOLO mode could not start');
         }
       }
       // Auto-execute onboarding tasks in parallel
@@ -3380,14 +3486,14 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         const taskIds = this.pendingOnboardingTaskIds;
         this.pendingOnboardingTaskIds = null;
         this.isOnboardingFlow = true;
-        this.onboardingStatus$.set('Pripremamo vaše zadatke...');
+        this.onboardingStatus$.set('Preparing your tasks...');
         try {
           await this.chatWsService.waitForConnection();
           this.chatWsService.emitParallelPopuni(taskIds, conversationId, true);
         } catch {
           this.isOnboardingFlow = false;
           this.onboardingStatus$.set(null);
-          this.showError('WebSocket konekcija neuspešna — automatsko izvršavanje nije pokrenuto');
+          this.showError('WebSocket connection failed — automatic execution not started');
         }
       }
       // Load pre-built plan from onboarding if planId is set (fallback when no taskIds)
@@ -3398,57 +3504,313 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           await this.chatWsService.waitForConnection();
           this.chatWsService.emitGetPlan(planId, conversationId);
         } catch {
-          this.showError('WebSocket konekcija neuspešna — plan nije mogao da se učita');
+          this.showError('WebSocket connection failed — plan could not be loaded');
         }
       }
     } catch {
       this.activeConversation$.set(null);
       this.isLoadingConversation$.set(false);
-      this.showError('Greška pri učitavanju konverzacije');
+      this.pageLoading.stop();
+      this.showError('Error loading conversation');
     }
   }
 
   async openProposalChat(proposalId: string, conceptId?: string): Promise<void> {
+    // DEDUP GUARD — prevents race conditions from rapid double-clicks or
+    // queryParams subscription firing twice.
+    if (this.proposalDiscussionState$() !== 'IDLE') {
+      return;
+    }
+
     try {
-      // Get proposal details from query params (passed by task-hub)
       const params = this.route.snapshot.queryParams;
-      const title = params['proposalTitle'] || 'AI Predlog';
+      const title = params['proposalTitle'] || 'AI Proposal';
       const reasoning = params['proposalReasoning'] || '';
       const action = params['proposalAction'] || '';
 
-      // Create new conversation for discussing this proposal (no concept needed)
+      // STEP 0 — Enter OPENING state and pre-set everything that the
+      // template depends on. Synchronous so the floating bar appears
+      // before any async work.
+      this.proposalDiscussionState$.set('OPENING');
+      this.activeProposalId$.set(proposalId);
+      this.activeProposalTitle$.set(title);
+      this.activeTab$.set('chat');
+      this.isLoading$.set(false);
+      this.isStreaming$.set(false);
+      this.streamingContent$.set('');
+
+      // STEP 1 — Create the conversation. skipAutoTrigger=true blocks the
+      // backend conceptPlanService.triggerConceptPlan() so no background
+      // work fires.
       const conversation = await this.conversationService.createConversation(
-        `${title} — Razgovor`,
+        `${title} — Discussion`,
+        undefined,
+        conceptId,
+        undefined,
+        true, // skipAutoTrigger
+      );
+
+      // STEP 2 — Build the proposal context as a local ASSISTANT message
+      // and set activeConversation$ DIRECTLY. We deliberately bypass
+      // loadConversation() here because:
+      //   1. It calls pageLoading.start() which causes a brief global
+      //      spinner flash outside the chat (the user complained about
+      //      "busy indicator outside the chat").
+      //   2. It clears a bunch of transient state we just set.
+      //   3. It does an HTTP fetch we don't need — the conversation we
+      //      just created is empty by definition.
+      const contextLines = [`**${title}**`];
+      if (reasoning) contextLines.push('', `**Reasoning:** ${reasoning}`);
+      if (action) contextLines.push('', `**Proposed action:** ${action}`);
+      contextLines.push(
+        '',
+        `_Type a message below to start discussing this proposal. When you're ready, click **Confirm** in the bar at the bottom and I'll lock in the plan and run it._`,
+      );
+      const contextMessage: Message = {
+        id: `proposal_context_${Date.now()}`,
+        conversationId: conversation.id,
+        role: MessageRole.ASSISTANT,
+        content: contextLines.join('\n'),
+        confidenceScore: null,
+        confidenceFactors: null,
+        createdAt: new Date().toISOString(),
+      };
+
+      // Cast to the shape activeConversation$ expects. The conversation
+      // object from createConversation has all the required fields.
+      this.activeConversation$.set({
+        ...(conversation as any),
+        messages: [contextMessage],
+      });
+
+      // STEP 3 — Refresh the tree to show the new conversation node.
+      // Done AFTER conversation creation so the new row is in the tree
+      // data when loadTree() runs.
+      this.treeRefresh.request();
+
+      // STEP 4 — Re-assert proposal context (defensive — should still be
+      // set from step 0 since we never called loadConversation), and
+      // transition to READY. Buttons become enabled here.
+      this.activeProposalId$.set(proposalId);
+      this.activeProposalTitle$.set(title);
+      this.awaitingFirstUserMessageConvId$.set(conversation.id);
+      this.activeTab$.set('chat');
+      this.isLoading$.set(false);
+      this.isStreaming$.set(false);
+      this.proposalDiscussionState$.set('READY');
+
+      // STEP 5 — Replace URL via history API directly. We deliberately avoid
+      // router.navigate() here because it fires NavigationStart/NavigationEnd
+      // events that flip the global routeLoading flag and cause a brief
+      // top-bar loading flash outside the chat — exactly the symptom the
+      // user reported. history.replaceState updates the address bar
+      // silently with zero side effects.
+      try {
+        window.history.replaceState({}, '', `/chat/${conversation.id}`);
+      } catch {
+        /* SSR / non-browser fallback — ignore */
+      }
+    } catch (err) {
+      this.proposalDiscussionState$.set('IDLE');
+      this.activeProposalId$.set(null);
+      this.activeProposalTitle$.set(null);
+      this.isLoading$.set(false);
+      this.showError('Error opening proposal discussion');
+    }
+  }
+
+  async openConceptChat(conceptId: string): Promise<void> {
+    try {
+      // Check if there's an existing conversation for this concept
+      const existingConvs = await this.conversationService.getConversations();
+      const existing = existingConvs.find((c: any) => c.conceptId === conceptId);
+
+      if (existing) {
+        // Navigate to existing conversation
+        await this.loadConversation(existing.id);
+        this.router.navigate(['/chat', existing.id], { replaceUrl: true });
+        return;
+      }
+
+      // No existing conversation — create new one linked to concept
+      const res = await fetch(`${environment.apiUrl}/api/v1/knowledge/concepts/${conceptId}`);
+      const conceptName = res.ok ? (await res.json())?.data?.name ?? conceptId : conceptId;
+
+      const conversation = await this.conversationService.createConversation(
+        `${conceptName} — Discussion`,
+        undefined,  // personaType
+        conceptId,  // link to concept
       );
       await this.loadConversation(conversation.id);
       this.router.navigate(['/chat', conversation.id], { replaceUrl: true });
 
-      // Send proposal context as first message
-      const parts = [
-        `Razgovarajmo o ovom AI predlogu pre nego što ga pokrenemo:`,
-        ``,
-        `**${title}**`,
-      ];
-      if (reasoning) parts.push(``, `**Obrazloženje:** ${reasoning}`);
-      if (action) parts.push(``, `**Predložena akcija:** ${action}`);
-      parts.push(``, `Šta misliš o ovom predlogu? Da li su pretpostavke tačne? Treba li nešto promeniti?`);
-
-      setTimeout(() => this.sendMessage(parts.join('\n')), 500);
+      setTimeout(() => this.sendMessage(
+        `Let's discuss the concept "${conceptName}". What's most important I should know and what are the key things for my business?`
+      ), 500);
     } catch (err) {
-      this.showError('Greška pri otvaranju razgovora o predlogu');
+      this.showError('Error opening concept discussion');
+    }
+  }
+
+  /**
+   * Continue discussion — user clicked "Nastavi razgovor" in the confirm bar.
+   * Scrolls the chat input into view and focuses it so the user can keep
+   * typing without hunting for the input field. No state change — the
+   * confirm bar stays visible because the proposal context is still active.
+   */
+  focusChatInput(): void {
+    // Defer to next frame so any in-flight scroll (e.g. incoming message)
+    // completes before we focus.
+    queueMicrotask(() => {
+      const el = document.querySelector<HTMLTextAreaElement>('app-chat-input textarea, app-chat-input input');
+      if (el) {
+        el.scrollIntoView({ block: 'end', behavior: 'smooth' });
+        el.focus();
+      }
+    });
+  }
+
+  /**
+   * Confirm proposal plan after discussion.
+   *
+   * Phase 2 of the two-phase proposal flow:
+   * 1. Asks the director to commit to a final plan PLUS a JSON deliverables
+   *    manifest (using the structured format defined in agents/main/SOUL.md
+   *    section "FAZA 2.5").
+   * 2. Parses the JSON manifest from the AI response.
+   * 3. Sends both the plan text and the parsed manifest to the approve
+   *    endpoint, which locks them onto the new task Note.
+   *
+   * If the manifest cannot be parsed (no JSON block), we still approve with
+   * just the text plan — the task will run with empty manifest (legacy
+   * behavior, no enforcement). The user is informed via a warning toast.
+   */
+  async confirmProposalPlan(): Promise<void> {
+    const proposalId = this.activeProposalId$();
+    if (!proposalId) return;
+    if (this.proposalDiscussionState$() !== 'READY') return;
+
+    this.proposalDiscussionState$.set('CONFIRMING');
+    this.confirmingPlan$.set(true);
+
+    try {
+      // Ask AI for the final plan AND a JSON deliverables manifest in one shot.
+      // The SOUL prompt instructs the director to respond with a markdown plan
+      // followed by a ```json fenced block containing the manifest array.
+      await this.sendMessage(
+        [
+          'The user clicked "Confirm plan and run". Please respond using the format from SOUL.md section "PHASE 2.5":',
+          '',
+          '1. Final plan as a numbered list of steps (markdown).',
+          '2. A JSON code block containing the deliverables manifest (the exact `expectedDeliverables` field from SOUL.md).',
+          '',
+          'The JSON MUST be inside ```json fences. Without it the task will not have strict enforcement.',
+          '',
+          'Please respond in English.',
+        ].join('\n'),
+      );
+
+      // Wait for AI to respond (streaming), then parse manifest + approve
+      const checkComplete = setInterval(() => {
+        if (!this.isStreaming$() && !this.isLoading$()) {
+          clearInterval(checkComplete);
+
+          // Get last AI message as the updated plan
+          const conv = this.activeConversation$();
+          const lastAiMsg = conv?.messages?.filter((m) => m.role === 'ASSISTANT').pop();
+          const updatedPlan = lastAiMsg?.content || '';
+
+          // Try to extract a fenced ```json ... ``` block containing the
+          // deliverables manifest. The director SOUL is trained to emit this
+          // format. If parsing fails, we still approve with empty manifest.
+          let expectedDeliverables: Array<{ type: string; filename: string; description: string }> | undefined;
+          const jsonMatch = updatedPlan.match(/```json\s*([\s\S]*?)```/i);
+          if (jsonMatch && jsonMatch[1]) {
+            try {
+              const parsed = JSON.parse(jsonMatch[1].trim());
+              if (Array.isArray(parsed) && parsed.every((d) => d?.type && d?.filename && d?.description)) {
+                expectedDeliverables = parsed;
+              } else if (parsed?.expectedDeliverables && Array.isArray(parsed.expectedDeliverables)) {
+                // Tolerate `{ "expectedDeliverables": [...] }` shape too
+                expectedDeliverables = parsed.expectedDeliverables;
+              }
+            } catch (e) {
+              console.warn('Failed to parse deliverables manifest from AI response:', e);
+            }
+          }
+
+          if (!expectedDeliverables || expectedDeliverables.length === 0) {
+            console.warn('[chat] Director did not return a deliverables manifest — task will run without strict enforcement.');
+          }
+
+          // Approve proposal via API with the updated plan + locked manifest
+          this.http
+            .patch(`/api/v1/notes/proposals/${proposalId}/approve`, {
+              updatedAction: updatedPlan,
+              ...(expectedDeliverables ? { expectedDeliverables } : {}),
+            })
+            .subscribe({
+              next: () => {
+                // Transition: CONFIRMING → APPROVED → IDLE.
+                // Approved task is now executing in the backend; we tear
+                // down the floating bar so the user goes back to a normal
+                // chat view (the running task will appear in the task hub).
+                this.confirmingPlan$.set(false);
+                this.proposalDiscussionState$.set('APPROVED');
+                this.activeProposalId$.set(null);
+                this.activeProposalTitle$.set(null);
+                // Brief moment in APPROVED state for any UI animations,
+                // then back to IDLE so the next proposal can open cleanly.
+                setTimeout(() => this.proposalDiscussionState$.set('IDLE'), 300);
+              },
+              error: (err) => {
+                console.error('Failed to approve proposal:', err);
+                this.confirmingPlan$.set(false);
+                // Transition back to READY so the user can retry
+                this.proposalDiscussionState$.set('READY');
+                this.showError('Error confirming plan');
+              },
+            });
+        }
+      }, 1000);
+
+      // Safety: clear after 10 minutes if AI never finishes.
+      // Bumped from 2 min because with MiniMax + reasoning + 4 grounding
+      // curls + complex multi-deliverable plan generation, the director
+      // legitimately needs 3-5 min to produce the PHASE 2.5 response.
+      // 2 min was firing before the AI was done, leaving the proposal
+      // PENDING in DB and showing a misleading "expired" error.
+      setTimeout(() => {
+        clearInterval(checkComplete);
+        if (this.confirmingPlan$()) {
+          this.confirmingPlan$.set(false);
+          // Transition back to READY so the user can retry
+          if (this.proposalDiscussionState$() === 'CONFIRMING') {
+            this.proposalDiscussionState$.set('READY');
+          }
+          this.showError('Plan confirmation expired. Try again.');
+        }
+      }, 600_000);
+    } catch (err) {
+      this.confirmingPlan$.set(false);
+      // Transition back to READY so the user can retry
+      if (this.proposalDiscussionState$() === 'CONFIRMING') {
+        this.proposalDiscussionState$.set('READY');
+      }
+      this.showError('Error confirming plan');
     }
   }
 
   async createNewConversation(domain?: string): Promise<void> {
     // Auto-classification handles topic detection — no manual picker needed
     try {
-      const title = domain ? `${domain} — Nova konverzacija` : undefined;
+      const title = domain ? `${domain} — New conversation` : undefined;
       const conversation = await this.conversationService.createConversation(title);
       await this.loadConversation(conversation.id);
       this.router.navigate(['/chat', conversation.id]);
       this.conceptTree?.loadTree();
     } catch {
-      this.showError('Greška pri kreiranju konverzacije');
+      this.showError('Error creating conversation');
     }
   }
 
@@ -3465,7 +3827,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       this.router.navigate(['/chat', conversation.id]);
       this.conceptTree?.loadTree();
     } catch {
-      this.showError('Greška pri kreiranju konverzacije');
+      this.showError('Error creating conversation');
     }
   }
 
@@ -3496,7 +3858,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       this.router.navigate(['/chat', conversation.id]);
       this.conceptTree?.loadTree();
     } catch {
-      this.showError('Greška pri kreiranju konverzacije');
+      this.showError('Error creating conversation');
     } finally {
       this.loadingConversationId$.set(null);
     }
@@ -3602,7 +3964,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         },
         error: () => {
           this.isTogglingAutoPopuni$.set(false);
-          this.showError('Greška pri promeni Auto AI podešavanja');
+          this.showError('Error changing Auto AI settings');
         },
       });
   }
@@ -3636,7 +3998,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     switch (action.type) {
       case 'create_tasks':
         // Send explicit task creation request so backend generates tasks from conversation
-        this.sendMessage('Kreiraj zadatke na osnovu prethodne analize.');
+        this.sendMessage('Create tasks based on the previous analysis.');
         this.activeTab$.set('notes');
         break;
       case 'view_tasks':
@@ -3645,7 +4007,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       case 'deep_dive':
       case 'explore_concept':
         // Send a follow-up message asking for deeper analysis
-        this.sendMessage('Istraži ovu temu dublje. Daj detaljniju analizu.');
+        this.sendMessage('Explore this topic deeper. Provide a more detailed analysis.');
         break;
       case 'next_domain':
         if (action.payload?.['conceptId']) {
@@ -3656,7 +4018,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         this.activeTab$.set('notes');
         break;
       case 'web_search':
-        this.sendMessage('Pretraži web za više informacija o ovoj temi.');
+        this.sendMessage('Search the web for more information on this topic.');
         break;
       case 'run_workflow':
         this.activeTab$.set('notes');
@@ -3760,7 +4122,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           return { ...conv, personaType: updated.personaType };
         });
       } catch {
-        this.showError('Greška pri ažuriranju persone');
+        this.showError('Error updating persona');
       }
     }
     this.showPersonaSelector$.set(false);
@@ -3827,7 +4189,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         this.activeTab$.set('chat');
       }
     } catch {
-      this.showError('Greška pri učitavanju koncepta');
+      this.showError('Error loading concept');
     }
   }
 
@@ -3857,6 +4219,11 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   async onRunAgents(taskIds: string[]): Promise<void> {
     if (taskIds.length === 0) return;
 
+    // Show busy indicator immediately so user sees AI is working
+    this.isLoading$.set(true);
+    this.researchPhase$.set('thinking');
+    this.startBusySafety();
+
     // ── BRAIN RELAY MODE: send to OpenClaw directly ──
     if ((environment as any).brainRelayMode) {
       this.isGeneratingPlan$.set(true);
@@ -3872,11 +4239,11 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           // Tasks sent to brain. Status updates will come via WebSocket.
         } else {
           this.isGeneratingPlan$.set(false);
-          this.showError(data.detail || 'Greška pri slanju zadataka mozgu.');
+          this.showError(data.detail || 'Error sending tasks to brain.');
         }
       } catch {
         this.isGeneratingPlan$.set(false);
-        this.showError('Greška pri komunikaciji sa serverom.');
+        this.showError('Error communicating with server.');
       }
       return;
     }
@@ -3898,7 +4265,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       } else {
         try {
           const conceptId = task?.conceptId ?? undefined;
-          const title = task?.title ? `${task.title}` : 'Izvršavanje zadatka';
+          const title = task?.title ? `${task.title}` : 'Task execution';
           const conversation = await this.conversationService.createConversation(
             title,
             undefined,
@@ -3909,7 +4276,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           this.router.navigate(['/chat', conversationId]);
           this.conceptTree?.loadTree();
         } catch {
-          this.showError('Greška pri kreiranju konverzacije za zadatak.');
+          this.showError('Error creating conversation for task.');
           return;
         }
       }
@@ -3920,7 +4287,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     this.planGenerationTimeout = setTimeout(() => {
       if (this.isGeneratingPlan$() && !this.parallelBatchId$()) {
         this.isGeneratingPlan$.set(false);
-        this.showError('Generisanje plana je isteklo. Pokušajte ponovo.');
+        this.showError('Plan generation timed out. Try again.');
       }
     }, 60000);
     this.chatWsService.emitParallelPopuni(taskIds, conversationId, this.autoAiPopuni$());
@@ -3944,7 +4311,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       if (this.submittingResultId$() === taskId) {
         this.submittingResultId$.set(null);
         this.taskResultStreamContent$.set('');
-        this.showError('Ocenjivanje rezultata je isteklo. Pokušajte ponovo.');
+        this.showError('Result scoring timed out. Try again.');
       }
     }, 60000);
   }
@@ -3968,14 +4335,14 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         .map((n) => n.id);
 
       if (pendingTaskIds.length === 0) {
-        this.showError('Nema zadataka na čekanju u ovom domenu.');
+        this.showError('No pending tasks in this domain.');
         return;
       }
 
       // Feed into existing plan flow (shows plan overlay → user approves → workflow executes)
       this.onRunAgents(pendingTaskIds);
     } catch {
-      this.showError('Pokretanje Brain-a nije uspelo. Pokušajte ponovo.');
+      this.showError('Brain startup failed. Try again.');
     }
   }
 
@@ -3983,7 +4350,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   async onRunBrainYolo(): Promise<void> {
     // In brain relay mode, YOLO is disabled — OpenClaw brain handles autonomous execution
     if ((environment as any).brainRelayMode) {
-      this.showError('Autonomni režim je pod kontrolom poslovnog mozga. Koristite Zadaci panel.');
+      this.showError('Autonomous mode is controlled by the business brain. Use the Tasks panel.');
       return;
     }
 
@@ -3997,7 +4364,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       this.isYoloMode$.set(true);
       this.chatWsService.emitStartDomainYolo(conversation.id, folderName);
     } catch {
-      this.showError('Pokretanje YOLO režima nije uspelo.');
+      this.showError('YOLO mode startup failed.');
     }
   }
 
@@ -4123,7 +4490,11 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     const startX = event.clientX;
     const startW = this.sidebarWidth$();
 
+    let lastResizeUpdate = 0;
     const onMove = (e: MouseEvent) => {
+      const now = Date.now();
+      if (now - lastResizeUpdate < 16) return; // Throttle to ~60fps
+      lastResizeUpdate = now;
       const delta = e.clientX - startX;
       this.sidebarWidth$.set(Math.max(180, Math.min(600, startW + delta)));
     };
@@ -4152,12 +4523,18 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     }, 500);
   }
 
-  /** Track scroll position to show/hide scroll-to-bottom button */
+  /** Track scroll position to show/hide scroll-to-bottom button (throttled via RAF) */
+  private scrollRafId: number | null = null;
   onMessagesScroll(): void {
-    const el = this.messagesContainer?.nativeElement;
-    if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    this.showScrollToBottom$.set(distanceFromBottom > 100);
+    if (this.scrollRafId) return; // Throttle: max 1 check per animation frame
+    this.scrollRafId = requestAnimationFrame(() => {
+      const el = this.messagesContainer?.nativeElement;
+      if (el) {
+        const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+        this.showScrollToBottom$.set(distanceFromBottom > 100);
+      }
+      this.scrollRafId = null;
+    });
   }
 
   /** Scroll to the bottom of the messages container */
@@ -4181,14 +4558,24 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!conversationId || this.isStreaming$()) return;
     this.isStreaming$.set(true);
     this.streamingContent$.set('');
+    this.startBusySafety();
     this.chatWsService.regenerateResponse(conversationId);
   }
 
   async sendMessage(input: string | ChatMessagePayload): Promise<void> {
     const content = typeof input === 'string' ? input : input.content;
     const attachmentIds = typeof input === 'string' ? undefined : input.attachmentIds;
+    const isUserInitiated = typeof input !== 'string';
     const conversationId = this.activeConversationId$();
     if (!conversationId || !content.trim()) return;
+
+    // First user-initiated message in a conversation that was waiting for the
+    // owner to engage (proposal discussion etc) — clear the blue-dot indicator
+    // in the tree view. Programmatic bootstrap messages pass plain strings and
+    // never trigger this clear, which is what we want.
+    if (isUserInitiated && this.awaitingFirstUserMessageConvId$() === conversationId) {
+      this.awaitingFirstUserMessageConvId$.set(null);
+    }
 
     // Auto-switch to Chat tab when sending from Tasks tab
     if (this.activeTab$() !== 'chat') {
@@ -4243,15 +4630,21 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       };
     });
 
-    // Send via WebSocket (with optional attachment IDs)
+    // Send via WebSocket (with optional attachment IDs and proposal context).
+    // Passing activeProposalId$() lets the backend fetch the proposal and
+    // inject its title/reasoning/proposed-action into the brain prompt so
+    // the brain knows what AI Task is being discussed. Without this, the
+    // brain answers from unrelated long-term memory (the "Golden Flux" bug).
+    const activeProposalId = this.activeProposalId$();
     const sent = this.chatWsService.sendMessage(
       conversationId,
       content,
-      attachmentIds?.length ? attachmentIds : undefined
+      attachmentIds?.length ? attachmentIds : undefined,
+      activeProposalId || undefined,
     );
     if (!sent) {
       this.isLoading$.set(false);
-      this.showError('Konekcija sa serverom nije uspostavljena. Osvežite stranicu.');
+      this.showError('Server connection not established. Refresh the page.');
     }
   }
 
@@ -4268,16 +4661,16 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     const checkConnection = setInterval(() => {
       const state = this.chatWsService.connectionState$();
       if (state === 'disconnected' && wasConnected) {
-        this.disconnectToast$.set('Veza prekinuta. Pokušavam ponovo...');
+        this.disconnectToast$.set('Connection lost. Retrying...');
       } else if (state === 'reconnecting') {
-        this.disconnectToast$.set('Ponovno povezivanje...');
+        this.disconnectToast$.set('Reconnecting...');
       } else if (state === 'connected' && !wasConnected && this.disconnectToast$()) {
         const wasWorkflow = this.chatWsService.wasWorkflowActive$();
         if (wasWorkflow) {
-          this.disconnectToast$.set('Veza obnovljena. Workflow je možda nastavljen u pozadini.');
+          this.disconnectToast$.set('Connection restored. Workflow may have continued in the background.');
           this.chatWsService.wasWorkflowActive$.set(false);
         } else {
-          this.disconnectToast$.set('Veza obnovljena.');
+          this.disconnectToast$.set('Connection restored.');
         }
         setTimeout(() => {
           if (this.connectionState$() === 'connected') this.disconnectToast$.set(null);
@@ -4319,11 +4712,15 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
     this.wsOn(
       this.chatWsService.onMessageReceived((data) => {
-        // Update user message ID with real one from server
+        // Server has accepted the user message and is forwarding to the LLM.
+        // We do NOT set isStreaming$ here — that flag must only become true
+        // when the bot's FIRST CHUNK of text actually arrives (in
+        // onMessageChunk). Setting it here would hide the typing indicator
+        // immediately and the user would see no thinking state during the
+        // ~10-30 second OpenClaw cold start.
         this.activeConversation$.update((conv) => {
           if (!conv) return conv;
           const messages = conv.messages.map((msg, idx, arr) => {
-            // Find last user message with temp ID
             const isLastTempUser =
               msg.role === MessageRole.USER &&
               msg.id.startsWith('temp_') &&
@@ -4337,12 +4734,18 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           });
           return { ...conv, messages };
         });
-        this.isStreaming$.set(true);
       })
     );
 
     this.wsOn(
       this.chatWsService.onMessageChunk((data) => {
+        // First chunk = bot has actually started writing. Transition the
+        // visible UI from typing indicator → streaming message. This is the
+        // single moment where `isStreaming$` becomes true. Idempotent —
+        // calling .set(true) on every chunk is fine.
+        if (!this.isStreaming$()) {
+          this.isStreaming$.set(true);
+        }
         this.streamBuffer += data.content;
         if (!this.streamRafId) {
           this.streamRafId = requestAnimationFrame(() => {
@@ -4356,7 +4759,13 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
     this.wsOn(
       this.chatWsService.onResearchPhase((data) => {
-        this.researchPhase$.set(data.phase === 'researching' ? 'researching' : 'thinking');
+        // Don't clobber client-side explicit phases like 'preparing-discussion'
+        // (set by openProposalChat). Only overwrite if the current phase is
+        // one the server is authoritative for.
+        const current = this.researchPhase$();
+        if (current === 'thinking' || current === 'researching') {
+          this.researchPhase$.set(data.phase === 'researching' ? 'researching' : 'thinking');
+        }
       })
     );
 
@@ -4420,7 +4829,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         this.isStreaming$.set(false);
         this.researchPhase$.set('thinking');
         const errorType = error.type ? `[${error.type}] ` : '';
-        this.showError(errorType + (error.message || 'Poruka nije poslata. Pokušajte ponovo.'));
+        this.showError(errorType + (error.message || 'Message not sent. Try again.'));
       })
     );
 
@@ -4446,7 +4855,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
         // Onboarding flow: update status and prepare to navigate to Tasks tab
         if (this.isOnboardingFlow) {
-          this.onboardingStatus$.set('Zadaci kreirani! Pokrećemo izvršavanje...');
+          this.onboardingStatus$.set('Tasks created! Starting execution...');
         }
 
         // Refresh concept tree (new conversations may have been created)
@@ -4454,8 +4863,8 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
         // Show visible feedback in chat with navigation instructions
         const count = data.taskCount ?? data.taskIds.length;
-        let content = `**Kreirano ${count} ${count === 1 ? 'zadatak' : 'zadataka'}!**`;
-        content += ' Kliknite na dugme ispod da biste prešli na zadatak.';
+        let content = `**Created ${count} ${count === 1 ? 'task' : 'tasks'}!**`;
+        content += ' Click the button below to navigate to the task.';
 
         const taskMsg: Message = {
           id: `tasks_created_${Date.now()}`,
@@ -4606,20 +5015,20 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
         if (payload.status === 'in_progress') {
           // Update current step info
-          this.currentStepTitle$.set(payload.stepTitle ?? 'Izvršavanje...');
+          this.currentStepTitle$.set(payload.stepTitle ?? 'Executing...');
           if (payload.stepIndex != null) {
             this.currentStepIndex$.set(payload.stepIndex);
           }
 
           // Add step-start status message to chat
-          const stepLabel = payload.stepTitle ?? 'Korak';
+          const stepLabel = payload.stepTitle ?? 'Step';
           const stepNum = (payload.stepIndex ?? 0) + 1;
           const total = payload.totalSteps ?? 0;
           const statusMessage: Message = {
             id: `wf_status_${payload.stepId}`,
             conversationId: this.activeConversationId$() ?? '',
             role: MessageRole.ASSISTANT,
-            content: `**Izvršavam korak ${stepNum}/${total}:** ${stepLabel}`,
+            content: `**Executing step ${stepNum}/${total}:** ${stepLabel}`,
             confidenceScore: null,
             confidenceFactors: null,
             createdAt: new Date().toISOString(),
@@ -4641,7 +5050,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           const completed = this.completedStepsCount$();
           const total = this.totalStepsCount$();
           if (completed < total) {
-            this.currentStepTitle$.set('Pripremam sledeći korak...');
+            this.currentStepTitle$.set('Preparing next step...');
           }
         }
 
@@ -4653,7 +5062,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           const completed = this.completedStepsCount$();
           const total = this.totalStepsCount$();
           if (completed < total) {
-            this.currentStepTitle$.set('Pripremam sledeći korak...');
+            this.currentStepTitle$.set('Preparing next step...');
           }
         }
 
@@ -4672,20 +5081,20 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         // Build completion summary with links to concept conversations
         const statusLabel =
           payload.status === 'completed'
-            ? 'Završeno'
+            ? 'Completed'
             : payload.status === 'cancelled'
-              ? 'Otkazano'
-              : 'Greška';
+              ? 'Cancelled'
+              : 'Error';
         const conceptConvs = this.createdConceptConversations$();
-        let summaryContent = `**${statusLabel}!** Izvršeno ${payload.completedSteps}/${payload.totalSteps} koraka.`;
+        let summaryContent = `**${statusLabel}!** Executed ${payload.completedSteps}/${payload.totalSteps} steps.`;
 
         if (conceptConvs.length > 0) {
-          summaryContent += '\n\n**Rezultati po konceptima:**';
+          summaryContent += '\n\n**Results by concepts:**';
           conceptConvs.forEach((c, i) => {
             summaryContent += `\n${i + 1}. [[${c.conceptName}]]`;
           });
           summaryContent +=
-            '\n\nKliknite na koncept ili odaberite konverzaciju u drvetu sa leve strane da pregledate rezultate.';
+            '\n\nClick on a concept or select a conversation in the tree on the left to review results.';
         }
 
         const summaryMessage: Message = {
@@ -4767,7 +5176,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
           this.yoloProgress$.set(null);
           this.isOnboardingFlow = false;
           this.onboardingStatus$.set(null);
-          this.showError(payload.message ?? 'Izvrsavanje neuspesno');
+          this.showError(payload.message ?? 'Execution failed');
         }
       })
     );
@@ -4850,7 +5259,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         this.streamingContent$.set('');
         this.taskExecutionStreamContent$.set('');
         this.executingTaskId$.set(null);
-        this.showError(data.message ?? 'Izvršavanje zadatka neuspešno');
+        this.showError(data.message ?? 'Task execution failed');
       })
     );
 
@@ -4893,7 +5302,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         }
         this.submittingResultId$.set(null);
         this.taskResultStreamContent$.set('');
-        this.showError(data.message ?? 'Slanje rezultata neuspešno');
+        this.showError(data.message ?? 'Result submission failed');
       })
     );
 
@@ -4912,7 +5321,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         // Review fix: Show error toast when auto-popuni partially fails
         if (data?.completedTasks != null && data.completedTasks < data.totalTasks) {
           this.showError(
-            `Auto AI: ${data.completedTasks}/${data.totalTasks} zadataka uspešno popunjeno`
+            `Auto AI: ${data.completedTasks}/${data.totalTasks} tasks successfully completed`
           );
         }
       })
@@ -4934,7 +5343,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
         // Onboarding flow: auto-navigate to Tasks tab so user sees execution progress
         if (this.isOnboardingFlow) {
-          this.onboardingStatus$.set('Izvršavanje zadataka u toku...');
+          this.onboardingStatus$.set('Task execution in progress...');
           this.activeTab$.set('notes');
           // Clear onboarding status after a delay (user can now see progress in Tasks tab)
           setTimeout(() => {
@@ -5092,7 +5501,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
               : exec.type === 'workflow'
                 ? 'Workflow'
                 : 'Auto AI';
-          this.showError(`Brain je radio dok ste bili odsutni: ${typeLabel} završen`);
+          this.showError(`Brain worked while you were away: ${typeLabel} completed`);
           needsRefresh = true;
         }
         // Refresh tree and notes once (not per-completion)
@@ -5257,10 +5666,10 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       const hasPending = this.domainHasPending(domain);
       if (hasPending) {
         this.nextStepSuggestion$.set({
-          message: `Preporučujem: ${domain.label} — ima zadatke na čekanju.`,
-          actionLabel: `Otvori ${domain.label} →`,
+          message: `Recommended: ${domain.label} — has pending tasks.`,
+          actionLabel: `Open ${domain.label} →`,
           actionCurriculumId: domain.curriculumId,
-          secondaryLabel: 'Pokaži sve domene',
+          secondaryLabel: 'Show all domains',
         });
         // Auto-dismiss after 60s
         if (this.nextStepDismissTimer) clearTimeout(this.nextStepDismissTimer);
@@ -5271,8 +5680,8 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
     // No pending domains — suggest reviewing scores
     this.nextStepSuggestion$.set({
-      message: 'Svi zadaci su završeni. Pregledajte rezultate ili započnite novi koncept.',
-      actionLabel: 'Pogledaj zadatke',
+      message: 'All tasks completed. Review results or start a new concept.',
+      actionLabel: 'View tasks',
     });
     if (this.nextStepDismissTimer) clearTimeout(this.nextStepDismissTimer);
     this.nextStepDismissTimer = setTimeout(() => this.nextStepSuggestion$.set(null), 60000);

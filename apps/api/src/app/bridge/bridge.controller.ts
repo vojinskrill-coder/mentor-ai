@@ -56,7 +56,8 @@ export class BridgeController {
     private readonly configService: ConfigService,
   ) {
     this.authToken = this.configService.get<string>('OPENCLAW_AUTH_TOKEN', '');
-    this.defaultTenantId = this.configService.get<string>('OPENCLAW_DEFAULT_TENANT_ID', '');
+    // OPENCLAW_DEFAULT_TENANT_ID intentionally empty — body tenantId is always required
+    this.defaultTenantId = '';
   }
 
   // ── Auth Guard ──
@@ -74,7 +75,8 @@ export class BridgeController {
    * This prevents OpenClaw from ever sending wrong/stale tenantId.
    */
   private resolveTenantId(requestedTenantId?: string): string {
-    return this.defaultTenantId || requestedTenantId || '';
+    // Body/query tenantId takes priority; env default is only a fallback
+    return requestedTenantId || this.defaultTenantId || '';
   }
 
   // ════════════════════════════════════════════
@@ -257,6 +259,24 @@ export class BridgeController {
     this.validateAuth(auth);
     dto.tenantId = this.resolveTenantId(dto.tenantId);
     return this.bridgeService.createMemory(dto);
+  }
+
+  @Get('memories')
+  async listMemories(
+    @Headers('authorization') auth: string,
+    @Query('tenantId') tenantId: string,
+    @Query('limit') limit?: string,
+    @Query('subject') subject?: string,
+    @Query('q') q?: string,
+  ) {
+    this.validateAuth(auth);
+    const resolvedTenantId = this.resolveTenantId(tenantId);
+    return this.bridgeService.listMemories({
+      tenantId: resolvedTenantId,
+      limit: limit ? Number(limit) : undefined,
+      subject,
+      q,
+    });
   }
 
   @Post('brain-state')

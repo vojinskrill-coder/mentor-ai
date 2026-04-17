@@ -20,9 +20,9 @@ export interface CrossPersonaResult {
 }
 
 const RELATIONSHIP_LABELS: Record<string, string> = {
-  PREREQUISITE: 'PREDUSLOV',
-  RELATED: 'POVEZAN',
-  ADVANCED: 'NAPREDNO',
+  PREREQUISITE: 'PREREQUISITE',
+  RELATED: 'RELATED',
+  ADVANCED: 'ADVANCED',
 };
 
 const RELATIONSHIP_PRIORITY: Record<string, number> = {
@@ -232,15 +232,15 @@ export class CrossPersonaIntelligenceService {
 
     const lines = outputs.map((o) => {
       const relLabel = RELATIONSHIP_LABELS[o.relationshipType] ?? o.relationshipType;
-      const scoreStr = o.aiScore != null ? `\n(AI ocena: ${o.aiScore}/100)` : '';
+      const scoreStr = o.aiScore != null ? `\n(AI score: ${o.aiScore}/100)` : '';
       return `[${o.personaLabel} — ${o.conceptName} (${relLabel})]:${scoreStr}\n${o.outputSummary}`;
     });
 
-    return `\n--- CROSS-PERSONA UVIDI ---
-Sledeći rezultati dolaze od drugih persona koje su analizirale POVEZANE koncepte.
-Koristi ove uvide da obogatiš svoju analizu međufunkcionalnim perspektivama.
+    return `\n--- CROSS-PERSONA INSIGHTS ---
+The following results come from other personas that analyzed RELATED concepts.
+Use these insights to enrich your analysis with cross-functional perspectives.
 
 ${lines.join('\n\n')}
---- KRAJ CROSS-PERSONA UVIDA ---\n`;
+--- END OF CROSS-PERSONA INSIGHTS ---\n`;
   }
 }

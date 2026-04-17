@@ -99,7 +99,7 @@ export class BrainSeedingService {
     const noteData = conceptsToSeed.map((concept) => ({
       id: `note_${createId()}`,
       title: concept.name,
-      content: `Istraži koncept: ${concept.name}`,
+      content: `Explore concept: ${concept.name}`,
       source: NoteSource.ONBOARDING,
       noteType: NoteType.TASK,
       status: NoteStatus.PENDING,

@@ -1,8 +1,10 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import * as yaml from 'js-yaml';
+import { Injectable, Logger } from '@nestjs/common';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const yaml = require('js-yaml');
 import * as fs from 'fs';
 import * as path from 'path';
 
+// ── Custom error ────────────────────────────────────────────────────────────
 export class ConfigurationError extends Error {
   constructor(message: string) {
     super(message);
@@ -10,196 +12,192 @@ export class ConfigurationError extends Error {
   }
 }
 
-interface RelayConfig {
+// ── Config interfaces ───────────────────────────────────────────────────────
+export interface RelayConfig {
   host: string;
   port: number;
   authToken: string;
-  timeout: number;
+  timeoutSeconds: number;
 }
 
-interface VaultConfig {
-  basePath: string;
-  tenantPath: string;
+export interface VaultConfig {
+  storageBackend: string;
   sshHost: string;
-  sshPort: number;
   sshUser: string;
   sshKeyPath: string;
-  mode: string;
+  basePath: string;
 }
 
-interface QdrantConfig {
-  url: string;
+export interface QdrantConfig {
+  host: string;
   apiKey: string;
-  collectionName: string;
-  embeddingDimension: number;
+  collectionPrefix: string;
+  vectorDimension: number;
 }
 
-interface EnrichmentConfig {
-  maxConcurrentJobs: number;
-  maxRetries: number;
-  retryDelayMs: number;
-  zombieTimeoutMs: number;
-  batchSize: number;
+export interface EnrichmentGuardrails {
   minWords: number;
   minChars: number;
-  requireDiacritics: boolean;
-  requireFrontmatter: boolean;
+  language: string;
   requireSources: boolean;
+  requireFrontmatter: boolean;
 }
 
-interface TimeoutsConfig {
-  relayCallMs: number;
-  vaultWriteMs: number;
-  vaultReadMs: number;
-  enrichmentStepMs: number;
-  validationMs: number;
-  correctionMs: number;
+export interface EnrichmentConfig {
+  concurrency: number;
+  sessionStrategy: string;
+  compactionInterval: number;
+  maxRetries: number;
+  guardrails: EnrichmentGuardrails;
 }
 
-interface GuardrailsConfig {
-  maxTokensPerCall: number;
-  maxRetriesPerStep: number;
-  requireValidation: boolean;
-  requireSelfCorrection: boolean;
+export interface TimeoutConfig {
+  enrichmentTimeout: number;
+  sshTimeout: number;
+  relayTimeout: number;
 }
 
-interface PlatformConfig {
-  relay: RelayConfig;
-  vault: VaultConfig & { [key: string]: unknown };
-  qdrant: QdrantConfig;
-  enrichment: EnrichmentConfig;
-  timeouts: TimeoutsConfig;
-  guardrails: GuardrailsConfig;
-  [key: string]: unknown;
-}
-
+// ── Service ─────────────────────────────────────────────────────────────────
 @Injectable()
-export class PlatformConfigService implements OnModuleInit {
+export class PlatformConfigService {
   private readonly logger = new Logger(PlatformConfigService.name);
-  private config!: PlatformConfig;
-  private configPath: string;
+  private config: Record<string, unknown>;
 
   constructor() {
-    this.configPath = path.resolve(
-      process.cwd(),
-      'openclaw-config',
-      'platform-config.yaml',
-    );
+    this.config = this.loadConfig();
   }
 
-  onModuleInit(): void {
-    this.loadConfig();
-  }
-
-  /** Load config from yaml, exposed for testing */
-  loadConfig(configPath?: string): void {
-    const filePath = configPath || this.configPath;
-    if (!fs.existsSync(filePath)) {
-      throw new ConfigurationError(
-        `Platform config not found at ${filePath}`,
-      );
-    }
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    const parsed = yaml.load(raw) as PlatformConfig;
-    this.config = this.resolveEnvVars(parsed);
-    this.logger.log('Platform config loaded successfully');
-  }
-
-  private resolveEnvVars(obj: any): any {
-    if (typeof obj === 'string') {
-      return obj.replace(/\$\{([^}]+)\}/g, (_match, expr) => {
-        const [envVar, defaultVal] = expr.split(':');
-        const envValue = process.env[envVar.trim()];
-        if (envValue !== undefined) return envValue;
-        if (defaultVal !== undefined) return defaultVal;
-        throw new ConfigurationError(
-          `Missing required environment variable: ${envVar.trim()}`,
-        );
-      });
-    }
-    if (Array.isArray(obj)) {
-      return obj.map((item) => this.resolveEnvVars(item));
-    }
-    if (obj && typeof obj === 'object') {
-      const result: any = {};
-      for (const [key, value] of Object.entries(obj)) {
-        result[key] = this.resolveEnvVars(value);
-      }
-      return result;
-    }
-    return obj;
-  }
+  // ── Public accessors ────────────────────────────────────────────────────
 
   getRelayConfig(): RelayConfig {
-    this.ensureLoaded();
+    const relay = this.getSection('relay');
     return {
-      host: this.config.relay.host,
-      port: Number(this.config.relay.port),
-      authToken: this.config.relay.authToken,
-      timeout: Number(this.config.relay.timeout),
+      host: this.requireString(relay, 'host', 'relay.host'),
+      port: this.toNumber(relay['port'], 'relay.port'),
+      authToken: this.requireString(relay, 'authToken', 'relay.authToken'),
+      timeoutSeconds: this.toNumber(relay['timeoutSeconds'], 'relay.timeoutSeconds'),
     };
   }
 
-  getVaultConfig(tenantId?: string): VaultConfig {
-    this.ensureLoaded();
-    const vault = { ...this.config.vault } as VaultConfig;
-    vault.sshPort = Number(vault.sshPort);
-    if (tenantId) {
-      vault.tenantPath = vault.tenantPath.replace('{{tenantId}}', tenantId);
-    }
-    return vault;
+  getVaultConfig(tenantId: string): VaultConfig {
+    const vault = this.getSection('vault');
+    const basePath = this.requireString(vault, 'basePath', 'vault.basePath');
+    return {
+      storageBackend: this.requireString(vault, 'storageBackend', 'vault.storageBackend'),
+      sshHost: this.requireString(vault, 'sshHost', 'vault.sshHost'),
+      sshUser: this.requireString(vault, 'sshUser', 'vault.sshUser'),
+      sshKeyPath: this.requireString(vault, 'sshKeyPath', 'vault.sshKeyPath'),
+      basePath: basePath.replace('{tenantId}', tenantId),
+    };
   }
 
   getQdrantConfig(): QdrantConfig {
-    this.ensureLoaded();
+    const qdrant = this.getSection('qdrant');
     return {
-      ...this.config.qdrant,
-      embeddingDimension: Number(this.config.qdrant.embeddingDimension),
+      host: this.requireString(qdrant, 'host', 'qdrant.host'),
+      apiKey: this.requireString(qdrant, 'apiKey', 'qdrant.apiKey'),
+      collectionPrefix: this.requireString(qdrant, 'collectionPrefix', 'qdrant.collectionPrefix'),
+      vectorDimension: this.toNumber(qdrant['vectorDimension'], 'qdrant.vectorDimension'),
     };
   }
 
   getEnrichmentConfig(): EnrichmentConfig {
-    this.ensureLoaded();
-    const e = this.config.enrichment;
-    return {
-      maxConcurrentJobs: Number(e.maxConcurrentJobs),
-      maxRetries: Number(e.maxRetries),
-      retryDelayMs: Number(e.retryDelayMs),
-      zombieTimeoutMs: Number(e.zombieTimeoutMs),
-      batchSize: Number(e.batchSize),
-      minWords: Number(e.minWords),
-      minChars: Number(e.minChars),
-      requireDiacritics: e.requireDiacritics === true || String(e.requireDiacritics) === 'true',
-      requireFrontmatter: e.requireFrontmatter === true || String(e.requireFrontmatter) === 'true',
-      requireSources: e.requireSources === true || String(e.requireSources) === 'true',
-    };
-  }
-
-  getTimeouts(): TimeoutsConfig {
-    this.ensureLoaded();
-    const t = this.config.timeouts;
-    return {
-      relayCallMs: Number(t.relayCallMs),
-      vaultWriteMs: Number(t.vaultWriteMs),
-      vaultReadMs: Number(t.vaultReadMs),
-      enrichmentStepMs: Number(t.enrichmentStepMs),
-      validationMs: Number(t.validationMs),
-      correctionMs: Number(t.correctionMs),
-    };
-  }
-
-  getGuardrailsConfig(): GuardrailsConfig {
-    this.ensureLoaded();
-    return {
-      ...this.config.guardrails,
-      maxTokensPerCall: Number(this.config.guardrails.maxTokensPerCall),
-      maxRetriesPerStep: Number(this.config.guardrails.maxRetriesPerStep),
-    };
-  }
-
-  private ensureLoaded(): void {
-    if (!this.config) {
-      throw new ConfigurationError('Platform config not loaded. Call loadConfig() first.');
+    const enrichment = this.getSection('enrichment');
+    const guardrails = enrichment['guardrails'] as Record<string, unknown> | undefined;
+    if (!guardrails || typeof guardrails !== 'object') {
+      throw new ConfigurationError('Missing required config section: enrichment.guardrails');
     }
+    return {
+      concurrency: this.toNumber(enrichment['concurrency'], 'enrichment.concurrency'),
+      sessionStrategy: this.requireString(enrichment, 'sessionStrategy', 'enrichment.sessionStrategy'),
+      compactionInterval: this.toNumber(enrichment['compactionInterval'], 'enrichment.compactionInterval'),
+      maxRetries: this.toNumber(enrichment['maxRetries'], 'enrichment.maxRetries'),
+      guardrails: {
+        minWords: this.toNumber(guardrails['minWords'], 'enrichment.guardrails.minWords'),
+        minChars: this.toNumber(guardrails['minChars'], 'enrichment.guardrails.minChars'),
+        language: this.requireString(guardrails, 'language', 'enrichment.guardrails.language'),
+        requireSources: this.toBool(guardrails['requireSources'], 'enrichment.guardrails.requireSources'),
+        requireFrontmatter: this.toBool(guardrails['requireFrontmatter'], 'enrichment.guardrails.requireFrontmatter'),
+      },
+    };
+  }
+
+  getTimeouts(): TimeoutConfig {
+    const timeouts = this.getSection('timeouts');
+    return {
+      enrichmentTimeout: this.toNumber(timeouts['enrichmentTimeout'], 'timeouts.enrichmentTimeout'),
+      sshTimeout: this.toNumber(timeouts['sshTimeout'], 'timeouts.sshTimeout'),
+      relayTimeout: this.toNumber(timeouts['relayTimeout'], 'timeouts.relayTimeout'),
+    };
+  }
+
+  // ── Private helpers ─────────────────────────────────────────────────────
+
+  private loadConfig(): Record<string, unknown> {
+    const yamlPath = path.join(process.cwd(), 'openclaw-config', 'platform-config.yaml');
+
+    let rawYaml: string;
+    try {
+      rawYaml = fs.readFileSync(yamlPath, 'utf8');
+    } catch (err) {
+      this.logger.warn(
+        `platform-config.yaml not found at ${yamlPath}. Using empty config — all values must come from env vars.`,
+      );
+      return {};
+    }
+
+    // Resolve ${ENV_VAR} and ${ENV_VAR:default} patterns
+    const resolved = rawYaml.replace(/\$\{([^}]+)\}/g, (_match, expr: string) => {
+      const [envKey, ...defaultParts] = expr.split(':');
+      const defaultValue = defaultParts.join(':'); // rejoin in case default contains ':'
+      const envValue = envKey ? process.env[envKey] : undefined;
+      if (envValue !== undefined) return envValue;
+      if (defaultValue !== '') return defaultValue;
+      return ''; // will be treated as missing if required
+    });
+
+    const parsed = yaml.load(resolved) as Record<string, unknown>;
+    this.logger.log('Platform config loaded successfully');
+    return parsed ?? {};
+  }
+
+  private getSection(key: string): Record<string, unknown> {
+    const section = this.config[key];
+    if (!section || typeof section !== 'object') {
+      throw new ConfigurationError(`Missing required config section: ${key}`);
+    }
+    return section as Record<string, unknown>;
+  }
+
+  private requireString(
+    obj: Record<string, unknown>,
+    key: string,
+    path: string,
+  ): string {
+    const val = obj[key];
+    if (val === undefined || val === null || val === '') {
+      throw new ConfigurationError(`Missing required config key: ${path}`);
+    }
+    return String(val);
+  }
+
+  private toNumber(val: unknown, path: string): number {
+    if (val === undefined || val === null || val === '') {
+      throw new ConfigurationError(`Missing required config key: ${path}`);
+    }
+    const num = Number(val);
+    if (isNaN(num)) {
+      throw new ConfigurationError(`Config key ${path} must be a number, got: ${val}`);
+    }
+    return num;
+  }
+
+  private toBool(val: unknown, path: string): boolean {
+    if (val === undefined || val === null) {
+      throw new ConfigurationError(`Missing required config key: ${path}`);
+    }
+    if (typeof val === 'boolean') return val;
+    if (typeof val === 'string') return val.toLowerCase() === 'true';
+    return Boolean(val);
   }
 }

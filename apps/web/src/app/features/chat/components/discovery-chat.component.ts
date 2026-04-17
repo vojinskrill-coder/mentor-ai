@@ -37,10 +37,10 @@ interface DiscoveryMessage {
         display: block;
       }
       .discovery-container {
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid #21262D;
         display: flex;
         flex-direction: column;
-        background: #0d0d0d;
+        background: #0D1117;
       }
       .discovery-header {
         display: flex;
@@ -51,7 +51,7 @@ interface DiscoveryMessage {
         user-select: none;
       }
       .discovery-header:hover {
-        background: #1a1a1a;
+        background: #161B22;
       }
       .header-left {
         display: flex;
@@ -61,7 +61,7 @@ interface DiscoveryMessage {
       .header-icon {
         width: 16px;
         height: 16px;
-        color: #3b82f6;
+        color: #58A6FF;
         flex-shrink: 0;
       }
       .header-title {
@@ -105,7 +105,7 @@ interface DiscoveryMessage {
       }
       .dmsg-user {
         align-self: flex-end;
-        background: #3b82f6;
+        background: #58A6FF;
         color: #ffffff;
         padding: 6px 10px;
         border-radius: 10px 10px 2px 10px;
@@ -117,9 +117,9 @@ interface DiscoveryMessage {
       }
       .dmsg-assistant {
         align-self: flex-start;
-        background: #1a1a1a;
-        border: 1px solid #242424;
-        color: #fafafa;
+        background: #161B22;
+        border: 1px solid #1C2128;
+        color: #E6EDF3;
         padding: 6px 10px;
         border-radius: 10px 10px 10px 2px;
         font-size: 12px;
@@ -152,36 +152,36 @@ interface DiscoveryMessage {
         margin: 2px 0;
       }
       :host ::ng-deep .dmsg-assistant strong {
-        color: #fafafa;
+        color: #E6EDF3;
       }
       :host ::ng-deep .dmsg-assistant h3 {
         font-size: 12px;
         font-weight: 600;
         margin: 6px 0 2px;
-        color: #fafafa;
+        color: #E6EDF3;
       }
       :host ::ng-deep .dmsg-assistant code {
-        background: #242424;
+        background: #1C2128;
         padding: 1px 4px;
         border-radius: 3px;
         font-size: 11px;
       }
       .dmsg-streaming {
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .discovery-input-area {
         display: flex;
         gap: 6px;
         padding: 8px 12px;
-        border-top: 1px solid #242424;
-        background: #0d0d0d;
+        border-top: 1px solid #1C2128;
+        background: #0D1117;
       }
       .discovery-input {
         flex: 1;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 6px;
-        color: #fafafa;
+        color: #E6EDF3;
         font-size: 12px;
         font-family: inherit;
         padding: 6px 10px;
@@ -192,13 +192,13 @@ interface DiscoveryMessage {
       }
       .discovery-input:focus {
         outline: none;
-        border-color: #3b82f6;
+        border-color: #58A6FF;
       }
       .discovery-input::placeholder {
         color: #707070;
       }
       .discovery-send-btn {
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
         border: none;
         border-radius: 6px;
@@ -215,7 +215,7 @@ interface DiscoveryMessage {
         background: #2563eb;
       }
       .discovery-send-btn:disabled {
-        background: #242424;
+        background: #1C2128;
         color: #707070;
         cursor: not-allowed;
       }
@@ -241,7 +241,7 @@ interface DiscoveryMessage {
         width: 4px;
         height: 4px;
         border-radius: 50%;
-        background: #3b82f6;
+        background: #58A6FF;
         animation: pulse-dot 1.2s ease-in-out infinite;
       }
       .streaming-dots span:nth-child(2) {

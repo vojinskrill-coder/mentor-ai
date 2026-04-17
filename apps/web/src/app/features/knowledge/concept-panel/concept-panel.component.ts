@@ -106,7 +106,7 @@ import type { ConceptCitationSummary, ConceptCategory } from '@mentor-ai/shared/
 
             @if (concept$()!.extendedDescription) {
               <div class="extended-section">
-                <h3 class="section-title">Detalji</h3>
+                <h3 class="section-title">Details</h3>
                 <div class="extended-text" [innerHTML]="renderMarkdown(concept$()!.extendedDescription!)"></div>
               </div>
             }
@@ -171,10 +171,11 @@ import type { ConceptCitationSummary, ConceptCategory } from '@mentor-ai/shared/
       top: 0;
       right: 0;
       height: 100vh;
-      width: 320px;
+      width: 40vw;
       max-width: 90vw;
-      background: #0a0a0a;
-      border-left: 1px solid #262626;
+      min-width: 320px;
+      background: #0D1117;
+      border-left: 1px solid #21262D;
       display: flex;
       flex-direction: column;
       z-index: 50;
@@ -209,14 +210,14 @@ import type { ConceptCitationSummary, ConceptCategory } from '@mentor-ai/shared/
       font-size: 0.75rem;
       font-weight: 500;
       border-radius: 9999px;
-      background: #1a1a1a;
+      background: #161B22;
       color: #a3a3a3;
       margin-bottom: 0.5rem;
     }
 
     .category-badge.finance { background: #10b98120; color: #10b981; }
     .category-badge.marketing { background: #f59e0b20; color: #f59e0b; }
-    .category-badge.technology { background: #3b82f620; color: #3b82f6; }
+    .category-badge.technology { background: #58A6FF20; color: #58A6FF; }
     .category-badge.operations { background: #8b5cf620; color: #8b5cf6; }
     .category-badge.legal { background: #6b728020; color: #6b7280; }
     .category-badge.creative { background: #ec489920; color: #ec4899; }
@@ -306,7 +307,7 @@ import type { ConceptCitationSummary, ConceptCategory } from '@mentor-ai/shared/
     .related-chip {
       padding: 0.375rem 0.75rem;
       font-size: 0.875rem;
-      background: #1a1a1a;
+      background: #161B22;
       border: 1px solid #333;
       color: #a3a3a3;
       border-radius: 9999px;
@@ -370,7 +371,7 @@ import type { ConceptCitationSummary, ConceptCategory } from '@mentor-ai/shared/
 
     /* Skeleton loaders */
     .skeleton {
-      background: linear-gradient(90deg, #1a1a1a 25%, #262626 50%, #1a1a1a 75%);
+      background: linear-gradient(90deg, #161B22 25%, #262626 50%, #161B22 75%);
       background-size: 200% 100%;
       animation: shimmer 1.5s infinite;
       border-radius: 0.25rem;

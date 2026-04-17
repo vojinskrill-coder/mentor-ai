@@ -155,10 +155,10 @@ import { BrochurePageViewerComponent, PageLayout, PageComponent } from '../broch
   `,
   styles: [`
     .figma-page { padding: 24px; max-width: 900px; }
-    .page-title { color: #FAFAFA; font-size: 24px; font-weight: 700; margin: 0 0 24px; }
+    .page-title { color: #E6EDF3; font-size: 24px; font-weight: 700; margin: 0 0 24px; }
 
     .section { margin-bottom: 32px; }
-    .section-title { color: #FAFAFA; font-size: 16px; font-weight: 600; margin: 0 0 12px; }
+    .section-title { color: #E6EDF3; font-size: 16px; font-weight: 600; margin: 0 0 12px; }
     .subsection { margin-top: 20px; }
     .subsection-title { color: #9CA3AF; font-size: 13px; font-weight: 600; text-transform: uppercase; margin: 0 0 8px; letter-spacing: 0.5px; }
     .hint { color: #6B7280; font-size: 13px; margin: 0 0 8px; }
@@ -167,48 +167,48 @@ import { BrochurePageViewerComponent, PageLayout, PageComponent } from '../broch
     .connected { background: #22c55e20; color: #22c55e; }
 
     .connect-btn {
-      padding: 10px 24px; background: #7C3AED; color: #FAFAFA; border: none;
+      padding: 10px 24px; background: #7C3AED; color: #E6EDF3; border: none;
       border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
     }
     .connect-btn:hover { background: #6D28D9; }
 
     .input-row { display: flex; gap: 8px; }
     .url-input {
-      flex: 1; padding: 10px 14px; background: #242424; border: 1px solid #2A2A2A;
-      border-radius: 8px; color: #FAFAFA; font-size: 13px; font-family: monospace;
+      flex: 1; padding: 10px 14px; background: #1C2128; border: 1px solid #21262D;
+      border-radius: 8px; color: #E6EDF3; font-size: 13px; font-family: monospace;
     }
     .url-input:focus { outline: none; border-color: #7C3AED; }
     .extract-btn {
-      padding: 10px 20px; background: #7C3AED; color: #FAFAFA; border: none;
+      padding: 10px 20px; background: #7C3AED; color: #E6EDF3; border: none;
       border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
     }
     .extract-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    .result-section { background: #1A1A1A; border: 1px solid #2A2A2A; border-radius: 12px; padding: 20px; }
+    .result-section { background: #161B22; border: 1px solid #21262D; border-radius: 12px; padding: 20px; }
 
     .stats-grid { display: flex; gap: 16px; margin-bottom: 16px; }
     .stat { display: flex; flex-direction: column; align-items: center; min-width: 70px; }
-    .stat-val { color: #FAFAFA; font-size: 24px; font-weight: 700; }
+    .stat-val { color: #E6EDF3; font-size: 24px; font-weight: 700; }
     .stat-label { color: #6B7280; font-size: 11px; }
 
     .color-grid { display: flex; flex-wrap: wrap; gap: 6px; }
     .color-swatch {
       width: 60px; height: 40px; border-radius: 6px; display: flex;
       align-items: flex-end; justify-content: center; padding: 2px;
-      border: 1px solid #2A2A2A;
+      border: 1px solid #21262D;
     }
     .color-hex { font-size: 8px; color: #FFF; text-shadow: 0 0 3px #000; }
 
-    .type-sample { color: #FAFAFA; margin-bottom: 6px; line-height: 1.3; }
+    .type-sample { color: #E6EDF3; margin-bottom: 6px; line-height: 1.3; }
 
     .pages-grid { display: flex; flex-wrap: wrap; gap: 12px; }
     .page-thumbnail { display: flex; flex-direction: column; align-items: center; gap: 4px; }
     .page-frame {
-      width: 120px; height: 170px; background: #242424; border: 1px solid #2A2A2A;
+      width: 120px; height: 170px; background: #1C2128; border: 1px solid #21262D;
       border-radius: 4px; position: relative; overflow: hidden;
     }
-    .comp-box { position: absolute; border: 1px solid #3B82F640; border-radius: 2px; }
-    .comp-text { background: #3B82F610; }
+    .comp-box { position: absolute; border: 1px solid #58A6FF40; border-radius: 2px; }
+    .comp-text { background: #58A6FF10; }
     .comp-image { background: #C9A96E10; border-color: #C9A96E40; }
     .comp-frame { background: #22c55e08; border-color: #22c55e20; }
     .comp-shape { background: #9CA3AF10; border-color: #9CA3AF30; }
@@ -216,29 +216,29 @@ import { BrochurePageViewerComponent, PageLayout, PageComponent } from '../broch
 
     .profile-card {
       display: flex; align-items: center; gap: 12px; padding: 12px; cursor: pointer;
-      background: #1A1A1A; border: 1px solid #2A2A2A; border-radius: 8px; margin-bottom: 8px;
+      background: #161B22; border: 1px solid #21262D; border-radius: 8px; margin-bottom: 8px;
       transition: border-color 0.15s;
     }
-    .profile-card:hover { border-color: #3B82F6; }
+    .profile-card:hover { border-color: #58A6FF; }
     .profile-card.active { border-color: #C9A96E; background: #1A1A2A; }
-    .profile-name { color: #FAFAFA; font-weight: 500; flex: 1; }
+    .profile-name { color: #E6EDF3; font-weight: 500; flex: 1; }
     .profile-meta { color: #C9A96E; font-size: 12px; }
     .profile-date { color: #6B7280; font-size: 11px; }
 
     .layout-preview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 16px; }
     .layout-card { display: flex; flex-direction: column; gap: 8px; }
     .layout-info { display: flex; flex-direction: column; gap: 2px; }
-    .layout-name { color: #FAFAFA; font-size: 12px; font-weight: 500; }
+    .layout-name { color: #E6EDF3; font-size: 12px; font-weight: 500; }
     .layout-desc { color: #6B7280; font-size: 11px; }
 
     .component-detail {
-      background: #1A1A1A; border: 1px solid #C9A96E40; border-radius: 8px;
+      background: #161B22; border: 1px solid #C9A96E40; border-radius: 8px;
       padding: 16px; margin-top: 16px;
     }
     .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .detail-item { display: flex; flex-direction: column; gap: 2px; }
     .dl { color: #6B7280; font-size: 10px; text-transform: uppercase; font-weight: 600; }
-    .detail-item span:last-child { color: #FAFAFA; font-size: 13px; }
+    .detail-item span:last-child { color: #E6EDF3; font-size: 13px; }
 
     .empty { color: #6B7280; font-size: 13px; padding: 20px; text-align: center; }
   `],

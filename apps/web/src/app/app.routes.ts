@@ -142,6 +142,21 @@ export const appRoutes: Route[] = [
           ),
         canActivate: [rolesGuard(['TENANT_OWNER'])],
       },
+      {
+        path: 'process-design',
+        loadComponent: () =>
+          import('./features/process-builder/process-design.component').then(
+            (m) => m.ProcessDesignComponent
+          ),
+        canActivate: [rolesGuard(['TENANT_OWNER'])],
+      },
+      {
+        path: 'settings',
+        loadComponent: () =>
+          import('./features/settings/settings.component').then(
+            (m) => m.SettingsComponent
+          ),
+      },
       // Platform admin routes
       {
         path: 'admin/llm-config',
@@ -150,6 +165,14 @@ export const appRoutes: Route[] = [
             (m) => m.LlmConfigComponent
           ),
         canActivate: [rolesGuard(['PLATFORM_OWNER'])],
+      },
+      {
+        path: 'admin/monitoring',
+        loadComponent: () =>
+          import('./platform-admin/monitoring/monitoring-dashboard.component').then(
+            (m) => m.MonitoringDashboardComponent
+          ),
+        canActivate: [rolesGuard(['PLATFORM_OWNER', 'TENANT_OWNER'])],
       },
       // Default redirect within shell
       {

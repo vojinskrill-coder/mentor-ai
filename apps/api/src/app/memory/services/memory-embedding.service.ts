@@ -12,6 +12,7 @@ export interface MemorySearchResult {
   content: string;
   subject?: string;
   type: MemoryType;
+  departmentTags?: string[];
 }
 
 /** OpenAI API endpoint for embeddings */
@@ -79,6 +80,7 @@ export class MemoryEmbeddingService {
       userId: string;
       type: MemoryType;
       subject?: string;
+      departmentTags?: string[];
     }
   ): Promise<string> {
     this.logger.debug({
@@ -120,6 +122,7 @@ export class MemoryEmbeddingService {
             type: metadata.type,
             subject: metadata.subject ?? null,
             content,
+            departmentTags: metadata.departmentTags ?? [],
             createdAt: new Date().toISOString(),
           },
         },
@@ -186,6 +189,7 @@ export class MemoryEmbeddingService {
         content: (r.payload?.['content'] as string) ?? '',
         subject: (r.payload?.['subject'] as string) ?? undefined,
         type: (r.payload?.['type'] as MemoryType) ?? ('FACTUAL_STATEMENT' as MemoryType),
+        departmentTags: (r.payload?.['departmentTags'] as string[]) ?? [],
       }));
     } catch (error) {
       this.logger.warn({

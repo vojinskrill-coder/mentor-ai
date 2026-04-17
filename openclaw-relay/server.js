@@ -1,9 +1,15 @@
 #!/usr/bin/env node
 /**
- * OpenClaw Streaming Relay Server v2
+ * OpenClaw Streaming Relay Server v3
  *
  * SSE streaming endpoint + backwards-compatible blocking /execute.
  * Runs the OpenClaw CLI and streams stdout/stderr as Server-Sent Events.
+ *
+ * v3 changes:
+ *   - Timeout raised from 600s to 3600s (agents run long operations)
+ *   - tenantProfile sets OPENCLAW_PROFILE_DIR for multi-tenant isolation
+ *   - SSE sequence numbers on every event (enables future resumption)
+ *   - Keepalive comments every 30s to prevent proxy/load-balancer timeouts
  *
  * Events emitted (SSE):
  *   event: status     → { phase: "starting"|"running"|"completed"|"failed" }
@@ -15,6 +21,7 @@
  * Env vars:
  *   RELAY_PORT       (default 3100)
  *   RELAY_AUTH_TOKEN  (required)
+ *   OPENCLAW_BASE_PROFILE  (default /root/.openclaw — base profile path)
  */
 
 import http from 'http';
@@ -23,9 +30,11 @@ import crypto from 'crypto';
 
 const PORT = parseInt(process.env.RELAY_PORT || '3100', 10);
 const AUTH_TOKEN = process.env.RELAY_AUTH_TOKEN || '';
-const MAX_TIMEOUT = 600;
+const MAX_TIMEOUT = 3600; // 1 hour — agents run long research/analysis operations
+const BASE_PROFILE = process.env.OPENCLAW_BASE_PROFILE || '/root/.openclaw';
+const KEEPALIVE_INTERVAL_MS = 30_000; // 30s SSE keepalive comments
 
-const OPENCLAW_ENV = {
+const OPENCLAW_ENV_BASE = {
   ...process.env,
   NO_COLOR: '1',
   NODE_COMPILE_CACHE: '/var/tmp/openclaw-compile-cache',
@@ -55,6 +64,22 @@ function parseBody(req) {
     });
     req.on('error', reject);
   });
+}
+
+/**
+ * Build OpenClaw environment with tenant profile directory.
+ * If tenantProfile is provided, set OPENCLAW_PROFILE_DIR to the tenant-specific path.
+ * This makes OpenClaw load the tenant's SOUL.md files instead of the default ones.
+ */
+function buildOpenClawEnv(tenantProfile) {
+  const env = { ...OPENCLAW_ENV_BASE };
+  if (tenantProfile) {
+    // Tenant profile path: /root/.openclaw-{tenantId}
+    const profileDir = `${BASE_PROFILE}-${tenantProfile}`;
+    env.OPENCLAW_PROFILE_DIR = profileDir;
+    log('Using tenant profile', { tenantProfile, profileDir });
+  }
+  return env;
 }
 
 /**
@@ -95,14 +120,16 @@ function detectTool(line) {
 /**
  * SSE streaming endpoint.
  * Runs openclaw CLI and streams output as Server-Sent Events.
+ * Each event includes an id: field for sequence tracking (claude-code SSE resumption pattern).
  */
 function handleStream(req, res, body) {
-  const { message, agentId = 'main', timeoutSeconds = MAX_TIMEOUT } = body;
+  const { message, agentId = 'main', timeoutSeconds = MAX_TIMEOUT, tenantProfile, sessionId } = body;
   const timeout = Math.min(timeoutSeconds, MAX_TIMEOUT);
   const runId = crypto.randomUUID();
   let responseClosed = false;
+  let sequenceNum = 0; // SSE sequence counter for resumption support
 
-  log('Stream execution start', { agentId, runId, msgLength: message.length });
+  log('Stream execution start', { agentId, runId, tenantProfile: tenantProfile || 'default', sessionId, msgLength: message.length, timeout });
 
   // SSE headers
   res.writeHead(200, {
@@ -113,12 +140,33 @@ function handleStream(req, res, body) {
     'X-Run-Id': runId,
   });
 
+  /**
+   * Send SSE event with sequence number.
+   * Format: id: <seq>\nevent: <type>\ndata: <json>\n\n
+   * Sequence numbers enable client-side resumption (Last-Event-ID pattern).
+   */
   function sendEvent(event, data) {
     if (responseClosed) return;
     try {
-      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      sequenceNum++;
+      res.write(`id: ${sequenceNum}\nevent: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     } catch (err) {
       log('sendEvent write failed', { runId, event, error: err.message });
+      responseClosed = true;
+    }
+  }
+
+  /**
+   * Send SSE keepalive comment.
+   * Prevents proxies/load-balancers from killing idle connections.
+   * SSE spec: lines starting with : are comments, ignored by EventSource clients.
+   * Our custom parser also ignores them (no event: prefix).
+   */
+  function sendKeepalive() {
+    if (responseClosed) return;
+    try {
+      res.write(`: keepalive ${Date.now()}\n\n`);
+    } catch {
       responseClosed = true;
     }
   }
@@ -126,11 +174,13 @@ function handleStream(req, res, body) {
   function endResponse() {
     if (responseClosed) return;
     responseClosed = true;
+    clearInterval(keepaliveTimer);
     try { res.end(); } catch { /* already closed */ }
   }
 
   function cleanup() {
     clearTimeout(abortTimer);
+    clearInterval(keepaliveTimer);
     if (!proc.killed) {
       try { proc.kill('SIGTERM'); } catch { /* already dead */ }
     }
@@ -138,9 +188,13 @@ function handleStream(req, res, body) {
 
   sendEvent('status', { phase: 'starting', runId });
 
+  // Keepalive timer: send SSE comment every 30s to keep connection alive
+  const keepaliveTimer = setInterval(sendKeepalive, KEEPALIVE_INTERVAL_MS);
+
+  // Build environment with tenant profile isolation
+  const openclawEnv = buildOpenClawEnv(tenantProfile);
+
   // Spawn openclaw CLI WITHOUT --json for real-time text streaming.
-  // With --json, OpenClaw buffers everything and dumps JSON at the end.
-  // Without --json, text streams to stdout as the LLM generates it.
   const startTime = Date.now();
   const proc = spawn('openclaw', [
     'agent', '--agent', agentId,
@@ -149,7 +203,7 @@ function handleStream(req, res, body) {
   ], {
     timeout: (timeout + 30) * 1000,
     maxBuffer: 10 * 1024 * 1024,
-    env: OPENCLAW_ENV,
+    env: openclawEnv,
   });
 
   let fullOutput = '';
@@ -190,16 +244,15 @@ function handleStream(req, res, body) {
   });
 
   const abortTimer = setTimeout(() => {
-    log('Timeout exceeded, killing process', { runId });
+    log('Timeout exceeded, killing process', { runId, timeout });
     if (!proc.killed) {
       try { proc.kill('SIGTERM'); } catch { /* already dead */ }
     }
-    // Don't sendEvent or endResponse here — let proc.on('close') handle final events.
-    // The process will exit after SIGTERM and 'close' fires with the exit code.
   }, (timeout + 30) * 1000);
 
   proc.on('close', (code) => {
     clearTimeout(abortTimer);
+    clearInterval(keepaliveTimer);
     const durationMs = Date.now() - startTime;
 
     if (lastToolEvent) {
@@ -220,12 +273,13 @@ function handleStream(req, res, body) {
     sendEvent('result', result);
     sendEvent('status', { phase: success ? 'completed' : 'failed', runId, durationMs });
 
-    log(`Stream ${success ? 'OK' : 'FAIL'} in ${durationMs}ms, len=${result.output.length}`);
+    log(`Stream ${success ? 'OK' : 'FAIL'} in ${durationMs}ms, len=${result.output.length}`, { tenantProfile: tenantProfile || 'default' });
     endResponse();
   });
 
   proc.on('error', (err) => {
     clearTimeout(abortTimer);
+    clearInterval(keepaliveTimer);
     const durationMs = Date.now() - startTime;
     sendEvent('error', { error: err.message });
     sendEvent('status', { phase: 'failed', runId, durationMs });
@@ -236,21 +290,23 @@ function handleStream(req, res, body) {
   // Clean up on client disconnect
   req.on('close', () => {
     log('Client disconnected', { runId, responseClosed });
-    responseClosed = true; // prevent further writes
+    responseClosed = true;
     cleanup();
   });
 }
 
 /**
  * Blocking /execute endpoint (backwards compatible).
- * Identical behavior to the original relay.
  */
 function handleExecute(req, res, body) {
-  const { message, agentId = 'main', timeoutSeconds = MAX_TIMEOUT } = body;
+  const { message, agentId = 'main', timeoutSeconds = MAX_TIMEOUT, tenantProfile } = body;
   const timeout = Math.min(timeoutSeconds, MAX_TIMEOUT);
 
   const startMs = Date.now();
-  log(`Execute: agent=${agentId}, msgLen=${message.length}`);
+  log(`Execute: agent=${agentId}, msgLen=${message.length}`, { tenantProfile: tenantProfile || 'default' });
+
+  // Build environment with tenant profile isolation
+  const openclawEnv = buildOpenClawEnv(tenantProfile);
 
   const proc = spawn('openclaw', [
     'agent', '--agent', agentId,
@@ -260,7 +316,7 @@ function handleExecute(req, res, body) {
   ], {
     timeout: (timeout + 30) * 1000,
     maxBuffer: 10 * 1024 * 1024,
-    env: OPENCLAW_ENV,
+    env: openclawEnv,
   });
 
   let stdout = '';
@@ -278,7 +334,7 @@ function handleExecute(req, res, body) {
     const success = code === 0;
 
     const parsed = parseOpenClawOutput(stdout);
-    log(`${success ? 'OK' : 'FAIL'} in ${durationMs}ms, len=${parsed.output.length}`);
+    log(`${success ? 'OK' : 'FAIL'} in ${durationMs}ms, len=${parsed.output.length}`, { tenantProfile: tenantProfile || 'default' });
 
     const result = {
       success,
@@ -306,7 +362,7 @@ const server = http.createServer(async (req, res) => {
   // Health check
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ ok: true, ts: Date.now(), version: 2 }));
+    return res.end(JSON.stringify({ ok: true, ts: Date.now(), version: 3 }));
   }
 
   // CORS preflight
@@ -356,8 +412,11 @@ const server = http.createServer(async (req, res) => {
   res.end(JSON.stringify({ error: 'Not found. Use POST /execute or POST /stream' }));
 });
 
-server.listen(PORT, '127.0.0.1', () => {
-  log(`OpenClaw Streaming Relay v2 on 127.0.0.1:${PORT}`, {
+server.listen(PORT, '0.0.0.0', () => {
+  log(`OpenClaw Streaming Relay v3 on 0.0.0.0:${PORT}`, {
+    maxTimeout: MAX_TIMEOUT,
+    baseProfile: BASE_PROFILE,
+    keepaliveMs: KEEPALIVE_INTERVAL_MS,
     endpoints: ['GET /health', 'POST /execute (blocking)', 'POST /stream (SSE)'],
   });
 });

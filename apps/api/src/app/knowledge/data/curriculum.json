@@ -1,9 +1,21 @@
 [
   {
-    "id": "introduction-to-business",
+    "id": "business",
     "parentId": null,
-    "label": "Introduction to Business",
+    "label": "Business",
     "sortOrder": 1
+  },
+  {
+    "id": "business-culture",
+    "parentId": "business",
+    "label": "Business Culture",
+    "sortOrder": 1
+  },
+  {
+    "id": "need-for-status",
+    "parentId": "business",
+    "label": "Need for Status",
+    "sortOrder": 2
   },
   {
     "id": "value",
@@ -12,10 +24,640 @@
     "sortOrder": 2
   },
   {
+    "id": "how-do-people-value-things",
+    "parentId": "value",
+    "label": "How Do People Value Things?",
+    "sortOrder": 1
+  },
+  {
+    "id": "maslows-hierarchy-of-needs",
+    "parentId": "value",
+    "label": "Maslow's Hierarchy of Needs",
+    "sortOrder": 2
+  },
+  {
+    "id": "how-do-people-evaluate-your-offer",
+    "parentId": "value",
+    "label": "How Do People Evaluate Your Offer?",
+    "sortOrder": 3
+  },
+  {
+    "id": "standard-offer-values",
+    "parentId": "value",
+    "label": "Standard Offer Values",
+    "sortOrder": 4
+  },
+  {
+    "id": "forms-of-value",
+    "parentId": "value",
+    "label": "Forms of Value",
+    "sortOrder": 5
+  },
+  {
+    "id": "product",
+    "parentId": "forms-of-value",
+    "label": "Product",
+    "sortOrder": 1
+  },
+  {
+    "id": "service",
+    "parentId": "forms-of-value",
+    "label": "Service",
+    "sortOrder": 2
+  },
+  {
+    "id": "shared-resource",
+    "parentId": "forms-of-value",
+    "label": "Shared Resource",
+    "sortOrder": 3
+  },
+  {
+    "id": "subscription",
+    "parentId": "forms-of-value",
+    "label": "Subscription",
+    "sortOrder": 4
+  },
+  {
+    "id": "resale",
+    "parentId": "forms-of-value",
+    "label": "Resale",
+    "sortOrder": 5
+  },
+  {
+    "id": "lease",
+    "parentId": "forms-of-value",
+    "label": "Lease",
+    "sortOrder": 6
+  },
+  {
+    "id": "audience-building",
+    "parentId": "forms-of-value",
+    "label": "Audience Building",
+    "sortOrder": 7
+  },
+  {
+    "id": "loan",
+    "parentId": "forms-of-value",
+    "label": "Loan",
+    "sortOrder": 8
+  },
+  {
+    "id": "option",
+    "parentId": "forms-of-value",
+    "label": "Option",
+    "sortOrder": 9
+  },
+  {
+    "id": "insurance",
+    "parentId": "forms-of-value",
+    "label": "Insurance",
+    "sortOrder": 10
+  },
+  {
+    "id": "capital",
+    "parentId": "forms-of-value",
+    "label": "Capital",
+    "sortOrder": 11
+  },
+  {
+    "id": "free-value",
+    "parentId": "forms-of-value",
+    "label": "Free Value",
+    "sortOrder": 12
+  },
+  {
+    "id": "sponsorship",
+    "parentId": "forms-of-value",
+    "label": "Sponsorship",
+    "sortOrder": 13
+  },
+  {
+    "id": "loyalty-program",
+    "parentId": "forms-of-value",
+    "label": "Loyalty Program",
+    "sortOrder": 14
+  },
+  {
+    "id": "value-categories",
+    "parentId": "value",
+    "label": "Value Categories",
+    "sortOrder": 6
+  },
+  {
+    "id": "company-values",
+    "parentId": "value",
+    "label": "Company Values",
+    "sortOrder": 7
+  },
+  {
+    "id": "core-and-aspirational-values",
+    "parentId": "value",
+    "label": "Core and Aspirational Values",
+    "sortOrder": 8
+  },
+  {
+    "id": "value-examples",
+    "parentId": "value",
+    "label": "Value Examples",
+    "sortOrder": 9
+  },
+  {
+    "id": "intellectual-capital",
+    "parentId": "value",
+    "label": "Intellectual Capital",
+    "sortOrder": 10
+  },
+  {
+    "id": "how-to-create-value",
+    "parentId": "value",
+    "label": "How to Create Value?",
+    "sortOrder": 11
+  },
+  {
+    "id": "value-proposition",
+    "parentId": "value",
+    "label": "Value Proposition",
+    "sortOrder": 12
+  },
+  {
+    "id": "prototype",
+    "parentId": "value",
+    "label": "Prototype",
+    "sortOrder": 13
+  },
+  {
+    "id": "minimum-viable-product-mvp",
+    "parentId": "value",
+    "label": "Minimum Viable Product (MVP)",
+    "sortOrder": 14
+  },
+  {
+    "id": "client-value-model",
+    "parentId": "value",
+    "label": "Client Value Model",
+    "sortOrder": 15
+  },
+  {
+    "id": "how-to-make-your-offer-more-valuable",
+    "parentId": "value",
+    "label": "How to Make Your Offer More Valuable?",
+    "sortOrder": 16
+  },
+  {
+    "id": "modularity",
+    "parentId": "value",
+    "label": "Modularity",
+    "sortOrder": 17
+  },
+  {
+    "id": "bundling-and-unbundling",
+    "parentId": "value",
+    "label": "Bundling and Unbundling",
+    "sortOrder": 18
+  },
+  {
+    "id": "removing-hassle",
+    "parentId": "value",
+    "label": "Removing Hassle",
+    "sortOrder": 19
+  },
+  {
     "id": "marketing",
     "parentId": null,
     "label": "Marketing",
     "sortOrder": 3
+  },
+  {
+    "id": "market-segmentation",
+    "parentId": "marketing",
+    "label": "Market Segmentation",
+    "sortOrder": 1
+  },
+  {
+    "id": "target-market-and-customer-profile",
+    "parentId": "marketing",
+    "label": "Target Market and Customer Profile",
+    "sortOrder": 2
+  },
+  {
+    "id": "positioning",
+    "parentId": "marketing",
+    "label": "Positioning",
+    "sortOrder": 3
+  },
+  {
+    "id": "competitive-advantage",
+    "parentId": "marketing",
+    "label": "Competitive Advantage",
+    "sortOrder": 4
+  },
+  {
+    "id": "differentiation-usp",
+    "parentId": "marketing",
+    "label": "Differentiation (USP)",
+    "sortOrder": 5
+  },
+  {
+    "id": "branding",
+    "parentId": "marketing",
+    "label": "Branding",
+    "sortOrder": 6
+  },
+  {
+    "id": "personal-brand",
+    "parentId": "marketing",
+    "label": "Personal Brand",
+    "sortOrder": 7
+  },
+  {
+    "id": "reputation",
+    "parentId": "marketing",
+    "label": "Reputation",
+    "sortOrder": 8
+  },
+  {
+    "id": "ways-to-test-the-market",
+    "parentId": "marketing",
+    "label": "Ways to Test the Market",
+    "sortOrder": 9
+  },
+  {
+    "id": "understanding-the-market",
+    "parentId": "marketing",
+    "label": "Understanding the Market",
+    "sortOrder": 10
+  },
+  {
+    "id": "market-entry-timing",
+    "parentId": "marketing",
+    "label": "Market Entry Timing",
+    "sortOrder": 11
+  },
+  {
+    "id": "the-ask-method",
+    "parentId": "marketing",
+    "label": "The \"Ask\" Method",
+    "sortOrder": 12
+  },
+  {
+    "id": "market-share",
+    "parentId": "marketing",
+    "label": "Market Share",
+    "sortOrder": 13
+  },
+  {
+    "id": "pestle-analysis",
+    "parentId": "marketing",
+    "label": "PESTLE Analysis",
+    "sortOrder": 14
+  },
+  {
+    "id": "competitive-analysis",
+    "parentId": "marketing",
+    "label": "Competitive Analysis",
+    "sortOrder": 15
+  },
+  {
+    "id": "benefits-of-competitive-analysis",
+    "parentId": "competitive-analysis",
+    "label": "Benefits of Competitive Analysis",
+    "sortOrder": 1
+  },
+  {
+    "id": "who-is-your-competition",
+    "parentId": "competitive-analysis",
+    "label": "Who Is Your Competition?",
+    "sortOrder": 2
+  },
+  {
+    "id": "how-can-you-learn-from-your-competition",
+    "parentId": "competitive-analysis",
+    "label": "How Can You Learn from Your Competition?",
+    "sortOrder": 3
+  },
+  {
+    "id": "how-does-your-competition-advertise",
+    "parentId": "competitive-analysis",
+    "label": "How Does Your Competition Advertise?",
+    "sortOrder": 4
+  },
+  {
+    "id": "how-much-does-your-competition-charge",
+    "parentId": "competitive-analysis",
+    "label": "How Much Does Your Competition Charge?",
+    "sortOrder": 5
+  },
+  {
+    "id": "competitive-analysis-strategies",
+    "parentId": "marketing",
+    "label": "Competitive Analysis Strategies",
+    "sortOrder": 16
+  },
+  {
+    "id": "swot-analysis",
+    "parentId": "competitive-analysis-strategies",
+    "label": "SWOT Analysis",
+    "sortOrder": 1
+  },
+  {
+    "id": "understanding-your-competitions-strengths",
+    "parentId": "competitive-analysis-strategies",
+    "label": "Understanding Your Competition's Strengths",
+    "sortOrder": 2
+  },
+  {
+    "id": "understanding-your-competitions-weaknesses",
+    "parentId": "competitive-analysis-strategies",
+    "label": "Understanding Your Competition's Weaknesses",
+    "sortOrder": 3
+  },
+  {
+    "id": "product-positioning-maps",
+    "parentId": "competitive-analysis-strategies",
+    "label": "Product Positioning Maps",
+    "sortOrder": 4
+  },
+  {
+    "id": "feature-matrix",
+    "parentId": "competitive-analysis-strategies",
+    "label": "Feature Matrix",
+    "sortOrder": 5
+  },
+  {
+    "id": "user-reviews",
+    "parentId": "competitive-analysis-strategies",
+    "label": "User Reviews",
+    "sortOrder": 6
+  },
+  {
+    "id": "product-positioning-strategies",
+    "parentId": "marketing",
+    "label": "Product Positioning Strategies",
+    "sortOrder": 17
+  },
+  {
+    "id": "attention-getting-techniques-in-marketing",
+    "parentId": "marketing",
+    "label": "Attention-Getting Techniques in Marketing",
+    "sortOrder": 18
+  },
+  {
+    "id": "whose-attention-to-attract",
+    "parentId": "attention-getting-techniques-in-marketing",
+    "label": "Whose Attention to Attract?",
+    "sortOrder": 1
+  },
+  {
+    "id": "how-to-turn-attention-into-action",
+    "parentId": "attention-getting-techniques-in-marketing",
+    "label": "How to Turn Attention into Action?",
+    "sortOrder": 2
+  },
+  {
+    "id": "aida",
+    "parentId": "attention-getting-techniques-in-marketing",
+    "label": "AIDA",
+    "sortOrder": 3
+  },
+  {
+    "id": "hook",
+    "parentId": "attention-getting-techniques-in-marketing",
+    "label": "Hook",
+    "sortOrder": 4
+  },
+  {
+    "id": "call-to-action",
+    "parentId": "attention-getting-techniques-in-marketing",
+    "label": "Call to Action",
+    "sortOrder": 5
+  },
+  {
+    "id": "end-result-what-do-your-clients-really-want-to-achieve",
+    "parentId": "attention-getting-techniques-in-marketing",
+    "label": "End Result - What Do Your Clients Really Want to Achieve?",
+    "sortOrder": 6
+  },
+  {
+    "id": "content",
+    "parentId": "attention-getting-techniques-in-marketing",
+    "label": "Content",
+    "sortOrder": 7
+  },
+  {
+    "id": "content-distribution-strategy",
+    "parentId": "attention-getting-techniques-in-marketing",
+    "label": "Content Distribution Strategy",
+    "sortOrder": 8
+  },
+  {
+    "id": "storytelling-in-marketing",
+    "parentId": "attention-getting-techniques-in-marketing",
+    "label": "Storytelling in Marketing",
+    "sortOrder": 9
+  },
+  {
+    "id": "social-proof-in-marketing",
+    "parentId": "attention-getting-techniques-in-marketing",
+    "label": "Social Proof in Marketing",
+    "sortOrder": 10
+  },
+  {
+    "id": "how-to-create-viral-content",
+    "parentId": "attention-getting-techniques-in-marketing",
+    "label": "How to Create Viral Content?",
+    "sortOrder": 11
+  },
+  {
+    "id": "availability",
+    "parentId": "marketing",
+    "label": "Availability",
+    "sortOrder": 19
+  },
+  {
+    "id": "openness",
+    "parentId": "marketing",
+    "label": "Openness",
+    "sortOrder": 20
+  },
+  {
+    "id": "preoccupation",
+    "parentId": "marketing",
+    "label": "Preoccupation",
+    "sortOrder": 21
+  },
+  {
+    "id": "consent",
+    "parentId": "marketing",
+    "label": "Consent",
+    "sortOrder": 22
+  },
+  {
+    "id": "remarkability",
+    "parentId": "marketing",
+    "label": "Remarkability",
+    "sortOrder": 23
+  },
+  {
+    "id": "controversy",
+    "parentId": "marketing",
+    "label": "Controversy",
+    "sortOrder": 24
+  },
+  {
+    "id": "using-different-marketing-approaches",
+    "parentId": "marketing",
+    "label": "Using Different Marketing Approaches",
+    "sortOrder": 25
+  },
+  {
+    "id": "inbound-marketing",
+    "parentId": "marketing",
+    "label": "Inbound Marketing",
+    "sortOrder": 26
+  },
+  {
+    "id": "niche-marketing-targeting-specific-groups",
+    "parentId": "inbound-marketing",
+    "label": "Niche Marketing - Targeting Specific Groups",
+    "sortOrder": 1
+  },
+  {
+    "id": "digital-marketing",
+    "parentId": "inbound-marketing",
+    "label": "Digital Marketing",
+    "sortOrder": 2
+  },
+  {
+    "id": "engagement-marketing-strategies-and-techniques",
+    "parentId": "inbound-marketing",
+    "label": "Engagement Marketing - Strategies and Techniques",
+    "sortOrder": 3
+  },
+  {
+    "id": "blogging",
+    "parentId": "inbound-marketing",
+    "label": "Blogging",
+    "sortOrder": 4
+  },
+  {
+    "id": "social-media-marketing",
+    "parentId": "inbound-marketing",
+    "label": "Social Media Marketing",
+    "sortOrder": 5
+  },
+  {
+    "id": "search-engine-optimization-seo",
+    "parentId": "inbound-marketing",
+    "label": "Search Engine Optimization (SEO)",
+    "sortOrder": 6
+  },
+  {
+    "id": "outbound-marketing",
+    "parentId": "marketing",
+    "label": "Outbound Marketing",
+    "sortOrder": 27
+  },
+  {
+    "id": "traditional-marketing-fundamentals",
+    "parentId": "outbound-marketing",
+    "label": "Traditional Marketing Fundamentals",
+    "sortOrder": 1
+  },
+  {
+    "id": "traditional-advertising",
+    "parentId": "outbound-marketing",
+    "label": "Traditional Advertising",
+    "sortOrder": 2
+  },
+  {
+    "id": "vidcasting",
+    "parentId": "outbound-marketing",
+    "label": "Vidcasting",
+    "sortOrder": 3
+  },
+  {
+    "id": "sensory-marketing-techniques",
+    "parentId": "outbound-marketing",
+    "label": "Sensory Marketing Techniques",
+    "sortOrder": 4
+  },
+  {
+    "id": "relationship-marketing-strategies-and-techniques",
+    "parentId": "outbound-marketing",
+    "label": "Relationship Marketing - Strategies and Techniques",
+    "sortOrder": 5
+  },
+  {
+    "id": "direct-mail-marketing",
+    "parentId": "outbound-marketing",
+    "label": "Direct Mail Marketing",
+    "sortOrder": 6
+  },
+  {
+    "id": "telemarketing",
+    "parentId": "outbound-marketing",
+    "label": "Telemarketing",
+    "sortOrder": 7
+  },
+  {
+    "id": "sponsorships",
+    "parentId": "outbound-marketing",
+    "label": "Sponsorships",
+    "sortOrder": 8
+  },
+  {
+    "id": "japanese-approach-to-marketing",
+    "parentId": "marketing",
+    "label": "Japanese Approach to Marketing",
+    "sortOrder": 28
+  },
+  {
+    "id": "characteristics-of-companies-with-effective-marketing",
+    "parentId": "marketing",
+    "label": "Characteristics of Companies with Effective Marketing",
+    "sortOrder": 29
+  },
+  {
+    "id": "marketing-mix",
+    "parentId": "marketing",
+    "label": "Marketing Mix",
+    "sortOrder": 30
+  },
+  {
+    "id": "role-of-product-in-the-marketing-mix",
+    "parentId": "marketing",
+    "label": "Role of Product in the Marketing Mix",
+    "sortOrder": 31
+  },
+  {
+    "id": "building-community",
+    "parentId": "marketing",
+    "label": "Building Community",
+    "sortOrder": 32
+  },
+  {
+    "id": "from-customers-to-fans-fanocracy",
+    "parentId": "marketing",
+    "label": "From Customers to Fans (Fanocracy)",
+    "sortOrder": 33
+  },
+  {
+    "id": "martech-marketing-and-technology-combined",
+    "parentId": "marketing",
+    "label": "MarTech - Marketing and Technology Combined",
+    "sortOrder": 34
+  },
+  {
+    "id": "value-innovation-radical-differentiation",
+    "parentId": "marketing",
+    "label": "Value Innovation - Radical Differentiation",
+    "sortOrder": 35
+  },
+  {
+    "id": "public-relations-pr",
+    "parentId": "marketing",
+    "label": "Public Relations (PR)",
+    "sortOrder": 36
   },
   {
     "id": "cognitive-biases",
@@ -24,10 +666,274 @@
     "sortOrder": 4
   },
   {
+    "id": "choice-architecture",
+    "parentId": "cognitive-biases",
+    "label": "Choice Architecture",
+    "sortOrder": 1
+  },
+  {
+    "id": "savings-contrast",
+    "parentId": "cognitive-biases",
+    "label": "Savings Contrast",
+    "sortOrder": 2
+  },
+  {
+    "id": "good-versus-bad",
+    "parentId": "cognitive-biases",
+    "label": "Good versus Bad",
+    "sortOrder": 3
+  },
+  {
+    "id": "us-versus-them",
+    "parentId": "cognitive-biases",
+    "label": "Us versus Them",
+    "sortOrder": 4
+  },
+  {
+    "id": "new-versus-old-contrast",
+    "parentId": "cognitive-biases",
+    "label": "New versus Old Contrast",
+    "sortOrder": 5
+  },
+  {
+    "id": "paradox-of-choice",
+    "parentId": "cognitive-biases",
+    "label": "Paradox of Choice",
+    "sortOrder": 6
+  },
+  {
+    "id": "anchoring-principle",
+    "parentId": "cognitive-biases",
+    "label": "Anchoring Principle",
+    "sortOrder": 7
+  },
+  {
+    "id": "nostalgia",
+    "parentId": "cognitive-biases",
+    "label": "Nostalgia",
+    "sortOrder": 8
+  },
+  {
+    "id": "scarcity",
+    "parentId": "cognitive-biases",
+    "label": "Scarcity",
+    "sortOrder": 9
+  },
+  {
+    "id": "loss-aversion",
+    "parentId": "cognitive-biases",
+    "label": "Loss Aversion",
+    "sortOrder": 10
+  },
+  {
+    "id": "comparison",
+    "parentId": "cognitive-biases",
+    "label": "Comparison",
+    "sortOrder": 11
+  },
+  {
+    "id": "familiarity-principle",
+    "parentId": "cognitive-biases",
+    "label": "Familiarity Principle",
+    "sortOrder": 12
+  },
+  {
+    "id": "novelty-principle",
+    "parentId": "cognitive-biases",
+    "label": "Novelty Principle",
+    "sortOrder": 13
+  },
+  {
+    "id": "commitment-principle",
+    "parentId": "cognitive-biases",
+    "label": "Commitment Principle",
+    "sortOrder": 14
+  },
+  {
+    "id": "bandwagon-principle",
+    "parentId": "cognitive-biases",
+    "label": "Bandwagon Principle",
+    "sortOrder": 15
+  },
+  {
+    "id": "forer-barnum-effect",
+    "parentId": "cognitive-biases",
+    "label": "Forer-Barnum Effect",
+    "sortOrder": 16
+  },
+  {
+    "id": "mental-associations",
+    "parentId": "cognitive-biases",
+    "label": "Mental Associations",
+    "sortOrder": 17
+  },
+  {
+    "id": "blind-spot-absence",
+    "parentId": "cognitive-biases",
+    "label": "Blind Spot (Absence)",
+    "sortOrder": 18
+  },
+  {
+    "id": "perception-control",
+    "parentId": "cognitive-biases",
+    "label": "Perception Control",
+    "sortOrder": 19
+  },
+  {
+    "id": "reference-level",
+    "parentId": "cognitive-biases",
+    "label": "Reference Level",
+    "sortOrder": 20
+  },
+  {
+    "id": "hindsight-bias",
+    "parentId": "cognitive-biases",
+    "label": "Hindsight Bias",
+    "sortOrder": 21
+  },
+  {
+    "id": "pattern-recognition",
+    "parentId": "cognitive-biases",
+    "label": "Pattern Recognition",
+    "sortOrder": 22
+  },
+  {
+    "id": "confirmation-bias",
+    "parentId": "cognitive-biases",
+    "label": "Confirmation Bias",
+    "sortOrder": 23
+  },
+  {
+    "id": "cognitive-modeling",
+    "parentId": "cognitive-biases",
+    "label": "Cognitive Modeling",
+    "sortOrder": 24
+  },
+  {
+    "id": "motivation",
+    "parentId": "cognitive-biases",
+    "label": "Motivation",
+    "sortOrder": 25
+  },
+  {
+    "id": "guidance-model",
+    "parentId": "cognitive-biases",
+    "label": "Guidance Model",
+    "sortOrder": 26
+  },
+  {
+    "id": "reframing",
+    "parentId": "cognitive-biases",
+    "label": "Reframing",
+    "sortOrder": 27
+  },
+  {
+    "id": "interpretation-and-revision",
+    "parentId": "cognitive-biases",
+    "label": "Interpretation and Revision",
+    "sortOrder": 28
+  },
+  {
     "id": "pricing",
     "parentId": null,
     "label": "Pricing",
     "sortOrder": 5
+  },
+  {
+    "id": "pricing-strategy",
+    "parentId": "pricing",
+    "label": "Pricing Strategy",
+    "sortOrder": 1
+  },
+  {
+    "id": "what-is-pricing",
+    "parentId": "pricing-strategy",
+    "label": "What Is Pricing?",
+    "sortOrder": 1
+  },
+  {
+    "id": "what-is-cost",
+    "parentId": "pricing-strategy",
+    "label": "What Is Cost?",
+    "sortOrder": 2
+  },
+  {
+    "id": "what-is-a-pricing-strategy",
+    "parentId": "pricing-strategy",
+    "label": "What Is a Pricing Strategy?",
+    "sortOrder": 3
+  },
+  {
+    "id": "how-to-set-a-pricing-strategy-key-questions",
+    "parentId": "pricing-strategy",
+    "label": "How to Set a Pricing Strategy - Key Questions",
+    "sortOrder": 4
+  },
+  {
+    "id": "factors-that-shape-pricing-strategy",
+    "parentId": "pricing-strategy",
+    "label": "Factors That Shape Pricing Strategy",
+    "sortOrder": 5
+  },
+  {
+    "id": "different-pricing-strategies",
+    "parentId": "pricing-strategy",
+    "label": "Different Pricing Strategies",
+    "sortOrder": 6
+  },
+  {
+    "id": "cost-based-pricing",
+    "parentId": "pricing-strategy",
+    "label": "Cost-Based Pricing",
+    "sortOrder": 7
+  },
+  {
+    "id": "segment-based-pricing",
+    "parentId": "pricing-strategy",
+    "label": "Segment-Based Pricing",
+    "sortOrder": 8
+  },
+  {
+    "id": "six-approaches-to-product-pricing",
+    "parentId": "pricing-strategy",
+    "label": "Six Approaches to Product Pricing",
+    "sortOrder": 9
+  },
+  {
+    "id": "how-to-use-price-as-a-decoy",
+    "parentId": "pricing",
+    "label": "How to Use Price as a Decoy?",
+    "sortOrder": 2
+  },
+  {
+    "id": "odd-and-even-pricing",
+    "parentId": "pricing",
+    "label": "Odd and Even Pricing",
+    "sortOrder": 3
+  },
+  {
+    "id": "choosing-the-right-number-for-your-product-price",
+    "parentId": "pricing",
+    "label": "Choosing the Right Number for Your Product Price",
+    "sortOrder": 4
+  },
+  {
+    "id": "price-uncertainty-principle",
+    "parentId": "pricing",
+    "label": "Price Uncertainty Principle",
+    "sortOrder": 5
+  },
+  {
+    "id": "psychological-pricing",
+    "parentId": "pricing",
+    "label": "Psychological Pricing",
+    "sortOrder": 6
+  },
+  {
+    "id": "creaming-and-skimming-tactics-in-pricing-strategy",
+    "parentId": "pricing",
+    "label": "Creaming and Skimming Tactics in Pricing Strategy",
+    "sortOrder": 7
   },
   {
     "id": "sales",
@@ -36,10 +942,178 @@
     "sortOrder": 6
   },
   {
+    "id": "sales-fundamentals",
+    "parentId": "sales",
+    "label": "Sales Fundamentals",
+    "sortOrder": 1
+  },
+  {
+    "id": "qualification-choosing-the-right-customers",
+    "parentId": "sales",
+    "label": "Qualification (Choosing the Right Customers)",
+    "sortOrder": 2
+  },
+  {
+    "id": "customer-profiling",
+    "parentId": "sales",
+    "label": "Customer Profiling",
+    "sortOrder": 3
+  },
+  {
+    "id": "trust",
+    "parentId": "sales",
+    "label": "Trust",
+    "sortOrder": 4
+  },
+  {
+    "id": "presentation",
+    "parentId": "sales",
+    "label": "Presentation",
+    "sortOrder": 5
+  },
+  {
+    "id": "handling-objections",
+    "parentId": "sales",
+    "label": "Handling Objections",
+    "sortOrder": 6
+  },
+  {
+    "id": "common-ground",
+    "parentId": "sales",
+    "label": "Common Ground",
+    "sortOrder": 7
+  },
+  {
+    "id": "transaction",
+    "parentId": "sales",
+    "label": "Transaction",
+    "sortOrder": 8
+  },
+  {
+    "id": "referrals",
+    "parentId": "sales",
+    "label": "Referrals",
+    "sortOrder": 9
+  },
+  {
+    "id": "customer-relationship-management-crm",
+    "parentId": "sales",
+    "label": "Customer Relationship Management (CRM)",
+    "sortOrder": 10
+  },
+  {
+    "id": "reciprocity",
+    "parentId": "sales",
+    "label": "Reciprocity",
+    "sortOrder": 11
+  },
+  {
+    "id": "exclusivity",
+    "parentId": "sales",
+    "label": "Exclusivity",
+    "sortOrder": 12
+  },
+  {
+    "id": "damaging-admissions",
+    "parentId": "sales",
+    "label": "Damaging Admissions",
+    "sortOrder": 13
+  },
+  {
+    "id": "price-elasticity",
+    "parentId": "sales",
+    "label": "Price Elasticity",
+    "sortOrder": 14
+  },
+  {
+    "id": "key-negotiation-strategies-in-sales",
+    "parentId": "sales",
+    "label": "Key Negotiation Strategies in Sales",
+    "sortOrder": 15
+  },
+  {
+    "id": "dimensions-of-negotiation",
+    "parentId": "sales",
+    "label": "Dimensions of Negotiation",
+    "sortOrder": 16
+  },
+  {
+    "id": "3-universal-currencies",
+    "parentId": "sales",
+    "label": "3 Universal Currencies",
+    "sortOrder": 17
+  },
+  {
+    "id": "persuasion",
+    "parentId": "sales",
+    "label": "Persuasion",
+    "sortOrder": 18
+  },
+  {
+    "id": "value-based-selling",
+    "parentId": "sales",
+    "label": "Value-Based Selling",
+    "sortOrder": 19
+  },
+  {
+    "id": "education-based-selling",
+    "parentId": "sales",
+    "label": "Education-Based Selling",
+    "sortOrder": 20
+  },
+  {
+    "id": "selling-through-intermediaries",
+    "parentId": "sales",
+    "label": "Selling Through Intermediaries",
+    "sortOrder": 21
+  },
+  {
+    "id": "auction",
+    "parentId": "sales",
+    "label": "Auction",
+    "sortOrder": 22
+  },
+  {
+    "id": "strategies-for-overcoming-resistance-to-persuasion",
+    "parentId": "sales",
+    "label": "Strategies for Overcoming Resistance to Persuasion",
+    "sortOrder": 23
+  },
+  {
+    "id": "how-to-effectively-remove-risk-in-sales",
+    "parentId": "sales",
+    "label": "How to Effectively Remove Risk in Sales?",
+    "sortOrder": 24
+  },
+  {
+    "id": "how-to-effectively-manage-sales-revenue",
+    "parentId": "sales",
+    "label": "How to Effectively Manage Sales Revenue?",
+    "sortOrder": 25
+  },
+  {
     "id": "business-development",
     "parentId": null,
     "label": "Business Development",
     "sortOrder": 7
+  },
+  {
+    "id": "lead-generation",
+    "parentId": "business-development",
+    "label": "Lead Generation",
+    "sortOrder": 1
+  },
+  {
+    "id": "lead-conversion",
+    "parentId": "business-development",
+    "label": "Lead Conversion",
+    "sortOrder": 2
+  },
+  {
+    "id": "customer-retention-techniques",
+    "parentId": "business-development",
+    "label": "Customer Retention Techniques",
+    "sortOrder": 3
   },
   {
     "id": "finance",
@@ -48,10 +1122,370 @@
     "sortOrder": 8
   },
   {
+    "id": "cash-flow",
+    "parentId": "finance",
+    "label": "Cash Flow",
+    "sortOrder": 1
+  },
+  {
+    "id": "profit",
+    "parentId": "finance",
+    "label": "Profit",
+    "sortOrder": 2
+  },
+  {
+    "id": "costs",
+    "parentId": "finance",
+    "label": "Costs",
+    "sortOrder": 3
+  },
+  {
+    "id": "profit-margin",
+    "parentId": "finance",
+    "label": "Profit Margin",
+    "sortOrder": 4
+  },
+  {
+    "id": "cost-calculation-approaches",
+    "parentId": "finance",
+    "label": "Cost Calculation Approaches",
+    "sortOrder": 5
+  },
+  {
+    "id": "value-capture",
+    "parentId": "finance",
+    "label": "Value Capture",
+    "sortOrder": 6
+  },
+  {
+    "id": "accounting",
+    "parentId": "finance",
+    "label": "Accounting",
+    "sortOrder": 7
+  },
+  {
+    "id": "budgets-financial-resource-planning",
+    "parentId": "finance",
+    "label": "Budgets (Financial Resource Planning)",
+    "sortOrder": 8
+  },
+  {
+    "id": "financial-forecasting",
+    "parentId": "finance",
+    "label": "Financial Forecasting",
+    "sortOrder": 9
+  },
+  {
+    "id": "key-financial-indicators",
+    "parentId": "finance",
+    "label": "Key Financial Indicators",
+    "sortOrder": 10
+  },
+  {
+    "id": "performance-evaluation",
+    "parentId": "finance",
+    "label": "Performance Evaluation",
+    "sortOrder": 11
+  },
+  {
+    "id": "depreciation",
+    "parentId": "finance",
+    "label": "Depreciation",
+    "sortOrder": 12
+  },
+  {
+    "id": "financial-ratios",
+    "parentId": "finance",
+    "label": "Financial Ratios",
+    "sortOrder": 13
+  },
+  {
+    "id": "annual-report",
+    "parentId": "finance",
+    "label": "Annual Report",
+    "sortOrder": 14
+  },
+  {
+    "id": "balance-sheet",
+    "parentId": "finance",
+    "label": "Balance Sheet",
+    "sortOrder": 15
+  },
+  {
+    "id": "cash-flow-statement",
+    "parentId": "finance",
+    "label": "Cash Flow Statement",
+    "sortOrder": 16
+  },
+  {
+    "id": "profit-and-loss-statement-pandl",
+    "parentId": "finance",
+    "label": "Profit and Loss Statement (P&L)",
+    "sortOrder": 17
+  },
+  {
+    "id": "key-performance-indicators-kpi",
+    "parentId": "finance",
+    "label": "Key Performance Indicators (KPI)",
+    "sortOrder": 18
+  },
+  {
+    "id": "income-statement",
+    "parentId": "finance",
+    "label": "Income Statement",
+    "sortOrder": 19
+  },
+  {
+    "id": "financial-reporting",
+    "parentId": "finance",
+    "label": "Financial Reporting",
+    "sortOrder": 20
+  },
+  {
+    "id": "financial-accounting",
+    "parentId": "finance",
+    "label": "Financial Accounting",
+    "sortOrder": 21
+  },
+  {
+    "id": "environmental-accounting",
+    "parentId": "finance",
+    "label": "Environmental Accounting",
+    "sortOrder": 22
+  },
+  {
+    "id": "standardization-of-accounting-practices",
+    "parentId": "finance",
+    "label": "Standardization of Accounting Practices",
+    "sortOrder": 23
+  },
+  {
+    "id": "management-accounting",
+    "parentId": "finance",
+    "label": "Management Accounting",
+    "sortOrder": 24
+  },
+  {
+    "id": "company-valuation",
+    "parentId": "finance",
+    "label": "Company Valuation",
+    "sortOrder": 25
+  },
+  {
+    "id": "financial-freedom",
+    "parentId": "finance",
+    "label": "Financial Freedom",
+    "sortOrder": 26
+  },
+  {
     "id": "operations-and-production",
     "parentId": null,
     "label": "Operations & Production",
     "sortOrder": 9
+  },
+  {
+    "id": "value-chain",
+    "parentId": "operations-and-production",
+    "label": "Value Chain",
+    "sortOrder": 1
+  },
+  {
+    "id": "new-product-development-process",
+    "parentId": "operations-and-production",
+    "label": "New Product Development Process",
+    "sortOrder": 2
+  },
+  {
+    "id": "business-analysis-ba",
+    "parentId": "operations-and-production",
+    "label": "Business Analysis (BA)",
+    "sortOrder": 3
+  },
+  {
+    "id": "design",
+    "parentId": "operations-and-production",
+    "label": "Design",
+    "sortOrder": 4
+  },
+  {
+    "id": "product-operations",
+    "parentId": "operations-and-production",
+    "label": "Product (Operations)",
+    "sortOrder": 5
+  },
+  {
+    "id": "understanding-the-product-process-matrix",
+    "parentId": "operations-and-production",
+    "label": "Understanding the Product-Process Matrix",
+    "sortOrder": 6
+  },
+  {
+    "id": "business-processes",
+    "parentId": "operations-and-production",
+    "label": "Business Processes",
+    "sortOrder": 7
+  },
+  {
+    "id": "material-procurement-management-in-production",
+    "parentId": "operations-and-production",
+    "label": "Material Procurement Management in Production",
+    "sortOrder": 8
+  },
+  {
+    "id": "capacity-management-in-production",
+    "parentId": "operations-and-production",
+    "label": "Capacity Management in Production",
+    "sortOrder": 9
+  },
+  {
+    "id": "inventory",
+    "parentId": "operations-and-production",
+    "label": "Inventory",
+    "sortOrder": 10
+  },
+  {
+    "id": "role-of-control-in-operations-and-production",
+    "parentId": "operations-and-production",
+    "label": "Role of Control in Operations and Production",
+    "sortOrder": 11
+  },
+  {
+    "id": "using-benchmarking-in-operations",
+    "parentId": "operations-and-production",
+    "label": "Using Benchmarking in Operations",
+    "sortOrder": 12
+  },
+  {
+    "id": "economies-and-diseconomies-of-scale",
+    "parentId": "operations-and-production",
+    "label": "Economies and Diseconomies of Scale",
+    "sortOrder": 13
+  },
+  {
+    "id": "reverse-supply-chain",
+    "parentId": "operations-and-production",
+    "label": "Reverse Supply Chain",
+    "sortOrder": 14
+  },
+  {
+    "id": "agile-approach-to-production",
+    "parentId": "operations-and-production",
+    "label": "Agile Approach to Production",
+    "sortOrder": 15
+  },
+  {
+    "id": "batch-production",
+    "parentId": "operations-and-production",
+    "label": "Batch Production",
+    "sortOrder": 16
+  },
+  {
+    "id": "continuous-production",
+    "parentId": "operations-and-production",
+    "label": "Continuous Production",
+    "sortOrder": 17
+  },
+  {
+    "id": "just-in-time-production",
+    "parentId": "operations-and-production",
+    "label": "Just-in-Time Production",
+    "sortOrder": 18
+  },
+  {
+    "id": "job-production",
+    "parentId": "operations-and-production",
+    "label": "Job Production",
+    "sortOrder": 19
+  },
+  {
+    "id": "mass-production",
+    "parentId": "operations-and-production",
+    "label": "Mass Production",
+    "sortOrder": 20
+  },
+  {
+    "id": "mass-customization",
+    "parentId": "operations-and-production",
+    "label": "Mass Customization",
+    "sortOrder": 21
+  },
+  {
+    "id": "lean-production",
+    "parentId": "operations-and-production",
+    "label": "Lean Production",
+    "sortOrder": 22
+  },
+  {
+    "id": "kaizen",
+    "parentId": "operations-and-production",
+    "label": "Kaizen",
+    "sortOrder": 23
+  },
+  {
+    "id": "six-sigma",
+    "parentId": "operations-and-production",
+    "label": "Six Sigma",
+    "sortOrder": 24
+  },
+  {
+    "id": "quality-management",
+    "parentId": "operations-and-production",
+    "label": "Quality Management",
+    "sortOrder": 25
+  },
+  {
+    "id": "quality-control",
+    "parentId": "operations-and-production",
+    "label": "Quality Control",
+    "sortOrder": 26
+  },
+  {
+    "id": "production-and-quality-control",
+    "parentId": "operations-and-production",
+    "label": "Production and Quality Control",
+    "sortOrder": 27
+  },
+  {
+    "id": "total-quality-management",
+    "parentId": "operations-and-production",
+    "label": "Total Quality Management",
+    "sortOrder": 28
+  },
+  {
+    "id": "applying-hybrid-processes-in-operations",
+    "parentId": "operations-and-production",
+    "label": "Applying Hybrid Processes in Operations",
+    "sortOrder": 29
+  },
+  {
+    "id": "outsourcing-managing-external-partners-in-production",
+    "parentId": "operations-and-production",
+    "label": "Outsourcing - Managing External Partners in Production",
+    "sortOrder": 30
+  },
+  {
+    "id": "how-to-effectively-use-offshoring",
+    "parentId": "operations-and-production",
+    "label": "How to Effectively Use Offshoring?",
+    "sortOrder": 31
+  },
+  {
+    "id": "innovation-and-invention",
+    "parentId": "operations-and-production",
+    "label": "Innovation and Invention",
+    "sortOrder": 32
+  },
+  {
+    "id": "feedback-collection-methods",
+    "parentId": "operations-and-production",
+    "label": "Feedback Collection Methods",
+    "sortOrder": 33
+  },
+  {
+    "id": "compliance",
+    "parentId": "operations-and-production",
+    "label": "Compliance",
+    "sortOrder": 34
   },
   {
     "id": "management",
@@ -60,999 +1494,9 @@
     "sortOrder": 10
   },
   {
-    "id": "human-resources",
-    "parentId": null,
-    "label": "Human Resources",
-    "sortOrder": 11
-  },
-  {
-    "id": "working-with-people",
-    "parentId": null,
-    "label": "Working with People",
-    "sortOrder": 12
-  },
-  {
-    "id": "self-management",
-    "parentId": null,
-    "label": "Self-Management",
-    "sortOrder": 13
-  },
-  {
-    "id": "value-delivery",
-    "parentId": null,
-    "label": "Value Delivery",
-    "sortOrder": 14
-  },
-  {
-    "id": "systems",
-    "parentId": null,
-    "label": "Systems",
-    "sortOrder": 15
-  },
-  {
-    "id": "business-models",
-    "parentId": null,
-    "label": "Business Models",
-    "sortOrder": 16
-  },
-  {
-    "id": "company-structure",
-    "parentId": null,
-    "label": "Company Structure",
-    "sortOrder": 17
-  },
-  {
-    "id": "types-of-companies",
-    "parentId": null,
-    "label": "Types of Companies",
-    "sortOrder": 18
-  },
-  {
-    "id": "buying-and-selling-a-business",
-    "parentId": null,
-    "label": "Buying and Selling a Business",
-    "sortOrder": 19
-  },
-  {
-    "id": "startup",
-    "parentId": null,
-    "label": "Startup",
-    "sortOrder": 20
-  },
-  {
-    "id": "data-management",
-    "parentId": null,
-    "label": "Data Management",
-    "sortOrder": 21
-  },
-  {
-    "id": "prompts",
-    "parentId": null,
-    "label": "Prompts",
-    "sortOrder": 22
-  },
-  {
-    "id": "value-flow",
-    "parentId": null,
-    "label": "Value Flow",
-    "sortOrder": 999
-  },
-  {
-    "id": "creating-barriers-for-competitors",
-    "parentId": null,
-    "label": "Creating Barriers for Competitors",
-    "sortOrder": 999
-  },
-  {
-    "id": "introduction-to-competitive-analysis",
-    "parentId": "competitive-analysis",
-    "label": "Introduction to Competitive Analysis",
-    "sortOrder": 1
-  },
-  {
-    "id": "competitive-analysis-strategies",
-    "parentId": "competitive-analysis",
-    "label": "Competitive Analysis Strategies",
-    "sortOrder": 2
-  },
-  {
-    "id": "product-positioning-strategies",
-    "parentId": "competitive-analysis",
-    "label": "Product Positioning Strategies",
-    "sortOrder": 3
-  },
-  {
-    "id": "energy-cycles",
-    "parentId": "energy",
-    "label": "Energy Cycles",
-    "sortOrder": 1
-  },
-  {
-    "id": "preserving-energy-resources",
-    "parentId": "energy",
-    "label": "Preserving Energy Resources",
-    "sortOrder": 2
-  },
-  {
-    "id": "working-conditions",
-    "parentId": "energy",
-    "label": "Working Conditions",
-    "sortOrder": 3
-  },
-  {
-    "id": "performance-load",
-    "parentId": "energy",
-    "label": "Performance Load",
-    "sortOrder": 4
-  },
-  {
-    "id": "willpower-depletion",
-    "parentId": "energy",
-    "label": "Willpower Depletion",
-    "sortOrder": 5
-  },
-  {
-    "id": "inhibition",
-    "parentId": "energy",
-    "label": "Inhibition",
-    "sortOrder": 6
-  },
-  {
-    "id": "stress-and-recovery",
-    "parentId": "energy",
-    "label": "Stress and Recovery",
-    "sortOrder": 7
-  },
-  {
-    "id": "legacy-hardware",
-    "parentId": "energy",
-    "label": "Legacy Hardware",
-    "sortOrder": 8
-  },
-  {
-    "id": "availability",
-    "parentId": "factors-affecting-attention-capture",
-    "label": "Availability",
-    "sortOrder": 1
-  },
-  {
-    "id": "openness",
-    "parentId": "factors-affecting-attention-capture",
-    "label": "Openness",
-    "sortOrder": 2
-  },
-  {
-    "id": "preoccupation",
-    "parentId": "factors-affecting-attention-capture",
-    "label": "Preoccupation",
-    "sortOrder": 3
-  },
-  {
-    "id": "consent",
-    "parentId": "factors-affecting-attention-capture",
-    "label": "Consent",
-    "sortOrder": 4
-  },
-  {
-    "id": "remarkability",
-    "parentId": "factors-affecting-attention-capture",
-    "label": "Remarkability",
-    "sortOrder": 5
-  },
-  {
-    "id": "controversy",
-    "parentId": "factors-affecting-attention-capture",
-    "label": "Controversy",
-    "sortOrder": 6
-  },
-  {
-    "id": "introduction-to-finance",
-    "parentId": "finance",
-    "label": "Introduction to Finance",
-    "sortOrder": 1
-  },
-  {
-    "id": "financial-statements",
-    "parentId": "finance",
-    "label": "Financial Statements",
-    "sortOrder": 2
-  },
-  {
-    "id": "accounting-with-focus-on-company-management",
-    "parentId": "finance",
-    "label": "Accounting with Focus on Company Management",
-    "sortOrder": 3
-  },
-  {
-    "id": "determining-company-value",
-    "parentId": "finance",
-    "label": "Determining Company Value",
-    "sortOrder": 4
-  },
-  {
-    "id": "financial-freedom",
-    "parentId": "finance",
-    "label": "Financial Freedom",
-    "sortOrder": 5
-  },
-  {
-    "id": "annual-report",
-    "parentId": "financial-statements",
-    "label": "Annual Report",
-    "sortOrder": 1
-  },
-  {
-    "id": "balance-sheet",
-    "parentId": "financial-statements",
-    "label": "Balance Sheet",
-    "sortOrder": 2
-  },
-  {
-    "id": "cash-flow-statement",
-    "parentId": "financial-statements",
-    "label": "Cash Flow Statement",
-    "sortOrder": 3
-  },
-  {
-    "id": "profit-and-loss-statement-pandl",
-    "parentId": "financial-statements",
-    "label": "Profit and Loss Statement (P&L)",
-    "sortOrder": 4
-  },
-  {
-    "id": "key-performance-indicators-kpi",
-    "parentId": "financial-statements",
-    "label": "Key Performance Indicators (KPI)",
-    "sortOrder": 5
-  },
-  {
-    "id": "income-statement",
-    "parentId": "financial-statements",
-    "label": "Income Statement",
-    "sortOrder": 6
-  },
-  {
-    "id": "financial-condition-reporting",
-    "parentId": "financial-statements",
-    "label": "Financial Condition Reporting",
-    "sortOrder": 7
-  },
-  {
-    "id": "financial-accounting",
-    "parentId": "financial-statements",
-    "label": "Financial Accounting",
-    "sortOrder": 8
-  },
-  {
-    "id": "environmental-accounting",
-    "parentId": "financial-statements",
-    "label": "Environmental Accounting",
-    "sortOrder": 9
-  },
-  {
-    "id": "standardization-of-accounting-practices",
-    "parentId": "financial-statements",
-    "label": "Standardization of Accounting Practices",
-    "sortOrder": 10
-  },
-  {
-    "id": "state-of-complete-focus-flow",
-    "parentId": "focus",
-    "label": "State of Complete Focus (Flow)",
-    "sortOrder": 1
-  },
-  {
-    "id": "cognitive-switching-penalty",
-    "parentId": "focus",
-    "label": "Cognitive Switching Penalty",
-    "sortOrder": 2
-  },
-  {
-    "id": "expectation-effect",
-    "parentId": "value-delivery",
-    "label": "Expectation Effect",
-    "sortOrder": 1
-  },
-  {
-    "id": "value-delivery-value-delivery",
-    "parentId": "value-delivery",
-    "label": "Value Delivery",
-    "sortOrder": 1
-  },
-  {
-    "id": "supply-chain",
-    "parentId": "value-delivery",
-    "label": "Supply Chain",
-    "sortOrder": 2
-  },
-  {
-    "id": "transportation-and-logistics",
-    "parentId": "value-delivery",
-    "label": "Transportation and Logistics",
-    "sortOrder": 3
-  },
-  {
-    "id": "distribution-channel",
-    "parentId": "value-delivery",
-    "label": "Distribution Channel",
-    "sortOrder": 4
-  },
-  {
-    "id": "inventory",
-    "parentId": "value-delivery",
-    "label": "Inventory",
-    "sortOrder": 5
-  },
-  {
-    "id": "predictability",
-    "parentId": "value-delivery",
-    "label": "Predictability",
-    "sortOrder": 6
-  },
-  {
-    "id": "throughput",
-    "parentId": "value-delivery",
-    "label": "Throughput",
-    "sortOrder": 7
-  },
-  {
-    "id": "scalability",
-    "parentId": "value-delivery",
-    "label": "Scalability",
-    "sortOrder": 8
-  },
-  {
-    "id": "how-to-make-your-offer-more-valuable",
-    "parentId": "value-how-to-make-your-offer-more-valuable",
-    "label": "How to Make Your Offer More Valuable?",
-    "sortOrder": 1
-  },
-  {
-    "id": "modularity",
-    "parentId": "value-how-to-make-your-offer-more-valuable",
-    "label": "Modularity",
-    "sortOrder": 2
-  },
-  {
-    "id": "bundling-and-unbundling-offers",
-    "parentId": "value-how-to-make-your-offer-more-valuable",
-    "label": "Bundling and Unbundling Offers",
-    "sortOrder": 3
-  },
-  {
-    "id": "removing-hassles",
-    "parentId": "value-how-to-make-your-offer-more-valuable",
-    "label": "Removing Hassles",
-    "sortOrder": 4
-  },
-  {
-    "id": "introduction-to-cognitive-biases",
-    "parentId": "cognitive-biases",
-    "label": "Introduction to Cognitive Biases",
-    "sortOrder": 1
-  },
-  {
-    "id": "basic-biases",
-    "parentId": "cognitive-biases",
-    "label": "Basic Biases",
-    "sortOrder": 2
-  },
-  {
-    "id": "perception-control",
-    "parentId": "cognitive-biases",
-    "label": "Perception Control",
-    "sortOrder": 3
-  },
-  {
-    "id": "cognitive-biases-that-affect-our-work",
-    "parentId": "cognitive-biases",
-    "label": "Cognitive Biases That Affect Our Work",
-    "sortOrder": 4
-  },
-  {
-    "id": "hindsight-tendency",
-    "parentId": "cognitive-biases-that-affect-our-work",
-    "label": "Hindsight Tendency",
-    "sortOrder": 1
-  },
-  {
-    "id": "pattern-matching",
-    "parentId": "cognitive-biases-that-affect-our-work",
-    "label": "Pattern Matching",
-    "sortOrder": 2
-  },
-  {
-    "id": "confirmation-bias",
-    "parentId": "cognitive-biases-that-affect-our-work",
-    "label": "Confirmation Bias",
-    "sortOrder": 3
-  },
-  {
-    "id": "cognitive-modeling",
-    "parentId": "cognitive-biases-that-affect-our-work",
-    "label": "Cognitive Modeling",
-    "sortOrder": 4
-  },
-  {
-    "id": "motivation",
-    "parentId": "cognitive-biases-that-affect-our-work",
-    "label": "Motivation",
-    "sortOrder": 5
-  },
-  {
-    "id": "guiding-model",
-    "parentId": "cognitive-biases-that-affect-our-work",
-    "label": "Guiding Model",
-    "sortOrder": 6
-  },
-  {
-    "id": "restructuring",
-    "parentId": "cognitive-biases-that-affect-our-work",
-    "label": "Restructuring",
-    "sortOrder": 7
-  },
-  {
-    "id": "interpretation-and-revision",
-    "parentId": "cognitive-biases-that-affect-our-work",
-    "label": "Interpretation and Revision",
-    "sortOrder": 8
-  },
-  {
-    "id": "company-structure-company-structure",
-    "parentId": "company-structure",
-    "label": "Company Structure",
-    "sortOrder": 1
-  },
-  {
-    "id": "functional-company-organization",
-    "parentId": "company-structure",
-    "label": "Functional Company Organization",
-    "sortOrder": 2
-  },
-  {
-    "id": "divisional-company-organization",
-    "parentId": "company-structure",
-    "label": "Divisional Company Organization",
-    "sortOrder": 3
-  },
-  {
-    "id": "matrix-based-structure",
-    "parentId": "company-structure",
-    "label": "Matrix-Based Structure",
-    "sortOrder": 4
-  },
-  {
-    "id": "network-company-organization",
-    "parentId": "company-structure",
-    "label": "Network Company Organization",
-    "sortOrder": 5
-  },
-  {
-    "id": "team-based-company-organization",
-    "parentId": "company-structure",
-    "label": "Team-Based Company Organization",
-    "sortOrder": 6
-  },
-  {
-    "id": "company-hierarchy-alignment",
-    "parentId": "company-structure",
-    "label": "Company Hierarchy Alignment",
-    "sortOrder": 7
-  },
-  {
-    "id": "reciprocity",
-    "parentId": "concepts-that-drive-sales",
-    "label": "Reciprocity",
-    "sortOrder": 1
-  },
-  {
-    "id": "exclusivity",
-    "parentId": "concepts-that-drive-sales",
-    "label": "Exclusivity",
-    "sortOrder": 2
-  },
-  {
-    "id": "damaging-admissions",
-    "parentId": "concepts-that-drive-sales",
-    "label": "Damaging Admissions",
-    "sortOrder": 3
-  },
-  {
-    "id": "price-elasticity",
-    "parentId": "concepts-that-drive-sales",
-    "label": "Price Elasticity",
-    "sortOrder": 4
-  },
-  {
-    "id": "environment",
-    "parentId": "concepts-that-affect-systems",
-    "label": "Environment",
-    "sortOrder": 1
-  },
-  {
-    "id": "selection-tests",
-    "parentId": "concepts-that-affect-systems",
-    "label": "Selection Tests",
-    "sortOrder": 2
-  },
-  {
-    "id": "change",
-    "parentId": "concepts-that-affect-systems",
-    "label": "Change",
-    "sortOrder": 3
-  },
-  {
-    "id": "uncertainty",
-    "parentId": "concepts-that-affect-systems",
-    "label": "Uncertainty",
-    "sortOrder": 4
-  },
-  {
-    "id": "domino-effect",
-    "parentId": "concepts-that-affect-systems",
-    "label": "Domino Effect",
-    "sortOrder": 5
-  },
-  {
-    "id": "autocatalysis",
-    "parentId": "concepts-that-affect-systems",
-    "label": "Autocatalysis",
-    "sortOrder": 6
-  },
-  {
-    "id": "force-multiplier",
-    "parentId": "concepts-that-affect-systems",
-    "label": "Force Multiplier",
-    "sortOrder": 7
-  },
-  {
-    "id": "multiplication",
-    "parentId": "concepts-that-affect-systems",
-    "label": "Multiplication",
-    "sortOrder": 8
-  },
-  {
-    "id": "duplication",
-    "parentId": "concepts-that-affect-systems",
-    "label": "Duplication",
-    "sortOrder": 9
-  },
-  {
-    "id": "normal-accidents",
-    "parentId": "concepts-that-affect-systems",
-    "label": "Normal Accidents",
-    "sortOrder": 10
-  },
-  {
-    "id": "resilience-self-organization-and-hierarchy",
-    "parentId": "concepts-that-affect-systems",
-    "label": "Resilience, Self-Organization, and Hierarchy",
-    "sortOrder": 11
-  },
-  {
-    "id": "time-delays-and-impact-on-systems",
-    "parentId": "concepts-that-affect-systems",
-    "label": "Time Delays and Impact on Systems",
-    "sortOrder": 12
-  },
-  {
-    "id": "how-to-effectively-use-authority-when-working-with-people",
-    "parentId": "key-concepts-for-management",
-    "label": "How to Effectively Use Authority When Working with People?",
-    "sortOrder": 1
-  },
-  {
-    "id": "commitment-and-consistency",
-    "parentId": "key-concepts-for-management",
-    "label": "Commitment and Consistency",
-    "sortOrder": 2
-  },
-  {
-    "id": "power",
-    "parentId": "key-concepts-for-management",
-    "label": "Power",
-    "sortOrder": 2
-  },
-  {
-    "id": "command-power",
-    "parentId": "key-concepts-for-management",
-    "label": "Command Power",
-    "sortOrder": 3
-  },
-  {
-    "id": "the-reason-why",
-    "parentId": "key-concepts-for-management",
-    "label": "The Reason Why",
-    "sortOrder": 5
-  },
-  {
-    "id": "expectations",
-    "parentId": "key-concepts-for-management",
-    "label": "Expectations",
-    "sortOrder": 6
-  },
-  {
-    "id": "clans",
-    "parentId": "key-concepts-for-management",
-    "label": "Clans",
-    "sortOrder": 7
-  },
-  {
-    "id": "convergence-and-divergence",
-    "parentId": "key-concepts-for-management",
-    "label": "Convergence and Divergence",
-    "sortOrder": 8
-  },
-  {
-    "id": "overcommunication",
-    "parentId": "key-concepts-for-management",
-    "label": "Overcommunication",
-    "sortOrder": 9
-  },
-  {
-    "id": "cognitive-capacity-limitations",
-    "parentId": "key-concepts-for-management",
-    "label": "Cognitive Capacity Limitations",
-    "sortOrder": 10
-  },
-  {
-    "id": "bystander-effect",
-    "parentId": "key-concepts-for-management",
-    "label": "Bystander Effect",
-    "sortOrder": 11
-  },
-  {
-    "id": "incentives",
-    "parentId": "key-concepts-for-management",
-    "label": "Incentives",
-    "sortOrder": 12
-  },
-  {
-    "id": "planning-fallacies",
-    "parentId": "key-concepts-for-management",
-    "label": "Planning Fallacies",
-    "sortOrder": 13
-  },
-  {
-    "id": "empathy",
-    "parentId": "key-concepts-for-working-with-people",
-    "label": "Empathy",
-    "sortOrder": 1
-  },
-  {
-    "id": "key-concepts-for-working-with-people-working-with-people",
-    "parentId": "key-concepts-for-working-with-people",
-    "label": "Working with People",
-    "sortOrder": 1
-  },
-  {
-    "id": "respect",
-    "parentId": "key-concepts-for-working-with-people",
-    "label": "Respect",
-    "sortOrder": 2
-  },
-  {
-    "id": "importance",
-    "parentId": "key-concepts-for-working-with-people",
-    "label": "Importance",
-    "sortOrder": 3
-  },
-  {
-    "id": "safety",
-    "parentId": "key-concepts-for-working-with-people",
-    "label": "Safety",
-    "sortOrder": 4
-  },
-  {
-    "id": "blame-shifting",
-    "parentId": "key-concepts-for-working-with-people",
-    "label": "Blame Shifting",
-    "sortOrder": 5
-  },
-  {
-    "id": "conflicts",
-    "parentId": "key-concepts-for-working-with-people",
-    "label": "Conflicts",
-    "sortOrder": 6
-  },
-  {
-    "id": "perception-control-perception-control",
-    "parentId": "perception-control",
-    "label": "Perception Control",
-    "sortOrder": 1
-  },
-  {
-    "id": "reference-level",
-    "parentId": "perception-control",
-    "label": "Reference Level",
-    "sortOrder": 2
-  },
-  {
-    "id": "acquisition-planning",
-    "parentId": "buying-and-selling-a-business",
-    "label": "Acquisition Planning",
-    "sortOrder": 1
-  },
-  {
-    "id": "mergers-and-acquisitions-manda",
-    "parentId": "buying-and-selling-a-business",
-    "label": "Mergers and Acquisitions (M&A)",
-    "sortOrder": 1
-  },
-  {
-    "id": "value-chain-integration",
-    "parentId": "buying-and-selling-a-business",
-    "label": "Value Chain Integration",
-    "sortOrder": 2
-  },
-  {
-    "id": "management-buyout-mbo",
-    "parentId": "buying-and-selling-a-business",
-    "label": "Management Buyout (MBO)",
-    "sortOrder": 3
-  },
-  {
-    "id": "divestiture-corporate-divestment",
-    "parentId": "buying-and-selling-a-business",
-    "label": "Divestiture (Corporate Divestment)",
-    "sortOrder": 4
-  },
-  {
-    "id": "human-resources-human-resources",
-    "parentId": "human-resources",
-    "label": "Human Resources",
-    "sortOrder": 1
-  },
-  {
-    "id": "hr-activity-flow",
-    "parentId": "human-resources",
-    "label": "HR Activity Flow",
-    "sortOrder": 1
-  },
-  {
-    "id": "employee-selection",
-    "parentId": "human-resources",
-    "label": "Employee Selection",
-    "sortOrder": 2
-  },
-  {
-    "id": "employee-recruitment-and-training",
-    "parentId": "human-resources",
-    "label": "Employee Recruitment and Training",
-    "sortOrder": 3
-  },
-  {
-    "id": "performance-based-selection",
-    "parentId": "human-resources",
-    "label": "Performance-Based Selection",
-    "sortOrder": 4
-  },
-  {
-    "id": "how-to-measure-results-motivate-and-promote-employees",
-    "parentId": "human-resources",
-    "label": "How to Measure Results, Motivate and Promote Employees?",
-    "sortOrder": 5
-  },
-  {
-    "id": "motivational-strategies-and-reward-systems",
-    "parentId": "human-resources",
-    "label": "Motivational Strategies and Reward Systems",
-    "sortOrder": 6
-  },
-  {
-    "id": "employee-interaction-and-communication",
-    "parentId": "human-resources",
-    "label": "Employee Interaction and Communication",
-    "sortOrder": 7
-  },
-  {
-    "id": "employee-relationship-management",
-    "parentId": "human-resources",
-    "label": "Employee Relationship Management",
-    "sortOrder": 8
-  },
-  {
-    "id": "employment-termination",
-    "parentId": "human-resources",
-    "label": "Employment Termination",
-    "sortOrder": 9
-  },
-  {
-    "id": "hr-professional-characteristics",
-    "parentId": "human-resources",
-    "label": "HR Professional Characteristics",
-    "sortOrder": 10
-  },
-  {
-    "id": "introduction-to-marketing",
-    "parentId": "marketing",
-    "label": "Introduction to Marketing",
-    "sortOrder": 1
-  },
-  {
-    "id": "understanding-the-market",
-    "parentId": "marketing",
-    "label": "Understanding the Market",
-    "sortOrder": 2
-  },
-  {
-    "id": "competitive-analysis",
-    "parentId": "marketing",
-    "label": "Competitive Analysis",
-    "sortOrder": 3
-  },
-  {
-    "id": "capturing-attention",
-    "parentId": "marketing",
-    "label": "Capturing Attention",
-    "sortOrder": 4
-  },
-  {
-    "id": "marketing-approaches",
-    "parentId": "marketing",
-    "label": "Marketing Approaches",
-    "sortOrder": 5
-  },
-  {
-    "id": "marketing-mix",
-    "parentId": "marketing",
-    "label": "Marketing Mix",
-    "sortOrder": 6
-  },
-  {
-    "id": "building-a-customer-community",
-    "parentId": "marketing",
-    "label": "Building a Customer Community",
-    "sortOrder": 7
-  },
-  {
-    "id": "martech-marketing-and-technology-combined",
-    "parentId": "marketing",
-    "label": "MarTech - Marketing and Technology Combined",
-    "sortOrder": 8
-  },
-  {
-    "id": "value-innovation-radical-diversification",
-    "parentId": "marketing",
-    "label": "Value Innovation - Radical Diversification",
-    "sortOrder": 9
-  },
-  {
-    "id": "public-relations-pr",
-    "parentId": "marketing",
-    "label": "Public Relations (PR)",
-    "sortOrder": 10
-  },
-  {
-    "id": "marketing-mix-marketing-mix",
-    "parentId": "marketing-mix",
-    "label": "Marketing Mix",
-    "sortOrder": 1
-  },
-  {
-    "id": "role-of-product-in-marketing-mix",
-    "parentId": "marketing-mix",
-    "label": "Role of Product in Marketing Mix",
-    "sortOrder": 2
-  },
-  {
-    "id": "niche-marketing-how-to-target-specific-groups",
-    "parentId": "marketing-approaches",
-    "label": "Niche Marketing - How to Target Specific Groups",
-    "sortOrder": 1
-  },
-  {
-    "id": "traditional-marketing-fundamentals",
-    "parentId": "marketing-approaches",
-    "label": "Traditional Marketing Fundamentals",
-    "sortOrder": 1
-  },
-  {
-    "id": "using-different-marketing-approaches",
-    "parentId": "marketing-approaches",
-    "label": "Using Different Marketing Approaches",
-    "sortOrder": 1
-  },
-  {
-    "id": "traditional-advertising",
-    "parentId": "marketing-approaches",
-    "label": "Traditional Advertising",
-    "sortOrder": 2
-  },
-  {
-    "id": "digital-marketing",
-    "parentId": "marketing-approaches",
-    "label": "Digital Marketing",
-    "sortOrder": 2
-  },
-  {
-    "id": "inbound-marketing-attraction-marketing",
-    "parentId": "marketing-approaches",
-    "label": "Inbound Marketing (Attraction Marketing)",
-    "sortOrder": 2
-  },
-  {
-    "id": "vidcasting",
-    "parentId": "marketing-approaches",
-    "label": "Vidcasting",
-    "sortOrder": 3
-  },
-  {
-    "id": "outbound-marketing",
-    "parentId": "marketing-approaches",
-    "label": "Outbound Marketing",
-    "sortOrder": 3
-  },
-  {
-    "id": "engagement-marketing-strategies-and-techniques",
-    "parentId": "marketing-approaches",
-    "label": "Engagement Marketing - Strategies and Techniques",
-    "sortOrder": 3
-  },
-  {
-    "id": "japanese-marketing-approach",
-    "parentId": "marketing-approaches",
-    "label": "Japanese Marketing Approach",
-    "sortOrder": 4
-  },
-  {
-    "id": "blogging",
-    "parentId": "marketing-approaches",
-    "label": "Blogging",
-    "sortOrder": 4
-  },
-  {
-    "id": "sensory-marketing-techniques",
-    "parentId": "marketing-approaches",
-    "label": "Sensory Marketing Techniques",
-    "sortOrder": 4
-  },
-  {
-    "id": "characteristics-of-companies-with-effective-marketing",
-    "parentId": "marketing-approaches",
-    "label": "Characteristics of Companies with Effective Marketing",
-    "sortOrder": 5
-  },
-  {
-    "id": "relationship-marketing-strategies-and-techniques",
-    "parentId": "marketing-approaches",
-    "label": "Relationship Marketing - Strategies and Techniques",
-    "sortOrder": 5
-  },
-  {
-    "id": "social-media-marketing",
-    "parentId": "marketing-approaches",
-    "label": "Social Media Marketing",
-    "sortOrder": 5
-  },
-  {
-    "id": "direct-mail-marketing",
-    "parentId": "marketing-approaches",
-    "label": "Direct Mail Marketing",
-    "sortOrder": 6
-  },
-  {
-    "id": "search-engine-optimization-seo",
-    "parentId": "marketing-approaches",
-    "label": "Search Engine Optimization (SEO)",
-    "sortOrder": 6
-  },
-  {
-    "id": "telemarketing",
-    "parentId": "marketing-approaches",
-    "label": "Telemarketing",
-    "sortOrder": 7
-  },
-  {
-    "id": "sponsorships",
-    "parentId": "marketing-approaches",
-    "label": "Sponsorships",
-    "sortOrder": 8
-  },
-  {
-    "id": "management-management",
+    "id": "management-fundamentals",
     "parentId": "management",
-    "label": "Management",
+    "label": "Management Fundamentals",
     "sortOrder": 1
   },
   {
@@ -1104,345 +1548,597 @@
     "sortOrder": 9
   },
   {
-    "id": "product",
-    "parentId": "types-of-value-forms-of-value",
-    "label": "Product",
-    "sortOrder": 1
-  },
-  {
-    "id": "forms-of-value",
-    "parentId": "types-of-value-forms-of-value",
-    "label": "Forms of Value",
-    "sortOrder": 1
-  },
-  {
-    "id": "service",
-    "parentId": "types-of-value-forms-of-value",
-    "label": "Service",
-    "sortOrder": 2
-  },
-  {
-    "id": "shared-resource",
-    "parentId": "types-of-value-forms-of-value",
-    "label": "Shared Resource",
-    "sortOrder": 3
-  },
-  {
-    "id": "subscription",
-    "parentId": "types-of-value-forms-of-value",
-    "label": "Subscription",
-    "sortOrder": 4
-  },
-  {
-    "id": "resale",
-    "parentId": "types-of-value-forms-of-value",
-    "label": "Resale",
-    "sortOrder": 5
-  },
-  {
-    "id": "lease",
-    "parentId": "types-of-value-forms-of-value",
-    "label": "Lease",
-    "sortOrder": 6
-  },
-  {
-    "id": "audience-aggregation",
-    "parentId": "types-of-value-forms-of-value",
-    "label": "Audience Aggregation",
-    "sortOrder": 7
-  },
-  {
-    "id": "loan",
-    "parentId": "types-of-value-forms-of-value",
-    "label": "Loan",
-    "sortOrder": 8
-  },
-  {
-    "id": "option",
-    "parentId": "types-of-value-forms-of-value",
-    "label": "Option",
-    "sortOrder": 9
-  },
-  {
-    "id": "insurance",
-    "parentId": "types-of-value-forms-of-value",
-    "label": "Insurance",
-    "sortOrder": 10
-  },
-  {
-    "id": "capital",
-    "parentId": "types-of-value-forms-of-value",
-    "label": "Capital",
+    "id": "human-resources",
+    "parentId": null,
+    "label": "Human Resources",
     "sortOrder": 11
   },
   {
-    "id": "free-value",
-    "parentId": "types-of-value-forms-of-value",
-    "label": "Free Value",
+    "id": "hr-activity-flow",
+    "parentId": "human-resources",
+    "label": "HR Activity Flow",
+    "sortOrder": 1
+  },
+  {
+    "id": "employee-selection",
+    "parentId": "human-resources",
+    "label": "Employee Selection",
+    "sortOrder": 2
+  },
+  {
+    "id": "employee-recruitment-and-training",
+    "parentId": "human-resources",
+    "label": "Employee Recruitment and Training",
+    "sortOrder": 3
+  },
+  {
+    "id": "performance-based-selection",
+    "parentId": "human-resources",
+    "label": "Performance-Based Selection",
+    "sortOrder": 4
+  },
+  {
+    "id": "how-to-measure-results-motivate-and-promote-employees",
+    "parentId": "human-resources",
+    "label": "How to Measure Results, Motivate, and Promote Employees?",
+    "sortOrder": 5
+  },
+  {
+    "id": "motivation-strategies-and-reward-systems",
+    "parentId": "human-resources",
+    "label": "Motivation Strategies and Reward Systems",
+    "sortOrder": 6
+  },
+  {
+    "id": "employee-interaction-and-communication",
+    "parentId": "human-resources",
+    "label": "Employee Interaction and Communication",
+    "sortOrder": 7
+  },
+  {
+    "id": "employee-relations-management",
+    "parentId": "human-resources",
+    "label": "Employee Relations Management",
+    "sortOrder": 8
+  },
+  {
+    "id": "employment-termination",
+    "parentId": "human-resources",
+    "label": "Employment Termination",
+    "sortOrder": 9
+  },
+  {
+    "id": "characteristics-of-hr-professionals",
+    "parentId": "human-resources",
+    "label": "Characteristics of HR Professionals",
+    "sortOrder": 10
+  },
+  {
+    "id": "working-with-people",
+    "parentId": null,
+    "label": "Working with People",
     "sortOrder": 12
   },
   {
-    "id": "sponsorship",
-    "parentId": "types-of-value-forms-of-value",
-    "label": "Sponsorship",
+    "id": "empathy",
+    "parentId": "working-with-people",
+    "label": "Empathy",
+    "sortOrder": 1
+  },
+  {
+    "id": "respect",
+    "parentId": "working-with-people",
+    "label": "Respect",
+    "sortOrder": 2
+  },
+  {
+    "id": "importance",
+    "parentId": "working-with-people",
+    "label": "Importance",
+    "sortOrder": 3
+  },
+  {
+    "id": "safety",
+    "parentId": "working-with-people",
+    "label": "Safety",
+    "sortOrder": 4
+  },
+  {
+    "id": "blame-shifting",
+    "parentId": "working-with-people",
+    "label": "Blame Shifting",
+    "sortOrder": 5
+  },
+  {
+    "id": "conflicts",
+    "parentId": "working-with-people",
+    "label": "Conflicts",
+    "sortOrder": 6
+  },
+  {
+    "id": "how-to-effectively-use-authority-when-working-with-people",
+    "parentId": "working-with-people",
+    "label": "How to Effectively Use Authority When Working with People?",
+    "sortOrder": 7
+  },
+  {
+    "id": "power",
+    "parentId": "working-with-people",
+    "label": "Power",
+    "sortOrder": 8
+  },
+  {
+    "id": "commitment-and-consistency",
+    "parentId": "working-with-people",
+    "label": "Commitment and Consistency",
+    "sortOrder": 9
+  },
+  {
+    "id": "command-power",
+    "parentId": "working-with-people",
+    "label": "Command Power",
+    "sortOrder": 10
+  },
+  {
+    "id": "the-reason-why",
+    "parentId": "working-with-people",
+    "label": "The Reason Why",
+    "sortOrder": 11
+  },
+  {
+    "id": "expectations",
+    "parentId": "working-with-people",
+    "label": "Expectations",
+    "sortOrder": 12
+  },
+  {
+    "id": "clans",
+    "parentId": "working-with-people",
+    "label": "Clans",
     "sortOrder": 13
   },
   {
-    "id": "loyalty-program",
-    "parentId": "types-of-value-forms-of-value",
-    "label": "Loyalty Program",
+    "id": "convergence-and-divergence",
+    "parentId": "working-with-people",
+    "label": "Convergence and Divergence",
     "sortOrder": 14
   },
   {
-    "id": "decisions",
-    "parentId": "self-management-decisions",
-    "label": "Decisions",
+    "id": "overcommunication",
+    "parentId": "working-with-people",
+    "label": "Overcommunication",
+    "sortOrder": 15
+  },
+  {
+    "id": "cognitive-capacity-limitations",
+    "parentId": "working-with-people",
+    "label": "Cognitive Capacity Limitations",
+    "sortOrder": 16
+  },
+  {
+    "id": "bystander-effect",
+    "parentId": "working-with-people",
+    "label": "Bystander Effect",
+    "sortOrder": 17
+  },
+  {
+    "id": "incentives",
+    "parentId": "working-with-people",
+    "label": "Incentives",
+    "sortOrder": 18
+  },
+  {
+    "id": "planning-fallacies",
+    "parentId": "working-with-people",
+    "label": "Planning Fallacies",
+    "sortOrder": 19
+  },
+  {
+    "id": "self-management",
+    "parentId": null,
+    "label": "Self-Management",
+    "sortOrder": 13
+  },
+  {
+    "id": "personal-development",
+    "parentId": "self-management",
+    "label": "Personal Development",
     "sortOrder": 1
   },
   {
-    "id": "goals",
-    "parentId": "self-management-decisions",
-    "label": "Goals",
+    "id": "habits",
+    "parentId": "self-management",
+    "label": "Habits",
     "sortOrder": 2
   },
   {
-    "id": "most-important-tasks",
-    "parentId": "self-management-decisions",
-    "label": "Most Important Tasks",
+    "id": "flow-state",
+    "parentId": "self-management",
+    "label": "Flow State",
     "sortOrder": 3
   },
   {
-    "id": "do-eliminate-delegate-and-defer",
-    "parentId": "self-management-decisions",
-    "label": "Do, Eliminate, Delegate, and Defer",
+    "id": "cognitive-switching-penalty",
+    "parentId": "self-management",
+    "label": "Cognitive Switching Penalty",
     "sortOrder": 4
   },
   {
-    "id": "states-of-being",
-    "parentId": "self-management-decisions",
-    "label": "States of Being",
+    "id": "energy-cycles",
+    "parentId": "self-management",
+    "label": "Energy Cycles",
     "sortOrder": 5
   },
   {
-    "id": "the-4-how-method",
-    "parentId": "self-management-decisions",
-    "label": "The \"4 How\" Method",
+    "id": "preserving-energy-resources",
+    "parentId": "self-management",
+    "label": "Preserving Energy Resources",
     "sortOrder": 6
   },
   {
-    "id": "the-5-why-method",
-    "parentId": "self-management-decisions",
-    "label": "The \"5 Why\" Method",
+    "id": "work-conditions",
+    "parentId": "self-management",
+    "label": "Work Conditions",
     "sortOrder": 7
   },
   {
-    "id": "introduction-to-pricing",
-    "parentId": "pricing",
-    "label": "Introduction to Pricing",
-    "sortOrder": 1
-  },
-  {
-    "id": "tactics",
-    "parentId": "pricing",
-    "label": "Tactics",
-    "sortOrder": 2
-  },
-  {
-    "id": "introduction-to-operations-and-production",
-    "parentId": "operations-and-production",
-    "label": "Introduction to Operations & Production",
-    "sortOrder": 1
-  },
-  {
-    "id": "production-types",
-    "parentId": "operations-and-production",
-    "label": "Production Types",
-    "sortOrder": 2
-  },
-  {
-    "id": "quality-management",
-    "parentId": "operations-and-production",
-    "label": "Quality Management",
-    "sortOrder": 3
-  },
-  {
-    "id": "applying-hybrid-processes-in-operations",
-    "parentId": "operations-and-production",
-    "label": "Applying Hybrid Processes in Operations",
-    "sortOrder": 4
-  },
-  {
-    "id": "outsourcing-managing-external-partners-in-production",
-    "parentId": "operations-and-production",
-    "label": "Outsourcing - Managing External Partners in Production",
-    "sortOrder": 5
-  },
-  {
-    "id": "how-to-effectively-use-offshoring",
-    "parentId": "operations-and-production",
-    "label": "How to Effectively Use Offshoring?",
-    "sortOrder": 6
-  },
-  {
-    "id": "innovations-and-inventions",
-    "parentId": "operations-and-production",
-    "label": "Innovations and Inventions",
-    "sortOrder": 7
-  },
-  {
-    "id": "feedback-collection-methods",
-    "parentId": "operations-and-production",
-    "label": "Feedback Collection Methods",
+    "id": "performance-load",
+    "parentId": "self-management",
+    "label": "Performance Load",
     "sortOrder": 8
   },
   {
-    "id": "compliance",
-    "parentId": "operations-and-production",
-    "label": "Compliance",
+    "id": "willpower-depletion",
+    "parentId": "self-management",
+    "label": "Willpower Depletion",
     "sortOrder": 9
   },
   {
-    "id": "attention-grabbing-techniques-in-marketing",
-    "parentId": "attention-fundamentals",
-    "label": "Attention-Grabbing Techniques in Marketing",
-    "sortOrder": 1
-  },
-  {
-    "id": "whose-attention-to-capture",
-    "parentId": "attention-fundamentals",
-    "label": "Whose Attention to Capture?",
-    "sortOrder": 2
-  },
-  {
-    "id": "how-to-convert-attention-into-action",
-    "parentId": "attention-fundamentals",
-    "label": "How to Convert Attention into Action?",
-    "sortOrder": 3
-  },
-  {
-    "id": "aida",
-    "parentId": "attention-fundamentals",
-    "label": "AIDA",
-    "sortOrder": 4
-  },
-  {
-    "id": "hook",
-    "parentId": "attention-fundamentals",
-    "label": "Hook",
-    "sortOrder": 5
-  },
-  {
-    "id": "call-to-action",
-    "parentId": "attention-fundamentals",
-    "label": "Call to Action",
-    "sortOrder": 6
-  },
-  {
-    "id": "end-result-what-your-clients-really-want-to-achieve",
-    "parentId": "attention-fundamentals",
-    "label": "End Result - What Your Clients Really Want to Achieve?",
-    "sortOrder": 7
-  },
-  {
-    "id": "content",
-    "parentId": "attention-fundamentals",
-    "label": "Content",
-    "sortOrder": 8
-  },
-  {
-    "id": "content-distribution-strategy",
-    "parentId": "attention-fundamentals",
-    "label": "Content Distribution Strategy",
-    "sortOrder": 9
-  },
-  {
-    "id": "storytelling-in-marketing",
-    "parentId": "attention-fundamentals",
-    "label": "Storytelling in Marketing",
+    "id": "inhibition",
+    "parentId": "self-management",
+    "label": "Inhibition",
     "sortOrder": 10
   },
   {
-    "id": "social-proof-in-marketing",
-    "parentId": "attention-fundamentals",
-    "label": "Social Proof in Marketing",
+    "id": "stress-and-recovery",
+    "parentId": "self-management",
+    "label": "Stress and Recovery",
     "sortOrder": 11
   },
   {
-    "id": "how-to-create-viral-content",
-    "parentId": "attention-fundamentals",
-    "label": "How to Create Viral Content?",
+    "id": "legacy-hardware",
+    "parentId": "self-management",
+    "label": "Legacy Hardware",
     "sortOrder": 12
   },
   {
-    "id": "nostalgia",
-    "parentId": "basic-biases",
-    "label": "Nostalgia",
+    "id": "parkinsons-law",
+    "parentId": "self-management",
+    "label": "Parkinson's Law",
+    "sortOrder": 13
+  },
+  {
+    "id": "pomodoro-technique",
+    "parentId": "self-management",
+    "label": "Pomodoro Technique",
+    "sortOrder": 14
+  },
+  {
+    "id": "next-action",
+    "parentId": "self-management",
+    "label": "Next Action",
+    "sortOrder": 15
+  },
+  {
+    "id": "decisions",
+    "parentId": "self-management",
+    "label": "Decisions",
+    "sortOrder": 16
+  },
+  {
+    "id": "goals",
+    "parentId": "self-management",
+    "label": "Goals",
+    "sortOrder": 17
+  },
+  {
+    "id": "most-important-tasks",
+    "parentId": "self-management",
+    "label": "Most Important Tasks",
+    "sortOrder": 18
+  },
+  {
+    "id": "do-eliminate-delegate-and-defer",
+    "parentId": "self-management",
+    "label": "Do, Eliminate, Delegate, and Defer",
+    "sortOrder": 19
+  },
+  {
+    "id": "states-of-being",
+    "parentId": "self-management",
+    "label": "States of Being",
+    "sortOrder": 20
+  },
+  {
+    "id": "the-4-how-method",
+    "parentId": "self-management",
+    "label": "The \"4 How\" Method",
+    "sortOrder": 21
+  },
+  {
+    "id": "the-5-why-method",
+    "parentId": "self-management",
+    "label": "The \"5 Why\" Method",
+    "sortOrder": 22
+  },
+  {
+    "id": "akrasia",
+    "parentId": "self-management",
+    "label": "Akrasia",
+    "sortOrder": 23
+  },
+  {
+    "id": "externalization",
+    "parentId": "self-management",
+    "label": "Externalization",
+    "sortOrder": 24
+  },
+  {
+    "id": "cognitive-freeze-after-threat",
+    "parentId": "self-management",
+    "label": "Cognitive Freeze After Threat",
+    "sortOrder": 25
+  },
+  {
+    "id": "locus-of-control",
+    "parentId": "self-management",
+    "label": "Locus of Control",
+    "sortOrder": 26
+  },
+  {
+    "id": "limiting-beliefs",
+    "parentId": "self-management",
+    "label": "Limiting Beliefs",
+    "sortOrder": 27
+  },
+  {
+    "id": "bias",
+    "parentId": "self-management",
+    "label": "Bias",
+    "sortOrder": 28
+  },
+  {
+    "id": "appeal-of-high-positions",
+    "parentId": "self-management",
+    "label": "Appeal of High Positions",
+    "sortOrder": 29
+  },
+  {
+    "id": "comparison-fallacy",
+    "parentId": "self-management",
+    "label": "Comparison Fallacy",
+    "sortOrder": 30
+  },
+  {
+    "id": "attachment",
+    "parentId": "self-management",
+    "label": "Attachment",
+    "sortOrder": 31
+  },
+  {
+    "id": "hedonic-adaptation",
+    "parentId": "self-management",
+    "label": "Hedonic Adaptation",
+    "sortOrder": 32
+  },
+  {
+    "id": "behavior-programming",
+    "parentId": "self-management",
+    "label": "Behavior Programming",
+    "sortOrder": 33
+  },
+  {
+    "id": "testing",
+    "parentId": "self-management",
+    "label": "Testing",
+    "sortOrder": 34
+  },
+  {
+    "id": "value-delivery",
+    "parentId": null,
+    "label": "Value Delivery",
+    "sortOrder": 14
+  },
+  {
+    "id": "expectation-effect",
+    "parentId": "value-delivery",
+    "label": "Expectation Effect",
     "sortOrder": 1
   },
   {
-    "id": "scarcity",
-    "parentId": "basic-biases",
-    "label": "Scarcity",
+    "id": "supply-chain",
+    "parentId": "value-delivery",
+    "label": "Supply Chain",
     "sortOrder": 2
   },
   {
-    "id": "loss-aversion",
-    "parentId": "basic-biases",
-    "label": "Loss Aversion",
+    "id": "transportation-and-logistics",
+    "parentId": "value-delivery",
+    "label": "Transportation and Logistics",
     "sortOrder": 3
   },
   {
-    "id": "comparison",
-    "parentId": "basic-biases",
-    "label": "Comparison",
+    "id": "distribution-channel",
+    "parentId": "value-delivery",
+    "label": "Distribution Channel",
     "sortOrder": 4
   },
   {
-    "id": "familiarity-principle",
-    "parentId": "basic-biases",
-    "label": "Familiarity Principle",
+    "id": "stock",
+    "parentId": "value-delivery",
+    "label": "Stock",
     "sortOrder": 5
   },
   {
-    "id": "novelty-principle",
-    "parentId": "basic-biases",
-    "label": "Novelty Principle",
+    "id": "predictability",
+    "parentId": "value-delivery",
+    "label": "Predictability",
     "sortOrder": 6
   },
   {
-    "id": "commitment-principle",
-    "parentId": "basic-biases",
-    "label": "Commitment Principle",
+    "id": "throughput",
+    "parentId": "value-delivery",
+    "label": "Throughput",
     "sortOrder": 7
   },
   {
-    "id": "bandwagon-principle",
-    "parentId": "basic-biases",
-    "label": "Bandwagon Principle",
+    "id": "scalability",
+    "parentId": "value-delivery",
+    "label": "Scalability",
     "sortOrder": 8
   },
   {
-    "id": "forer-barnum-effect",
-    "parentId": "basic-biases",
-    "label": "Forer-Barnum Effect",
+    "id": "understanding-systems",
+    "parentId": null,
+    "label": "Understanding Systems",
+    "sortOrder": 15
+  },
+  {
+    "id": "flow",
+    "parentId": "understanding-systems",
+    "label": "Flow",
+    "sortOrder": 1
+  },
+  {
+    "id": "resources",
+    "parentId": "understanding-systems",
+    "label": "Resources",
+    "sortOrder": 2
+  },
+  {
+    "id": "stocks-flows-and-feedback-loops",
+    "parentId": "understanding-systems",
+    "label": "Stocks, Flows, and Feedback Loops",
+    "sortOrder": 3
+  },
+  {
+    "id": "surplus",
+    "parentId": "understanding-systems",
+    "label": "Surplus",
+    "sortOrder": 4
+  },
+  {
+    "id": "constraints",
+    "parentId": "understanding-systems",
+    "label": "Constraints",
+    "sortOrder": 5
+  },
+  {
+    "id": "feedback-loop",
+    "parentId": "understanding-systems",
+    "label": "Feedback Loop",
+    "sortOrder": 6
+  },
+  {
+    "id": "galls-law",
+    "parentId": "understanding-systems",
+    "label": "Gall's Law",
+    "sortOrder": 7
+  },
+  {
+    "id": "environment",
+    "parentId": "understanding-systems",
+    "label": "Environment",
+    "sortOrder": 8
+  },
+  {
+    "id": "selection-tests",
+    "parentId": "understanding-systems",
+    "label": "Selection Tests",
     "sortOrder": 9
   },
   {
-    "id": "mental-associations",
-    "parentId": "basic-biases",
-    "label": "Mental Associations",
+    "id": "change",
+    "parentId": "understanding-systems",
+    "label": "Change",
     "sortOrder": 10
+  },
+  {
+    "id": "uncertainty",
+    "parentId": "understanding-systems",
+    "label": "Uncertainty",
+    "sortOrder": 11
+  },
+  {
+    "id": "domino-effect",
+    "parentId": "understanding-systems",
+    "label": "Domino Effect",
+    "sortOrder": 12
+  },
+  {
+    "id": "autocatalysis",
+    "parentId": "understanding-systems",
+    "label": "Autocatalysis",
+    "sortOrder": 13
+  },
+  {
+    "id": "force-multiplier",
+    "parentId": "understanding-systems",
+    "label": "Force Multiplier",
+    "sortOrder": 14
+  },
+  {
+    "id": "multiplication",
+    "parentId": "understanding-systems",
+    "label": "Multiplication",
+    "sortOrder": 15
+  },
+  {
+    "id": "duplication",
+    "parentId": "understanding-systems",
+    "label": "Duplication",
+    "sortOrder": 16
+  },
+  {
+    "id": "normal-accidents",
+    "parentId": "understanding-systems",
+    "label": "Normal Accidents",
+    "sortOrder": 17
+  },
+  {
+    "id": "resilience-self-organization-and-hierarchy",
+    "parentId": "understanding-systems",
+    "label": "Resilience, Self-Organization, and Hierarchy",
+    "sortOrder": 18
+  },
+  {
+    "id": "time-delays-and-impact-on-systems",
+    "parentId": "understanding-systems",
+    "label": "Time Delays and Impact on Systems",
+    "sortOrder": 19
+  },
+  {
+    "id": "managing-interdependencies-in-complex-systems",
+    "parentId": "understanding-systems",
+    "label": "Managing Interdependencies in Complex Systems",
+    "sortOrder": 20
+  },
+  {
+    "id": "applying-systems-thinking-in-everyday-life",
+    "parentId": "understanding-systems",
+    "label": "Applying Systems Thinking in Everyday Life",
+    "sortOrder": 21
+  },
+  {
+    "id": "business-models",
+    "parentId": null,
+    "label": "Business Models",
+    "sortOrder": 16
   },
   {
     "id": "add-on-business-model",
     "parentId": "business-models",
     "label": "Add-on Business Model",
-    "sortOrder": 1
-  },
-  {
-    "id": "business-models-business-models",
-    "parentId": "business-models",
-    "label": "Business Models",
     "sortOrder": 1
   },
   {
@@ -1467,24 +2163,24 @@
     "id": "atm-business-model",
     "parentId": "business-models",
     "label": "ATM Business Model",
-    "sortOrder": 6
+    "sortOrder": 5
   },
   {
     "id": "ingredient-branding-business-model",
     "parentId": "business-models",
     "label": "Ingredient Branding (Business Model)",
+    "sortOrder": 6
+  },
+  {
+    "id": "razor-and-blade",
+    "parentId": "business-models",
+    "label": "Razor and Blade",
     "sortOrder": 7
   },
   {
     "id": "crowdfunding-business-model",
     "parentId": "business-models",
     "label": "Crowdfunding (Business Model)",
-    "sortOrder": 8
-  },
-  {
-    "id": "razor-and-blade",
-    "parentId": "business-models",
-    "label": "Razor and Blade",
     "sortOrder": 8
   },
   {
@@ -1532,7 +2228,7 @@
   {
     "id": "e-commerce",
     "parentId": "business-models",
-    "label": "E-commerce",
+    "label": "E-Commerce",
     "sortOrder": 16
   },
   {
@@ -1640,7 +2336,7 @@
   {
     "id": "lock-in-model",
     "parentId": "business-models",
-    "label": "Lock-in Model",
+    "label": "Lock-In Model",
     "sortOrder": 34
   },
   {
@@ -1656,9 +2352,9 @@
     "sortOrder": 36
   },
   {
-    "id": "person-to-person-p2p-business-model",
+    "id": "peer-to-peer-p2p-business-model",
     "parentId": "business-models",
-    "label": "Person to Person (P2P Business Model)",
+    "label": "Peer-to-Peer (P2P Business Model)",
     "sortOrder": 37
   },
   {
@@ -1694,7 +2390,7 @@
   {
     "id": "pay-per-use",
     "parentId": "business-models",
-    "label": "Pay Per Use",
+    "label": "Pay-Per-Use",
     "sortOrder": 43
   },
   {
@@ -1704,15 +2400,15 @@
     "sortOrder": 44
   },
   {
-    "id": "turn-trash-into-cash",
+    "id": "turn-waste-into-cash",
     "parentId": "business-models",
-    "label": "Turn Trash into Cash",
+    "label": "Turn Waste into Cash",
     "sortOrder": 45
   },
   {
-    "id": "experience-selling",
+    "id": "selling-experiences",
     "parentId": "business-models",
-    "label": "Experience Selling",
+    "label": "Selling Experiences",
     "sortOrder": 46
   },
   {
@@ -1734,9 +2430,9 @@
     "sortOrder": 49
   },
   {
-    "id": "no-frills",
+    "id": "bare-essentials",
     "parentId": "business-models",
-    "label": "No Frills",
+    "label": "Bare Essentials",
     "sortOrder": 50
   },
   {
@@ -1776,417 +2472,57 @@
     "sortOrder": 56
   },
   {
-    "id": "key-negotiation-strategies-in-sales",
-    "parentId": "negotiation",
-    "label": "Key Negotiation Strategies in Sales",
+    "id": "company-structure",
+    "parentId": null,
+    "label": "Company Structure",
+    "sortOrder": 17
+  },
+  {
+    "id": "functional-organization",
+    "parentId": "company-structure",
+    "label": "Functional Organization",
     "sortOrder": 1
   },
   {
-    "id": "negotiation-dimensions",
-    "parentId": "negotiation",
-    "label": "Negotiation Dimensions",
+    "id": "divisional-organization",
+    "parentId": "company-structure",
+    "label": "Divisional Organization",
     "sortOrder": 2
   },
   {
-    "id": "negotiation-negotiation-dimensions",
-    "parentId": "negotiation",
-    "label": "Negotiation Dimensions",
+    "id": "matrix-structure",
+    "parentId": "company-structure",
+    "label": "Matrix Structure",
     "sortOrder": 3
   },
   {
-    "id": "3-universal-currencies",
-    "parentId": "negotiation",
-    "label": "3 Universal Currencies",
+    "id": "network-organization",
+    "parentId": "company-structure",
+    "label": "Network Organization",
     "sortOrder": 4
   },
   {
-    "id": "persuasion",
-    "parentId": "negotiation",
-    "label": "Persuasion",
+    "id": "team-based-organization",
+    "parentId": "company-structure",
+    "label": "Team-Based Organization",
     "sortOrder": 5
   },
   {
-    "id": "attention-fundamentals",
-    "parentId": "capturing-attention",
-    "label": "Attention Fundamentals",
-    "sortOrder": 1
-  },
-  {
-    "id": "factors-affecting-attention-capture",
-    "parentId": "capturing-attention",
-    "label": "Factors Affecting Attention Capture",
-    "sortOrder": 2
-  },
-  {
-    "id": "introduction-to-sales",
-    "parentId": "sales",
-    "label": "Introduction to Sales",
-    "sortOrder": 1
-  },
-  {
-    "id": "concepts-that-drive-sales",
-    "parentId": "sales",
-    "label": "Concepts that Drive Sales",
-    "sortOrder": 2
-  },
-  {
-    "id": "negotiation",
-    "parentId": "sales",
-    "label": "Negotiation",
-    "sortOrder": 3
-  },
-  {
-    "id": "sales-types",
-    "parentId": "sales",
-    "label": "Sales Types",
-    "sortOrder": 4
-  },
-  {
-    "id": "how-to-effectively-mitigate-risk-in-sales",
-    "parentId": "sales",
-    "label": "How to Effectively Mitigate Risk in Sales?",
-    "sortOrder": 5
-  },
-  {
-    "id": "how-to-effectively-manage-sales-revenue",
-    "parentId": "sales",
-    "label": "How to Effectively Manage Sales Revenue?",
+    "id": "flattening-company-hierarchy",
+    "parentId": "company-structure",
+    "label": "Flattening Company Hierarchy",
     "sortOrder": 6
   },
   {
-    "id": "prompts-prompts",
-    "parentId": "prompts",
-    "label": "Prompts",
-    "sortOrder": 1
-  },
-  {
-    "id": "key-concepts-for-working-with-people",
-    "parentId": "working-with-people",
-    "label": "Key Concepts for Working with People",
-    "sortOrder": 1
-  },
-  {
-    "id": "key-concepts-for-management",
-    "parentId": "working-with-people",
-    "label": "Key Concepts for Management",
-    "sortOrder": 2
-  },
-  {
-    "id": "understanding-the-market-understanding-the-market",
-    "parentId": "understanding-the-market",
-    "label": "Understanding the Market",
-    "sortOrder": 2
-  },
-  {
-    "id": "ways-to-test-the-market",
-    "parentId": "understanding-the-market",
-    "label": "Ways to Test the Market",
-    "sortOrder": 2
-  },
-  {
-    "id": "market-entry-timing",
-    "parentId": "understanding-the-market",
-    "label": "Market Entry Timing",
-    "sortOrder": 4
-  },
-  {
-    "id": "the-ask-method",
-    "parentId": "understanding-the-market",
-    "label": "The \"Ask\" Method",
-    "sortOrder": 5
-  },
-  {
-    "id": "market-share",
-    "parentId": "understanding-the-market",
-    "label": "Market Share",
-    "sortOrder": 6
-  },
-  {
-    "id": "pestle-analysis",
-    "parentId": "understanding-the-market",
-    "label": "PESTLE Analysis",
-    "sortOrder": 7
-  },
-  {
-    "id": "lead-generation",
-    "parentId": "business-development",
-    "label": "Lead Generation",
-    "sortOrder": 1
-  },
-  {
-    "id": "business-development-business-development",
-    "parentId": "business-development",
-    "label": "Business Development",
-    "sortOrder": 1
-  },
-  {
-    "id": "lead-conversion",
-    "parentId": "business-development",
-    "label": "Lead Conversion",
-    "sortOrder": 2
-  },
-  {
-    "id": "customer-retention-techniques",
-    "parentId": "business-development",
-    "label": "Customer Retention Techniques",
-    "sortOrder": 3
-  },
-  {
-    "id": "introduction-to-systems",
-    "parentId": "systems",
-    "label": "Introduction to Systems",
-    "sortOrder": 1
-  },
-  {
-    "id": "concepts-that-affect-systems",
-    "parentId": "systems",
-    "label": "Concepts that Affect Systems",
-    "sortOrder": 2
-  },
-  {
-    "id": "managing-interdependencies-in-complex-systems",
-    "parentId": "systems",
-    "label": "Managing Interdependencies in Complex Systems",
-    "sortOrder": 3
-  },
-  {
-    "id": "applying-systems-thinking-in-everyday-life",
-    "parentId": "systems",
-    "label": "Applying Systems Thinking in Everyday Life",
-    "sortOrder": 4
-  },
-  {
-    "id": "akrasia",
-    "parentId": "tendencies",
-    "label": "Akrasia",
-    "sortOrder": 1
-  },
-  {
-    "id": "externalization",
-    "parentId": "tendencies",
-    "label": "Externalization",
-    "sortOrder": 2
-  },
-  {
-    "id": "cognitive-freeze-after-threat",
-    "parentId": "tendencies",
-    "label": "Cognitive Freeze After Threat",
-    "sortOrder": 3
-  },
-  {
-    "id": "locus-of-control",
-    "parentId": "tendencies",
-    "label": "Locus of Control",
-    "sortOrder": 4
-  },
-  {
-    "id": "limiting-belief",
-    "parentId": "tendencies",
-    "label": "Limiting Belief",
-    "sortOrder": 5
-  },
-  {
-    "id": "bias",
-    "parentId": "tendencies",
-    "label": "Bias",
-    "sortOrder": 6
-  },
-  {
-    "id": "attraction-to-high-positions",
-    "parentId": "tendencies",
-    "label": "Attraction to High Positions",
-    "sortOrder": 7
-  },
-  {
-    "id": "comparison-fallacy",
-    "parentId": "tendencies",
-    "label": "Comparison Fallacy",
-    "sortOrder": 8
-  },
-  {
-    "id": "attachment",
-    "parentId": "tendencies",
-    "label": "Attachment",
-    "sortOrder": 9
-  },
-  {
-    "id": "hedonic-adaptation",
-    "parentId": "tendencies",
-    "label": "Hedonic Adaptation",
-    "sortOrder": 10
-  },
-  {
-    "id": "behavioral-programming",
-    "parentId": "tendencies",
-    "label": "Behavioral Programming",
-    "sortOrder": 11
-  },
-  {
-    "id": "startup-startup",
-    "parentId": "startup",
-    "label": "Startup",
-    "sortOrder": 1
-  },
-  {
-    "id": "types-of-startups",
-    "parentId": "startup",
-    "label": "Types of Startups",
-    "sortOrder": 1
-  },
-  {
-    "id": "business-plan",
-    "parentId": "startup",
-    "label": "Business Plan",
-    "sortOrder": 2
-  },
-  {
-    "id": "business-financing",
-    "parentId": "startup",
-    "label": "Business Financing",
-    "sortOrder": 3
-  },
-  {
-    "id": "startup-financing-methods",
-    "parentId": "startup",
-    "label": "Startup Financing Methods",
-    "sortOrder": 4
-  },
-  {
-    "id": "role-of-business-accelerators-and-incubators-in-startup-ecosystem",
-    "parentId": "startup",
-    "label": "Role of Business Accelerators and Incubators in Startup Ecosystem",
-    "sortOrder": 5
-  },
-  {
-    "id": "competitive-analysis-strategies-competitive-analysis-strategies",
-    "parentId": "competitive-analysis-strategies",
-    "label": "Competitive Analysis Strategies",
-    "sortOrder": 1
-  },
-  {
-    "id": "swot-analysis",
-    "parentId": "competitive-analysis-strategies",
-    "label": "SWOT Analysis",
-    "sortOrder": 2
-  },
-  {
-    "id": "understanding-your-competitors-strengths",
-    "parentId": "competitive-analysis-strategies",
-    "label": "Understanding Your Competitors Strengths",
-    "sortOrder": 3
-  },
-  {
-    "id": "understanding-your-competitors-weaknesses",
-    "parentId": "competitive-analysis-strategies",
-    "label": "Understanding Your Competitors Weaknesses",
-    "sortOrder": 4
-  },
-  {
-    "id": "product-positioning-maps",
-    "parentId": "competitive-analysis-strategies",
-    "label": "Product Positioning Maps",
-    "sortOrder": 5
-  },
-  {
-    "id": "feature-matrix",
-    "parentId": "competitive-analysis-strategies",
-    "label": "Feature Matrix",
-    "sortOrder": 6
-  },
-  {
-    "id": "user-reviews",
-    "parentId": "competitive-analysis-strategies",
-    "label": "User Reviews",
-    "sortOrder": 7
-  },
-  {
-    "id": "how-to-create-value",
-    "parentId": "creating-value",
-    "label": "How to Create Value?",
-    "sortOrder": 1
-  },
-  {
-    "id": "value-proposition",
-    "parentId": "creating-value",
-    "label": "Value Proposition",
-    "sortOrder": 2
-  },
-  {
-    "id": "prototype",
-    "parentId": "creating-value",
-    "label": "Prototype",
-    "sortOrder": 3
-  },
-  {
-    "id": "minimum-viable-product-mvp",
-    "parentId": "creating-value",
-    "label": "Minimum Viable Product (MVP)",
-    "sortOrder": 4
-  },
-  {
-    "id": "customer-value-model",
-    "parentId": "creating-value",
-    "label": "Customer Value Model",
-    "sortOrder": 5
-  },
-  {
-    "id": "community-building",
-    "parentId": "building-a-customer-community",
-    "label": "Community Building",
-    "sortOrder": 1
-  },
-  {
-    "id": "from-customers-to-fans-fanocracy",
-    "parentId": "building-a-customer-community",
-    "label": "From Customers to Fans (Fanocracy)",
-    "sortOrder": 2
-  },
-  {
-    "id": "how-to-use-price-as-a-decoy",
-    "parentId": "tactics",
-    "label": "How to Use Price as a Decoy?",
-    "sortOrder": 1
-  },
-  {
-    "id": "odd-and-even-pricing",
-    "parentId": "tactics",
-    "label": "Odd and Even Pricing",
-    "sortOrder": 2
-  },
-  {
-    "id": "choosing-the-right-number-for-your-product-price",
-    "parentId": "tactics",
-    "label": "Choosing the Right Number for Your Product Price",
-    "sortOrder": 3
-  },
-  {
-    "id": "price-uncertainty-principle",
-    "parentId": "tactics",
-    "label": "Price Uncertainty Principle",
-    "sortOrder": 4
-  },
-  {
-    "id": "psychological-pricing",
-    "parentId": "tactics",
-    "label": "Psychological Pricing",
-    "sortOrder": 5
-  },
-  {
-    "id": "creaming-and-skimming-pricing-tactics",
-    "parentId": "tactics",
-    "label": "Creaming and Skimming Pricing Tactics",
-    "sortOrder": 6
+    "id": "types-of-companies",
+    "parentId": null,
+    "label": "Types of Companies",
+    "sortOrder": 18
   },
   {
     "id": "corporations",
     "parentId": "types-of-companies",
     "label": "Corporations",
-    "sortOrder": 1
-  },
-  {
-    "id": "ownership-models",
-    "parentId": "types-of-companies",
-    "label": "Ownership Models",
     "sortOrder": 1
   },
   {
@@ -2208,837 +2544,75 @@
     "sortOrder": 4
   },
   {
-    "id": "non-profit-organizations",
+    "id": "nonprofit-organizations",
     "parentId": "types-of-companies",
-    "label": "Non-Profit Organizations",
+    "label": "Nonprofit Organizations",
     "sortOrder": 5
   },
   {
-    "id": "value-based-selling",
-    "parentId": "sales-types",
-    "label": "Value-Based Selling",
+    "id": "mergers-and-acquisitions-manda",
+    "parentId": null,
+    "label": "Mergers & Acquisitions (M&A)",
+    "sortOrder": 19
+  },
+  {
+    "id": "acquisition-planning",
+    "parentId": "mergers-and-acquisitions-manda",
+    "label": "Acquisition Planning",
     "sortOrder": 1
   },
   {
-    "id": "education-based-selling",
-    "parentId": "sales-types",
-    "label": "Education-Based Selling",
+    "id": "value-chain-integration",
+    "parentId": "mergers-and-acquisitions-manda",
+    "label": "Value Chain Integration",
     "sortOrder": 2
   },
   {
-    "id": "selling-through-intermediaries",
-    "parentId": "sales-types",
-    "label": "Selling Through Intermediaries",
+    "id": "management-buyout-mbo",
+    "parentId": "mergers-and-acquisitions-manda",
+    "label": "Management Buyout (MBO)",
     "sortOrder": 3
   },
   {
-    "id": "auction",
-    "parentId": "sales-types",
-    "label": "Auction",
+    "id": "divestiture-corporate-divestment",
+    "parentId": "mergers-and-acquisitions-manda",
+    "label": "Divestiture (Corporate Divestment)",
     "sortOrder": 4
   },
   {
-    "id": "strategies-for-overcoming-resistance-to-persuasion",
-    "parentId": "sales-types",
-    "label": "Strategies for Overcoming Resistance to Persuasion",
+    "id": "startup",
+    "parentId": null,
+    "label": "Startup",
+    "sortOrder": 20
+  },
+  {
+    "id": "types-of-startups",
+    "parentId": "startup",
+    "label": "Types of Startups",
+    "sortOrder": 1
+  },
+  {
+    "id": "business-plan",
+    "parentId": "startup",
+    "label": "Business Plan",
+    "sortOrder": 2
+  },
+  {
+    "id": "business-financing",
+    "parentId": "startup",
+    "label": "Business Financing",
+    "sortOrder": 3
+  },
+  {
+    "id": "startup-funding-methods",
+    "parentId": "startup",
+    "label": "Startup Funding Methods",
+    "sortOrder": 4
+  },
+  {
+    "id": "role-of-accelerators-and-incubators-in-the-startup-ecosystem",
+    "parentId": "startup",
+    "label": "Role of Accelerators and Incubators in the Startup Ecosystem",
     "sortOrder": 5
-  },
-  {
-    "id": "agile-production-approach",
-    "parentId": "production-types",
-    "label": "Agile Production Approach",
-    "sortOrder": 1
-  },
-  {
-    "id": "batch-production",
-    "parentId": "production-types",
-    "label": "Batch Production",
-    "sortOrder": 2
-  },
-  {
-    "id": "continuous-production",
-    "parentId": "production-types",
-    "label": "Continuous Production",
-    "sortOrder": 3
-  },
-  {
-    "id": "just-in-time-production",
-    "parentId": "production-types",
-    "label": "Just-in-Time Production",
-    "sortOrder": 4
-  },
-  {
-    "id": "job-production",
-    "parentId": "production-types",
-    "label": "Job Production",
-    "sortOrder": 5
-  },
-  {
-    "id": "mass-production",
-    "parentId": "production-types",
-    "label": "Mass Production",
-    "sortOrder": 6
-  },
-  {
-    "id": "mass-customization",
-    "parentId": "production-types",
-    "label": "Mass Customization",
-    "sortOrder": 7
-  },
-  {
-    "id": "lean-production",
-    "parentId": "production-types",
-    "label": "Lean Production",
-    "sortOrder": 8
-  },
-  {
-    "id": "kaizen",
-    "parentId": "production-types",
-    "label": "Kaizen",
-    "sortOrder": 9
-  },
-  {
-    "id": "six-sigma",
-    "parentId": "production-types",
-    "label": "Six Sigma",
-    "sortOrder": 10
-  },
-  {
-    "id": "quality-management-quality-management",
-    "parentId": "quality-management",
-    "label": "Quality Management",
-    "sortOrder": 1
-  },
-  {
-    "id": "quality-control",
-    "parentId": "quality-management",
-    "label": "Quality Control",
-    "sortOrder": 2
-  },
-  {
-    "id": "production-and-quality-control",
-    "parentId": "quality-management",
-    "label": "Production and Quality Control",
-    "sortOrder": 3
-  },
-  {
-    "id": "total-quality-management",
-    "parentId": "quality-management",
-    "label": "Total Quality Management",
-    "sortOrder": 4
-  },
-  {
-    "id": "collecting-user-data",
-    "parentId": "data-management",
-    "label": "Collecting User Data",
-    "sortOrder": 1
-  },
-  {
-    "id": "data-storage",
-    "parentId": "data-management",
-    "label": "Data Storage",
-    "sortOrder": 1
-  },
-  {
-    "id": "user-data-management",
-    "parentId": "data-management",
-    "label": "User Data Management",
-    "sortOrder": 2
-  },
-  {
-    "id": "big-data",
-    "parentId": "data-management",
-    "label": "Big Data",
-    "sortOrder": 3
-  },
-  {
-    "id": "business-intelligence-bi",
-    "parentId": "data-management",
-    "label": "Business Intelligence (BI)",
-    "sortOrder": 4
-  },
-  {
-    "id": "using-data-for-decision-making",
-    "parentId": "data-management",
-    "label": "Using Data for Decision Making",
-    "sortOrder": 5
-  },
-  {
-    "id": "information-management",
-    "parentId": "data-management",
-    "label": "Information Management",
-    "sortOrder": 6
-  },
-  {
-    "id": "introduction",
-    "parentId": "self-management",
-    "label": "Introduction",
-    "sortOrder": 1
-  },
-  {
-    "id": "focus",
-    "parentId": "self-management",
-    "label": "Focus",
-    "sortOrder": 2
-  },
-  {
-    "id": "energy",
-    "parentId": "self-management",
-    "label": "Energy",
-    "sortOrder": 3
-  },
-  {
-    "id": "time-management",
-    "parentId": "self-management",
-    "label": "Time Management",
-    "sortOrder": 4
-  },
-  {
-    "id": "self-management-decisions",
-    "parentId": "self-management",
-    "label": "Decisions",
-    "sortOrder": 5
-  },
-  {
-    "id": "tendencies",
-    "parentId": "self-management",
-    "label": "Tendencies",
-    "sortOrder": 6
-  },
-  {
-    "id": "testing",
-    "parentId": "self-management",
-    "label": "Testing",
-    "sortOrder": 7
-  },
-  {
-    "id": "parkinsons-law",
-    "parentId": "time-management",
-    "label": "Parkinson's Law",
-    "sortOrder": 1
-  },
-  {
-    "id": "pomodoro-technique",
-    "parentId": "time-management",
-    "label": "Pomodoro Technique",
-    "sortOrder": 2
-  },
-  {
-    "id": "next-action",
-    "parentId": "time-management",
-    "label": "Next Action",
-    "sortOrder": 3
-  },
-  {
-    "id": "personal-development",
-    "parentId": "introduction",
-    "label": "Personal Development",
-    "sortOrder": 1
-  },
-  {
-    "id": "introduction-self-management",
-    "parentId": "introduction",
-    "label": "Self-Management",
-    "sortOrder": 1
-  },
-  {
-    "id": "habits",
-    "parentId": "introduction",
-    "label": "Habits",
-    "sortOrder": 2
-  },
-  {
-    "id": "introduction-to-competitive-analysis-competitive-analysis",
-    "parentId": "introduction-to-competitive-analysis",
-    "label": "Competitive Analysis",
-    "sortOrder": 1
-  },
-  {
-    "id": "benefits-of-competitive-analysis",
-    "parentId": "introduction-to-competitive-analysis",
-    "label": "Benefits of Competitive Analysis",
-    "sortOrder": 2
-  },
-  {
-    "id": "who-is-your-competition",
-    "parentId": "introduction-to-competitive-analysis",
-    "label": "Who Is Your Competition?",
-    "sortOrder": 3
-  },
-  {
-    "id": "how-can-you-learn-from-your-competition",
-    "parentId": "introduction-to-competitive-analysis",
-    "label": "How Can You Learn from Your Competition?",
-    "sortOrder": 4
-  },
-  {
-    "id": "how-does-your-competition-advertise",
-    "parentId": "introduction-to-competitive-analysis",
-    "label": "How Does Your Competition Advertise?",
-    "sortOrder": 5
-  },
-  {
-    "id": "how-much-does-your-competition-charge",
-    "parentId": "introduction-to-competitive-analysis",
-    "label": "How Much Does Your Competition Charge?",
-    "sortOrder": 6
-  },
-  {
-    "id": "introduction-to-finance-finance",
-    "parentId": "introduction-to-finance",
-    "label": "Finance",
-    "sortOrder": 1
-  },
-  {
-    "id": "cash-flow",
-    "parentId": "introduction-to-finance",
-    "label": "Cash Flow",
-    "sortOrder": 1
-  },
-  {
-    "id": "profit",
-    "parentId": "introduction-to-finance",
-    "label": "Profit",
-    "sortOrder": 2
-  },
-  {
-    "id": "costs",
-    "parentId": "introduction-to-finance",
-    "label": "Costs",
-    "sortOrder": 3
-  },
-  {
-    "id": "profit-margin",
-    "parentId": "introduction-to-finance",
-    "label": "Profit Margin",
-    "sortOrder": 4
-  },
-  {
-    "id": "cost-calculation-approaches",
-    "parentId": "introduction-to-finance",
-    "label": "Cost Calculation Approaches",
-    "sortOrder": 5
-  },
-  {
-    "id": "value-capture",
-    "parentId": "introduction-to-finance",
-    "label": "Value Capture",
-    "sortOrder": 6
-  },
-  {
-    "id": "accounting",
-    "parentId": "introduction-to-finance",
-    "label": "Accounting",
-    "sortOrder": 7
-  },
-  {
-    "id": "budgets-financial-resource-planning",
-    "parentId": "introduction-to-finance",
-    "label": "Budgets (Financial Resource Planning)",
-    "sortOrder": 8
-  },
-  {
-    "id": "financial-forecasting",
-    "parentId": "introduction-to-finance",
-    "label": "Financial Forecasting",
-    "sortOrder": 9
-  },
-  {
-    "id": "key-financial-indicators",
-    "parentId": "introduction-to-finance",
-    "label": "Key Financial Indicators",
-    "sortOrder": 10
-  },
-  {
-    "id": "performance-evaluation",
-    "parentId": "introduction-to-finance",
-    "label": "Performance Evaluation",
-    "sortOrder": 11
-  },
-  {
-    "id": "depreciation",
-    "parentId": "introduction-to-finance",
-    "label": "Depreciation",
-    "sortOrder": 12
-  },
-  {
-    "id": "financial-ratios",
-    "parentId": "introduction-to-finance",
-    "label": "Financial Ratios",
-    "sortOrder": 13
-  },
-  {
-    "id": "introduction-to-cognitive-biases-cognitive-biases",
-    "parentId": "introduction-to-cognitive-biases",
-    "label": "Cognitive Biases",
-    "sortOrder": 1
-  },
-  {
-    "id": "choice-architecture",
-    "parentId": "introduction-to-cognitive-biases",
-    "label": "Choice Architecture",
-    "sortOrder": 2
-  },
-  {
-    "id": "savings-contrast",
-    "parentId": "introduction-to-cognitive-biases",
-    "label": "Savings Contrast",
-    "sortOrder": 3
-  },
-  {
-    "id": "good-vs-bad",
-    "parentId": "introduction-to-cognitive-biases",
-    "label": "Good vs Bad",
-    "sortOrder": 4
-  },
-  {
-    "id": "us-vs-them",
-    "parentId": "introduction-to-cognitive-biases",
-    "label": "Us vs Them",
-    "sortOrder": 5
-  },
-  {
-    "id": "new-vs-old-contrast",
-    "parentId": "introduction-to-cognitive-biases",
-    "label": "New vs Old Contrast",
-    "sortOrder": 6
-  },
-  {
-    "id": "paradox-of-choice",
-    "parentId": "introduction-to-cognitive-biases",
-    "label": "Paradox of Choice",
-    "sortOrder": 7
-  },
-  {
-    "id": "anchoring-principle",
-    "parentId": "introduction-to-cognitive-biases",
-    "label": "Anchoring Principle",
-    "sortOrder": 8
-  },
-  {
-    "id": "market-segmentation",
-    "parentId": "introduction-to-marketing",
-    "label": "Market Segmentation",
-    "sortOrder": 1
-  },
-  {
-    "id": "introduction-to-marketing-marketing",
-    "parentId": "introduction-to-marketing",
-    "label": "Marketing",
-    "sortOrder": 1
-  },
-  {
-    "id": "target-market-and-customer-profile",
-    "parentId": "introduction-to-marketing",
-    "label": "Target Market and Customer Profile",
-    "sortOrder": 2
-  },
-  {
-    "id": "positioning",
-    "parentId": "introduction-to-marketing",
-    "label": "Positioning",
-    "sortOrder": 3
-  },
-  {
-    "id": "competitive-advantage",
-    "parentId": "introduction-to-marketing",
-    "label": "Competitive Advantage",
-    "sortOrder": 4
-  },
-  {
-    "id": "differentiation-usp",
-    "parentId": "introduction-to-marketing",
-    "label": "Differentiation (USP)",
-    "sortOrder": 5
-  },
-  {
-    "id": "branding",
-    "parentId": "introduction-to-marketing",
-    "label": "Branding",
-    "sortOrder": 6
-  },
-  {
-    "id": "personal-brand",
-    "parentId": "introduction-to-marketing",
-    "label": "Personal Brand",
-    "sortOrder": 7
-  },
-  {
-    "id": "reputation",
-    "parentId": "introduction-to-marketing",
-    "label": "Reputation",
-    "sortOrder": 8
-  },
-  {
-    "id": "pricing-strategy",
-    "parentId": "introduction-to-pricing",
-    "label": "Pricing Strategy",
-    "sortOrder": 1
-  },
-  {
-    "id": "what-is-pricing",
-    "parentId": "introduction-to-pricing",
-    "label": "What Is Pricing?",
-    "sortOrder": 1
-  },
-  {
-    "id": "introduction-to-pricing-pricing",
-    "parentId": "introduction-to-pricing",
-    "label": "Pricing",
-    "sortOrder": 1
-  },
-  {
-    "id": "what-is-cost",
-    "parentId": "introduction-to-pricing",
-    "label": "What Is Cost?",
-    "sortOrder": 2
-  },
-  {
-    "id": "what-is-a-pricing-strategy",
-    "parentId": "introduction-to-pricing",
-    "label": "What Is a Pricing Strategy?",
-    "sortOrder": 3
-  },
-  {
-    "id": "how-to-set-a-pricing-strategy-key-questions",
-    "parentId": "introduction-to-pricing",
-    "label": "How to Set a Pricing Strategy - Key Questions",
-    "sortOrder": 4
-  },
-  {
-    "id": "factors-shaping-pricing-strategy",
-    "parentId": "introduction-to-pricing",
-    "label": "Factors Shaping Pricing Strategy",
-    "sortOrder": 5
-  },
-  {
-    "id": "different-pricing-strategies",
-    "parentId": "introduction-to-pricing",
-    "label": "Different Pricing Strategies",
-    "sortOrder": 6
-  },
-  {
-    "id": "cost-based-pricing",
-    "parentId": "introduction-to-pricing",
-    "label": "Cost-Based Pricing",
-    "sortOrder": 7
-  },
-  {
-    "id": "customer-segment-based-pricing",
-    "parentId": "introduction-to-pricing",
-    "label": "Customer Segment-Based Pricing",
-    "sortOrder": 8
-  },
-  {
-    "id": "four-approaches-to-product-pricing",
-    "parentId": "introduction-to-pricing",
-    "label": "Four Approaches to Product Pricing",
-    "sortOrder": 9
-  },
-  {
-    "id": "value-chain",
-    "parentId": "introduction-to-operations-and-production",
-    "label": "Value Chain",
-    "sortOrder": 1
-  },
-  {
-    "id": "introduction-to-operations-and-production-operations-and-production",
-    "parentId": "introduction-to-operations-and-production",
-    "label": "Operations & Production",
-    "sortOrder": 1
-  },
-  {
-    "id": "new-product-development-process",
-    "parentId": "introduction-to-operations-and-production",
-    "label": "New Product Development Process",
-    "sortOrder": 2
-  },
-  {
-    "id": "business-analysis-ba",
-    "parentId": "introduction-to-operations-and-production",
-    "label": "Business Analysis (BA)",
-    "sortOrder": 3
-  },
-  {
-    "id": "design",
-    "parentId": "introduction-to-operations-and-production",
-    "label": "Design",
-    "sortOrder": 4
-  },
-  {
-    "id": "introduction-to-operations-and-production-product",
-    "parentId": "introduction-to-operations-and-production",
-    "label": "Product",
-    "sortOrder": 5
-  },
-  {
-    "id": "understanding-product-process-matrix",
-    "parentId": "introduction-to-operations-and-production",
-    "label": "Understanding Product-Process Matrix",
-    "sortOrder": 6
-  },
-  {
-    "id": "business-processes",
-    "parentId": "introduction-to-operations-and-production",
-    "label": "Business Processes",
-    "sortOrder": 7
-  },
-  {
-    "id": "managing-material-procurement-in-production",
-    "parentId": "introduction-to-operations-and-production",
-    "label": "Managing Material Procurement in Production",
-    "sortOrder": 8
-  },
-  {
-    "id": "managing-production-capacity",
-    "parentId": "introduction-to-operations-and-production",
-    "label": "Managing Production Capacity",
-    "sortOrder": 9
-  },
-  {
-    "id": "introduction-to-operations-and-production-inventory",
-    "parentId": "introduction-to-operations-and-production",
-    "label": "Inventory",
-    "sortOrder": 10
-  },
-  {
-    "id": "role-of-control-in-operations-and-production",
-    "parentId": "introduction-to-operations-and-production",
-    "label": "Role of Control in Operations and Production",
-    "sortOrder": 11
-  },
-  {
-    "id": "using-benchmarking-in-operations",
-    "parentId": "introduction-to-operations-and-production",
-    "label": "Using Benchmarking in Operations",
-    "sortOrder": 12
-  },
-  {
-    "id": "economies-and-diseconomies-of-scale",
-    "parentId": "introduction-to-operations-and-production",
-    "label": "Economies and Diseconomies of Scale",
-    "sortOrder": 13
-  },
-  {
-    "id": "reverse-supply-chain",
-    "parentId": "introduction-to-operations-and-production",
-    "label": "Reverse Supply Chain",
-    "sortOrder": 14
-  },
-  {
-    "id": "business",
-    "parentId": "introduction-to-business",
-    "label": "Business",
-    "sortOrder": 1
-  },
-  {
-    "id": "business-culture",
-    "parentId": "introduction-to-business",
-    "label": "Business Culture",
-    "sortOrder": 2
-  },
-  {
-    "id": "introduction-to-sales-sales",
-    "parentId": "introduction-to-sales",
-    "label": "Sales",
-    "sortOrder": 1
-  },
-  {
-    "id": "qualification-selecting-the-right-customers",
-    "parentId": "introduction-to-sales",
-    "label": "Qualification (Selecting the Right Customers)",
-    "sortOrder": 2
-  },
-  {
-    "id": "customer-profiling",
-    "parentId": "introduction-to-sales",
-    "label": "Customer Profiling",
-    "sortOrder": 3
-  },
-  {
-    "id": "trust",
-    "parentId": "introduction-to-sales",
-    "label": "Trust",
-    "sortOrder": 4
-  },
-  {
-    "id": "presentation",
-    "parentId": "introduction-to-sales",
-    "label": "Presentation",
-    "sortOrder": 5
-  },
-  {
-    "id": "addressing-objections",
-    "parentId": "introduction-to-sales",
-    "label": "Addressing Objections",
-    "sortOrder": 6
-  },
-  {
-    "id": "common-ground",
-    "parentId": "introduction-to-sales",
-    "label": "Common Ground",
-    "sortOrder": 7
-  },
-  {
-    "id": "transaction",
-    "parentId": "introduction-to-sales",
-    "label": "Transaction",
-    "sortOrder": 8
-  },
-  {
-    "id": "referrals",
-    "parentId": "introduction-to-sales",
-    "label": "Referrals",
-    "sortOrder": 9
-  },
-  {
-    "id": "customer-relationship-management-crm",
-    "parentId": "introduction-to-sales",
-    "label": "Customer Relationship Management (CRM)",
-    "sortOrder": 10
-  },
-  {
-    "id": "understanding-systems",
-    "parentId": "introduction-to-systems",
-    "label": "Understanding Systems",
-    "sortOrder": 1
-  },
-  {
-    "id": "flow",
-    "parentId": "introduction-to-systems",
-    "label": "Flow",
-    "sortOrder": 1
-  },
-  {
-    "id": "resources",
-    "parentId": "introduction-to-systems",
-    "label": "Resources",
-    "sortOrder": 2
-  },
-  {
-    "id": "stocks-flows-and-feedback-loops",
-    "parentId": "introduction-to-systems",
-    "label": "Stocks, Flows, and Feedback Loops",
-    "sortOrder": 3
-  },
-  {
-    "id": "surplus",
-    "parentId": "introduction-to-systems",
-    "label": "Surplus",
-    "sortOrder": 4
-  },
-  {
-    "id": "constraints",
-    "parentId": "introduction-to-systems",
-    "label": "Constraints",
-    "sortOrder": 5
-  },
-  {
-    "id": "feedback-loop",
-    "parentId": "introduction-to-systems",
-    "label": "Feedback Loop",
-    "sortOrder": 6
-  },
-  {
-    "id": "galls-law",
-    "parentId": "introduction-to-systems",
-    "label": "Gall's Law",
-    "sortOrder": 7
-  },
-  {
-    "id": "how-do-people-value-things",
-    "parentId": "introduction-to-value",
-    "label": "How Do People Value Things?",
-    "sortOrder": 1
-  },
-  {
-    "id": "introduction-to-value-value",
-    "parentId": "introduction-to-value",
-    "label": "Value",
-    "sortOrder": 1
-  },
-  {
-    "id": "maslows-hierarchy-of-needs",
-    "parentId": "introduction-to-value",
-    "label": "Maslow's Hierarchy of Needs",
-    "sortOrder": 2
-  },
-  {
-    "id": "how-do-people-evaluate-your-offer",
-    "parentId": "introduction-to-value",
-    "label": "How Do People Evaluate Your Offer?",
-    "sortOrder": 3
-  },
-  {
-    "id": "need-for-status",
-    "parentId": "introduction-to-value",
-    "label": "Need for Status",
-    "sortOrder": 4
-  },
-  {
-    "id": "standard-offer-values",
-    "parentId": "introduction-to-value",
-    "label": "Standard Offer Values",
-    "sortOrder": 5
-  },
-  {
-    "id": "introduction-to-value",
-    "parentId": "value",
-    "label": "Introduction to Value",
-    "sortOrder": 1
-  },
-  {
-    "id": "types-of-value",
-    "parentId": "value",
-    "label": "Types of Value",
-    "sortOrder": 2
-  },
-  {
-    "id": "creating-value",
-    "parentId": "value",
-    "label": "Creating Value",
-    "sortOrder": 3
-  },
-  {
-    "id": "value-how-to-make-your-offer-more-valuable",
-    "parentId": "value",
-    "label": "How to Make Your Offer More Valuable?",
-    "sortOrder": 4
-  },
-  {
-    "id": "types-of-value-forms-of-value",
-    "parentId": "types-of-value",
-    "label": "Forms of Value",
-    "sortOrder": 1
-  },
-  {
-    "id": "value-categories",
-    "parentId": "types-of-value",
-    "label": "Value Categories",
-    "sortOrder": 2
-  },
-  {
-    "id": "company-values",
-    "parentId": "types-of-value",
-    "label": "Company Values",
-    "sortOrder": 3
-  },
-  {
-    "id": "core-and-aspirational-values",
-    "parentId": "types-of-value",
-    "label": "Core and Aspirational Values",
-    "sortOrder": 4
-  },
-  {
-    "id": "value-examples",
-    "parentId": "types-of-value",
-    "label": "Value Examples",
-    "sortOrder": 5
-  },
-  {
-    "id": "intellectual-capital",
-    "parentId": "types-of-value",
-    "label": "Intellectual Capital",
-    "sortOrder": 6
   }
 ]

@@ -13,8 +13,16 @@ const _ts_metadata = require("@swc/helpers/_/_ts_metadata");
 const _common = require("@nestjs/common");
 const _config = require("@nestjs/config");
 const _client = require("@prisma/client");
-const DB_RETRY_INTERVAL_MS = 10000; // 10 seconds
-const DB_RETRY_MAX_MS = 120000; // 2 minutes
+// Retry cadence for transient DB connection failures.
+//
+// CRITICAL: this is the INTERVAL between individual retries, not the total
+// budget. Set it too high (e.g. 30 minutes) and any single transient hiccup
+// blocks every subsequent DB query for that long — the entire UI hangs
+// because every API request is waiting on a Prisma query that is sleeping
+// in the retry loop. Keep this short (seconds) so recovery is near-instant
+// on flaps, and rely on DB_RETRY_MAX_MS as the "be patient" ceiling.
+const DB_RETRY_INTERVAL_MS = 5000; // 5 seconds between retries
+const DB_RETRY_MAX_MS = 30 * 60 * 1000; // 30 minute total retry window (patient ceiling)
 const RETRYABLE_ERRORS = [
     'Can\'t reach database server',
     'Connection refused',

@@ -57,7 +57,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
       }
       .msg-user {
         max-width: 70%;
-        background: #3b82f6;
+        background: #58A6FF;
         color: #ffffff;
         border-radius: 16px 16px 4px 16px;
         padding: 12px 16px;
@@ -75,14 +75,14 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         text-align: right;
       }
       .ai-card {
-        background: #1a1a1a;
+        background: #161B22;
         border-radius: 12px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         overflow: hidden;
       }
       .ai-header {
         padding: 12px 16px;
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -103,6 +103,11 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         font-size: 13px;
         font-weight: 600;
       }
+      .persona-icon {
+        width: 22px; height: 22px;
+        object-fit: contain;
+        flex-shrink: 0;
+      }
       .persona-name {
         font-size: 13px;
         font-weight: 500;
@@ -121,16 +126,16 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         height: 14px;
       }
       .confidence-high {
-        color: #22c55e;
-        background: rgba(34, 197, 94, 0.1);
+        color: #3FB950;
+        background: rgba(63, 185, 80, 0.1);
       }
       .confidence-medium {
         color: #eab308;
         background: rgba(234, 179, 8, 0.1);
       }
       .confidence-low {
-        color: #ef4444;
-        background: rgba(239, 68, 68, 0.1);
+        color: #F85149;
+        background: rgba(248, 81, 73, 0.1);
       }
       .ai-content {
         padding: 20px;
@@ -153,21 +158,21 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
       .ai-content h1 {
         font-size: 1.6em;
         font-weight: 700;
-        color: #fafafa;
+        color: #E6EDF3;
         margin: 28px 0 12px;
         letter-spacing: -0.01em;
       }
       .ai-content h2 {
         font-size: 1.35em;
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
         margin: 24px 0 10px;
         letter-spacing: -0.01em;
       }
       .ai-content h3 {
         font-size: 1.15em;
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
         margin: 22px 0 8px;
       }
       .ai-content h4,
@@ -186,7 +191,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
 
       /* Bold & italic */
       .ai-content strong {
-        color: #fafafa;
+        color: #E6EDF3;
         font-weight: 600;
       }
       .ai-content em {
@@ -239,31 +244,31 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         font-size: 0.9em;
       }
       .ai-content thead th {
-        background: #262626;
-        color: #fafafa;
+        background: #1C2128;
+        color: #E6EDF3;
         font-weight: 600;
         text-align: left;
         padding: 10px 14px;
-        border: 1px solid #333;
+        border: 1px solid #30363D;
       }
       .ai-content tbody td {
         padding: 10px 14px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         color: #d4d4d4;
       }
       .ai-content tbody tr:nth-child(even) {
-        background: #1a1a1a;
+        background: #161B22;
       }
       .ai-content tbody tr:nth-child(odd) {
-        background: #0d0d0d;
+        background: #0D1117;
       }
       .ai-content tbody tr:hover {
-        background: #262626;
+        background: #1C2128;
       }
 
       /* Inline code */
       .ai-content code {
-        background: #262626;
+        background: #1C2128;
         color: #e5e5e5;
         padding: 0.15em 0.4em;
         border-radius: 4px;
@@ -273,8 +278,8 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
 
       /* Code blocks — well separated */
       .ai-content pre {
-        background: #0d0d0d;
-        border: 1px solid #2a2a2a;
+        background: #0D1117;
+        border: 1px solid #21262D;
         border-radius: 8px;
         padding: 14px 18px;
         overflow-x: auto;
@@ -290,11 +295,11 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
 
       /* Blockquotes — well separated */
       .ai-content blockquote {
-        border-left: 3px solid #3b82f6;
+        border-left: 3px solid #58A6FF;
         margin: 20px 0;
         padding: 0.75em 1.25em;
         color: #a1a1a1;
-        background: rgba(59, 130, 246, 0.05);
+        background: rgba(88, 166, 255, 0.05);
         border-radius: 0 6px 6px 0;
       }
       .ai-content blockquote p {
@@ -314,14 +319,14 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         letter-spacing: 0.5px;
       }
       .ai-content .callout-insight {
-        border-left-color: #3b82f6;
-        background: rgba(59, 130, 246, 0.08);
+        border-left-color: #58A6FF;
+        background: rgba(88, 166, 255, 0.08);
       }
       .ai-content .callout-insight strong {
         color: #60a5fa;
       }
       .ai-content .callout-warning {
-        border-left-color: #f59e0b;
+        border-left-color: #D29922;
         background: rgba(245, 158, 11, 0.08);
       }
       .ai-content .callout-warning strong {
@@ -355,7 +360,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
       /* Horizontal rule — generous spacing */
       .ai-content hr {
         border: none;
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid #21262D;
         margin: 24px 0;
       }
 
@@ -367,7 +372,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
 
       .ai-footer {
         padding: 12px 16px;
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid #21262D;
       }
       .ai-time {
         font-size: 12px;
@@ -408,7 +413,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         display: inline-block;
         width: 6px;
         height: 20px;
-        background: #3b82f6;
+        background: #58A6FF;
         border-radius: 2px;
         margin-left: 2px;
         animation: pulse 1s ease-in-out infinite;
@@ -420,7 +425,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
       /* Suggested action buttons (D1) */
       .actions-section {
         padding: 10px 20px 14px;
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid #21262D;
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
@@ -436,8 +441,8 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         align-items: center;
         gap: 6px;
         padding: 6px 14px;
-        background: #0d0d0d;
-        border: 1px solid #2a2a2a;
+        background: #0D1117;
+        border: 1px solid #21262D;
         border-radius: 20px;
         font-size: 12px;
         font-weight: 500;
@@ -447,9 +452,9 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         transition: all 0.15s;
       }
       .action-pill:hover {
-        background: #1a1a1a;
-        border-color: #3b82f6;
-        color: #fafafa;
+        background: #161B22;
+        border-color: #58A6FF;
+        color: #E6EDF3;
       }
       .action-pill svg {
         width: 14px;
@@ -460,14 +465,14 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
       /* Inline chart (D5) */
       .chart-toggle-row {
         padding: 8px 16px;
-        border-top: 1px solid #242424;
+        border-top: 1px solid #1C2128;
       }
       .chart-toggle-btn {
         display: inline-flex;
         align-items: center;
         gap: 6px;
         padding: 4px 10px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         border-radius: 6px;
         background: transparent;
         color: #9e9e9e;
@@ -476,9 +481,9 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         transition: all 0.15s ease;
       }
       .chart-toggle-btn:hover {
-        color: #fafafa;
-        border-color: #3b82f6;
-        background: rgba(59, 130, 246, 0.05);
+        color: #E6EDF3;
+        border-color: #58A6FF;
+        background: rgba(88, 166, 255, 0.05);
       }
       .chart-toggle-btn svg {
         width: 14px;
@@ -486,7 +491,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
       }
       .chart-container {
         padding: 16px;
-        border-top: 1px solid #242424;
+        border-top: 1px solid #1C2128;
       }
       .chart-bar-row {
         display: flex;
@@ -507,7 +512,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
       .chart-bar-track {
         flex: 1;
         height: 20px;
-        background: #242424;
+        background: #1C2128;
         border-radius: 4px;
         overflow: hidden;
       }
@@ -520,7 +525,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
       .chart-bar-value {
         width: 70px;
         font-size: 11px;
-        color: #fafafa;
+        color: #E6EDF3;
         font-weight: 500;
         flex-shrink: 0;
       }
@@ -550,7 +555,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         gap: 6px;
         padding: 6px 10px;
         background: rgba(255, 255, 255, 0.06);
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         border-radius: 6px;
         font-size: 12px;
         color: #e0e0e0;
@@ -593,8 +598,8 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         transition: all 0.15s;
       }
       .msg-action-btn:hover {
-        color: #fafafa;
-        background: #242424;
+        color: #E6EDF3;
+        background: #1C2128;
       }
       .msg-action-btn:disabled {
         opacity: 0.4;
@@ -605,7 +610,33 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         height: 14px;
       }
       .msg-action-btn.copied {
-        color: #22c55e;
+        color: #3FB950;
+      }
+      /* Proposal discussion buttons — inline alongside Copy/Regenerate */
+      .msg-action-btn.proposal-discuss-btn {
+        color: #58A6FF;
+        border: 1px solid rgba(88, 166, 255, 0.35);
+        margin-left: 8px;
+      }
+      .msg-action-btn.proposal-discuss-btn:hover:not(:disabled) {
+        color: #E6EDF3;
+        background: rgba(88, 166, 255, 0.15);
+        border-color: #58A6FF;
+      }
+      .msg-action-btn.proposal-confirm-btn {
+        color: #FAFAFA;
+        background: #238636;
+        border: 1px solid #2EA043;
+        font-weight: 600;
+      }
+      .msg-action-btn.proposal-confirm-btn:hover:not(:disabled) {
+        background: #2EA043;
+      }
+      .msg-action-btn .spin {
+        animation: msg-spin 0.8s linear infinite;
+      }
+      @keyframes msg-spin {
+        to { transform: rotate(360deg); }
       }
 
       /* Code block copy button */
@@ -617,9 +648,9 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         top: 6px;
         right: 6px;
         padding: 4px 8px;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         border-radius: 4px;
-        background: #1a1a1a;
+        background: #161B22;
         color: #707070;
         font-size: 11px;
         font-family: inherit;
@@ -632,11 +663,11 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         opacity: 1;
       }
       :host ::ng-deep .code-copy-btn:hover {
-        color: #fafafa;
-        border-color: #3b82f6;
+        color: #E6EDF3;
+        border-color: #58A6FF;
       }
       :host ::ng-deep .code-copy-btn.copied {
-        color: #22c55e;
+        color: #3FB950;
         opacity: 1;
       }
     `,
@@ -677,15 +708,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         <!-- Header -->
         <div class="ai-header">
           <div class="ai-header-left">
-            <div class="persona-avatar" [style.backgroundColor]="getPersonaColor()">
-              {{ getPersonaInitial() }}
-            </div>
-            <span
-              class="persona-name"
-              [style.color]="personaType() ? getPersonaColor() : '#FAFAFA'"
-            >
-              {{ getPersonaLabel() }}
-            </span>
+            <img class="persona-icon" src="assets/images/neuron-os-logo.png" alt="Neuron OS" />
           </div>
 
           @if (!isStreaming() && hasConfidence$()) {
@@ -746,7 +769,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
         <!-- Suggested Actions (D1) -->
         @if (!isStreaming() && hasSuggestedActions$()) {
           <div class="actions-section">
-            <div class="actions-label">Preporučeni sledeći koraci</div>
+            <div class="actions-label">Recommended next steps</div>
             @for (action of message().suggestedActions ?? []; track $index) {
               <button class="action-pill" (click)="onActionClick(action)">
                 @switch (action.icon) {
@@ -859,7 +882,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
                   d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
                 />
               </svg>
-              {{ showChart$() ? 'Sakrij grafikon' : 'Prikaži grafikon' }}
+              {{ showChart$() ? 'Hide chart' : 'Show chart' }}
             </button>
           </div>
           @if (showChart$()) {
@@ -888,7 +911,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
               class="msg-action-btn"
               [class.copied]="isCopied$()"
               (click)="copyMessage()"
-              [title]="isCopied$() ? 'Kopirano!' : 'Kopiraj poruku'"
+              [title]="isCopied$() ? 'Copied!' : 'Copy message'"
             >
               @if (isCopied$()) {
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -899,7 +922,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
                     d="M5 13l4 4L19 7"
                   />
                 </svg>
-                Kopirano!
+                Copied!
               } @else {
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
@@ -909,14 +932,14 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
                     d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
                   />
                 </svg>
-                Kopiraj
+                Copy
               }
             </button>
             @if (isLastAssistantMessage()) {
               <button
                 class="msg-action-btn"
                 (click)="onRegenerateClick()"
-                title="Regenerisi odgovor"
+                title="Regenerate response"
               >
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
@@ -926,7 +949,34 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
                     d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                   />
                 </svg>
-                Regenerisi
+                Regenerate
+              </button>
+            }
+            <!-- Proposal discussion action — inline next to Copy/Regenerate.
+                 Only on the last AI message of an active proposal discussion. -->
+            @if (isProposalDiscussion() && isLastAssistantMessage()) {
+              <button
+                class="msg-action-btn proposal-confirm-btn"
+                [disabled]="proposalBusy()"
+                (click)="onConfirmClick()"
+                title="Lock in this plan and start execution"
+              >
+                @if (proposalConfirming()) {
+                  <svg class="spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-width="2" d="M4 12a8 8 0 018-8" />
+                  </svg>
+                  Confirming...
+                } @else {
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                  Confirm
+                }
               </button>
             }
           </div>
@@ -943,7 +993,7 @@ import { MemoryAttributionComponent } from './memory-attribution/memory-attribut
                   />
                 </svg>
                 <p class="improvement-text">
-                  <span class="improvement-label">Za poboljšanje:</span>
+                  <span class="improvement-label">To improve:</span>
                   {{ improvementSuggestion() }}
                 </p>
               </div>
@@ -969,11 +1019,19 @@ export class ChatMessageComponent implements AfterViewChecked {
   readonly personaType = input<PersonaType | null>(null);
   readonly improvementSuggestion = input<string | null>(null);
   readonly isLastAssistantMessage = input(false);
+  /** True when the active conversation is an AI proposal discussion. */
+  readonly isProposalDiscussion = input(false);
+  /** True while the proposal Confirm flow is awaiting the structured AI response. */
+  readonly proposalConfirming = input(false);
+  /** True when the chat is loading/streaming and the proposal buttons should be disabled. */
+  readonly proposalBusy = input(false);
   readonly citationClick = output<ConceptCitation | string>();
   readonly attributionClick = output<MemoryAttribution>();
   readonly outdatedClick = output<MemoryAttribution>();
   readonly actionClick = output<SuggestedAction>();
   readonly regenerateClick = output<string>();
+  readonly confirmProposalClick = output<void>();
+  readonly discussFurtherClick = output<void>();
 
   /** Copy-to-clipboard state */
   readonly isCopied$ = signal(false);
@@ -991,6 +1049,14 @@ export class ChatMessageComponent implements AfterViewChecked {
 
   onRegenerateClick(): void {
     this.regenerateClick.emit(this.message().id);
+  }
+
+  onConfirmClick(): void {
+    this.confirmProposalClick.emit();
+  }
+
+  onDiscussFurtherClick(): void {
+    this.discussFurtherClick.emit();
   }
 
   onCitationClick(citation: ConceptCitation | string): void {
@@ -1015,7 +1081,7 @@ export class ChatMessageComponent implements AfterViewChecked {
   // Chart visualization (D5)
   readonly showChart$ = signal(false);
   readonly chartColors = [
-    '#3B82F6',
+    '#58A6FF',
     '#10B981',
     '#F59E0B',
     '#8B5CF6',
@@ -1114,7 +1180,7 @@ export class ChatMessageComponent implements AfterViewChecked {
 
   getPersonaColor(): string {
     const type = this.personaType();
-    return type ? (PERSONA_COLORS[type as PersonaTypeEnum] ?? '#3B82F6') : '#3B82F6';
+    return type ? (PERSONA_COLORS[type as PersonaTypeEnum] ?? '#58A6FF') : '#58A6FF';
   }
 
   getPersonaInitial(): string {
@@ -1125,7 +1191,7 @@ export class ChatMessageComponent implements AfterViewChecked {
 
   getPersonaLabel(): string {
     const type = this.personaType();
-    return type ? (PERSONA_NAMES[type as PersonaTypeEnum] ?? 'AI Asistent') : 'AI Asistent';
+    return type ? (PERSONA_NAMES[type as PersonaTypeEnum] ?? 'Neuron OS') : 'Neuron OS';
   }
 
   isImage(mimeType: string): boolean {
@@ -1162,14 +1228,14 @@ export class ChatMessageComponent implements AfterViewChecked {
 
       const btn = document.createElement('button');
       btn.className = 'code-copy-btn';
-      btn.textContent = 'Kopiraj';
+      btn.textContent = 'Copy';
       btn.addEventListener('click', () => {
         const code = pre.querySelector('code')?.textContent ?? pre.textContent ?? '';
         navigator.clipboard.writeText(code).then(() => {
-          btn.textContent = 'Kopirano!';
+          btn.textContent = 'Copied!';
           btn.classList.add('copied');
           setTimeout(() => {
-            btn.textContent = 'Kopiraj';
+            btn.textContent = 'Copy';
             btn.classList.remove('copied');
           }, 2000);
         });

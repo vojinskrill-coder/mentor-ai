@@ -10,8 +10,8 @@ import type { DataExportResponse, DataExportRequest, ExportFormat } from '@mento
   styles: [
     `
       .section-card {
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 12px;
         padding: 24px;
       }
@@ -24,7 +24,7 @@ import type { DataExportResponse, DataExportRequest, ExportFormat } from '@mento
       .section-header svg {
         width: 20px;
         height: 20px;
-        color: #3b82f6;
+        color: #58A6FF;
         flex-shrink: 0;
       }
       .section-title {
@@ -62,7 +62,7 @@ import type { DataExportResponse, DataExportRequest, ExportFormat } from '@mento
       }
       .radio-item input,
       .checkbox-item input {
-        accent-color: #3b82f6;
+        accent-color: #58A6FF;
         cursor: pointer;
       }
       .fmt-icon {
@@ -79,7 +79,7 @@ import type { DataExportResponse, DataExportRequest, ExportFormat } from '@mento
         padding: 10px 20px;
         border-radius: 8px;
         border: none;
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
         font-size: 14px;
         font-weight: 500;
@@ -144,8 +144,8 @@ import type { DataExportResponse, DataExportRequest, ExportFormat } from '@mento
         justify-content: space-between;
         padding: 12px;
         border-radius: 8px;
-        border: 1px solid #2a2a2a;
-        background: #0d0d0d;
+        border: 1px solid #21262D;
+        background: #0D1117;
       }
       .history-left {
         display: flex;
@@ -208,7 +208,7 @@ import type { DataExportResponse, DataExportRequest, ExportFormat } from '@mento
         padding: 6px 14px;
         border-radius: 6px;
         border: none;
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
         font-size: 13px;
         font-weight: 500;

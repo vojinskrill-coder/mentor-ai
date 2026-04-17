@@ -205,7 +205,7 @@ export class WebSearchService {
   formatSourcesAsObsidian(results: EnrichedSearchResult[]): string {
     if (!results || results.length === 0) return '';
 
-    let context = '\n\n--- WEB ISTRAŽIVANJE (aktuelni podaci) ---';
+    let context = '\n\n--- WEB RESEARCH (current data) ---';
     for (const result of results) {
       context += `\n\n**[${result.title}](${result.link})**`;
       if (result.pageContent) {
@@ -214,13 +214,13 @@ export class WebSearchService {
         context += `\n${result.snippet}`;
       }
     }
-    context += '\n--- KRAJ WEB ISTRAŽIVANJA ---';
+    context += '\n--- END OF WEB RESEARCH ---';
     context +=
-      '\n\nKADA KORISTIŠ informacije iz web istraživanja, OBAVEZNO citiraj izvor INLINE odmah posle rečenice koja koristi tu informaciju.';
-    context += '\nFormat citiranja: ([Naziv izvora](URL)) — stavi odmah posle relevantne rečenice.';
+      '\n\nWHEN USING information from web research, you MUST cite the source INLINE immediately after the sentence that uses that information.';
+    context += '\nCitation format: ([Source Name](URL)) — place immediately after the relevant sentence.';
     context +=
-      '\nPrimer: "Tržište digitalnog marketinga raste 15% godišnje ([Digital Marketing Report 2026](https://example.com/report))."';
-    context += '\nAko ne koristiš informaciju iz izvora, NE citiraj ga.';
+      '\nExample: "The digital marketing market is growing 15% annually ([Digital Marketing Report 2026](https://example.com/report))."';
+    context += '\nIf you do not use information from a source, do NOT cite it.';
     return context;
   }
 

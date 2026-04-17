@@ -1,71 +1,84 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import * as yaml from 'js-yaml';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 
-export interface AgentGuardrails {
-  maxTokensPerCall: number;
-  maxRetriesPerStep: number;
-  requireValidation: boolean;
-  requireSelfCorrection: boolean;
-}
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const yaml = require('js-yaml');
 
-export interface AgentDefinition {
+// ── Types ──────────────────────────────────────────────────────
+
+export interface AgentConfig {
   id: string;
-  name: string;
-  description: string;
-  soulTemplate: string;
-  skills: string[];
-  guardrails: AgentGuardrails;
+  role: string;
+  model: string;
+  capabilities: string[];
+  guardrails: Record<string, unknown>;
 }
 
-interface AgentRegistryYaml {
-  agents: AgentDefinition[];
-}
+// ── Service ────────────────────────────────────────────────────
 
 @Injectable()
-export class AgentRegistryService implements OnModuleInit {
+export class AgentRegistryService {
   private readonly logger = new Logger(AgentRegistryService.name);
-  private agents: Map<string, AgentDefinition> = new Map();
-  private registryPath: string;
+  private readonly agents: Map<string, AgentConfig> = new Map();
 
   constructor() {
-    this.registryPath = path.resolve(
+    this.loadRegistry();
+  }
+
+  /**
+   * Get a single agent by ID. Throws NotFoundException if not found.
+   */
+  getAgent(id: string): AgentConfig {
+    const agent = this.agents.get(id);
+    if (!agent) {
+      throw new NotFoundException(`Agent "${id}" not found in registry`);
+    }
+    return agent;
+  }
+
+  /**
+   * Return all registered agents.
+   */
+  getAllAgents(): AgentConfig[] {
+    return Array.from(this.agents.values());
+  }
+
+  /**
+   * Return the guardrails for a specific agent.
+   */
+  getAgentGuardrails(id: string): Record<string, unknown> {
+    return this.getAgent(id).guardrails;
+  }
+
+  // ── Private ──────────────────────────────────────────────────
+
+  private loadRegistry(): void {
+    const yamlPath = path.join(
       process.cwd(),
       'openclaw-config',
       'agent-registry.yaml',
     );
-  }
 
-  onModuleInit(): void {
-    this.loadRegistry();
-  }
+    const rawYaml = fs.readFileSync(yamlPath, 'utf-8');
+    const parsed = yaml.load(rawYaml) as {
+      agents: Record<string, Omit<AgentConfig, 'id'>>;
+    };
 
-  loadRegistry(registryPath?: string): void {
-    const filePath = registryPath || this.registryPath;
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`Agent registry not found at ${filePath}`);
+    if (!parsed?.agents || typeof parsed.agents !== 'object') {
+      throw new Error('agent-registry.yaml must have a top-level "agents" key');
     }
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    const parsed = yaml.load(raw) as AgentRegistryYaml;
 
-    this.agents.clear();
-    for (const agent of parsed.agents) {
-      this.agents.set(agent.id, agent);
+    for (const [id, entry] of Object.entries(parsed.agents)) {
+      this.agents.set(id, {
+        id,
+        role: entry.role,
+        model: entry.model,
+        capabilities: entry.capabilities ?? [],
+        guardrails: entry.guardrails ?? {},
+      });
     }
+
     this.logger.log(`Loaded ${this.agents.size} agents from registry`);
-  }
-
-  getAgent(id: string): AgentDefinition | undefined {
-    return this.agents.get(id);
-  }
-
-  getAllAgents(): AgentDefinition[] {
-    return Array.from(this.agents.values());
-  }
-
-  getAgentGuardrails(id: string): AgentGuardrails | undefined {
-    const agent = this.agents.get(id);
-    return agent?.guardrails;
   }
 }

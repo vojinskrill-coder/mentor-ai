@@ -167,7 +167,7 @@ interface ContentSegment {
       }
 
       .citation-badge:focus-visible {
-        box-shadow: 0 0 0 2px #3b82f6;
+        box-shadow: 0 0 0 2px #58A6FF;
       }
 
       /* Category-specific colors */
@@ -192,13 +192,13 @@ interface ContentSegment {
       }
 
       .citation-badge.technology {
-        border-color: #3b82f633;
-        color: #3b82f6;
+        border-color: #58A6FF33;
+        color: #58A6FF;
       }
 
       .citation-badge.technology:hover {
-        background-color: #3b82f620;
-        border-color: #3b82f6;
+        background-color: #58A6FF20;
+        border-color: #58A6FF;
       }
 
       .citation-badge.operations {
@@ -242,15 +242,15 @@ interface ContentSegment {
       .content-with-citations h1 {
         font-size: 1.5em;
         font-weight: 700;
-        color: #fafafa;
+        color: #E6EDF3;
         margin: 24px 0 8px;
         padding-bottom: 6px;
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid #21262D;
       }
       .content-with-citations h2 {
         font-size: 1.3em;
         font-weight: 600;
-        color: #fafafa;
+        color: #E6EDF3;
         margin: 20px 0 6px;
         padding-bottom: 4px;
         border-bottom: 1px solid rgba(42, 42, 42, 0.5);
@@ -275,7 +275,7 @@ interface ContentSegment {
         line-height: 1.7;
       }
       .content-with-citations strong {
-        color: #fafafa;
+        color: #E6EDF3;
         font-weight: 600;
       }
       .content-with-citations em {
@@ -324,11 +324,11 @@ interface ContentSegment {
         font-size: 0.9em;
         border-radius: 6px;
         overflow: hidden;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
       }
       .content-with-citations thead th {
-        background: #1a1a1a;
-        color: #fafafa;
+        background: #161B22;
+        color: #E6EDF3;
         font-weight: 600;
         text-align: left;
         padding: 10px 14px;
@@ -336,7 +336,7 @@ interface ContentSegment {
       }
       .content-with-citations tbody td {
         padding: 9px 14px;
-        border-bottom: 1px solid #1e1e1e;
+        border-bottom: 1px solid #21262D;
         color: #d4d4d4;
       }
       .content-with-citations tbody tr:hover {
@@ -356,7 +356,7 @@ interface ContentSegment {
       }
       .content-with-citations pre {
         background: #111;
-        border: 1px solid #2a2a2a;
+        border: 1px solid #21262D;
         border-radius: 8px;
         padding: 14px 18px;
         overflow-x: auto;
@@ -371,7 +371,7 @@ interface ContentSegment {
       }
 
       .content-with-citations blockquote {
-        border-left: 3px solid #3b82f6;
+        border-left: 3px solid #58A6FF;
         margin: 16px 0;
         padding: 8px 16px;
         color: #b0b0b0;
@@ -387,7 +387,7 @@ interface ContentSegment {
         border-radius: 0 8px 8px 0;
       }
       .content-with-citations .callout-insight {
-        border-left-color: #3b82f6;
+        border-left-color: #58A6FF;
         background: rgba(59, 130, 246, 0.06);
       }
       .content-with-citations .callout-insight strong {
@@ -426,7 +426,7 @@ interface ContentSegment {
 
       .content-with-citations hr {
         border: none;
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid #21262D;
         margin: 20px 0;
       }
       .content-with-citations del {

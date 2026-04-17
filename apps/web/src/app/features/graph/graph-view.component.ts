@@ -9,26 +9,26 @@ import { GraphStateService, GraphNode, GraphEdge, ActiveAgent, OPENCLAW_NODE_ID 
 
 interface Transform { x: number; y: number; scale: number; }
 
-// ─── Premium Color System ───
-// Sophisticated, muted jewel tones — luxury feel against deep dark
+// ─── Neural Network Color System ───
+// Cool palette with enough variety to distinguish domains — blue, teal, green, purple, white
 const PREMIUM_PERSONA_COLORS: Record<string, { core: string; glow: string; dim: string }> = {
-  CFO:        { core: '#6EE7B7', glow: 'rgba(110,231,183,0.18)', dim: 'rgba(110,231,183,0.05)' },  // soft emerald
-  CMO:        { core: '#FCD34D', glow: 'rgba(252,211,77,0.18)', dim: 'rgba(252,211,77,0.05)' },    // warm gold
-  CTO:        { core: '#A5B4FC', glow: 'rgba(165,180,252,0.18)', dim: 'rgba(165,180,252,0.05)' },  // soft lavender
-  OPERATIONS: { core: '#FCA5A5', glow: 'rgba(252,165,165,0.18)', dim: 'rgba(252,165,165,0.05)' },  // soft coral
-  LEGAL:      { core: '#C4B5FD', glow: 'rgba(196,181,253,0.18)', dim: 'rgba(196,181,253,0.05)' },  // soft violet
-  CREATIVE:   { core: '#F9A8D4', glow: 'rgba(249,168,212,0.18)', dim: 'rgba(249,168,212,0.05)' },  // soft rose
-  CSO:        { core: '#99F6E4', glow: 'rgba(153,246,228,0.18)', dim: 'rgba(153,246,228,0.05)' },  // soft teal
-  SALES:      { core: '#FDBA74', glow: 'rgba(253,186,116,0.18)', dim: 'rgba(253,186,116,0.05)' },  // soft amber
+  CFO:        { core: '#4ADE80', glow: 'rgba(74,222,128,0.16)', dim: 'rgba(74,222,128,0.04)' },   // green
+  CMO:        { core: '#38BDF8', glow: 'rgba(56,189,248,0.16)', dim: 'rgba(56,189,248,0.04)' },   // sky blue
+  CTO:        { core: '#A78BFA', glow: 'rgba(167,139,250,0.16)', dim: 'rgba(167,139,250,0.04)' }, // violet
+  OPERATIONS: { core: '#2DD4BF', glow: 'rgba(45,212,191,0.16)', dim: 'rgba(45,212,191,0.04)' },   // teal
+  LEGAL:      { core: '#818CF8', glow: 'rgba(129,140,248,0.16)', dim: 'rgba(129,140,248,0.04)' }, // indigo
+  CREATIVE:   { core: '#F0ABFC', glow: 'rgba(240,171,252,0.16)', dim: 'rgba(240,171,252,0.04)' }, // light purple
+  CSO:        { core: '#67E8F9', glow: 'rgba(103,232,249,0.16)', dim: 'rgba(103,232,249,0.04)' }, // cyan
+  SALES:      { core: '#FCD34D', glow: 'rgba(252,211,77,0.16)', dim: 'rgba(252,211,77,0.04)' },   // gold
 };
-const OPENCLAW_COLORS = { core: '#60A5FA', glow: 'rgba(96,165,250,0.25)', dim: 'rgba(96,165,250,0.08)' }; // blue
-const DEFAULT_COLORS = { core: '#D1D5DB', glow: 'rgba(209,213,219,0.12)', dim: 'rgba(209,213,219,0.04)' };
+const OPENCLAW_COLORS = { core: '#60A5FA', glow: 'rgba(96,165,250,0.20)', dim: 'rgba(96,165,250,0.06)' };
+const DEFAULT_COLORS = { core: '#94A3B8', glow: 'rgba(148,163,184,0.12)', dim: 'rgba(148,163,184,0.03)' };
 
 const EDGE_OPACITIES: Record<string, number> = {
-  PREREQUISITE: 0.35,
-  RELATED: 0.18,
-  ADVANCED: 0.12,
-  OPENCLAW: 0, // invisible — only used for physics layout; active connections drawn separately
+  PREREQUISITE: 0.20,
+  RELATED: 0.12,
+  ADVANCED: 0.08,
+  OPENCLAW: 0,
 };
 
 @Component({
@@ -37,7 +37,7 @@ const EDGE_OPACITIES: Record<string, number> = {
   imports: [CommonModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [`
-    :host { display: block; width: 100%; height: 100%; position: relative; background: #06080C; }
+    :host { display: block; width: 100%; height: 100%; position: relative; background: #0D1117; }
     canvas { width: 100%; height: 100%; cursor: grab; }
     canvas.dragging { cursor: grabbing; }
     .controls {
@@ -97,6 +97,7 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private transform: Transform = { x: 0, y: 0, scale: 1 };
   private animFrame = 0;
   private simulation!: d3Force.Simulation<GraphNode, GraphEdge>;
+  private neuronLogoImg: HTMLImageElement | null = null;
   private nodes: GraphNode[] = [];
   private edges: GraphEdge[] = [];
   private activeAgents: ActiveAgent[] = [];
@@ -113,8 +114,14 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private nodeCreationTimes = new Map<string, number>();
   private edgeCreationTimes = new Map<string, number>();
   private resizeObserver!: ResizeObserver;
+  private _scheduleRender: () => void = () => {};
+  private _hexRgbCache = new Map<string, string>();
 
   ngOnInit(): void {
+    // Preload Neuron OS logo for graph node
+    this.neuronLogoImg = new Image();
+    this.neuronLogoImg.src = 'assets/images/neuron-os-logo.png';
+
     this.graphState.loadGraph();
     this.graphState.subscribeToEvents();
 
@@ -130,6 +137,7 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
         }
         this.nodes = newNodes;
         this.updateSimulation();
+        this._scheduleRender();
       }),
       this.graphState.edges$.subscribe((edgeMap) => {
         const newEdges = [...edgeMap.values()];
@@ -143,9 +151,11 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
         }
         this.edges = newEdges;
         this.updateSimulation();
+        this._scheduleRender();
       }),
       this.graphState.activeAgents$.subscribe((agents) => {
         this.activeAgents = agents;
+        this._scheduleRender();
       }),
     );
   }
@@ -168,16 +178,32 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .force('y', d3Force.forceY(this.height / 2).strength(0.03))
       .alphaDecay(0.012)
       .velocityDecay(0.4)
-      .on('tick', () => { /* render in animFrame */ });
+      .on('tick', () => { this._scheduleRender(); });
 
+    // Render loop: only runs when needed (simulation active, user interaction, or data change)
     this.zone.runOutsideAngular(() => {
-      const loop = () => {
-        this.animTime = performance.now();
-        this.render();
-        this.animFrame = requestAnimationFrame(loop);
+      let renderScheduled = false;
+      this._scheduleRender = () => {
+        if (renderScheduled) return;
+        renderScheduled = true;
+        this.animFrame = requestAnimationFrame(() => {
+          renderScheduled = false;
+          this.animTime = performance.now();
+          this.render();
+          // Keep rendering while simulation is active
+          if (this.simulation && this.simulation.alpha() > 0.005) {
+            this._scheduleRender();
+          }
+        });
       };
-      this.animFrame = requestAnimationFrame(loop);
+      // Initial render
+      this._scheduleRender();
     });
+
+    // If nodes arrived before simulation was created, update now
+    if (this.nodes.length > 0) {
+      this.updateSimulation();
+    }
 
     // Auto fit after initial stabilization
     setTimeout(() => this.fitToView(), 800);
@@ -228,38 +254,68 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.width, this.height);
 
-    // Deep dark background with subtle radial vignette
-    ctx.fillStyle = '#06080C';
+    // Deep dark background
+    ctx.fillStyle = '#0D1117';
     ctx.fillRect(0, 0, this.width, this.height);
-    const vignette = ctx.createRadialGradient(
-      this.width / 2, this.height / 2, 0,
-      this.width / 2, this.height / 2, Math.max(this.width, this.height) * 0.7
-    );
-    vignette.addColorStop(0, 'rgba(12,16,24,0)');
-    vignette.addColorStop(1, 'rgba(0,0,0,0.4)');
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, this.width, this.height);
+
+    // Vignette only for small graphs (expensive gradient)
+    if (this.nodes.length < 80) {
+      const vignette = ctx.createRadialGradient(
+        this.width / 2, this.height / 2, 0,
+        this.width / 2, this.height / 2, Math.max(this.width, this.height) * 0.7
+      );
+      vignette.addColorStop(0, 'rgba(13,17,23,0)');
+      vignette.addColorStop(1, 'rgba(0,0,0,0.4)');
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, this.width, this.height);
+    }
 
     ctx.translate(this.transform.x, this.transform.y);
     ctx.scale(this.transform.scale, this.transform.scale);
 
-    // Layer 1: Edge glow (behind everything) — skip OpenClaw edges (drawn separately)
+    const isLargeGraph = this.nodes.length > 60;
+
+    // Layer 1: Edges — batch non-hovered edges in a single path for performance
+    const hoveredEdges: GraphEdge[] = [];
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(100,120,150,0.06)';
+    ctx.lineWidth = 0.5;
     for (const edge of this.edges) {
-      if ((edge as any).type !== 'OPENCLAW') this.drawEdge(ctx, edge);
+      if ((edge as any).type === 'OPENCLAW') continue;
+      const source = edge.source as GraphNode;
+      const target = edge.target as GraphNode;
+      if (!source.x || !target.x || !source.y || !target.y) continue;
+      const isConnected = this.hoveredNode &&
+        (source.id === this.hoveredNode.id || target.id === this.hoveredNode.id);
+      if (isConnected) {
+        hoveredEdges.push(edge);
+      } else {
+        ctx.moveTo(source.x, source.y);
+        ctx.lineTo(target.x, target.y);
+      }
+    }
+    ctx.stroke();
+    // Draw hovered edges with gradients (only a few)
+    for (const edge of hoveredEdges) {
+      this.drawEdge(ctx, edge);
     }
 
-    // Layer 2: Collaboration particles
-    for (const edge of this.edges) {
-      if ((edge as any).type !== 'OPENCLAW') this.drawCollaborationParticles(ctx, edge);
+    // Layer 2: Collaboration particles (skip for large graphs — too expensive)
+    if (!isLargeGraph) {
+      for (const edge of this.edges) {
+        if ((edge as any).type !== 'OPENCLAW') this.drawCollaborationParticles(ctx, edge);
+      }
     }
 
-    // Layer 3: OpenClaw → active concept connection lines (subtle, only when active)
+    // Layer 3: OpenClaw → active concept connection lines
     this.drawOpenClawConnections(ctx);
 
-    // Layer 4: Node bloom (soft glow behind nodes)
-    for (const node of this.nodes) this.drawNodeBloom(ctx, node);
+    // Layer 4: Node bloom (skip for large graphs — expensive blur)
+    if (!isLargeGraph) {
+      for (const node of this.nodes) this.drawNodeBloom(ctx, node);
+    }
 
-    // Layer 5: Nodes (OpenClaw drawn with special renderer)
+    // Layer 5: Nodes
     for (const node of this.nodes) {
       if (node.id === OPENCLAW_NODE_ID) {
         this.drawOpenClawNode(ctx, node);
@@ -268,11 +324,32 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
       }
     }
 
-    // Layer 6: Agent dots + particles (on concept nodes)
+    // Layer 6: Agent dots + particles
     for (const agent of this.activeAgents) this.drawAgentDot(ctx, agent);
 
-    // Layer 7: Labels (on top of everything)
-    for (const node of this.nodes) this.drawLabel(ctx, node);
+    // Layer 7: Labels (for large graphs, only show labels for hovered + connected nodes)
+    if (isLargeGraph) {
+      const showLabels = new Set<string>();
+      if (this.hoveredNode) {
+        showLabels.add(this.hoveredNode.id);
+        // Add connected nodes
+        for (const e of this.edges) {
+          const src = typeof e.source === 'string' ? e.source : (e.source as GraphNode).id;
+          const tgt = typeof e.target === 'string' ? e.target : (e.target as GraphNode).id;
+          if (src === this.hoveredNode.id) showLabels.add(tgt);
+          if (tgt === this.hoveredNode.id) showLabels.add(src);
+        }
+      }
+      // Always show OpenClaw and pulsing nodes
+      for (const n of this.nodes) {
+        if (n.id === OPENCLAW_NODE_ID || n.isPulsing) showLabels.add(n.id);
+      }
+      for (const node of this.nodes) {
+        if (showLabels.has(node.id) || showLabels.size === 0) this.drawLabel(ctx, node);
+      }
+    } else {
+      for (const node of this.nodes) this.drawLabel(ctx, node);
+    }
 
     // Layer 8: Tooltip
     if (this.hoveredNode) this.drawTooltip(ctx, this.hoveredNode);
@@ -285,55 +362,47 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const target = edge.target as GraphNode;
     if (!source.x || !target.x || !source.y || !target.y) return;
 
-    const opacity = EDGE_OPACITIES[edge.type] ?? 0.08;
-    const key = this.edgeKey(edge);
-    const createdAt = this.edgeCreationTimes.get(key);
-
-    let progress = 1;
-    if (createdAt) {
-      const elapsed = this.animTime - createdAt;
-      progress = elapsed < 1000 ? this.easeOutCubic(Math.min(1, elapsed / 1000)) : 1;
-      if (elapsed > 1200) this.edgeCreationTimes.delete(key);
-    }
-
-    // Hovered edge highlight
     const isConnected = this.hoveredNode &&
       (source.id === this.hoveredNode.id || target.id === this.hoveredNode.id);
-    const finalOpacity = isConnected ? opacity * 4 : opacity;
 
-    const dx = target.x - source.x;
-    const dy = target.y - source.y;
-    const ex = source.x + dx * progress;
-    const ey = source.y + dy * progress;
+    if (isConnected) {
+      // Full gradient rendering only for hovered edges (max ~20 per hover)
+      const opacity = EDGE_OPACITIES[edge.type] ?? 0.08;
+      const sourceColors = PREMIUM_PERSONA_COLORS[source.personaType] ?? DEFAULT_COLORS;
+      const targetColors = PREMIUM_PERSONA_COLORS[(target as GraphNode).personaType] ?? DEFAULT_COLORS;
+      const srcRgb = this.hexToRgbCached(sourceColors.core);
+      const tgtRgb = this.hexToRgbCached(targetColors.core);
+      const bo = Math.min(opacity * 8, 0.7);
 
-    // Gradient line that fades at both ends
-    const grad = ctx.createLinearGradient(source.x, source.y, ex, ey);
-    const edgeColor = isConnected ? 'rgba(210,220,245,' : 'rgba(160,175,210,';
-    grad.addColorStop(0, edgeColor + (finalOpacity * 0.3) + ')');
-    grad.addColorStop(0.2, edgeColor + finalOpacity + ')');
-    grad.addColorStop(0.8, edgeColor + finalOpacity + ')');
-    grad.addColorStop(1, edgeColor + (finalOpacity * 0.3) + ')');
-
-    ctx.beginPath();
-    ctx.moveTo(source.x, source.y);
-    ctx.lineTo(ex, ey);
-    ctx.strokeStyle = grad;
-    ctx.lineWidth = isConnected ? 0.8 : 0.5;
-    ctx.stroke();
-
-    // Creation glow pulse
-    if (createdAt && (this.animTime - createdAt) < 1200) {
-      const t = (this.animTime - createdAt) / 1200;
-      const px = source.x + dx * t;
-      const py = source.y + dy * t;
-      const glowGrad = ctx.createRadialGradient(px, py, 0, px, py, 6);
-      glowGrad.addColorStop(0, `rgba(130,170,255,${0.6 * (1 - t)})`);
-      glowGrad.addColorStop(1, 'rgba(130,170,255,0)');
+      const grad = ctx.createLinearGradient(source.x, source.y, target.x, target.y);
+      grad.addColorStop(0, `rgba(${srcRgb},${bo})`);
+      grad.addColorStop(0.5, `rgba(${srcRgb},${bo * 0.3})`);
+      grad.addColorStop(1, `rgba(${tgtRgb},${bo})`);
       ctx.beginPath();
-      ctx.arc(px, py, 6, 0, Math.PI * 2);
-      ctx.fillStyle = glowGrad;
-      ctx.fill();
+      ctx.moveTo(source.x, source.y);
+      ctx.lineTo(target.x, target.y);
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    } else {
+      // Flat color for non-hovered edges (FAST — no gradient, no glow)
+      ctx.beginPath();
+      ctx.moveTo(source.x, source.y);
+      ctx.lineTo(target.x, target.y);
+      ctx.strokeStyle = 'rgba(100,120,150,0.06)';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
     }
+  }
+
+  /** Cached hex→rgb conversion to avoid repeated regex parsing */
+  private hexToRgbCached(hex: string): string {
+    let cached = this._hexRgbCache.get(hex);
+    if (!cached) {
+      cached = this.hexToRgb(hex);
+      this._hexRgbCache.set(hex, cached);
+    }
+    return cached;
   }
 
   private drawNodeBloom(ctx: CanvasRenderingContext2D, node: GraphNode): void {
@@ -345,10 +414,11 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const _isCompleted = node.status === 'COMPLETED';
     const nr = this.nodeRadius(node);
 
-    // Outer ambient glow — subtle, proportional
+    // Soft ambient glow — subtle, not overpowering
     const bloomR = nr * 4;
-    const glowGrad = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, bloomR);
-    glowGrad.addColorStop(0, isHovered ? colors.glow : colors.dim);
+    const glowGrad = ctx.createRadialGradient(node.x, node.y, nr * 0.5, node.x, node.y, bloomR);
+    glowGrad.addColorStop(0, isHovered ? colors.glow : `rgba(${this.hexToRgb(colors.core)},0.12)`);
+    glowGrad.addColorStop(0.5, `rgba(${this.hexToRgb(colors.core)},0.04)`);
     glowGrad.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.beginPath();
     ctx.arc(node.x, node.y, bloomR, 0, Math.PI * 2);
@@ -358,10 +428,10 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Pulse bloom (when active)
     if (node.isPulsing) {
       const phase = (Math.sin(this.animTime / 800) + 1) / 2;
-      const pulseR = nr * 3 + phase * nr * 2.5;
+      const pulseR = nr * 4 + phase * nr * 3;
       const pulseGrad = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, pulseR);
-      pulseGrad.addColorStop(0, `rgba(${this.hexToRgb(colors.core)},${0.12 + phase * 0.08})`);
-      pulseGrad.addColorStop(0.6, `rgba(${this.hexToRgb(colors.core)},${0.04 * (1 - phase)})`);
+      pulseGrad.addColorStop(0, `rgba(${this.hexToRgb(colors.core)},${0.18 + phase * 0.12})`);
+      pulseGrad.addColorStop(0.5, `rgba(${this.hexToRgb(colors.core)},${0.06 * (1 - phase)})`);
       pulseGrad.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.beginPath();
       ctx.arc(node.x, node.y, pulseR, 0, Math.PI * 2);
@@ -386,18 +456,25 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
     const r = this.nodeRadius(node) * scale;
 
-    // Simple flat fill — clean, Obsidian-style
+    // Subtle sphere — soft highlight, not glaring
+    const nodeGrad = ctx.createRadialGradient(
+      node.x - r * 0.2, node.y - r * 0.2, 0,
+      node.x, node.y, r
+    );
+    nodeGrad.addColorStop(0, `rgba(255,255,255,0.35)`);  // soft highlight
+    nodeGrad.addColorStop(0.35, colors.core);
+    nodeGrad.addColorStop(1, `rgba(${this.hexToRgb(colors.core)},0.6)`);
     ctx.beginPath();
     ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
-    ctx.fillStyle = colors.core;
+    ctx.fillStyle = nodeGrad;
     ctx.fill();
 
-    // Completed indicator — thin green ring
+    // Completed indicator — bright ring
     if (node.status === 'COMPLETED') {
       ctx.beginPath();
       ctx.arc(node.x, node.y, r + 1.5, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(110,231,183,0.45)';
-      ctx.lineWidth = 0.6;
+      ctx.strokeStyle = 'rgba(45,212,191,0.5)';
+      ctx.lineWidth = 0.8;
       ctx.stroke();
     }
   }
@@ -424,8 +501,8 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     ctx.fillStyle = 'rgba(6,8,12,0.8)';
     ctx.fillText(label, node.x + 0.5, labelY + 0.5);
 
-    // Label text
-    ctx.fillStyle = isHovered ? `rgba(255,255,255,0.9)` : `rgba(200,205,215,0.55)`;
+    // Label text — brighter for neural network style
+    ctx.fillStyle = isHovered ? `rgba(255,255,255,0.95)` : `rgba(180,200,230,0.65)`;
     ctx.fillText(label, node.x, labelY);
   }
 
@@ -495,86 +572,18 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     ctx.lineWidth = 0.8;
     ctx.stroke();
 
-    // Core circle — dark with blue edge
-    const coreGrad = ctx.createRadialGradient(x - 2, y - 2, 0, x, y, r);
-    coreGrad.addColorStop(0, '#1E293B');
-    coreGrad.addColorStop(0.85, '#0F172A');
-    coreGrad.addColorStop(1, isActive ? '#1E40AF' : '#1E3A5F');
+    // Neuron OS logo — transparent PNG, no background needed
+    // Invisible hit area for drag (transparent fill)
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = coreGrad;
+    ctx.fillStyle = 'rgba(0,0,0,0.01)'; // nearly invisible but clickable
     ctx.fill();
 
-    // Digital brain icon — drawn with paths
-    ctx.save();
-    ctx.translate(x, y);
-    const s = r * 0.065; // scale factor
-
-    // Brain outline (left hemisphere)
-    ctx.beginPath();
-    ctx.moveTo(-1 * s, -6 * s);
-    ctx.bezierCurveTo(-5 * s, -6 * s, -7 * s, -3 * s, -7 * s, 0);
-    ctx.bezierCurveTo(-7 * s, 2 * s, -6 * s, 4 * s, -4.5 * s, 5 * s);
-    ctx.bezierCurveTo(-3 * s, 6 * s, -1 * s, 6.5 * s, 0, 6.5 * s);
-    // Right hemisphere
-    ctx.bezierCurveTo(1 * s, 6.5 * s, 3 * s, 6 * s, 4.5 * s, 5 * s);
-    ctx.bezierCurveTo(6 * s, 4 * s, 7 * s, 2 * s, 7 * s, 0);
-    ctx.bezierCurveTo(7 * s, -3 * s, 5 * s, -6 * s, 1 * s, -6 * s);
-    ctx.closePath();
-    ctx.strokeStyle = isActive ? 'rgba(147,197,253,0.9)' : 'rgba(96,165,250,0.6)';
-    ctx.lineWidth = 0.8;
-    ctx.stroke();
-
-    // Center line
-    ctx.beginPath();
-    ctx.moveTo(0, -5.5 * s);
-    ctx.lineTo(0, 6 * s);
-    ctx.strokeStyle = 'rgba(96,165,250,0.3)';
-    ctx.lineWidth = 0.5;
-    ctx.stroke();
-
-    // Neural connection dots (circuit-board feel)
-    const dots: [number, number][] = [
-      [-4 * s, -2 * s], [-3 * s, 2 * s], [-5 * s, 1 * s],
-      [4 * s, -2 * s], [3 * s, 2 * s], [5 * s, 1 * s],
-      [-2 * s, -4 * s], [2 * s, -4 * s],
-      [-2 * s, 4 * s], [2 * s, 4 * s],
-    ];
-    const dotColor = isActive ? 'rgba(147,197,253,0.9)' : 'rgba(96,165,250,0.5)';
-    for (const d of dots) {
-      ctx.beginPath();
-      ctx.arc(d[0], d[1], 0.7, 0, Math.PI * 2);
-      ctx.fillStyle = dotColor;
-      ctx.fill();
+    // Draw logo
+    if (this.neuronLogoImg?.complete && this.neuronLogoImg.naturalWidth > 0) {
+      const imgSize = r * 1.96;
+      ctx.drawImage(this.neuronLogoImg, x - imgSize / 2, y - imgSize / 2, imgSize, imgSize);
     }
-
-    // Neural links between dots
-    ctx.strokeStyle = isActive ? 'rgba(96,165,250,0.35)' : 'rgba(96,165,250,0.15)';
-    ctx.lineWidth = 0.4;
-    const links: [number, number][] = [[0, 1], [1, 2], [3, 4], [4, 5], [6, 7], [8, 9], [0, 6], [3, 7], [1, 8], [4, 9]];
-    for (const lk of links) {
-      ctx.beginPath();
-      ctx.moveTo(dots[lk[0]]![0], dots[lk[0]]![1]);
-      ctx.lineTo(dots[lk[1]]![0], dots[lk[1]]![1]);
-      ctx.stroke();
-    }
-
-    // Active: animated synaptic pulse through neural links
-    if (isActive) {
-      const pulseIdx = Math.floor((this.animTime / 400) % links.length);
-      const lk = links[pulseIdx]!;
-      const phase = ((this.animTime / 400) % 1);
-      const da = dots[lk[0]]!;
-      const db = dots[lk[1]]!;
-      const px = da[0] + (db[0] - da[0]) * phase;
-      const py = da[1] + (db[1] - da[1]) * phase;
-      ctx.beginPath();
-      ctx.arc(px, py, 1.2, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(147,197,253,0.9)';
-      ctx.fill();
-    }
-
-    ctx.restore();
 
     // Active pulse ring animation
     if (isActive) {
@@ -770,7 +779,7 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     for (let i = this.nodes.length - 1; i >= 0; i--) {
       const n = this.nodes[i]!;
       if (n == null || n.x == null || n.y == null) continue;
-      if (n.id === OPENCLAW_NODE_ID) continue; // OpenClaw is not clickable for navigation
+      // OpenClaw node is draggable but not clickable for navigation (handled in onMouseUp)
       const r = this.nodeRadius(n) + 3; // extra 3px for easier click target
       const dx = wx - n.x;
       const dy = wy - n.y;
@@ -810,6 +819,7 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.hoveredNode = this.hitTest(wx, wy);
       this.canvasRef.nativeElement.style.cursor = this.hoveredNode ? 'pointer' : 'grab';
     }
+    this._scheduleRender();
   }
 
   onMouseUp(event: MouseEvent): void {
@@ -819,8 +829,8 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
       (performance.now() - this.mouseDownTime) < 300;
 
     if (this.dragNode) {
-      // If it was a click (not drag), navigate
-      if (wasClick) {
+      // If it was a click (not drag), navigate — but not for Neuron Agent node
+      if (wasClick && this.dragNode.id !== OPENCLAW_NODE_ID) {
         this.noteActivated.emit({ noteId: this.dragNode.noteId, conceptId: this.dragNode.id });
       }
       this.dragNode.fx = null;
@@ -845,10 +855,11 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.transform.x = mx - (mx - this.transform.x) * (newScale / this.transform.scale);
     this.transform.y = my - (my - this.transform.y) * (newScale / this.transform.scale);
     this.transform.scale = newScale;
+    this._scheduleRender();
   }
 
-  zoomIn(): void { this.transform.scale = Math.min(5, this.transform.scale * 1.15); }
-  zoomOut(): void { this.transform.scale = Math.max(0.1, this.transform.scale / 1.15); }
+  zoomIn(): void { this.transform.scale = Math.min(5, this.transform.scale * 1.15); this._scheduleRender(); }
+  zoomOut(): void { this.transform.scale = Math.max(0.1, this.transform.scale / 1.15); this._scheduleRender(); }
 
   fitToView(): void {
     if (this.nodes.length === 0) return;
@@ -865,6 +876,7 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.transform.scale = scale;
     this.transform.x = (this.width - graphW * scale) / 2 - minX * scale + pad * scale;
     this.transform.y = (this.height - graphH * scale) / 2 - minY * scale + pad * scale;
+    this._scheduleRender();
   }
 
   private resize(): void {
@@ -879,6 +891,7 @@ export class GraphViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.simulation) {
       this.simulation.force('center', d3Force.forceCenter(this.width / 2, this.height / 2));
     }
+    this._scheduleRender();
   }
 
   private edgeKey(e: GraphEdge): string {

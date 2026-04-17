@@ -63,29 +63,29 @@ export function buildRelationshipClassificationPrompt(
     .map((c, i) => `${i + 1}. ${c.name} (${c.category}) [slug: ${c.slug}] - "${c.definition}"`)
     .join('\n');
 
-  return `Ti si ekspert za poslovne baze znanja. Analiziraj odnose između NOVOG koncepta i postojećih koncepata.
+  return `You are a business knowledge base expert. Analyze relationships between the NEW concept and existing concepts.
 
-NOVI KONCEPT: "${conceptName}"
-KATEGORIJA: ${conceptCategory}
-DEFINICIJA: "${conceptDefinition}"
+NEW CONCEPT: "${conceptName}"
+CATEGORY: ${conceptCategory}
+DEFINITION: "${conceptDefinition}"
 
-POSTOJEĆI KONCEPTI ZA EVALUACIJU:
+EXISTING CONCEPTS FOR EVALUATION:
 ${candidateList}
 
-Za svaki postojeći koncept, klasifikuj odnos OD novog koncepta KA postojećem:
-- PREREQUISITE: Postojeći koncept mora biti shvaćen PRE novog koncepta (postojeći je temelj za novi)
-- RELATED: Koncepti su u istom poslovnom domenu i dopunjuju se međusobno
-- ADVANCED: Postojeći koncept je dublja/specijalizovanija verzija novog koncepta
-- NONE: Nema smislenog odnosa
+For each existing concept, classify the relationship FROM the new concept TO the existing one:
+- PREREQUISITE: The existing concept must be understood BEFORE the new concept (existing is a foundation for the new)
+- RELATED: Concepts are in the same business domain and complement each other
+- ADVANCED: The existing concept is a deeper/more specialized version of the new concept
+- NONE: No meaningful relationship
 
-PRAVILA:
-- Uključi SAMO koncepte sa PREREQUISITE, RELATED ili ADVANCED odnosom. Izostavi NONE.
-- Budi selektivan: kreiraj odnose samo tamo gde postoji stvarna poslovna logička veza.
-- Ciljaj na 3-8 odnosa po konceptu. Kvalitet iznad kvantiteta.
-- Odnosi između različitih kategorija su vredni kada odražavaju stvarne poslovne veze.
+RULES:
+- Include ONLY concepts with PREREQUISITE, RELATED, or ADVANCED relationships. Omit NONE.
+- Be selective: create relationships only where there is a real business logical connection.
+- Aim for 3-8 relationships per concept. Quality over quantity.
+- Relationships between different categories are valuable when they reflect real business connections.
 
-Vrati SAMO validan JSON niz (bez markdown-a, bez objašnjenja):
+Return ONLY a valid JSON array (no markdown, no explanations):
 [{"slug": "concept-slug", "type": "RELATED"}, {"slug": "another-slug", "type": "PREREQUISITE"}]
 
-Ako ne postoje smisleni odnosi, vrati prazan niz: []`;
+If there are no meaningful relationships, return an empty array: []`;
 }

@@ -190,9 +190,12 @@ export class FigmaService {
   async readFile(accessToken: string, fileKey: string): Promise<any> {
     // Personal tokens use X-Figma-Token, OAuth tokens use Authorization: Bearer
     const isPersonalToken = accessToken.startsWith('figd_');
-    const headers = isPersonalToken
-      ? { 'X-Figma-Token': accessToken }
-      : { 'Authorization': `Bearer ${accessToken}` };
+    const headers: Record<string, string> = {};
+    if (isPersonalToken) {
+      headers['X-Figma-Token'] = accessToken;
+    } else {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
 
     const res = await fetch(`https://api.figma.com/v1/files/${fileKey}`, { headers });
     if (!res.ok) {

@@ -34,9 +34,9 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
     <div class="memory-page">
       <header class="page-header">
         <div class="header-content">
-          <h1 class="page-title">Memorija i kontekst</h1>
+          <h1 class="page-title">Memory & Context</h1>
           <p class="page-description">
-            Upravljajte onim što AI pamti o vama, vašim klijentima i projektima.
+            Manage what the AI remembers about you, your clients, and projects.
           </p>
         </div>
         <button
@@ -45,7 +45,7 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
           [disabled]="memories$().length === 0"
           (click)="onClearAll()"
         >
-          Obriši svu memoriju
+          Delete all memory
         </button>
       </header>
 
@@ -70,7 +70,7 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
       @if (isLoading$()) {
         <div class="loading-state">
           <div class="spinner" aria-hidden="true"></div>
-          <p>Učitavanje memorija...</p>
+          <p>Loading memories...</p>
         </div>
       }
 
@@ -79,7 +79,7 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
         <div class="error-state" role="alert">
           <p>{{ error$() }}</p>
           <button type="button" class="retry-btn" (click)="loadMemories()">
-            Pokušaj ponovo
+            Try again
           </button>
         </div>
       }
@@ -90,10 +90,10 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
           <span class="empty-icon" aria-hidden="true">💭</span>
           <p class="empty-text">
             @if (activeFilter$() === 'ALL') {
-              Još nema memorija. Dok razgovarate sa AI-jem, on će učiti i
-              pamtiti kontekst o vašem radu.
+              No memories yet. As you converse with the AI, it will learn and
+              remember context about your work.
             } @else {
-              Nema pronađenih memorija za: {{ getFilterLabel(activeFilter$()).toLowerCase() }}.
+              No memories found for: {{ getFilterLabel(activeFilter$()).toLowerCase() }}.
             }
           </p>
         </div>
@@ -137,7 +137,7 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
                     aria-label="Edit memory"
                     (click)="onEdit(memory)"
                   >
-                    Izmeni
+                    Edit
                   </button>
                   <button
                     type="button"
@@ -147,9 +147,9 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
                     (click)="onDelete(memory)"
                   >
                     @if (deletingIds$().has(memory.id)) {
-                      Brisanje...
+                      Deleting...
                     } @else {
-                      Obriši
+                      Delete
                     }
                   </button>
                 </div>
@@ -167,12 +167,12 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
               [disabled]="currentPage$() === 0"
               (click)="prevPage()"
             >
-              ← Prethodna
+              ← Previous
             </button>
             <span class="page-info">
-              Prikazano {{ currentPage$() * pageSize + 1 }} -
+              Showing {{ currentPage$() * pageSize + 1 }} -
               {{ Math.min((currentPage$() + 1) * pageSize, totalMemories$()) }}
-              od {{ totalMemories$() }}
+              of {{ totalMemories$() }}
             </span>
             <button
               type="button"
@@ -180,7 +180,7 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
               [disabled]="(currentPage$() + 1) * pageSize >= totalMemories$()"
               (click)="nextPage()"
             >
-              Sledeća →
+              Next →
             </button>
           </div>
         }
@@ -196,14 +196,14 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
           aria-labelledby="clear-title"
           aria-describedby="clear-desc"
         >
-          <h2 id="clear-title" class="dialog-title">Obriši svu memoriju</h2>
+          <h2 id="clear-title" class="dialog-title">Delete all memory</h2>
           <p id="clear-desc" class="dialog-desc">
-            Ovo će trajno obrisati svih {{ totalMemories$() }} memorija.
-            Ova radnja se ne može poništiti.
+            This will permanently delete all {{ totalMemories$() }} memories.
+            This action cannot be undone.
           </p>
           <div class="confirm-input">
             <label for="confirm-text">
-              Unesite <strong>FORGET</strong> za potvrdu:
+              Type <strong>FORGET</strong> to confirm:
             </label>
             <input
               id="confirm-text"
@@ -219,7 +219,7 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
               class="btn btn-secondary"
               (click)="cancelClearAll()"
             >
-              Otkaži
+              Cancel
             </button>
             <button
               type="button"
@@ -228,9 +228,9 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
               (click)="confirmClearAll()"
             >
               @if (isClearing$()) {
-                Brisanje...
+                Deleting...
               } @else {
-                Obriši svu memoriju
+                Delete all memory
               }
             </button>
           </div>
@@ -279,8 +279,8 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
     .clear-all-btn {
       padding: 0.5rem 1rem;
       background-color: transparent;
-      border: 1px solid #ef4444;
-      color: #ef4444;
+      border: 1px solid #F85149;
+      color: #F85149;
       border-radius: 0.375rem;
       font-size: 0.875rem;
       font-weight: 500;
@@ -289,7 +289,7 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
     }
 
     .clear-all-btn:hover:not(:disabled) {
-      background-color: #ef444420;
+      background-color: #F8514920;
     }
 
     .clear-all-btn:disabled {
@@ -301,7 +301,7 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
       display: flex;
       gap: 0.5rem;
       margin-bottom: 1.5rem;
-      border-bottom: 1px solid #262626;
+      border-bottom: 1px solid #1C2128;
       padding-bottom: 0.5rem;
     }
 
@@ -318,18 +318,18 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
 
     .filter-tab:hover {
       color: #a3a3a3;
-      background-color: #1a1a1a;
+      background-color: #161B22;
     }
 
     .filter-tab.active {
       color: #e5e5e5;
-      background-color: #262626;
+      background-color: #1C2128;
     }
 
     .filter-tab .count {
       margin-left: 0.25rem;
       padding: 0.125rem 0.375rem;
-      background-color: #333;
+      background-color: #30363D;
       border-radius: 9999px;
       font-size: 0.75rem;
     }
@@ -350,7 +350,7 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
       width: 2rem;
       height: 2rem;
       border: 2px solid #333;
-      border-top-color: #3b82f6;
+      border-top-color: #58A6FF;
       border-radius: 50%;
       animation: spin 0.6s linear infinite;
       margin-bottom: 1rem;
@@ -372,8 +372,8 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
     .retry-btn {
       margin-top: 1rem;
       padding: 0.5rem 1rem;
-      background-color: #262626;
-      border: 1px solid #333;
+      background-color: #1C2128;
+      border: 1px solid #30363D;
       color: #e5e5e5;
       border-radius: 0.375rem;
       cursor: pointer;
@@ -386,15 +386,15 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
     }
 
     .memory-card {
-      background-color: #1a1a1a;
-      border: 1px solid #262626;
+      background-color: #161B22;
+      border: 1px solid #1C2128;
       border-radius: 0.5rem;
       padding: 1rem;
       transition: all 0.15s ease;
     }
 
     .memory-card:hover {
-      border-color: #333;
+      border-color: #30363D;
     }
 
     .memory-card.deleting {
@@ -455,30 +455,30 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
       padding: 0.25rem 0.5rem;
       font-size: 0.75rem;
       background: transparent;
-      border: 1px solid #333;
+      border: 1px solid #30363D;
       border-radius: 0.25rem;
       cursor: pointer;
       transition: all 0.15s ease;
     }
 
     .edit-btn {
-      color: #3b82f6;
-      border-color: #3b82f633;
+      color: #58A6FF;
+      border-color: #58A6FF33;
     }
 
     .edit-btn:hover {
-      background-color: #3b82f620;
-      border-color: #3b82f6;
+      background-color: #58A6FF20;
+      border-color: #58A6FF;
     }
 
     .delete-btn {
-      color: #ef4444;
-      border-color: #ef444433;
+      color: #F85149;
+      border-color: #F8514933;
     }
 
     .delete-btn:hover:not(:disabled) {
-      background-color: #ef444420;
-      border-color: #ef4444;
+      background-color: #F8514920;
+      border-color: #F85149;
     }
 
     .delete-btn:disabled {
@@ -496,15 +496,15 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
 
     .page-btn {
       padding: 0.5rem 1rem;
-      background-color: #262626;
-      border: 1px solid #333;
+      background-color: #1C2128;
+      border: 1px solid #30363D;
       color: #a3a3a3;
       border-radius: 0.375rem;
       cursor: pointer;
     }
 
     .page-btn:hover:not(:disabled) {
-      background-color: #333;
+      background-color: #30363D;
       color: #e5e5e5;
     }
 
@@ -532,8 +532,8 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
       transform: translate(-50%, -50%);
       width: 90%;
       max-width: 400px;
-      background-color: #1a1a1a;
-      border: 1px solid #333;
+      background-color: #161B22;
+      border: 1px solid #30363D;
       border-radius: 0.75rem;
       padding: 1.5rem;
       z-index: 1001;
@@ -564,14 +564,14 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
     }
 
     .confirm-input strong {
-      color: #ef4444;
+      color: #F85149;
     }
 
     .confirm-field {
       width: 100%;
       padding: 0.5rem 0.75rem;
-      background-color: #0d0d0d;
-      border: 1px solid #333;
+      background-color: #0D1117;
+      border: 1px solid #30363D;
       border-radius: 0.375rem;
       color: #e5e5e5;
       font-size: 0.875rem;
@@ -593,18 +593,18 @@ import { MemoryCorrectionDialogComponent, type MemoryCorrectionResult } from './
 
     .btn-secondary {
       background-color: transparent;
-      border: 1px solid #333;
+      border: 1px solid #30363D;
       color: #a3a3a3;
     }
 
     .btn-secondary:hover {
-      background-color: #262626;
+      background-color: #1C2128;
       color: #e5e5e5;
     }
 
     .btn-danger {
-      background-color: #ef4444;
-      border: 1px solid #ef4444;
+      background-color: #F85149;
+      border: 1px solid #F85149;
       color: white;
     }
 
@@ -642,11 +642,11 @@ export class MemoryListComponent implements OnInit {
   readonly Math = Math;
 
   readonly filters: { type: MemoryType | 'ALL'; label: string }[] = [
-    { type: 'ALL', label: 'Sve' },
-    { type: 'CLIENT_CONTEXT' as MemoryType, label: 'Klijenti' },
-    { type: 'PROJECT_CONTEXT' as MemoryType, label: 'Projekti' },
-    { type: 'USER_PREFERENCE' as MemoryType, label: 'Preferencije' },
-    { type: 'FACTUAL_STATEMENT' as MemoryType, label: 'Činjenice' },
+    { type: 'ALL', label: 'All' },
+    { type: 'CLIENT_CONTEXT' as MemoryType, label: 'Clients' },
+    { type: 'PROJECT_CONTEXT' as MemoryType, label: 'Projects' },
+    { type: 'USER_PREFERENCE' as MemoryType, label: 'Preferences' },
+    { type: 'FACTUAL_STATEMENT' as MemoryType, label: 'Facts' },
   ];
 
   // Computed
@@ -676,7 +676,7 @@ export class MemoryListComponent implements OnInit {
       this.memories$.set(response.data);
       this.totalMemories$.set(response.meta.total);
     } catch {
-      this.error$.set('Greška pri učitavanju memorija. Pokušajte ponovo.');
+      this.error$.set('Error loading memories. Please try again.');
     } finally {
       this.isLoading$.set(false);
     }
@@ -707,16 +707,16 @@ export class MemoryListComponent implements OnInit {
 
   getSourceLabel(source: MemorySource): string {
     const labels: Record<MemorySource, string> = {
-      AI_EXTRACTED: 'AI ekstraktovano',
-      USER_STATED: 'Vi ste naveli',
-      USER_CORRECTED: 'Ispravljeno',
+      AI_EXTRACTED: 'AI extracted',
+      USER_STATED: 'You stated',
+      USER_CORRECTED: 'Corrected',
     };
     return labels[source] ?? source;
   }
 
   formatDate(dateString: string): string {
     const date = new Date(dateString);
-    return date.toLocaleDateString('sr-Latn', {
+    return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -766,12 +766,12 @@ export class MemoryListComponent implements OnInit {
 
       this.closeCorrectionDialog();
     } catch {
-      this.error$.set('Greška pri čuvanju ispravke. Pokušajte ponovo.');
+      this.error$.set('Error saving correction. Please try again.');
     }
   }
 
   async onDelete(memory: Memory): Promise<void> {
-    if (!confirm(`Obrisati memoriju o "${memory.subject ?? 'ovoj temi'}"?`)) {
+    if (!confirm(`Delete memory about "${memory.subject ?? 'this topic'}"?`)) {
       return;
     }
 
@@ -784,7 +784,7 @@ export class MemoryListComponent implements OnInit {
       this.memories$.update((memories) => memories.filter((m) => m.id !== memory.id));
       this.totalMemories$.update((t) => t - 1);
     } catch {
-      this.error$.set('Greška pri brisanju memorije. Pokušajte ponovo.');
+      this.error$.set('Error deleting memory. Please try again.');
     } finally {
       this.deletingIds$.update((ids) => {
         const newIds = new Set(ids);
@@ -818,7 +818,7 @@ export class MemoryListComponent implements OnInit {
       this.totalMemories$.set(0);
       this.cancelClearAll();
     } catch {
-      this.error$.set('Greška pri brisanju memorija. Pokušajte ponovo.');
+      this.error$.set('Error deleting memories. Please try again.');
     } finally {
       this.isClearing$.set(false);
     }

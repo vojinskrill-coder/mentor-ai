@@ -42,7 +42,7 @@ export class MemoryContextBuilderService {
    * @param tenantId - Tenant ID for isolation
    * @returns Formatted context with attributions
    */
-  async buildContext(query: string, userId: string, tenantId: string): Promise<MemoryContext> {
+  async buildContext(query: string, userId: string, tenantId: string, userDepartment?: string | null): Promise<MemoryContext> {
     this.logger.debug({
       message: 'Building memory context',
       userId,
@@ -58,7 +58,19 @@ export class MemoryContextBuilderService {
       10 // Top 10 most relevant
     );
 
-    if (searchResults.length === 0) {
+    // Department filtering: if user has a department, filter out memories
+    // tagged for other departments. Memories with empty departmentTags or
+    // including the user's department (or 'all') pass through.
+    // PLATFORM_OWNER/TENANT_OWNER have no department filter (userDepartment = null).
+    const filteredResults = userDepartment
+      ? searchResults.filter((r) => {
+          const tags = r.departmentTags;
+          if (!tags || tags.length === 0) return true; // No tags = visible to all
+          return tags.includes(userDepartment) || tags.includes('all');
+        })
+      : searchResults;
+
+    if (filteredResults.length === 0) {
       this.logger.debug({
         message: 'No relevant memories found',
         userId,
@@ -78,7 +90,7 @@ export class MemoryContextBuilderService {
     let tokenCount = this.estimateTokens(context);
     const maxContentTokens = this.MAX_MEMORY_TOKENS - 100; // Reserve for header/footer
 
-    for (const result of searchResults) {
+    for (const result of filteredResults) {
       const memoryText = this.formatMemory(result);
       const memoryTokens = this.estimateTokens(memoryText);
 

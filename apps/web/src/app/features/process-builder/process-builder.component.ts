@@ -72,7 +72,7 @@ interface StepForm {
               </div>
               @if (!$last) {
                 <div class="step-arrow">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#58A6FF" stroke-width="2"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
                 </div>
               }
             }
@@ -159,48 +159,48 @@ interface StepForm {
     .builder-layout { display: flex; height: 100%; }
 
     .workflow-sidebar {
-      width: 220px; flex-shrink: 0; background: #1A1A1A; border-right: 1px solid #2A2A2A;
+      width: 220px; flex-shrink: 0; background: #161B22; border-right: 1px solid #21262D;
       padding: 16px; overflow-y: auto;
     }
-    .sidebar-title { color: #FAFAFA; font-size: 16px; font-weight: 700; margin: 0 0 16px; }
+    .sidebar-title { color: #E6EDF3; font-size: 16px; font-weight: 700; margin: 0 0 16px; }
     .workflow-item {
       padding: 10px; border-radius: 6px; cursor: pointer; margin-bottom: 6px;
       border: 1px solid transparent; display: flex; flex-direction: column; gap: 2px;
     }
-    .workflow-item:hover { border-color: #2A2A2A; background: #242424; }
-    .workflow-item.active { border-color: #3B82F6; background: #242424; }
-    .wf-name { color: #FAFAFA; font-size: 13px; font-weight: 500; }
+    .workflow-item:hover { border-color: #21262D; background: #1C2128; }
+    .workflow-item.active { border-color: #58A6FF; background: #1C2128; }
+    .wf-name { color: #E6EDF3; font-size: 13px; font-weight: 500; }
     .wf-steps { color: #6B7280; font-size: 11px; }
     .wf-cron { color: #C9A96E; font-size: 10px; font-family: monospace; }
     .add-workflow-btn {
       width: 100%; padding: 8px; margin-top: 8px; background: transparent;
-      border: 1px dashed #2A2A2A; border-radius: 6px; color: #3B82F6;
+      border: 1px dashed #21262D; border-radius: 6px; color: #58A6FF;
       cursor: pointer; font-size: 13px;
     }
-    .add-workflow-btn:hover { border-color: #3B82F6; }
+    .add-workflow-btn:hover { border-color: #58A6FF; }
 
     .builder-main { flex: 1; padding: 24px; overflow-y: auto; }
     .workflow-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
     .wf-header-info { display: flex; flex-direction: column; gap: 8px; }
     .wf-name-input {
-      background: transparent; border: none; border-bottom: 1px solid #2A2A2A;
-      color: #FAFAFA; font-size: 20px; font-weight: 700; padding: 4px 0; width: 300px;
+      background: transparent; border: none; border-bottom: 1px solid #21262D;
+      color: #E6EDF3; font-size: 20px; font-weight: 700; padding: 4px 0; width: 300px;
     }
-    .wf-name-input:focus { outline: none; border-color: #3B82F6; }
+    .wf-name-input:focus { outline: none; border-color: #58A6FF; }
     .wf-slug-input, .wf-cron-input {
-      background: transparent; border: none; border-bottom: 1px solid #2A2A2A;
+      background: transparent; border: none; border-bottom: 1px solid #21262D;
       color: #9CA3AF; font-size: 12px; padding: 4px 0; width: 300px; font-family: monospace;
     }
-    .wf-slug-input:focus, .wf-cron-input:focus { outline: none; border-color: #3B82F6; }
+    .wf-slug-input:focus, .wf-cron-input:focus { outline: none; border-color: #58A6FF; }
     .wf-header-actions { display: flex; gap: 8px; }
     .autogen-btn {
-      padding: 8px 16px; background: #C9A96E; color: #0D0D0D; border: none;
+      padding: 8px 16px; background: #C9A96E; color: #0D1117; border: none;
       border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;
     }
     .autogen-btn:hover { background: #b8963e; }
     .autogen-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .save-wf-btn {
-      padding: 8px 16px; background: #3B82F6; color: #FAFAFA; border: none;
+      padding: 8px 16px; background: #58A6FF; color: #E6EDF3; border: none;
       border-radius: 6px; cursor: pointer; font-size: 13px;
     }
     .delete-wf-btn {
@@ -210,53 +210,53 @@ interface StepForm {
 
     .step-flow { display: flex; flex-direction: column; align-items: center; gap: 4px; }
     .step-box {
-      width: 360px; padding: 14px; background: #1A1A1A; border: 1px solid #2A2A2A;
+      width: 360px; padding: 14px; background: #161B22; border: 1px solid #21262D;
       border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 12px;
       transition: border-color 0.15s;
     }
-    .step-box:hover { border-color: #3B82F6; }
-    .step-box.active { border-color: #3B82F6; background: #1A1A2A; }
+    .step-box:hover { border-color: #58A6FF; }
+    .step-box.active { border-color: #58A6FF; background: #1A1A2A; }
     .step-order {
-      width: 28px; height: 28px; border-radius: 50%; background: #242424;
+      width: 28px; height: 28px; border-radius: 50%; background: #1C2128;
       display: flex; align-items: center; justify-content: center;
-      color: #3B82F6; font-weight: 700; font-size: 13px; flex-shrink: 0;
+      color: #58A6FF; font-weight: 700; font-size: 13px; flex-shrink: 0;
     }
     .step-info { display: flex; flex-direction: column; flex: 1; }
-    .step-name { color: #FAFAFA; font-size: 13px; font-weight: 500; }
+    .step-name { color: #E6EDF3; font-size: 13px; font-weight: 500; }
     .step-type { font-size: 10px; font-weight: 600; }
-    .type-AUTOMATIC { color: #3B82F6; }
+    .type-AUTOMATIC { color: #58A6FF; }
     .type-APPROVAL { color: #C9A96E; }
     .type-MANUAL { color: #9CA3AF; }
     .step-agent { color: #6B7280; font-size: 11px; }
     .step-arrow { display: flex; justify-content: center; }
     .add-step-btn {
       padding: 8px 24px; margin-top: 8px; background: transparent;
-      border: 1px dashed #2A2A2A; border-radius: 6px; color: #3B82F6;
+      border: 1px dashed #21262D; border-radius: 6px; color: #58A6FF;
       cursor: pointer; font-size: 13px;
     }
 
     .step-editor {
-      width: 360px; flex-shrink: 0; background: #1A1A1A; border-left: 1px solid #2A2A2A;
+      width: 360px; flex-shrink: 0; background: #161B22; border-left: 1px solid #21262D;
       padding: 16px; overflow-y: auto;
     }
     .editor-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-    .editor-title { color: #FAFAFA; font-size: 16px; margin: 0; }
+    .editor-title { color: #E6EDF3; font-size: 16px; margin: 0; }
     .close-editor { background: none; border: none; color: #6B7280; font-size: 20px; cursor: pointer; }
 
     .editor-fields { display: flex; flex-direction: column; gap: 12px; }
     .field { display: flex; flex-direction: column; gap: 4px; }
     .field-label { color: #9CA3AF; font-size: 11px; font-weight: 600; text-transform: uppercase; }
     .field-input, .field-select, .field-textarea {
-      background: #242424; border: 1px solid #2A2A2A; border-radius: 6px;
-      color: #FAFAFA; padding: 8px; font-size: 13px;
+      background: #1C2128; border: 1px solid #21262D; border-radius: 6px;
+      color: #E6EDF3; padding: 8px; font-size: 13px;
     }
-    .field-input:focus, .field-select:focus, .field-textarea:focus { outline: none; border-color: #3B82F6; }
+    .field-input:focus, .field-select:focus, .field-textarea:focus { outline: none; border-color: #58A6FF; }
     .field-textarea { resize: vertical; }
     .code-textarea { font-family: monospace; font-size: 12px; }
 
     .editor-actions { display: flex; gap: 8px; margin-top: 16px; }
     .save-step-btn {
-      flex: 1; padding: 8px; background: #3B82F6; color: #FAFAFA;
+      flex: 1; padding: 8px; background: #58A6FF; color: #E6EDF3;
       border: none; border-radius: 6px; cursor: pointer; font-size: 13px;
     }
     .delete-step-btn {

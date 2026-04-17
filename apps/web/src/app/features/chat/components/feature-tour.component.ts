@@ -13,43 +13,43 @@ const TOUR_STORAGE_KEY = 'mentor_ai_feature_tour_v1';
 const TOUR_STEPS: TourStep[] = [
   {
     target: '.sidebar',
-    title: 'Navigacija razgovora',
+    title: 'Conversation navigation',
     description:
-      'Ovde nalazite sve vaše razgovore organizovane po poslovnim konceptima. Kliknite na razgovor da ga otvorite.',
+      'Here you will find all your conversations organized by business concepts. Click on a conversation to open it.',
     position: 'right',
   },
   {
     target: '.new-chat-btn',
-    title: 'Novi razgovor',
-    description: 'Kliknite ovde da započnete novi razgovor sa vašim AI poslovnim savetnikom.',
+    title: 'New conversation',
+    description: 'Click here to start a new conversation with your AI business advisor.',
     position: 'right',
   },
   {
     target: '.chat-main',
-    title: 'Prostor za razgovor',
+    title: 'Conversation area',
     description:
-      'Ovde se prikazuju poruke — vaša pitanja i odgovori AI-a sa citiranjima i ocenama pouzdanosti.',
+      'Messages are displayed here — your questions and AI responses with citations and confidence ratings.',
     position: 'left',
   },
   {
     target: 'app-chat-input',
-    title: 'Unos poruke',
+    title: 'Message input',
     description:
-      'Postavite pitanja, zatražite analize ili pokrenite zadatke. AI će automatski kreirati i izvršiti poslovne zadatke.',
+      'Ask questions, request analyses, or launch tasks. AI will automatically create and execute business tasks.',
     position: 'top',
   },
   {
     target: '.auto-ai-toggle',
-    title: 'Automatski AI režim',
+    title: 'Automatic AI mode',
     description:
-      'Kada je uključen, AI autonomno popunjava i ocenjuje sve kreirane zadatke bez čekanja na vašu potvrdu.',
+      'When enabled, AI autonomously fills in and scores all created tasks without waiting for your confirmation.',
     position: 'bottom',
   },
   {
     target: '.sidebar-footer',
-    title: 'Podešavanja',
+    title: 'Settings',
     description:
-      'Pristupite konfiguraciji AI provajdera, upravljanju timom i podešavanjima naloga.',
+      'Access AI provider configuration, team management, and account settings.',
     position: 'right',
   },
 ];
@@ -84,13 +84,13 @@ const TOUR_STEPS: TourStep[] = [
         position: fixed;
         z-index: 10000;
         width: 340px;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 12px;
         padding: 20px;
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
         font-family: 'Inter', system-ui, sans-serif;
-        color: #fafafa;
+        color: #E6EDF3;
         animation: tooltipFadeIn 0.3s ease-out;
       }
       @keyframes tooltipFadeIn {
@@ -108,8 +108,8 @@ const TOUR_STEPS: TourStep[] = [
         position: absolute;
         width: 12px;
         height: 12px;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         transform: rotate(45deg);
       }
       .arrow-top {
@@ -140,7 +140,7 @@ const TOUR_STEPS: TourStep[] = [
       .tooltip-step {
         font-size: 11px;
         font-weight: 600;
-        color: #3b82f6;
+        color: #58A6FF;
         text-transform: uppercase;
         letter-spacing: 0.05em;
         margin-bottom: 8px;
@@ -170,11 +170,11 @@ const TOUR_STEPS: TourStep[] = [
         width: 6px;
         height: 6px;
         border-radius: 50%;
-        background: #2a2a2a;
+        background: #21262D;
         transition: background 0.2s;
       }
       .progress-dot.active {
-        background: #3b82f6;
+        background: #58A6FF;
       }
       .progress-dot.completed {
         background: #22c55e;
@@ -201,18 +201,18 @@ const TOUR_STEPS: TourStep[] = [
         padding: 8px 12px;
       }
       .tour-btn-skip:hover {
-        color: #fafafa;
+        color: #E6EDF3;
       }
       .tour-btn-prev {
-        background: #242424;
-        color: #fafafa;
-        border: 1px solid #2a2a2a;
+        background: #1C2128;
+        color: #E6EDF3;
+        border: 1px solid #21262D;
       }
       .tour-btn-prev:hover {
-        background: #2a2a2a;
+        background: #21262D;
       }
       .tour-btn-next {
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
       }
       .tour-btn-next:hover {
@@ -233,21 +233,21 @@ const TOUR_STEPS: TourStep[] = [
       .welcome-card {
         width: 100%;
         max-width: 420px;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
+        background: #161B22;
+        border: 1px solid #21262D;
         border-radius: 16px;
         padding: 32px;
         text-align: center;
         box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
         font-family: 'Inter', system-ui, sans-serif;
-        color: #fafafa;
+        color: #E6EDF3;
         z-index: 9999;
       }
       .welcome-icon {
         width: 56px;
         height: 56px;
         margin: 0 auto 20px;
-        color: #3b82f6;
+        color: #58A6FF;
       }
       .welcome-card h2 {
         font-size: 22px;
@@ -269,7 +269,7 @@ const TOUR_STEPS: TourStep[] = [
         padding: 12px 24px;
         border-radius: 8px;
         border: none;
-        background: #3b82f6;
+        background: #58A6FF;
         color: white;
         font-size: 15px;
         font-weight: 500;
@@ -288,14 +288,14 @@ const TOUR_STEPS: TourStep[] = [
         font-family: inherit;
       }
       .welcome-skip-btn:hover {
-        color: #fafafa;
+        color: #E6EDF3;
       }
     `,
   ],
   template: `
     @if (showWelcome$()) {
       <div class="welcome-overlay">
-        <div class="welcome-card" role="dialog" aria-label="Dobrodošli u vodič">
+        <div class="welcome-card" role="dialog" aria-label="Welcome to the tour">
           <svg class="welcome-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
@@ -304,14 +304,14 @@ const TOUR_STEPS: TourStep[] = [
               d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
             />
           </svg>
-          <h2>Upoznajte Mentor AI</h2>
+          <h2>Meet Neuron OS</h2>
           <p>
-            Brzi vodič kroz ključne funkcije platforme. Naučite kako da koristite AI poslovnog
-            savetnika, upravljate razgovorima i pratite napredak vašeg tima.
+            A quick tour through the key features of the platform. Learn how to use your AI business
+            advisor, manage conversations, and track your team's progress.
           </p>
           <div class="welcome-actions">
-            <button class="welcome-start-btn" (click)="startTour()">Započni vodič</button>
-            <button class="welcome-skip-btn" (click)="skipTour()">Preskoči za sada</button>
+            <button class="welcome-start-btn" (click)="startTour()">Start tour</button>
+            <button class="welcome-skip-btn" (click)="skipTour()">Skip for now</button>
           </div>
         </div>
       </div>
@@ -331,7 +331,7 @@ const TOUR_STEPS: TourStep[] = [
       <div
         class="tour-tooltip"
         role="dialog"
-        aria-label="Vodič kroz funkcije"
+        aria-label="Feature tour"
         [style.top.px]="tooltipPos$().top"
         [style.left.px]="tooltipPos$().left"
       >
@@ -342,7 +342,7 @@ const TOUR_STEPS: TourStep[] = [
           [class.arrow-left]="currentStep$().position === 'right'"
           [class.arrow-right]="currentStep$().position === 'left'"
         ></div>
-        <div class="tooltip-step">Korak {{ currentIndex$() + 1 }} od {{ steps.length }}</div>
+        <div class="tooltip-step">Step {{ currentIndex$() + 1 }} of {{ steps.length }}</div>
         <div class="tooltip-title">{{ currentStep$().title }}</div>
         <div class="tooltip-desc">{{ currentStep$().description }}</div>
         <div class="tooltip-footer">
@@ -356,12 +356,12 @@ const TOUR_STEPS: TourStep[] = [
             }
           </div>
           <div class="tooltip-actions">
-            <button class="tour-btn tour-btn-skip" (click)="skipTour()">Preskoči</button>
+            <button class="tour-btn tour-btn-skip" (click)="skipTour()">Skip</button>
             @if (currentIndex$() > 0) {
-              <button class="tour-btn tour-btn-prev" (click)="prevStep()">Nazad</button>
+              <button class="tour-btn tour-btn-prev" (click)="prevStep()">Back</button>
             }
             <button class="tour-btn tour-btn-next" (click)="nextStep()">
-              {{ currentIndex$() === steps.length - 1 ? 'Završi' : 'Dalje' }}
+              {{ currentIndex$() === steps.length - 1 ? 'Finish' : 'Next' }}
             </button>
           </div>
         </div>
@@ -408,7 +408,7 @@ export class FeatureTourComponent implements OnInit, OnDestroy {
     this.resizeObserver?.disconnect();
   }
 
-  /** Called externally when user clicks "Brzi vodič" */
+  /** Called externally when user clicks "Quick tour" */
   launchTour(): void {
     this.currentIndex$.set(0);
     this.currentStep$.set(TOUR_STEPS[0]!);

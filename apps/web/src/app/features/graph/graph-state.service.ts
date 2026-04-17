@@ -121,7 +121,7 @@ export class GraphStateService implements OnDestroy {
         // Inject OpenClaw hub node — always present, connected to all concepts
         const openClawNode: GraphNode = {
           id: OPENCLAW_NODE_ID,
-          name: 'AI Agent',
+          name: 'Neuron Agent',
           category: 'AI',
           status: 'PENDING',
           personaType: 'OPENCLAW',
@@ -141,7 +141,12 @@ export class GraphStateService implements OnDestroy {
 
         this._nodes.next(nodeMap);
         this._edges.next(edgeMap);
-        this._activeAgents.next(res.data.activeAgents);
+        // Filter active agents: remove stale entries for completed concepts
+        const freshAgents = res.data.activeAgents.filter(a => {
+          const node = nodeMap.get(a.conceptId);
+          return node && node.status !== 'COMPLETED';
+        });
+        this._activeAgents.next(freshAgents);
         this._graphUpdated.next({ type: 'full-load' });
         this.loaded = true;
       },
@@ -234,6 +239,13 @@ export class GraphStateService implements OnDestroy {
       this.wsService.onBridgeTaskCreated(() => {
         this.loadGraph();
       })
+    );
+
+    // Maturity events — reload graph when stage initialized (new concepts created)
+    this.unsubFns.push(
+      this.wsService.onStageInitialized?.(() => {
+        this.loadGraph();
+      }) ?? (() => { /* noop */ })
     );
   }
 

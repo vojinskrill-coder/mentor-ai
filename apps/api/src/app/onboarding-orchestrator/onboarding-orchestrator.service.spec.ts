@@ -1,63 +1,114 @@
+import { Test } from '@nestjs/testing';
+import { PlatformPrismaService } from '@mentor-ai/shared/tenant-context';
+import { OnboardingVerificationService } from '../onboarding-verification/onboarding-verification.service';
+import { EnrichmentQueueService } from '../enrichment-queue/enrichment-queue.service';
 import { OnboardingOrchestratorService } from './onboarding-orchestrator.service';
+
+// ── Mocks ──────────────────────────────────────────────────────
+
+const TENANT_ID = 'test-tenant-001';
+const EXPECTED_COUNT = 3;
+
+const MOCK_CONCEPTS = [
+  { id: 'concept-1' },
+  { id: 'concept-2' },
+  { id: 'concept-3' },
+];
+
+function createMockVerification() {
+  return {
+    verifyTenantSetup: jest.fn().mockResolvedValue({
+      verified: true,
+      checks: [],
+      failures: [],
+    }),
+  };
+}
+
+function createMockQueue() {
+  return {
+    enqueueBatch: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
+function createMockPrisma() {
+  return {
+    concept: {
+      findMany: jest.fn().mockResolvedValue(MOCK_CONCEPTS),
+    },
+  };
+}
 
 describe('OnboardingOrchestratorService', () => {
   let service: OnboardingOrchestratorService;
-  let mockVerification: any;
-  let mockQueue: any;
-  let mockPrisma: any;
+  let mockVerification: ReturnType<typeof createMockVerification>;
+  let mockQueue: ReturnType<typeof createMockQueue>;
+  let mockPrisma: ReturnType<typeof createMockPrisma>;
 
-  beforeEach(() => {
-    mockVerification = {
-      verifyTenantSetup: jest.fn().mockResolvedValue({
-        passed: true,
-        checks: [],
-        summary: 'All passed',
-      }),
-    };
-    mockQueue = {
-      enqueueBatch: jest.fn().mockResolvedValue(443),
-    };
-    mockPrisma = {
-      concept: {
-        findMany: jest.fn().mockResolvedValue(
-          Array.from({ length: 443 }, (_, i) => ({ slug: `concept-${i}` })),
-        ),
-      },
-    };
-    service = new OnboardingOrchestratorService(
-      mockVerification,
-      mockQueue,
-      mockPrisma,
+  beforeEach(async () => {
+    mockVerification = createMockVerification();
+    mockQueue = createMockQueue();
+    mockPrisma = createMockPrisma();
+
+    const module = await Test.createTestingModule({
+      providers: [
+        OnboardingOrchestratorService,
+        { provide: OnboardingVerificationService, useValue: mockVerification },
+        { provide: EnrichmentQueueService, useValue: mockQueue },
+        { provide: PlatformPrismaService, useValue: mockPrisma },
+      ],
+    }).compile();
+
+    service = module.get(OnboardingOrchestratorService);
+  });
+
+  // ── Success Path ─────────────────────────────────────────────
+
+  it('verification passes -> queue populated', async () => {
+    const result = await service.finalizeOnboarding(TENANT_ID, EXPECTED_COUNT);
+
+    expect(result.success).toBe(true);
+    expect(result.queuedCount).toBe(MOCK_CONCEPTS.length);
+    expect(mockQueue.enqueueBatch).toHaveBeenCalledWith(
+      TENANT_ID,
+      ['concept-1', 'concept-2', 'concept-3'],
     );
   });
 
-  it('should finalize onboarding successfully', async () => {
-    const result = await service.finalizeOnboarding('tenant-1', 8);
-    expect(result.success).toBe(true);
-    expect(result.verificationPassed).toBe(true);
-    expect(result.enrichmentCount).toBe(443);
-    expect(result.errors).toHaveLength(0);
-  });
+  // ── Failure Path ─────────────────────────────────────────────
 
-  it('should fail when verification fails', async () => {
+  it('verification fails -> queue NOT populated, returns failures', async () => {
+    const failures = [
+      {
+        check: 'concept_count',
+        passed: false,
+        expected: 3,
+        actual: 0,
+        message: 'Only 0 concepts found',
+      },
+    ];
     mockVerification.verifyTenantSetup.mockResolvedValue({
-      passed: false,
-      checks: [
-        { name: 'tenant_exists', passed: false, details: 'Not found' },
-      ],
-      summary: 'Failed',
+      verified: false,
+      checks: failures,
+      failures,
     });
-    const result = await service.finalizeOnboarding('bad-tenant', 8);
+
+    const result = await service.finalizeOnboarding(TENANT_ID, EXPECTED_COUNT);
+
     expect(result.success).toBe(false);
-    expect(result.verificationPassed).toBe(false);
-    expect(result.enrichmentCount).toBe(0);
+    expect(result.failures).toEqual(failures);
+    expect(result.queuedCount).toBeUndefined();
+    expect(mockQueue.enqueueBatch).not.toHaveBeenCalled();
   });
 
-  it('should handle enrichment queue errors gracefully', async () => {
-    mockQueue.enqueueBatch.mockRejectedValue(new Error('DB error'));
-    const result = await service.finalizeOnboarding('tenant-1', 8);
-    expect(result.success).toBe(false);
-    expect(result.verificationPassed).toBe(true);
-    expect(result.errors.length).toBeGreaterThan(0);
+  // ── Correct Tenant Query ─────────────────────────────────────
+
+  it('concepts queried for correct tenantId', async () => {
+    await service.finalizeOnboarding(TENANT_ID, EXPECTED_COUNT);
+
+    expect(mockPrisma.concept.findMany).toHaveBeenCalledWith({
+      where: { tenantId: TENANT_ID },
+      select: { id: true },
+    });
   });
 });

@@ -1,94 +1,57 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import { NotFoundException } from '@nestjs/common';
 import { AgentRegistryService } from './agent-registry.service';
 
 describe('AgentRegistryService', () => {
   let service: AgentRegistryService;
-  let tmpDir: string;
-  let registryFile: string;
 
-  const registryYaml = `
-agents:
-  - id: main
-    name: Main Agent
-    description: Primary agent
-    soulTemplate: SOUL.template.md
-    skills:
-      - mentor-ai-bridge
-    guardrails:
-      maxTokensPerCall: 4096
-      maxRetriesPerStep: 5
-      requireValidation: true
-      requireSelfCorrection: true
-  - id: research
-    name: Research Agent
-    description: Research specialist
-    soulTemplate: SOUL.template.md
-    skills:
-      - mentor-ai-bridge
-    guardrails:
-      maxTokensPerCall: 4096
-      maxRetriesPerStep: 3
-      requireValidation: true
-      requireSelfCorrection: true
-`;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-registry-test-'));
-    registryFile = path.join(tmpDir, 'agent-registry.yaml');
-    fs.writeFileSync(registryFile, registryYaml);
+  beforeAll(() => {
     service = new AgentRegistryService();
   });
 
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  it('should load agents from registry file', () => {
-    service.loadRegistry(registryFile);
+  it('should load all 8 agents', () => {
     const agents = service.getAllAgents();
-    expect(agents).toHaveLength(2);
+    expect(agents.length).toBe(8);
   });
 
-  it('should get agent by id', () => {
-    service.loadRegistry(registryFile);
-    const agent = service.getAgent('main');
-    expect(agent).toBeDefined();
-    expect(agent!.name).toBe('Main Agent');
+  it('each agent should have required fields (id, role, model, capabilities, guardrails)', () => {
+    for (const agent of service.getAllAgents()) {
+      expect(agent.id).toBeTruthy();
+      expect(agent.role).toBeTruthy();
+      expect(agent.model).toBeTruthy();
+      expect(Array.isArray(agent.capabilities)).toBe(true);
+      expect(typeof agent.guardrails).toBe('object');
+    }
   });
 
-  it('should return undefined for unknown agent', () => {
-    service.loadRegistry(registryFile);
-    expect(service.getAgent('nonexistent')).toBeUndefined();
-  });
-
-  it('should return all agents', () => {
-    service.loadRegistry(registryFile);
-    const agents = service.getAllAgents();
-    expect(agents.map((a) => a.id)).toEqual(['main', 'research']);
-  });
-
-  it('should get agent guardrails', () => {
-    service.loadRegistry(registryFile);
+  it('main agent should have language guardrail set to english_only', () => {
     const guardrails = service.getAgentGuardrails('main');
-    expect(guardrails).toBeDefined();
-    expect(guardrails!.maxTokensPerCall).toBe(4096);
-    expect(guardrails!.requireValidation).toBe(true);
+    expect(guardrails['language']).toBe('english_only');
   });
 
-  it('should return undefined guardrails for unknown agent', () => {
-    service.loadRegistry(registryFile);
-    expect(service.getAgentGuardrails('unknown')).toBeUndefined();
+  it('main agent should have all expected capabilities', () => {
+    const main = service.getAgent('main');
+    expect(main.capabilities).toEqual(
+      expect.arrayContaining(['web_search', 'read', 'write', 'edit', 'exec', 'image_synthesize']),
+    );
   });
 
-  it('should throw on missing registry file', () => {
-    expect(() => service.loadRegistry('/nonexistent/path.yaml')).toThrow();
+  it('financial agent should have noFabricatedNumbers guardrail', () => {
+    const guardrails = service.getAgentGuardrails('financial');
+    expect(guardrails['noFabricatedNumbers']).toBe(true);
   });
 
-  it('should have skills array on agents', () => {
-    service.loadRegistry(registryFile);
-    const agent = service.getAgent('main');
-    expect(agent!.skills).toContain('mentor-ai-bridge');
+  it('should throw NotFoundException for unknown agent', () => {
+    expect(() => service.getAgent('nonexistent')).toThrow(NotFoundException);
+  });
+
+  it('getAgent should return correct agent by id', () => {
+    const research = service.getAgent('research');
+    expect(research.role).toBe('Market Research Analyst');
+    expect(research.model).toBe('deepseek/MiniMax-M2.7');
+  });
+
+  it('designer agent should have brandCompliance guardrail', () => {
+    const guardrails = service.getAgentGuardrails('designer');
+    expect(guardrails['brandCompliance']).toBe(true);
   });
 });

@@ -46,34 +46,34 @@ export function buildConceptExtractionPrompt(
 ): string {
   const existingList =
     existingNames.length > 0
-      ? `\nPOSTOJEĆI KONCEPTI (NE ekstrahuj ove):\n${existingNames.join(', ')}\n`
+      ? `\nEXISTING CONCEPTS (do NOT extract these):\n${existingNames.join(', ')}\n`
       : '';
 
-  return `Ti si kurator baze poslovnog znanja. Analiziraj sledeći AI-generisani tekst i identifikuj nove poslovne koncepte koji NISU već u bazi znanja.
+  return `You are a business knowledge base curator. Analyze the following AI-generated text and identify new business concepts that are NOT already in the knowledge base.
 
-TEKST ZA ANALIZU:
+TEXT FOR ANALYSIS:
 """
 ${aiOutput}
 """
 ${existingList}
-VALIDNE KATEGORIJE: ${VALID_CATEGORIES.join(', ')}
+VALID CATEGORIES: ${VALID_CATEGORIES.join(', ')}
 
-PRAVILA:
-- Ekstrahuj samo jasno definisane poslovne koncepte (okviri, metodologije, strategije, alati, procesi, metrike).
-- NE ekstrahuj generičke pojmove (npr. "poslovanje", "rast", "uspeh") ili vlastita imena (firme, osobe).
-- NE ekstrahuj koncepte koji već postoje u listi iznad.
-- Svaki koncept mora imati jasnu, specifičnu definiciju od minimum 15 reči na srpskom jeziku.
-- Dodeli najadekvatniju kategoriju iz liste validnih kategorija.
-- Department tags treba da odgovaraju relevantnim odeljenjima: FINANCE, MARKETING, TECHNOLOGY, OPERATIONS, LEGAL, CREATIVE, STRATEGY, SALES.
-- Ekstrahuj najviše ${maxConcepts} konceptata. Prioritizuj najspecifičnije i najkorisnije.
-- Ako nema novih koncepata, vrati prazan niz.
-- Naziv koncepta piši na srpskom (ili engleski ako je to ustaljen termin, npr. "Lean Startup", "OKR").
-- Definiciju UVEK piši na srpskom jeziku.
+RULES:
+- Extract only clearly defined business concepts (frameworks, methodologies, strategies, tools, processes, metrics).
+- Do NOT extract generic terms (e.g., "business", "growth", "success") or proper names (companies, people).
+- Do NOT extract concepts that already exist in the list above.
+- Each concept must have a clear, specific definition of at least 15 words in English.
+- Assign the most appropriate category from the list of valid categories.
+- Department tags should match relevant departments: FINANCE, MARKETING, TECHNOLOGY, OPERATIONS, LEGAL, CREATIVE, STRATEGY, SALES.
+- Extract at most ${maxConcepts} concepts. Prioritize the most specific and useful ones.
+- If there are no new concepts, return an empty array.
+- Write concept names in English (or keep established terms like "Lean Startup", "OKR").
+- ALWAYS write definitions in English.
 
-Vrati SAMO validan JSON niz (bez markdown-a, bez objašnjenja):
-[{"name": "Naziv Koncepta", "category": "Kategorija", "definition": "Jasna definicija koncepta na srpskom jeziku.", "departmentTags": ["STRATEGY", "FINANCE"]}]
+Return ONLY a valid JSON array (no markdown, no explanations):
+[{"name": "Concept Name", "category": "Category", "definition": "Clear concept definition in English.", "departmentTags": ["STRATEGY", "FINANCE"]}]
 
-Ako nema novih koncepata, vrati: []`;
+If there are no new concepts, return: []`;
 }
 
 /**

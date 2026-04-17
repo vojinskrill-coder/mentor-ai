@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { DepartmentGuard } from '../knowledge/guards/department.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -34,7 +35,8 @@ export class ConversationController {
     private readonly conversationService: ConversationService,
     private readonly curriculumService: CurriculumService,
     private readonly conceptService: ConceptService,
-    private readonly conceptPlanService: ConceptPlanService
+    private readonly conceptPlanService: ConceptPlanService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -70,8 +72,24 @@ export class ConversationController {
       conceptId
     );
 
-    // Auto Concept Plan: fire-and-forget plan creation or next-step suggestion
-    if (conceptId) {
+    // Auto Concept Plan: fire-and-forget plan creation or next-step suggestion.
+    //
+    // CRITICAL: this path uses the legacy internal HeadlessExecutorService
+    // pipeline (synthesis → job planning → Gemini/DeepSeek agents). When
+    // BRAIN_RELAY_MODE=true the brain is OpenClaw — the user has explicitly
+    // chosen to delegate ALL orchestration to OpenClaw via SOUL.md, and the
+    // internal pipeline must NOT auto-fire because:
+    //   1. It bypasses OpenClaw entirely (wrong brain)
+    //   2. It runs without user approval (wrong gating)
+    //   3. It auto-creates tasks the user didn't ask for
+    // The user-facing symptom is "I clicked Discuss and it just started
+    // executing without my confirmation". Don't reintroduce this without
+    // a very good reason.
+    // Additionally, even when relay mode is OFF the proposal-discussion flow
+    // explicitly opts out via `dto.skipAutoTrigger` so clicking "Discuss"
+    // never spawns a background plan that the user didn't ask for.
+    const relayMode = this.configService.get<string>('BRAIN_RELAY_MODE', 'false') === 'true';
+    if (conceptId && !relayMode && !dto.skipAutoTrigger) {
       this.conceptPlanService
         .triggerConceptPlan(conceptId, conversation.id, user.userId, user.tenantId)
         .catch(() => {

@@ -622,55 +622,53 @@ export class NotesService {
       const workflowResults = children
         .map((child, i) => {
           const stepNum = child.workflowStepNumber ?? i + 1;
-          return `--- KORAK ${stepNum}: ${child.title} ---\n${child.content}`;
+          return `--- STEP ${stepNum}: ${child.title} ---\n${child.content}`;
         })
         .join('\n\n');
 
-      prompt = `Ti si vrhunski poslovni stručnjak. Tvoj tim je završio detaljnu analizu i istraživanje kroz ${children.length} koraka workflow-a. Sintetiši SVE rezultate u FINALNI DOKUMENT koji vlasnik poslovanja može odmah da koristi.
+      prompt = `You are a top-tier business expert. Your team has completed a detailed analysis and research through ${children.length} workflow steps. Synthesize ALL results into a FINAL DOCUMENT that the business owner can use immediately.
 
-ZADATAK: ${note.title}
-${note.expectedOutcome ? `OČEKIVANI REZULTAT: ${note.expectedOutcome}` : ''}
+TASK: ${note.title}
+${note.expectedOutcome ? `EXPECTED OUTCOME: ${note.expectedOutcome}` : ''}
 
-REZULTATI ISTRAŽIVANJA I ANALIZE (ovo je tvoj ulazni materijal — koristi SVE podatke):
+RESEARCH AND ANALYSIS RESULTS (this is your input material — use ALL data):
 ${workflowResults}
 
-KRITIČNO — RAZLIKUJ DVA TIPA ZADATAKA:
-A) DIGITALNI (sadržaj, planovi, analize, mejlovi, kampanje, budžeti, šabloni, procedure):
-   → PROIZVEDI GOTOV REZULTAT. Ne daj instrukcije — NAPIŠI sam dokument/sadržaj/plan.
-B) FIZIČKI (odlazak negde, naručivanje, pozivi, instalacija, sastanci):
-   → NE simuliraj da si obavio fizičku radnju. Napiši KO treba ŠTA da uradi sa detaljima.
-   → Označi sa "⚠ ZAHTEVA LJUDSKU AKCIJU:" ispred svakog fizičkog koraka.
+CRITICAL — DISTINGUISH TWO TYPES OF TASKS:
+A) DIGITAL (content, plans, analyses, emails, campaigns, budgets, templates, procedures):
+   → PRODUCE A FINISHED RESULT. Do not give instructions — WRITE the document/content/plan yourself.
+B) PHYSICAL (going somewhere, ordering, calls, installation, meetings):
+   → DO NOT simulate performing a physical action. Write WHO needs to do WHAT with details.
+   → Mark with "⚠ REQUIRES HUMAN ACTION:" before each physical step.
 
-INSTRUKCIJE:
-1. Ovo NIJE izveštaj o tome šta je urađeno. Ovo je FINALNI DELIVERABLE — gotov dokument koji vlasnik koristi.
-2. Ako su koraci proizveli analizu → sintetiši u GOTOV AKCIONI PLAN sa preporukama, rokovima, odgovornim osobama
-3. Ako su koraci definisali strategiju → napravi KOMPLETNU STRATEGIJU sa koracima implementacije i metrikama
-4. Ako su koraci istražili vrednost → definiši KONKRETNE OBLIKE VREDNOSTI sa cenovnom strategijom
-5. Ako su koraci kreirali sadržaj → napravi GOTOV SADRŽAJ spreman za objavljivanje
-6. NIKADA ne piši "trebalo bi da..." za digitalne zadatke — NAPRAVI to sam
-7. NIKADA ne izmišljaj podatke — ako nemaš konkretan podatak, naznači [POPUNITI: ...]
-8. Koristi specifične podatke, brojke i nalaze iz koraka — nemoj generalizovati
-9. Strukturiraj sa jasnim zaglavljima, tabelama, nabrajanjima
-10. NIKADA ne piši "u prethodnim koracima smo..." — PRIKAŽI gotov rezultat
-11. Dodaj "Sledeći koraci" SAMO za stavke koje zahtevaju LJUDSKU intervenciju
-
-Odgovaraj ISKLJUČIVO na srpskom jeziku.`;
+INSTRUCTIONS:
+1. This is NOT a report about what was done. This is the FINAL DELIVERABLE — a finished document the owner uses.
+2. If steps produced analysis → synthesize into a READY ACTION PLAN with recommendations, deadlines, responsible persons
+3. If steps defined strategy → create a COMPLETE STRATEGY with implementation steps and metrics
+4. If steps explored value → define CONCRETE VALUE FORMS with pricing strategy
+5. If steps created content → produce FINISHED CONTENT ready for publishing
+6. NEVER write "you should..." for digital tasks — DO it yourself
+7. NEVER fabricate data — if you lack a specific data point, mark [TO FILL: ...]
+8. Use specific data, numbers, and findings from the steps — do not generalize
+9. Structure with clear headings, tables, bullet points
+10. NEVER write "in the previous steps we..." — PRESENT the finished result
+11. Add "Next Steps" ONLY for items that require HUMAN intervention`;
     } else {
       // No workflow steps — simple task, do the work directly
-      prompt = `Ti si poslovni stručnjak. IZVRŠI sledeći zadatak u potpunosti.
+      prompt = `You are a business expert. EXECUTE the following task in its entirety.
 
-ZADATAK: ${note.title}
-${note.content ? `OPIS: ${note.content}` : ''}
-${note.expectedOutcome ? `OČEKIVANI REZULTAT: ${note.expectedOutcome}` : ''}
+TASK: ${note.title}
+${note.content ? `DESCRIPTION: ${note.content}` : ''}
+${note.expectedOutcome ? `EXPECTED OUTCOME: ${note.expectedOutcome}` : ''}
 
-KRITIČNO — RAZLIKUJ:
-A) DIGITALNI ZADACI (sadržaj, planovi, analize, mejlovi, kampanje, budžeti, šabloni):
-   → PROIZVEDI GOTOV REZULTAT. Ne piši instrukcije — NAPIŠI sam dokument.
-B) FIZIČKI ZADACI (odlazak, naručivanje, pozivi, instalacija):
-   → NE simuliraj fizičku radnju. Napiši ko treba šta da uradi sa detaljima.
-   → Označi: "⚠ ZAHTEVA LJUDSKU AKCIJU:" ispred fizičkih koraka.
+CRITICAL — DISTINGUISH:
+A) DIGITAL TASKS (content, plans, analyses, emails, campaigns, budgets, templates):
+   → PRODUCE A FINISHED RESULT. Do not write instructions — WRITE the document yourself.
+B) PHYSICAL TASKS (going somewhere, ordering, calls, installation):
+   → DO NOT simulate a physical action. Write who needs to do what with details.
+   → Mark: "⚠ REQUIRES HUMAN ACTION:" before physical steps.
 
-Proizvedi kompletan, profesionalan rezultat. NIKADA ne piši "trebalo bi da..." za digitalne zadatke. Ako nemaš podatak, naznači [POPUNITI: ...]. Odgovaraj na srpskom jeziku.`;
+Produce a complete, professional result. NEVER write "you should..." for digital tasks. If you lack data, mark [TO FILL: ...].`;
     }
 
     let fullResponse = '';
@@ -682,7 +680,7 @@ Proizvedi kompletan, profesionalan rezultat. NIKADA ne piši "trebalo bi da..." 
       }
     );
 
-    const result = fullResponse.trim() || 'Generisanje nije uspelo. Pokušajte ponovo.';
+    const result = fullResponse.trim() || 'Generation failed. Please try again.';
 
     // Auto-save as userReport and mark as COMPLETED
     await this.prisma.note.update({
@@ -710,24 +708,24 @@ Proizvedi kompletan, profesionalan rezultat. NIKADA ne piši "trebalo bi da..." 
       throw new NotFoundException(`Note ${noteId} has no report to score`);
     }
 
-    const scoringPrompt = `Ti si AI mentor za poslovanje. Oceni izveštaj korisnika o završenom zadatku.
+    const scoringPrompt = `You are an AI business mentor. Score the user's report on a completed task.
 
-ZADATAK:
-Naslov: ${note.title}
-Opis: ${note.content}
-${note.expectedOutcome ? `Očekivani ishod: ${note.expectedOutcome}` : ''}
+TASK:
+Title: ${note.title}
+Description: ${note.content}
+${note.expectedOutcome ? `Expected outcome: ${note.expectedOutcome}` : ''}
 
-IZVEŠTAJ KORISNIKA:
+USER REPORT:
 ${note.userReport}
 
-Oceni na skali 0-100 na osnovu:
-- Kompletnost: Da li su svi aspekti zadatka pokriveni?
-- Specifičnost: Da li su navedeni konkretni detalji umesto opštih fraza?
-- Kvalitet analize: Da li je korisnik pokazao razumevanje?
-- Primenljivost: Da li se rezultati mogu primeniti u praksi?
+Score on a scale of 0-100 based on:
+- Completeness: Are all aspects of the task covered?
+- Specificity: Are concrete details provided instead of general phrases?
+- Quality of analysis: Did the user demonstrate understanding?
+- Applicability: Can the results be applied in practice?
 
-Odgovori ISKLJUČIVO u JSON formatu:
-{"score": <broj 0-100>, "feedback": "<2-3 rečenice na srpskom sa konkretnim savetima za poboljšanje>"}`;
+Respond EXCLUSIVELY in JSON format:
+{"score": <number 0-100>, "feedback": "<2-3 sentences with concrete improvement advice>"}`;
 
     let fullResponse = '';
     await this.aiGateway.streamCompletionWithContext(
@@ -739,7 +737,7 @@ Odgovori ISKLJUČIVO u JSON formatu:
     );
 
     let score = 50;
-    let feedback = 'Ocenjivanje nije uspelo. Pokušajte ponovo.';
+    let feedback = 'Scoring failed. Please try again.';
     try {
       const jsonMatch = fullResponse.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -976,7 +974,7 @@ Odgovori ISKLJUČIVO u JSON formatu:
     } = {}
   ): Promise<TaskHubResponse> {
     const page = Math.max(1, options.page || 1);
-    const limit = Math.min(100, Math.max(1, options.limit || 50));
+    const limit = Math.min(50, Math.max(1, options.limit || 15)); // Default 15, not 50 — reduces Neon DB latency
     const skip = (page - 1) * limit;
 
     // Build where clause — Note has no FK to Concept (cross-DB), so category filter done post-query
@@ -1013,39 +1011,22 @@ Odgovori ISKLJUČIVO u JSON formatu:
       where.id = { in: noteIdsWithJobs.map((j) => j.noteId) };
     }
 
-    // Fetch tasks
-    const [tasks, total] = await Promise.all([
-      this.prisma.note.findMany({
-        where,
-        include: {
-          children: { orderBy: { workflowStepNumber: 'asc' } },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-      this.prisma.note.count({ where }),
+    // Single fast query — no children, no joins. Concepts + jobs loaded in parallel AFTER.
+    const tasks = await this.prisma.note.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit });
+    const total = tasks.length < limit ? skip + tasks.length : skip + limit + 1;
+
+    if (tasks.length === 0) {
+      return { tasks: [], total: 0, domainSummary: [] } as any;
+    }
+
+    // Concept + agentJob in ONE parallel call
+    const conceptIds = [...new Set(tasks.map(t => t.conceptId).filter(Boolean))] as string[];
+    const taskIds = tasks.map(t => t.id);
+    const [concepts, agentJobs] = await Promise.all([
+      conceptIds.length > 0 ? this.prisma.concept.findMany({ where: { id: { in: conceptIds } }, select: { id: true, name: true, category: true } }) : [],
+      taskIds.length > 0 ? this.prisma.agentJob.findMany({ where: { noteId: { in: taskIds } }, select: { id: true, noteId: true, agentType: true, status: true, order: true }, orderBy: { order: 'asc' } }) : [],
     ]);
-
-    // Fetch concept info for all tasks that have conceptId
-    const conceptIds = [...new Set(tasks.map((t) => t.conceptId).filter(Boolean))] as string[];
-    const concepts = conceptIds.length > 0
-      ? await this.prisma.concept.findMany({
-          where: { id: { in: conceptIds } },
-          select: { id: true, name: true, category: true },
-        })
-      : [];
-    const conceptMap = new Map(concepts.map((c) => [c.id, c]));
-
-    // Fetch agent jobs for all returned tasks
-    const taskIds = tasks.map((t) => t.id);
-    const agentJobs = taskIds.length > 0
-      ? await this.prisma.agentJob.findMany({
-          where: { noteId: { in: taskIds } },
-          select: { id: true, noteId: true, agentType: true, status: true, order: true },
-          orderBy: { order: 'asc' },
-        })
-      : [];
+    const conceptMap = new Map(concepts.map((c: any) => [c.id, c]));
 
     // Group jobs by noteId
     const jobsByNote = new Map<string, TaskHubAgentJob[]>();

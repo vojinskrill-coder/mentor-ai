@@ -161,27 +161,27 @@ export class AutonomousSchedulerService {
         });
 
         // Generate digest via LLM
-        const digestPrompt = `Ti si poslovni analitičar. Generiši NEDELJNI IZVEŠTAJ za kompaniju ${tenant.name || 'N/A'}.
+        const digestPrompt = `You are a business analyst. Generate a WEEKLY REPORT for company ${tenant.name || 'N/A'}.
 
-MATURITY PROGRES:
-- Faza: AUTONOMOUS
-- Ukupno koncepata: ${progress.totalAssignments}
-- Završeno: ${progress.completed}
-- U toku: ${progress.inProgress}
-- Progres: ${progress.completionPercent}%
+MATURITY PROGRESS:
+- Phase: AUTONOMOUS
+- Total concepts: ${progress.totalAssignments}
+- Completed: ${progress.completed}
+- In progress: ${progress.inProgress}
+- Progress: ${progress.completionPercent}%
 
-ZAVRŠENI ZADACI (poslednjih 7 dana):
-${recentTasks.map((t) => `- ${t.title}${t.aiScore ? ` (ocena: ${t.aiScore}/100)` : ''}`).join('\n') || 'Nema završenih zadataka.'}
+COMPLETED TASKS (last 7 days):
+${recentTasks.map((t) => `- ${t.title}${t.aiScore ? ` (score: ${t.aiScore}/100)` : ''}`).join('\n') || 'No completed tasks.'}
 
-AUTONOMNI SKENOVI (poslednjih 7 dana):
-${recentRuns.map((r) => `- ${r.runType}: pronađeno ${r.staleFound} zastarelih, re-izvršeno ${r.reExecuted}`).join('\n') || 'Nema skenova.'}
+AUTONOMOUS SCANS (last 7 days):
+${recentRuns.map((r) => `- ${r.runType}: found ${r.staleFound} stale, re-executed ${r.reExecuted}`).join('\n') || 'No scans.'}
 
-PRAVILA:
-1. Piši na srpskom jeziku
-2. Strukturiraj sa ## zaglavljima
-3. Dodaj sekciju "Preporuke za sledeću nedelju"
-4. Budi konkretan — navedi specifične koncepte i brojke
-5. Ukupno 300-500 reči`;
+RULES:
+1. Write in English
+2. Structure with ## headings
+3. Add a section "Recommendations for next week"
+4. Be specific — mention specific concepts and numbers
+5. Total 300-500 words`;
 
         let digestContent = '';
         await this.aiGateway.streamCompletionWithContext(
@@ -203,7 +203,7 @@ PRAVILA:
         await this.prisma.note.create({
           data: {
             id: `note_${createId()}`,
-            title: `Nedeljni izveštaj — ${dateStr}`,
+            title: `Weekly Report — ${dateStr}`,
             content: digestContent,
             source: 'MANUAL',
             noteType: 'SUMMARY',
@@ -215,7 +215,7 @@ PRAVILA:
 
         // Broadcast notification
         this.wsHolder.emitToTenant(tenant.id, 'autonomous:digest-ready', {
-          title: `Nedeljni izveštaj — ${dateStr}`,
+          title: `Weekly Report — ${dateStr}`,
           timestamp: new Date().toISOString(),
         });
 

@@ -283,6 +283,8 @@ export class ChatWebsocketService {
   private processCompleteCallbacks: Array<(data: ProcessCompletePayload) => void> = [];
   private processApprovalNeededCallbacks: Array<(data: ProcessApprovalNeededPayload) => void> = [];
   private processCancelledCallbacks: Array<(data: ProcessCancelledPayload) => void> = [];
+  private processStepProgressCallbacks: Array<(data: any) => void> = [];
+  private processBatchCallbacks: Array<(data: { events: any[] }) => void> = [];
 
   /**
    * Connects to the WebSocket server.
@@ -682,6 +684,10 @@ export class ChatWebsocketService {
     this.socket.on('process:complete', (data: any) => safe(this.processCompleteCallbacks, data));
     this.socket.on('process:approval-needed', (data: any) => safe(this.processApprovalNeededCallbacks, data));
     this.socket.on('process:cancelled', (data: any) => safe(this.processCancelledCallbacks, data));
+    // Real-time streaming progress (text chunks, tool use, retry status)
+    this.socket.on('process:step-progress', (data: any) => safe(this.processStepProgressCallbacks, data));
+    // Batched events (claude-code SerialBatchEventUploader pattern — multiple events in one message)
+    this.socket.on('batch', (data: any) => safe(this.processBatchCallbacks, data));
   }
 
   /**
@@ -740,7 +746,12 @@ export class ChatWebsocketService {
    * @param content - Message content
    * @returns true if message was sent, false if WebSocket not connected
    */
-  sendMessage(conversationId: string, content: string, attachmentIds?: string[]): boolean {
+  sendMessage(
+    conversationId: string,
+    content: string,
+    attachmentIds?: string[],
+    proposalId?: string,
+  ): boolean {
     if (!this.checkConnected('slanje poruke')) {
       return false;
     }
@@ -748,6 +759,13 @@ export class ChatWebsocketService {
     const payload: Record<string, unknown> = { conversationId, content };
     if (attachmentIds && attachmentIds.length > 0) {
       payload['attachmentIds'] = attachmentIds;
+    }
+    // Proposal context plumbing: when discussing an AI Task, the backend
+    // uses this id to fetch the proposal and inject its title/reasoning/
+    // proposed-action into the brain's prompt. Without this, the brain has
+    // no idea what task is being discussed.
+    if (proposalId) {
+      payload['proposalId'] = proposalId;
     }
     this.socket!.emit('chat:message-send', payload);
     return true;
@@ -1456,6 +1474,18 @@ export class ChatWebsocketService {
     return () => { const i = this.processCancelledCallbacks.indexOf(callback); if (i > -1) this.processCancelledCallbacks.splice(i, 1); };
   }
 
+  /** Real-time streaming progress: text chunks, tool use, retry status, errors */
+  onProcessStepProgress(callback: (typeof this.processStepProgressCallbacks)[number]): () => void {
+    this.processStepProgressCallbacks.push(callback);
+    return () => { const i = this.processStepProgressCallbacks.indexOf(callback); if (i > -1) this.processStepProgressCallbacks.splice(i, 1); };
+  }
+
+  /** Batched events — multiple progress events in a single WebSocket message */
+  onProcessBatch(callback: (typeof this.processBatchCallbacks)[number]): () => void {
+    this.processBatchCallbacks.push(callback);
+    return () => { const i = this.processBatchCallbacks.indexOf(callback); if (i > -1) this.processBatchCallbacks.splice(i, 1); };
+  }
+
   clearCallbacks(): void {
     // H6: Include messageDeletedCallbacks in cleanup to prevent accumulation on reconnect
     this.messageDeletedCallbacks = [];
@@ -1540,5 +1570,7 @@ export class ChatWebsocketService {
     this.processCompleteCallbacks = [];
     this.processApprovalNeededCallbacks = [];
     this.processCancelledCallbacks = [];
+    this.processStepProgressCallbacks = [];
+    this.processBatchCallbacks = [];
   }
 }

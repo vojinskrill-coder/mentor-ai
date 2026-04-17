@@ -1,144 +1,112 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-export interface ValidationConfig {
-  minWords?: number;
-  minChars?: number;
-  requireDiacritics?: boolean;
-  requireFrontmatter?: boolean;
-  requireSources?: boolean;
-  serbianWordThreshold?: number;
+export interface ContentValidationConfig {
+  minWords: number;
+  minChars: number;
+  language: string;
+  requireSources: boolean;
+  requireFrontmatter: boolean;
 }
 
-export interface ValidationResult {
+export interface ContentValidationResult {
   valid: boolean;
   errors: string[];
-  warnings: string[];
-  stats: {
-    wordCount: number;
-    charCount: number;
-    hasDiacritics: boolean;
-    hasFrontmatter: boolean;
-    hasSources: boolean;
-    serbianWordCount: number;
-  };
 }
 
-const SERBIAN_DIACRITICS = /[čćšžđČĆŠŽĐ]/;
-
-// Common Serbian words that indicate Serbian content
-const SERBIAN_WORDS = [
-  'i', 'u', 'je', 'na', 'da', 'su', 'za', 'sa', 'se', 'od',
-  'koji', 'koja', 'koje', 'biti', 'može', 'kroz', 'ili', 'ali',
-  'kada', 'kako', 'što', 'kao', 'sve', 'između', 'prema', 'nakon',
-  'prije', 'posle', 'ovaj', 'ovog', 'toga', 'tom', 'tim', 'već',
-  'još', 'samo', 'tako', 'vrlo', 'više', 'manje', 'ovo', 'taj',
-  'koji', 'poslovanje', 'prodaja', 'marketing', 'finansije',
-  'upravljanje', 'strategija', 'tržište', 'kompanija', 'preduzeće',
-];
-
-// English words that should NOT trigger Serbian detection
-const ENGLISH_COMMON = new Set([
-  'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can',
-  'her', 'was', 'one', 'our', 'out', 'has', 'his', 'how', 'its',
-  'let', 'may', 'new', 'now', 'old', 'see', 'way', 'who', 'did',
-  'get', 'got', 'had', 'him', 'use', 'say', 'she', 'too', 'any',
-]);
-
+/**
+ * ContentValidationService — shared guardrail logic for enriched content.
+ *
+ * Extracted from TenantGuardService.validateContent() to eliminate duplication
+ * across tenant-guard.service.ts, headless-executor.service.ts, and future consumers.
+ *
+ * Reads default thresholds from ConfigService (if available) but allows per-call overrides.
+ */
 @Injectable()
 export class ContentValidationService {
   private readonly logger = new Logger(ContentValidationService.name);
-  private readonly defaultConfig: ValidationConfig;
+  private readonly defaultConfig: ContentValidationConfig;
 
   constructor(@Optional() private readonly configService?: ConfigService) {
     this.defaultConfig = {
-      minWords: 50,
-      minChars: 200,
-      requireDiacritics: true,
-      requireFrontmatter: true,
-      requireSources: true,
-      serbianWordThreshold: 5,
+      minWords: this.readConfig('CONTENT_MIN_WORDS', 4500),
+      minChars: this.readConfig('CONTENT_MIN_CHARS', 15000),
+      language: this.configService?.get<string>('CONTENT_LANGUAGE') ?? 'english',
+      requireSources: this.readConfig('CONTENT_REQUIRE_SOURCES', true),
+      requireFrontmatter: this.readConfig('CONTENT_REQUIRE_FRONTMATTER', true),
     };
   }
 
+  /**
+   * Validate enriched content quality.
+   *
+   * Checks performed:
+   * 1. Minimum character length
+   * 2. Serbian diacritical characters
+   * 3. Serbian word frequency (> 5 definitive Serbian words triggers rejection)
+   * 4. Minimum word count
+   * 5. YAML frontmatter presence (---)
+   * 6. Sources/References section presence
+   */
   validateContent(
     content: string,
-    config?: Partial<ValidationConfig>,
-  ): ValidationResult {
+    config?: Partial<ContentValidationConfig>,
+  ): ContentValidationResult {
     const cfg = { ...this.defaultConfig, ...config };
     const errors: string[] = [];
-    const warnings: string[] = [];
 
-    const words = content
-      .split(/\s+/)
-      .filter((w) => w.length > 0);
-    const wordCount = words.length;
-    const charCount = content.length;
+    // 1. Length check
+    if (!content || content.length < cfg.minChars) {
+      errors.push(
+        `Content too short: ${content?.length ?? 0} chars (need >= ${cfg.minChars})`,
+      );
+    }
 
-    // Diacritics check
-    const hasDiacritics = SERBIAN_DIACRITICS.test(content);
+    // 2. Serbian diacritics check (U+010D, U+0107, U+0161, U+017E, U+0111)
+    if (/[\u010d\u0107\u0161\u017e\u0111]/i.test(content)) {
+      errors.push('Content contains Serbian diacritical characters (\u010d\u0107\u0161\u017e\u0111)');
+    }
 
-    // Frontmatter check (---\n...\n---)
-    const hasFrontmatter = /^---\n[\s\S]*?\n---/m.test(content);
-
-    // Sources section check
-    const hasSources = /## (Sources|Izvori|Reference)/im.test(content);
-
-    // Serbian word count (case-insensitive, excluding common English words)
-    const lowerWords = words.map((w) =>
-      w.toLowerCase().replace(/[^a-zčćšžđ]/g, ''),
+    // 3. Serbian words check — definitive Serbian words only, avoid false positives
+    // These words do NOT appear in English: koji, koja, koje, mo\u017ee, nije, ve\u0107, etc.
+    // Words like "image", "primary", "invasive" must NOT trigger
+    const serbianWords = content.match(
+      /\b(koji|koja|koje|mo\u017ee|nije|ve\u0107|\u0161to|zato|izme\u0111u|njihov|kompanij|tr\u017ei\u0161t|vrednost|kupac|prodaj)\b/gi,
     );
-    const serbianWordCount = lowerWords.filter(
-      (w) =>
-        w.length > 1 &&
-        SERBIAN_WORDS.includes(w) &&
-        !ENGLISH_COMMON.has(w),
-    ).length;
-
-    // Validation checks
-    if (cfg.minWords && wordCount < cfg.minWords) {
+    if (serbianWords && serbianWords.length > 5) {
       errors.push(
-        `Word count ${wordCount} is below minimum ${cfg.minWords}`,
+        `Content has ${serbianWords.length} Serbian words: ${serbianWords.slice(0, 5).join(', ')}...`,
       );
     }
 
-    if (cfg.minChars && charCount < cfg.minChars) {
+    // 4. Word count
+    const wordCount = content.split(/\s+/).filter((w) => w.length > 0).length;
+    if (wordCount < cfg.minWords) {
       errors.push(
-        `Character count ${charCount} is below minimum ${cfg.minChars}`,
+        `Word count too low: ${wordCount} (need >= ${cfg.minWords})`,
       );
     }
 
-    if (cfg.requireDiacritics && !hasDiacritics) {
-      // Only flag if content appears to be Serbian
-      if (serbianWordCount >= (cfg.serbianWordThreshold || 5)) {
-        errors.push(
-          'Serbian content detected but no diacritics (čćšžđ) found',
-        );
-      } else {
-        warnings.push('No Serbian diacritics found');
-      }
+    // 5. Frontmatter check
+    if (cfg.requireFrontmatter && !content.includes('---')) {
+      errors.push('Missing YAML frontmatter (---)');
     }
 
-    if (cfg.requireFrontmatter && !hasFrontmatter) {
-      errors.push('Missing frontmatter section (---...---)');
+    // 6. Sources section
+    if (
+      cfg.requireSources &&
+      !content.includes('## Sources') &&
+      !content.includes('## References')
+    ) {
+      errors.push('Missing Sources/References section');
     }
 
-    if (cfg.requireSources && !hasSources) {
-      errors.push('Missing Sources/Izvori section');
-    }
+    return { valid: errors.length === 0, errors };
+  }
 
-    return {
-      valid: errors.length === 0,
-      errors,
-      warnings,
-      stats: {
-        wordCount,
-        charCount,
-        hasDiacritics,
-        hasFrontmatter,
-        hasSources,
-        serbianWordCount,
-      },
-    };
+  private readConfig<T>(key: string, fallback: T): T {
+    if (!this.configService) return fallback;
+    const val = this.configService.get<T>(key);
+    return val ?? fallback;
   }
 }

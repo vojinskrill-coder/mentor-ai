@@ -32,11 +32,19 @@ import { AppEventsModule } from './events/events.module';
 import { OpenClawTenantModule } from './openclaw-tenant/openclaw-tenant.module';
 import { BridgeModule } from './bridge/bridge.module';
 import { ProcessModule } from './process/process.module';
+import { BuilderModule } from './builder/builder.module';
 import { FigmaModule } from './figma/figma.module';
 import { BrochureModule } from './brochure/brochure.module';
+import { N8nModule } from './n8n/n8n.module';
+import { CatalogModule } from './catalog/catalog.module';
+import { ToolkitModule } from './toolkit/toolkit.module';
+import { NocoDbModule } from './nocodb/nocodb.module';
+import { McpModule } from './mcp/mcp.module';
 import { McpServerModule } from './mcp-server/mcp-server.module';
 import { AgentRegistryModule } from './agent-registry/agent-registry.module';
 import { AgentProvisioningModule } from './agent-provisioning/agent-provisioning.module';
+import { VaultModule } from './vault/vault.module';
+import { ProductImagesModule } from './product-images/product-images.module';
 
 // Serve Angular static files in production (combined deploy)
 const staticPath = join(__dirname, '..', '..', 'web', 'browser');
@@ -85,8 +93,16 @@ const serveStaticImports = existsSync(staticPath)
     OpenClawTenantModule,
     BridgeModule,
     ProcessModule,
+    BuilderModule,
     FigmaModule,
     BrochureModule,
+    N8nModule,
+    CatalogModule,
+    ProductImagesModule,
+    ToolkitModule,
+    NocoDbModule,
+    VaultModule,
+    McpModule,
     McpServerModule,
     AgentRegistryModule,
     AgentProvisioningModule,

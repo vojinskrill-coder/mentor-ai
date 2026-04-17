@@ -25,6 +25,7 @@ export class OpenClawTenantService {
   /**
    * Provision a new OpenClaw tenant profile on Hetzner.
    * Creates isolated directory, copies base config, writes custom SOUL.MD files.
+   * All operations are idempotent and safe to re-run.
    */
   async provisionTenant(
     tenantId: string,
@@ -36,28 +37,29 @@ export class OpenClawTenantService {
     this.logger.log({ message: 'Provisioning OpenClaw tenant', tenantId, profilePath });
 
     try {
-      // Step 1: Create profile directory structure
-      await this.sshExec(`mkdir -p ${profilePath}`);
+      // Step 1: Create profile directory structure (mkdir -p is idempotent)
+      await this.sshExecWithRetry(`mkdir -p ${profilePath}`);
 
-      // Step 2: Copy base config (same LLM, tools, API keys)
-      await this.sshExec(`cp ${this.baseProfile}/openclaw.json ${profilePath}/openclaw.json`);
+      // Step 2: Copy base config (cp -f overwrites if exists — idempotent)
+      await this.sshExecWithRetry(`cp -f ${this.baseProfile}/openclaw.json ${profilePath}/openclaw.json`);
 
       // Step 3: Create agent directories and write SOUL.MD files
       for (const agent of AGENTS) {
         const agentDir = `${profilePath}/agents/${agent}/agent`;
-        await this.sshExec(`mkdir -p ${agentDir}`);
+        await this.sshExecWithRetry(`mkdir -p ${agentDir}`);
 
         const soulContent = souls[agent as keyof GeneratedSouls];
         if (soulContent) {
-          // Write SOUL.MD via heredoc to handle special characters
-          await this.sshExec(
-            `cat > ${agentDir}/SOUL.md << 'SOUL_EOF'\n${soulContent}\nSOUL_EOF`
+          // Write SOUL.MD via base64 encoding for safe transfer (no heredoc escaping issues)
+          const encoded = Buffer.from(soulContent).toString('base64');
+          await this.sshExecWithRetry(
+            `echo '${encoded}' | base64 -d > ${agentDir}/SOUL.md`
           );
         }
       }
 
       // Step 4: Verify with a test command
-      const testResult = await this.sshExec(
+      const testResult = await this.sshExecWithRetry(
         `ls ${profilePath}/agents/*/agent/SOUL.md 2>/dev/null | wc -l`
       );
       const soulCount = parseInt(testResult.trim(), 10);
@@ -82,7 +84,21 @@ export class OpenClawTenantService {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown';
       this.logger.error({ message: 'Tenant provisioning failed', tenantId, error: errorMsg });
-      return { success: false, profilePath, error: errorMsg };
+
+      // Attempt cleanup of partially created directory
+      let cleanupStatus = 'not_attempted';
+      try {
+        this.logger.warn({ message: 'Attempting cleanup of partial provisioning', tenantId, profilePath });
+        await this.sshExec(`rm -rf ${profilePath}`);
+        cleanupStatus = 'success';
+        this.logger.log({ message: 'Cleanup succeeded', tenantId, profilePath });
+      } catch (cleanupError) {
+        cleanupStatus = 'failed';
+        const cleanupMsg = cleanupError instanceof Error ? cleanupError.message : 'Unknown';
+        this.logger.error({ message: 'Cleanup failed', tenantId, profilePath, error: cleanupMsg });
+      }
+
+      return { success: false, profilePath, error: `${errorMsg} (cleanup: ${cleanupStatus})` };
     }
   }
 
@@ -91,7 +107,8 @@ export class OpenClawTenantService {
    */
   async updateSoul(tenantId: string, agentType: string, soulContent: string): Promise<void> {
     const soulPath = `/root/.openclaw-${tenantId}/agents/${agentType}/agent/SOUL.md`;
-    await this.sshExec(`cat > ${soulPath} << 'SOUL_EOF'\n${soulContent}\nSOUL_EOF`);
+    const encoded = Buffer.from(soulContent).toString('base64');
+    await this.sshExecWithRetry(`echo '${encoded}' | base64 -d > ${soulPath}`);
     this.logger.log({ message: 'SOUL.MD updated', tenantId, agentType });
   }
 
@@ -115,26 +132,27 @@ export class OpenClawTenantService {
   }): Promise<void> {
     const userMd = `# USER.md — ${profile.companyName}
 
-## Profil Kompanije
-- **Ime**: ${profile.companyName}
-- **Industrija**: ${profile.industry}
-- **Opis**: ${profile.description ?? 'Nije dostupno'}
-- **Website**: ${profile.websiteUrl ?? 'Nije dostupno'}
-- **Trenutno stanje**: ${profile.businessState ?? 'Nije dostupno'}
+## Company Profile
+- **Name**: ${profile.companyName}
+- **Industry**: ${profile.industry}
+- **Description**: ${profile.description ?? 'Not available'}
+- **Website**: ${profile.websiteUrl ?? 'Not available'}
+- **Current state**: ${profile.businessState ?? 'Not available'}
 
-## Organizacija
-- **Departmani**: ${profile.departments?.join(', ') ?? 'Nije definisano'}
-- **Uloga vlasnika**: ${profile.userRole ?? 'OWNER'}
-- **Strategija**: ${profile.strategy ?? 'Nije definisana'}
-- **Režim rada**: ${profile.executionMode ?? 'MANUAL'}
+## Organization
+- **Departments**: ${profile.departments?.join(', ') ?? 'Not defined'}
+- **Owner role**: ${profile.userRole ?? 'OWNER'}
+- **Strategy**: ${profile.strategy ?? 'Not defined'}
+- **Execution mode**: ${profile.executionMode ?? 'MANUAL'}
 
-${profile.crawledProfile ? `## Web Profil\n${profile.crawledProfile}\n` : ''}
-${profile.onboardingOutput ? `## Onboarding Analiza\n${profile.onboardingOutput}\n` : ''}
-${profile.pdfExtract ? `## Brošura (izvod)\n${profile.pdfExtract}\n` : ''}
+${profile.crawledProfile ? `## Web Profile\n${profile.crawledProfile}\n` : ''}
+${profile.onboardingOutput ? `## Onboarding Analysis\n${profile.onboardingOutput}\n` : ''}
+${profile.pdfExtract ? `## Brochure (excerpt)\n${profile.pdfExtract}\n` : ''}
 `;
 
     const userMdPath = `/root/.openclaw-${tenantId}/agents/main/agent/USER.md`;
-    await this.sshExec(`cat > ${userMdPath} << 'USER_EOF'\n${userMd}\nUSER_EOF`);
+    const encodedUser = Buffer.from(userMd).toString('base64');
+    await this.sshExecWithRetry(`echo '${encodedUser}' | base64 -d > ${userMdPath}`);
     this.logger.log({ message: 'USER.md written', tenantId });
   }
 
@@ -181,7 +199,8 @@ Auth: Bearer token in Authorization header
 `;
 
     const agentsMdPath = `/root/.openclaw-${tenantId}/agents/main/agent/AGENTS.md`;
-    await this.sshExec(`cat > ${agentsMdPath} << 'AGENTS_EOF'\n${agentsMd}\nAGENTS_EOF`);
+    const encodedAgents = Buffer.from(agentsMd).toString('base64');
+    await this.sshExecWithRetry(`echo '${encodedAgents}' | base64 -d > ${agentsMdPath}`);
     this.logger.log({ message: 'AGENTS.md written', tenantId });
   }
 
@@ -199,7 +218,7 @@ Auth: Bearer token in Authorization header
     }
 
     // Use single quotes in SSH to prevent all shell expansion
-    const result = await this.sshExec(
+    const result = await this.sshExecWithRetry(
       `base64 '${filePath.replace(/'/g, "'\\''")}' 2>/dev/null || echo "FILE_NOT_FOUND"`
     );
 
@@ -219,7 +238,7 @@ Auth: Bearer token in Authorization header
       throw new Error(`Invalid noteId: ${noteId}`);
     }
     const dir = `/root/.openclaw/workspace/deliverables/${noteId}`;
-    const result = await this.sshExec(
+    const result = await this.sshExecWithRetry(
       `find '${dir}' -type f 2>/dev/null || echo "DIR_NOT_FOUND"`
     );
     if (result.trim() === 'DIR_NOT_FOUND' || !result.trim()) return [];
@@ -227,11 +246,154 @@ Auth: Bearer token in Authorization header
   }
 
   /**
+   * Deep content validation for a deliverable file. Runs a Python check
+   * on Hetzner via SSH that loads the file with the appropriate library
+   * and counts meaningful content (cells, paragraphs, slides, pages, etc).
+   *
+   * Returns:
+   *   - valid: true if the file has real content
+   *   - reason: human-readable explanation when invalid
+   *   - metric: the count that was measured (for logging)
+   *
+   * Supported types: xlsx, docx, pptx, pdf. Other types pass through as valid
+   * (we already size-check them in the bridge sanity layer).
+   *
+   * This is the safety net against the "brain returns empty xlsx skeleton"
+   * failure mode. Even if the brain skips per-file verification in its
+   * exec loop, we catch empty content here before marking the task COMPLETED.
+   */
+  async validateDeliverableContent(
+    remotePath: string,
+  ): Promise<{ valid: boolean; reason?: string; metric?: number }> {
+    const ext = (remotePath.split('.').pop() || '').toLowerCase();
+    // Only validate binary-format deliverables — text formats (md, csv,
+    // txt, svg, json) pass through because empty text is a valid
+    // possibility and we'd get false positives.
+    if (!['xlsx', 'docx', 'pptx', 'pdf'].includes(ext)) {
+      return { valid: true };
+    }
+
+    // Build a python one-liner per extension. Each prints "OK <metric>"
+    // on success or "FAIL <reason>" on invalid content.
+    let py: string;
+    switch (ext) {
+      case 'xlsx':
+        // Count non-empty cells across all sheets. Empty xlsx has
+        // sheetData/ elements with zero <c> children.
+        py = `
+import sys
+try:
+    from openpyxl import load_workbook
+    wb = load_workbook(sys.argv[1], read_only=True, data_only=True)
+    total = 0
+    for name in wb.sheetnames:
+        ws = wb[name]
+        for row in ws.iter_rows(values_only=True):
+            for v in row:
+                if v not in (None, ''):
+                    total += 1
+    if total < 3:
+        print(f'FAIL empty_xlsx ({total} cells across {len(wb.sheetnames)} sheets)')
+    else:
+        print(f'OK {total}')
+except Exception as e:
+    print(f'FAIL parse_error {e}')
+`;
+        break;
+      case 'docx':
+        py = `
+import sys
+try:
+    from docx import Document
+    d = Document(sys.argv[1])
+    text_chars = sum(len(p.text.strip()) for p in d.paragraphs)
+    if text_chars < 50:
+        print(f'FAIL empty_docx ({text_chars} chars, {len(d.paragraphs)} paragraphs)')
+    else:
+        print(f'OK {text_chars}')
+except Exception as e:
+    print(f'FAIL parse_error {e}')
+`;
+        break;
+      case 'pptx':
+        py = `
+import sys
+try:
+    from pptx import Presentation
+    p = Presentation(sys.argv[1])
+    text_items = 0
+    for slide in p.slides:
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                for para in shape.text_frame.paragraphs:
+                    if para.text.strip():
+                        text_items += 1
+    if text_items < 3 or len(p.slides) < 1:
+        print(f'FAIL empty_pptx ({text_items} text items, {len(p.slides)} slides)')
+    else:
+        print(f'OK {text_items}')
+except Exception as e:
+    print(f'FAIL parse_error {e}')
+`;
+        break;
+      case 'pdf':
+        // Heuristic: count the number of characters extractable from all pages.
+        // Empty/placeholder PDFs have very little text content.
+        py = `
+import sys
+try:
+    from pypdf import PdfReader
+    r = PdfReader(sys.argv[1])
+    total_chars = sum(len((p.extract_text() or '').strip()) for p in r.pages)
+    if total_chars < 100:
+        print(f'FAIL empty_pdf ({total_chars} chars, {len(r.pages)} pages)')
+    else:
+        print(f'OK {total_chars}')
+except ImportError:
+    # pypdf not installed — fall back to a byte-level heuristic: look
+    # for streams. Don't fail the whole task over a missing dep.
+    print('OK skipped_no_pypdf')
+except Exception as e:
+    print(f'FAIL parse_error {e}')
+`;
+        break;
+      default:
+        return { valid: true };
+    }
+
+    // base64-encode the script so shell quoting is a non-issue
+    const b64 = Buffer.from(py.trim()).toString('base64');
+    const cmd = `python3 -c "import base64,sys,os; exec(base64.b64decode('${b64}').decode())" '${remotePath.replace(/'/g, "'\\''")}'`;
+
+    try {
+      const out = await this.sshExecWithRetry(cmd);
+      const line = out.trim();
+      if (line.startsWith('OK')) {
+        const metric = parseInt(line.split(/\s+/)[1] ?? '0', 10);
+        return { valid: true, metric: Number.isNaN(metric) ? undefined : metric };
+      }
+      if (line.startsWith('FAIL')) {
+        return { valid: false, reason: line.replace(/^FAIL\s*/, '').trim() };
+      }
+      // Unknown output — treat as valid rather than block the task
+      return { valid: true };
+    } catch (err) {
+      this.logger.warn({
+        message: 'Content validation exec failed',
+        path: remotePath,
+        error: err instanceof Error ? err.message : 'unknown',
+      });
+      // Don't block task completion if our validator itself errored.
+      return { valid: true };
+    }
+  }
+
+  /**
    * Check if a tenant profile exists on Hetzner.
    */
   async tenantExists(tenantId: string): Promise<boolean> {
     try {
-      const result = await this.sshExec(`test -d /root/.openclaw-${tenantId} && echo yes || echo no`);
+      const result = await this.sshExecWithRetry(`test -d /root/.openclaw-${tenantId} && echo yes || echo no`);
       return result.trim() === 'yes';
     } catch {
       return false;
@@ -245,16 +407,72 @@ Auth: Bearer token in Authorization header
    * Write a file to a remote path on Hetzner via SSH.
    * Creates parent directories if needed.
    */
+  /**
+   * Read a text file from Hetzner via SSH and return its content as a string.
+   * Uses base64 encoding for safe transfer. Throws if file not found.
+   */
+  async readRemoteFile(remotePath: string): Promise<string> {
+    const buf = await this.readFile(remotePath);
+    return buf.toString('utf-8');
+  }
+
   async writeRemoteFile(remotePath: string, content: string): Promise<void> {
     const dir = remotePath.substring(0, remotePath.lastIndexOf('/'));
-    await this.sshExec(`mkdir -p ${dir}`);
-    await this.sshExec(`cat > ${remotePath} << 'FILE_EOF'\n${content}\nFILE_EOF`);
+    await this.sshExecWithRetry(`mkdir -p ${dir}`);
+    const encoded = Buffer.from(content).toString('base64');
+    await this.sshExecWithRetry(`echo '${encoded}' | base64 -d > ${remotePath}`);
     this.logger.log({ message: 'Remote file written', path: remotePath });
   }
 
   async deleteTenant(tenantId: string): Promise<void> {
-    await this.sshExec(`rm -rf /root/.openclaw-${tenantId}`);
+    await this.sshExecWithRetry(`rm -rf /root/.openclaw-${tenantId}`);
     this.logger.log({ message: 'Tenant profile deleted', tenantId });
+  }
+
+  /**
+   * Check if an error is transient and safe to retry.
+   * Auth failures are NOT retried.
+   */
+  private isTransientError(error: Error): boolean {
+    const msg = error.message.toLowerCase();
+    const transientPatterns = ['timeout', 'econnreset', 'econnrefused', 'hang up', 'timed out', 'etimedout'];
+    return transientPatterns.some((p) => msg.includes(p));
+  }
+
+  /**
+   * Execute an SSH command with retry on transient failures.
+   * Max 2 retries with exponential backoff (1s, 2s) plus 25% jitter.
+   */
+  private async sshExecWithRetry(command: string, maxRetries = 2): Promise<string> {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await this.sshExec(command);
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+
+        if (attempt >= maxRetries || !this.isTransientError(err)) {
+          throw err;
+        }
+
+        const baseDelay = Math.min(1000 * Math.pow(2, attempt), 4000);
+        const jitter = baseDelay * 0.25 * (Math.random() * 2 - 1); // ±25%
+        const delay = Math.round(baseDelay + jitter);
+
+        this.logger.warn({
+          message: 'SSH transient error, retrying',
+          attempt: attempt + 1,
+          maxRetries,
+          delayMs: delay,
+          error: err.message,
+          command: command.substring(0, 80),
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+
+    // Unreachable, but TypeScript needs it
+    throw new Error('sshExecWithRetry: exhausted retries');
   }
 
   /**

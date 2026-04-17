@@ -73,6 +73,11 @@ describe('MaturityEngineService', () => {
       mockCrossPersonaIntelligence as any,
       mockAppEventBus as any,
       mockConfigService as any,
+      undefined, // vaultService (optional)
+      undefined, // aiGateway (optional)
+      undefined, // notesService (optional)
+      undefined, // conversationSvc (optional)
+      undefined, // enrichmentQueueService (optional)
     );
   });
 

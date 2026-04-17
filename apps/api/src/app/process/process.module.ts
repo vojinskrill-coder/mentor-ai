@@ -11,13 +11,17 @@ import { ProcessSchedulerService } from './process-scheduler.service';
 import { SchemaValidatorService } from './schema-validator.service';
 import { ProcessDeduplicationService } from './process-dedup.service';
 import { FalImageService } from './fal-image.service';
+import { N8nModule } from '../n8n/n8n.module';
+import { ProductImagesModule } from '../product-images/product-images.module';
 
 /**
  * Process Workflow Engine Module
  *
  * Provides process definition, execution, scheduling, and validation.
- * Orchestrates OpenClaw agents through multi-step business processes
- * with JSON Schema validation and approval gates.
+ * Orchestrates agents through multi-step business processes:
+ * - n8n for workflow execution (default when n8n workflow exists)
+ * - OpenClaw for agentic steps requiring tool use
+ * - JSON Schema validation and approval gates
  */
 @Module({
   imports: [
@@ -27,6 +31,8 @@ import { FalImageService } from './fal-image.service';
     OpenClawTenantModule, // For SSH deploy of SKILL.md
     AiGatewayModule, // For auto-generate skills
     KnowledgeModule, // For EmbeddingService (lead dedup)
+    N8nModule, // For n8n workflow execution
+    ProductImagesModule, // For product image context in content processes
   ],
   controllers: [ProcessController],
   providers: [
@@ -36,6 +42,6 @@ import { FalImageService } from './fal-image.service';
     ProcessDeduplicationService,
     FalImageService,
   ],
-  exports: [ProcessExecutorService, ProcessSchedulerService],
+  exports: [ProcessExecutorService, ProcessSchedulerService, FalImageService, ProcessDeduplicationService],
 })
 export class ProcessModule {}

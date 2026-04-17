@@ -197,23 +197,89 @@ export const APP_EVENTS = {
   SYSTEM_HEALTH_CHECK: 'system.health.check',
 } as const;
 
+/**
+ * Batched event entry for high-frequency events (claude-code: SerialBatchEventUploader pattern).
+ * Progress events are batched to prevent WebSocket flooding during heavy agent activity.
+ */
+interface BatchedEvent {
+  event: string;
+  payload: Record<string, unknown>;
+  timestamp: number;
+}
+
 @Injectable()
 export class AppEventBus {
   private readonly logger = new Logger(AppEventBus.name);
+
+  /** High-frequency event patterns that should be batched (100ms window) */
+  private static readonly BATCHED_PATTERNS = ['step-progress'];
+
+  /** Batch state: claude-code coalescing pattern — 1 flush timer, pending batch */
+  private pendingBatch: BatchedEvent[] = [];
+  private batchTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly BATCH_WINDOW_MS = 100;
+  private readonly MAX_BATCH_SIZE = 15;
 
   constructor(private readonly eventEmitter: EventEmitter2) {}
 
   /**
    * Emit an event through the centralized bus.
-   * All events are logged for observability.
+   * High-frequency events (step-progress) are batched; others emit immediately.
    */
   emit(event: string, payload: Record<string, unknown>): void {
+    // Check if this event should be batched
+    if (AppEventBus.BATCHED_PATTERNS.some(p => event.includes(p))) {
+      this.enqueueBatch(event, payload);
+      return;
+    }
+
     this.logger.debug({
       message: `Event: ${event}`,
       tenantId: payload['tenantId'],
       ...this.extractLogFields(payload),
     });
     this.eventEmitter.emit(event, payload);
+  }
+
+  /**
+   * Enqueue event into batch buffer (claude-code: SerialBatchEventUploader).
+   * Flushes after 100ms window or when batch reaches max size.
+   */
+  private enqueueBatch(event: string, payload: Record<string, unknown>): void {
+    this.pendingBatch.push({ event, payload, timestamp: Date.now() });
+
+    if (this.pendingBatch.length >= this.MAX_BATCH_SIZE) {
+      this.flushBatch();
+    } else if (!this.batchTimer) {
+      this.batchTimer = setTimeout(() => this.flushBatch(), this.BATCH_WINDOW_MS);
+    }
+  }
+
+  /**
+   * Flush pending batch as a single 'bridge.batch' event.
+   * WebSocket gateway receives one message with N events instead of N messages.
+   */
+  private flushBatch(): void {
+    if (this.batchTimer) {
+      clearTimeout(this.batchTimer);
+      this.batchTimer = null;
+    }
+
+    if (this.pendingBatch.length === 0) return;
+
+    const batch = this.pendingBatch;
+    this.pendingBatch = [];
+
+    // Emit individual events for backend handlers (they expect individual events)
+    for (const entry of batch) {
+      this.eventEmitter.emit(entry.event, entry.payload);
+    }
+
+    // Also emit a batched version for WebSocket gateway (single message)
+    this.eventEmitter.emit('bridge.batch', {
+      events: batch,
+      tenantId: batch[0]?.payload['tenantId'],
+    });
   }
 
   /**
