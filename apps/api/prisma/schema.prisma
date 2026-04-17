@@ -1190,3 +1190,34 @@ model BrochureComponent {
   @@map("brochure_components")
 }
 
+enum EnrichmentStatus {
+  QUEUED
+  DISPATCHED
+  EXECUTING
+  VALIDATING
+  CORRECTING
+  COMPLETED
+  FAILED
+  PERMANENTLY_FAILED
+}
+
+model EnrichmentQueue {
+  id            String            @id @default(cuid())
+  tenantId      String            @map("tenant_id")
+  conceptId     String            @map("concept_id")
+  status        EnrichmentStatus  @default(QUEUED)
+  attempt       Int               @default(0)
+  maxAttempts   Int               @default(3) @map("max_attempts")
+  sessionId     String?           @map("session_id")
+  dispatchedAt  DateTime?         @map("dispatched_at")
+  completedAt   DateTime?         @map("completed_at")
+  failedAt      DateTime?         @map("failed_at")
+  error         String?
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+
+  @@unique([tenantId, conceptId])
+  @@index([tenantId, status])
+  @@map("enrichment_queue")
+}
+

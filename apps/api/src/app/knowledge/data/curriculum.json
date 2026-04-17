@@ -1,14 +1,14 @@
 [
   {
-    "id": "uvod-u-poslovanje",
+    "id": "introduction-to-business",
     "parentId": null,
-    "label": "Uvod u Poslovanje",
+    "label": "Introduction to Business",
     "sortOrder": 1
   },
   {
-    "id": "vrednost",
+    "id": "value",
     "parentId": null,
-    "label": "Vrednost",
+    "label": "Value",
     "sortOrder": 2
   },
   {
@@ -18,99 +18,99 @@
     "sortOrder": 3
   },
   {
-    "id": "kognitivne-sklonosti",
+    "id": "cognitive-biases",
     "parentId": null,
-    "label": "Kognitivne Sklonosti",
+    "label": "Cognitive Biases",
     "sortOrder": 4
   },
   {
-    "id": "odredjivanje-cene",
+    "id": "pricing",
     "parentId": null,
-    "label": "Određivanje Cene",
+    "label": "Pricing",
     "sortOrder": 5
   },
   {
-    "id": "prodaja",
+    "id": "sales",
     "parentId": null,
-    "label": "Prodaja",
+    "label": "Sales",
     "sortOrder": 6
   },
   {
-    "id": "razvoj-poslovanja",
+    "id": "business-development",
     "parentId": null,
-    "label": "Razvoj Poslovanja",
+    "label": "Business Development",
     "sortOrder": 7
   },
   {
-    "id": "finansije",
+    "id": "finance",
     "parentId": null,
-    "label": "Finansije",
+    "label": "Finance",
     "sortOrder": 8
   },
   {
-    "id": "operacije-i-proizvodnja",
+    "id": "operations-and-production",
     "parentId": null,
-    "label": "Operacije i Proizvodnja",
+    "label": "Operations & Production",
     "sortOrder": 9
   },
   {
-    "id": "menadzment",
+    "id": "management",
     "parentId": null,
-    "label": "Menadžment",
+    "label": "Management",
     "sortOrder": 10
   },
   {
-    "id": "ljudski-resursi",
+    "id": "human-resources",
     "parentId": null,
-    "label": "Ljudski Resursi",
+    "label": "Human Resources",
     "sortOrder": 11
   },
   {
-    "id": "rad-sa-ljudima",
+    "id": "working-with-people",
     "parentId": null,
-    "label": "Rad sa Ljudima",
+    "label": "Working with People",
     "sortOrder": 12
   },
   {
-    "id": "upravljanje-svojim-radom",
+    "id": "self-management",
     "parentId": null,
-    "label": "Upravljanje Svojim Radom",
+    "label": "Self-Management",
     "sortOrder": 13
   },
   {
-    "id": "isporuka-vrednosti",
+    "id": "value-delivery",
     "parentId": null,
-    "label": "Isporuka Vrednosti",
+    "label": "Value Delivery",
     "sortOrder": 14
   },
   {
-    "id": "sistemi",
+    "id": "systems",
     "parentId": null,
-    "label": "Sistemi",
+    "label": "Systems",
     "sortOrder": 15
   },
   {
-    "id": "poslovni-modeli",
+    "id": "business-models",
     "parentId": null,
-    "label": "Poslovni Modeli",
+    "label": "Business Models",
     "sortOrder": 16
   },
   {
-    "id": "kompanijska-struktura",
+    "id": "company-structure",
     "parentId": null,
-    "label": "Kompanijska Struktura",
+    "label": "Company Structure",
     "sortOrder": 17
   },
   {
-    "id": "tipovi-kompanija",
+    "id": "types-of-companies",
     "parentId": null,
-    "label": "Tipovi Kompanija",
+    "label": "Types of Companies",
     "sortOrder": 18
   },
   {
-    "id": "kupovina-i-prodaja-poslovanja",
+    "id": "buying-and-selling-a-business",
     "parentId": null,
-    "label": "Kupovina i Prodaja Poslovanja",
+    "label": "Buying and Selling a Business",
     "sortOrder": 19
   },
   {
@@ -120,1905 +120,1905 @@
     "sortOrder": 20
   },
   {
-    "id": "upravljanje-podacima",
+    "id": "data-management",
     "parentId": null,
-    "label": "Upravljanje Podacima",
+    "label": "Data Management",
     "sortOrder": 21
   },
   {
-    "id": "promptovi",
+    "id": "prompts",
     "parentId": null,
-    "label": "Promptovi",
+    "label": "Prompts",
     "sortOrder": 22
   },
   {
-    "id": "tok-vrednosti",
+    "id": "value-flow",
     "parentId": null,
-    "label": "Tok Vrednosti",
+    "label": "Value Flow",
     "sortOrder": 999
   },
   {
-    "id": "stvaranje-barijera-za-konkurente",
+    "id": "creating-barriers-for-competitors",
     "parentId": null,
-    "label": "Stvaranje Barijera za Konkurente",
+    "label": "Creating Barriers for Competitors",
     "sortOrder": 999
   },
   {
-    "id": "uvod-u-analizu-konkurencije",
-    "parentId": "analiza-konkurencije",
-    "label": "Uvod u Analizu Konkurencije",
+    "id": "introduction-to-competitive-analysis",
+    "parentId": "competitive-analysis",
+    "label": "Introduction to Competitive Analysis",
     "sortOrder": 1
   },
   {
-    "id": "strategije-analize-konkurencije",
-    "parentId": "analiza-konkurencije",
-    "label": "Strategije Analize Konkurencije",
+    "id": "competitive-analysis-strategies",
+    "parentId": "competitive-analysis",
+    "label": "Competitive Analysis Strategies",
     "sortOrder": 2
   },
   {
-    "id": "strategije-pozicioniranja-proizvoda",
-    "parentId": "analiza-konkurencije",
-    "label": "Strategije Pozicioniranja Proizvoda",
+    "id": "product-positioning-strategies",
+    "parentId": "competitive-analysis",
+    "label": "Product Positioning Strategies",
     "sortOrder": 3
   },
   {
-    "id": "energetski-ciklusi",
-    "parentId": "energija",
-    "label": "Energetski Ciklusi",
+    "id": "energy-cycles",
+    "parentId": "energy",
+    "label": "Energy Cycles",
     "sortOrder": 1
   },
   {
-    "id": "ocuvanje-energetskih-resursa",
-    "parentId": "energija",
-    "label": "Očuvanje Energetskih Resursa",
+    "id": "preserving-energy-resources",
+    "parentId": "energy",
+    "label": "Preserving Energy Resources",
     "sortOrder": 2
   },
   {
-    "id": "uslovi-za-rad",
-    "parentId": "energija",
-    "label": "Uslovi za Rad",
+    "id": "working-conditions",
+    "parentId": "energy",
+    "label": "Working Conditions",
     "sortOrder": 3
   },
   {
-    "id": "opterecenje-performansi",
-    "parentId": "energija",
-    "label": "Opterećenje Performansi",
+    "id": "performance-load",
+    "parentId": "energy",
+    "label": "Performance Load",
     "sortOrder": 4
   },
   {
-    "id": "trosenje-volje",
-    "parentId": "energija",
-    "label": "Trošenje Volje",
+    "id": "willpower-depletion",
+    "parentId": "energy",
+    "label": "Willpower Depletion",
     "sortOrder": 5
   },
   {
-    "id": "inhibicija",
-    "parentId": "energija",
-    "label": "Inhibicija",
+    "id": "inhibition",
+    "parentId": "energy",
+    "label": "Inhibition",
     "sortOrder": 6
   },
   {
-    "id": "stres-i-oporavak",
-    "parentId": "energija",
-    "label": "Stres i Oporavak",
+    "id": "stress-and-recovery",
+    "parentId": "energy",
+    "label": "Stress and Recovery",
     "sortOrder": 7
   },
   {
-    "id": "zaostali-hardver",
-    "parentId": "energija",
-    "label": "Zaostali Hardver",
+    "id": "legacy-hardware",
+    "parentId": "energy",
+    "label": "Legacy Hardware",
     "sortOrder": 8
   },
   {
-    "id": "dostupnost",
-    "parentId": "faktori-koji-uticu-na-privlacenje-paznje",
-    "label": "Dostupnost",
+    "id": "availability",
+    "parentId": "factors-affecting-attention-capture",
+    "label": "Availability",
     "sortOrder": 1
   },
   {
-    "id": "otvorenost",
-    "parentId": "faktori-koji-uticu-na-privlacenje-paznje",
-    "label": "Otvorenost",
+    "id": "openness",
+    "parentId": "factors-affecting-attention-capture",
+    "label": "Openness",
     "sortOrder": 2
   },
   {
-    "id": "preokupacija",
-    "parentId": "faktori-koji-uticu-na-privlacenje-paznje",
-    "label": "Preokupacija",
+    "id": "preoccupation",
+    "parentId": "factors-affecting-attention-capture",
+    "label": "Preoccupation",
     "sortOrder": 3
   },
   {
-    "id": "saglasnost",
-    "parentId": "faktori-koji-uticu-na-privlacenje-paznje",
-    "label": "Saglasnost",
+    "id": "consent",
+    "parentId": "factors-affecting-attention-capture",
+    "label": "Consent",
     "sortOrder": 4
   },
   {
-    "id": "izuzetnost",
-    "parentId": "faktori-koji-uticu-na-privlacenje-paznje",
-    "label": "Izuzetnost",
+    "id": "remarkability",
+    "parentId": "factors-affecting-attention-capture",
+    "label": "Remarkability",
     "sortOrder": 5
   },
   {
-    "id": "kontroverza",
-    "parentId": "faktori-koji-uticu-na-privlacenje-paznje",
-    "label": "Kontroverza",
+    "id": "controversy",
+    "parentId": "factors-affecting-attention-capture",
+    "label": "Controversy",
     "sortOrder": 6
   },
   {
-    "id": "uvod-u-finansije",
-    "parentId": "finansije",
-    "label": "Uvod u Finansije",
+    "id": "introduction-to-finance",
+    "parentId": "finance",
+    "label": "Introduction to Finance",
     "sortOrder": 1
   },
   {
-    "id": "finansijski-izvestaji",
-    "parentId": "finansije",
-    "label": "Finansijski Izveštaji",
+    "id": "financial-statements",
+    "parentId": "finance",
+    "label": "Financial Statements",
     "sortOrder": 2
   },
   {
-    "id": "racunovodstvo-sa-fokusom-na-upravljanje-kompanije",
-    "parentId": "finansije",
-    "label": "Računovodstvo sa Fokusom na Upravljanje Kompanije",
+    "id": "accounting-with-focus-on-company-management",
+    "parentId": "finance",
+    "label": "Accounting with Focus on Company Management",
     "sortOrder": 3
   },
   {
-    "id": "utvrdjivanje-vrednosti-kompanije",
-    "parentId": "finansije",
-    "label": "Utvrđivanje Vrednosti Kompanije",
+    "id": "determining-company-value",
+    "parentId": "finance",
+    "label": "Determining Company Value",
     "sortOrder": 4
   },
   {
-    "id": "sloboda-u-finansijskom-smislu",
-    "parentId": "finansije",
-    "label": "Sloboda u Finansijskom Smislu",
+    "id": "financial-freedom",
+    "parentId": "finance",
+    "label": "Financial Freedom",
     "sortOrder": 5
   },
   {
-    "id": "godisnji-izvestaj-annual-report",
-    "parentId": "finansijski-izvestaji",
-    "label": "Godišnji Izvestaj (Annual Report)",
+    "id": "annual-report",
+    "parentId": "financial-statements",
+    "label": "Annual Report",
     "sortOrder": 1
   },
   {
-    "id": "bilans-stanja",
-    "parentId": "finansijski-izvestaji",
-    "label": "Bilans Stanja",
+    "id": "balance-sheet",
+    "parentId": "financial-statements",
+    "label": "Balance Sheet",
     "sortOrder": 2
   },
   {
-    "id": "izvestaj-o-toku-gotovine",
-    "parentId": "finansijski-izvestaji",
-    "label": "Izveštaj o Toku Gotovine",
+    "id": "cash-flow-statement",
+    "parentId": "financial-statements",
+    "label": "Cash Flow Statement",
     "sortOrder": 3
   },
   {
-    "id": "izvestaj-o-dobitku-i-gubitku-p-l",
-    "parentId": "finansijski-izvestaji",
-    "label": "Izveštaj o Dobitku i Gubitku (P&L)",
+    "id": "profit-and-loss-statement-pandl",
+    "parentId": "financial-statements",
+    "label": "Profit and Loss Statement (P&L)",
     "sortOrder": 4
   },
   {
-    "id": "kljucni-indikatori-ucinka-kpi",
-    "parentId": "finansijski-izvestaji",
-    "label": "Ključni Indikatori Učinka (KPI)",
+    "id": "key-performance-indicators-kpi",
+    "parentId": "financial-statements",
+    "label": "Key Performance Indicators (KPI)",
     "sortOrder": 5
   },
   {
-    "id": "bilans-uspeha",
-    "parentId": "finansijski-izvestaji",
-    "label": "Bilans Uspeha",
+    "id": "income-statement",
+    "parentId": "financial-statements",
+    "label": "Income Statement",
     "sortOrder": 6
   },
   {
-    "id": "izvestavanje-o-finansijskom-stanju",
-    "parentId": "finansijski-izvestaji",
-    "label": "Izveštavanje o Finansijskom Stanju",
+    "id": "financial-condition-reporting",
+    "parentId": "financial-statements",
+    "label": "Financial Condition Reporting",
     "sortOrder": 7
   },
   {
-    "id": "finansijsko-racunovodstvo",
-    "parentId": "finansijski-izvestaji",
-    "label": "Finansijsko Računovodstvo",
+    "id": "financial-accounting",
+    "parentId": "financial-statements",
+    "label": "Financial Accounting",
     "sortOrder": 8
   },
   {
-    "id": "ekolosko-racunovodstvo",
-    "parentId": "finansijski-izvestaji",
-    "label": "Ekološko Računovodstvo",
+    "id": "environmental-accounting",
+    "parentId": "financial-statements",
+    "label": "Environmental Accounting",
     "sortOrder": 9
   },
   {
-    "id": "standardizacija-racunovodstvenih-praksi",
-    "parentId": "finansijski-izvestaji",
-    "label": "Standardizacija Računovodstvenih Praksi",
+    "id": "standardization-of-accounting-practices",
+    "parentId": "financial-statements",
+    "label": "Standardization of Accounting Practices",
     "sortOrder": 10
   },
   {
-    "id": "stanje-potpune-fokusiranosti-flow",
-    "parentId": "fokus",
-    "label": "Stanje Potpune Fokusiranosti (Flow)",
+    "id": "state-of-complete-focus-flow",
+    "parentId": "focus",
+    "label": "State of Complete Focus (Flow)",
     "sortOrder": 1
   },
   {
-    "id": "kazna-kognitivnog-prebacivanja",
-    "parentId": "fokus",
-    "label": "Kazna Kognitivnog Prebacivanja",
+    "id": "cognitive-switching-penalty",
+    "parentId": "focus",
+    "label": "Cognitive Switching Penalty",
     "sortOrder": 2
   },
   {
-    "id": "efekat-ocekivanja",
-    "parentId": "isporuka-vrednosti",
-    "label": "Efekat Očekivanja",
+    "id": "expectation-effect",
+    "parentId": "value-delivery",
+    "label": "Expectation Effect",
     "sortOrder": 1
   },
   {
-    "id": "isporuka-vrednosti-isporuka-vrednosti",
-    "parentId": "isporuka-vrednosti",
-    "label": "Isporuka Vrednosti",
+    "id": "value-delivery-value-delivery",
+    "parentId": "value-delivery",
+    "label": "Value Delivery",
     "sortOrder": 1
   },
   {
-    "id": "lanac-snabdevanja",
-    "parentId": "isporuka-vrednosti",
-    "label": "Lanac Snabdevanja",
+    "id": "supply-chain",
+    "parentId": "value-delivery",
+    "label": "Supply Chain",
     "sortOrder": 2
   },
   {
-    "id": "transport-i-logistika",
-    "parentId": "isporuka-vrednosti",
-    "label": "Transport i Logistika",
+    "id": "transportation-and-logistics",
+    "parentId": "value-delivery",
+    "label": "Transportation and Logistics",
     "sortOrder": 3
   },
   {
-    "id": "kanal-distribucije",
-    "parentId": "isporuka-vrednosti",
-    "label": "Kanal Distribucije",
+    "id": "distribution-channel",
+    "parentId": "value-delivery",
+    "label": "Distribution Channel",
     "sortOrder": 4
   },
   {
-    "id": "zalihe",
-    "parentId": "isporuka-vrednosti",
-    "label": "Zalihe",
+    "id": "inventory",
+    "parentId": "value-delivery",
+    "label": "Inventory",
     "sortOrder": 5
   },
   {
-    "id": "predvidljivost",
-    "parentId": "isporuka-vrednosti",
-    "label": "Predvidljivost",
+    "id": "predictability",
+    "parentId": "value-delivery",
+    "label": "Predictability",
     "sortOrder": 6
   },
   {
-    "id": "propusnost",
-    "parentId": "isporuka-vrednosti",
-    "label": "Propusnost",
+    "id": "throughput",
+    "parentId": "value-delivery",
+    "label": "Throughput",
     "sortOrder": 7
   },
   {
-    "id": "skalabilnost",
-    "parentId": "isporuka-vrednosti",
-    "label": "Skalabilnost",
+    "id": "scalability",
+    "parentId": "value-delivery",
+    "label": "Scalability",
     "sortOrder": 8
   },
   {
-    "id": "kako-uciniti-ponudu-vrednijom-kako-uciniti-ponudu-vrednijom",
-    "parentId": "kako-uciniti-ponudu-vrednijom",
-    "label": "Kako učiniti ponudu vrednijom?",
+    "id": "how-to-make-your-offer-more-valuable",
+    "parentId": "value-how-to-make-your-offer-more-valuable",
+    "label": "How to Make Your Offer More Valuable?",
     "sortOrder": 1
   },
   {
-    "id": "modularnost",
-    "parentId": "kako-uciniti-ponudu-vrednijom",
-    "label": "Modularnost",
+    "id": "modularity",
+    "parentId": "value-how-to-make-your-offer-more-valuable",
+    "label": "Modularity",
     "sortOrder": 2
   },
   {
-    "id": "pakovanje-i-razdvajanje-ponude-bundling-unbundling",
-    "parentId": "kako-uciniti-ponudu-vrednijom",
-    "label": "Pakovanje i Razdvajanje Ponude (Bundling, Unbundling)",
+    "id": "bundling-and-unbundling-offers",
+    "parentId": "value-how-to-make-your-offer-more-valuable",
+    "label": "Bundling and Unbundling Offers",
     "sortOrder": 3
   },
   {
-    "id": "uklanjanje-gnjavaze",
-    "parentId": "kako-uciniti-ponudu-vrednijom",
-    "label": "Uklanjanje Gnjavaže",
+    "id": "removing-hassles",
+    "parentId": "value-how-to-make-your-offer-more-valuable",
+    "label": "Removing Hassles",
     "sortOrder": 4
   },
   {
-    "id": "uvod-u-kognitivne-sklonosti",
-    "parentId": "kognitivne-sklonosti",
-    "label": "Uvod u Kognitivne Sklonosti",
+    "id": "introduction-to-cognitive-biases",
+    "parentId": "cognitive-biases",
+    "label": "Introduction to Cognitive Biases",
     "sortOrder": 1
   },
   {
-    "id": "osnovne-sklonosti",
-    "parentId": "kognitivne-sklonosti",
-    "label": "Osnovne Sklonosti",
+    "id": "basic-biases",
+    "parentId": "cognitive-biases",
+    "label": "Basic Biases",
     "sortOrder": 2
   },
   {
-    "id": "kontrola-percepcije",
-    "parentId": "kognitivne-sklonosti",
-    "label": "Kontrola Percepcije",
+    "id": "perception-control",
+    "parentId": "cognitive-biases",
+    "label": "Perception Control",
     "sortOrder": 3
   },
   {
-    "id": "kognitivne-sklonosti-koje-uticu-na-nas-rad",
-    "parentId": "kognitivne-sklonosti",
-    "label": "Kognitivne Sklonosti koje utiču na naš rad",
+    "id": "cognitive-biases-that-affect-our-work",
+    "parentId": "cognitive-biases",
+    "label": "Cognitive Biases That Affect Our Work",
     "sortOrder": 4
   },
   {
-    "id": "tendencija-retrospekcije",
-    "parentId": "kognitivne-sklonosti-koje-uticu-na-nas-rad",
-    "label": "Tendencija Retrospekcije",
+    "id": "hindsight-tendency",
+    "parentId": "cognitive-biases-that-affect-our-work",
+    "label": "Hindsight Tendency",
     "sortOrder": 1
   },
   {
-    "id": "povezivanje-obrazaca",
-    "parentId": "kognitivne-sklonosti-koje-uticu-na-nas-rad",
-    "label": "Povezivanje Obrazaca",
+    "id": "pattern-matching",
+    "parentId": "cognitive-biases-that-affect-our-work",
+    "label": "Pattern Matching",
     "sortOrder": 2
   },
   {
-    "id": "sklonost-potvrdjivanju",
-    "parentId": "kognitivne-sklonosti-koje-uticu-na-nas-rad",
-    "label": "Sklonost Potvrđivanju",
+    "id": "confirmation-bias",
+    "parentId": "cognitive-biases-that-affect-our-work",
+    "label": "Confirmation Bias",
     "sortOrder": 3
   },
   {
-    "id": "kognitivno-modelovanje",
-    "parentId": "kognitivne-sklonosti-koje-uticu-na-nas-rad",
-    "label": "Kognitivno Modelovanje",
+    "id": "cognitive-modeling",
+    "parentId": "cognitive-biases-that-affect-our-work",
+    "label": "Cognitive Modeling",
     "sortOrder": 4
   },
   {
-    "id": "motivacija",
-    "parentId": "kognitivne-sklonosti-koje-uticu-na-nas-rad",
-    "label": "Motivacija",
+    "id": "motivation",
+    "parentId": "cognitive-biases-that-affect-our-work",
+    "label": "Motivation",
     "sortOrder": 5
   },
   {
-    "id": "model-za-navodjenje",
-    "parentId": "kognitivne-sklonosti-koje-uticu-na-nas-rad",
-    "label": "Model za Navođenje",
+    "id": "guiding-model",
+    "parentId": "cognitive-biases-that-affect-our-work",
+    "label": "Guiding Model",
     "sortOrder": 6
   },
   {
-    "id": "restrukturiranje",
-    "parentId": "kognitivne-sklonosti-koje-uticu-na-nas-rad",
-    "label": "Restrukturiranje",
+    "id": "restructuring",
+    "parentId": "cognitive-biases-that-affect-our-work",
+    "label": "Restructuring",
     "sortOrder": 7
   },
   {
-    "id": "tumacenje-i-revizija",
-    "parentId": "kognitivne-sklonosti-koje-uticu-na-nas-rad",
-    "label": "Tumačenje i Revizija",
+    "id": "interpretation-and-revision",
+    "parentId": "cognitive-biases-that-affect-our-work",
+    "label": "Interpretation and Revision",
     "sortOrder": 8
   },
   {
-    "id": "kompanijska-struktura-kompanijska-struktura",
-    "parentId": "kompanijska-struktura",
-    "label": "Kompanijska Struktura",
+    "id": "company-structure-company-structure",
+    "parentId": "company-structure",
+    "label": "Company Structure",
     "sortOrder": 1
   },
   {
-    "id": "organizacija-kompanije-po-funkcijama",
-    "parentId": "kompanijska-struktura",
-    "label": "Organizacija Kompanije po Funkcijama",
+    "id": "functional-company-organization",
+    "parentId": "company-structure",
+    "label": "Functional Company Organization",
     "sortOrder": 2
   },
   {
-    "id": "organizacija-kompanije-po-divizijama",
-    "parentId": "kompanijska-struktura",
-    "label": "Organizacija Kompanije po Divizijama",
+    "id": "divisional-company-organization",
+    "parentId": "company-structure",
+    "label": "Divisional Company Organization",
     "sortOrder": 3
   },
   {
-    "id": "struktura-na-bazi-matrice",
-    "parentId": "kompanijska-struktura",
-    "label": "Struktura na Bazi Matrice",
+    "id": "matrix-based-structure",
+    "parentId": "company-structure",
+    "label": "Matrix-Based Structure",
     "sortOrder": 4
   },
   {
-    "id": "mrezna-organizacija-kompanije",
-    "parentId": "kompanijska-struktura",
-    "label": "Mrežna Organizacija Kompanije",
+    "id": "network-company-organization",
+    "parentId": "company-structure",
+    "label": "Network Company Organization",
     "sortOrder": 5
   },
   {
-    "id": "organizacija-kompanije-po-timovima",
-    "parentId": "kompanijska-struktura",
-    "label": "Organizacija Kompanije po Timovima",
+    "id": "team-based-company-organization",
+    "parentId": "company-structure",
+    "label": "Team-Based Company Organization",
     "sortOrder": 6
   },
   {
-    "id": "poravnanje-hijerarhija-kompanije",
-    "parentId": "kompanijska-struktura",
-    "label": "Poravnanje Hijerarhija Kompanije",
+    "id": "company-hierarchy-alignment",
+    "parentId": "company-structure",
+    "label": "Company Hierarchy Alignment",
     "sortOrder": 7
   },
   {
-    "id": "reciprocitet",
-    "parentId": "koncepti-koji-podsticu-prodaju",
-    "label": "Reciprocitet",
+    "id": "reciprocity",
+    "parentId": "concepts-that-drive-sales",
+    "label": "Reciprocity",
     "sortOrder": 1
   },
   {
-    "id": "ekskluzivnost",
-    "parentId": "koncepti-koji-podsticu-prodaju",
-    "label": "Ekskluzivnost",
+    "id": "exclusivity",
+    "parentId": "concepts-that-drive-sales",
+    "label": "Exclusivity",
     "sortOrder": 2
   },
   {
-    "id": "stetna-priznanja",
-    "parentId": "koncepti-koji-podsticu-prodaju",
-    "label": "Štetna Priznanja",
+    "id": "damaging-admissions",
+    "parentId": "concepts-that-drive-sales",
+    "label": "Damaging Admissions",
     "sortOrder": 3
   },
   {
-    "id": "elasticnost-cena",
-    "parentId": "koncepti-koji-podsticu-prodaju",
-    "label": "Elastičnost Cena",
+    "id": "price-elasticity",
+    "parentId": "concepts-that-drive-sales",
+    "label": "Price Elasticity",
     "sortOrder": 4
   },
   {
-    "id": "okruzenje",
-    "parentId": "koncepti-koji-uticu-na-sisteme",
-    "label": "Okruženje",
+    "id": "environment",
+    "parentId": "concepts-that-affect-systems",
+    "label": "Environment",
     "sortOrder": 1
   },
   {
-    "id": "testovi-selekcije",
-    "parentId": "koncepti-koji-uticu-na-sisteme",
-    "label": "Testovi Selekcije",
+    "id": "selection-tests",
+    "parentId": "concepts-that-affect-systems",
+    "label": "Selection Tests",
     "sortOrder": 2
   },
   {
-    "id": "promena",
-    "parentId": "koncepti-koji-uticu-na-sisteme",
-    "label": "Promena",
+    "id": "change",
+    "parentId": "concepts-that-affect-systems",
+    "label": "Change",
     "sortOrder": 3
   },
   {
-    "id": "neizvesnost",
-    "parentId": "koncepti-koji-uticu-na-sisteme",
-    "label": "Neizvesnost",
+    "id": "uncertainty",
+    "parentId": "concepts-that-affect-systems",
+    "label": "Uncertainty",
     "sortOrder": 4
   },
   {
-    "id": "domino-efekat",
-    "parentId": "koncepti-koji-uticu-na-sisteme",
-    "label": "Domino Efekat",
+    "id": "domino-effect",
+    "parentId": "concepts-that-affect-systems",
+    "label": "Domino Effect",
     "sortOrder": 5
   },
   {
-    "id": "autokataliza",
-    "parentId": "koncepti-koji-uticu-na-sisteme",
-    "label": "Autokataliza",
+    "id": "autocatalysis",
+    "parentId": "concepts-that-affect-systems",
+    "label": "Autocatalysis",
     "sortOrder": 6
   },
   {
-    "id": "pojacivac-snage",
-    "parentId": "koncepti-koji-uticu-na-sisteme",
-    "label": "Pojačivač Snage",
+    "id": "force-multiplier",
+    "parentId": "concepts-that-affect-systems",
+    "label": "Force Multiplier",
     "sortOrder": 7
   },
   {
-    "id": "multiplikacija",
-    "parentId": "koncepti-koji-uticu-na-sisteme",
-    "label": "Multiplikacija",
+    "id": "multiplication",
+    "parentId": "concepts-that-affect-systems",
+    "label": "Multiplication",
     "sortOrder": 8
   },
   {
-    "id": "umnozavanje",
-    "parentId": "koncepti-koji-uticu-na-sisteme",
-    "label": "Umnožavanje",
+    "id": "duplication",
+    "parentId": "concepts-that-affect-systems",
+    "label": "Duplication",
     "sortOrder": 9
   },
   {
-    "id": "normalne-nesrece",
-    "parentId": "koncepti-koji-uticu-na-sisteme",
-    "label": "Normalne Nesreće",
+    "id": "normal-accidents",
+    "parentId": "concepts-that-affect-systems",
+    "label": "Normal Accidents",
     "sortOrder": 10
   },
   {
-    "id": "otpornost-samoorganizacija-i-hijerarhija",
-    "parentId": "koncepti-koji-uticu-na-sisteme",
-    "label": "Otpornost, Samoorganizacija i Hijerarhija",
+    "id": "resilience-self-organization-and-hierarchy",
+    "parentId": "concepts-that-affect-systems",
+    "label": "Resilience, Self-Organization, and Hierarchy",
     "sortOrder": 11
   },
   {
-    "id": "vremenska-odlaganja-i-uticaj-na-sisteme",
-    "parentId": "koncepti-koji-uticu-na-sisteme",
-    "label": "Vremenska Odlaganja i Uticaj na Sisteme",
+    "id": "time-delays-and-impact-on-systems",
+    "parentId": "concepts-that-affect-systems",
+    "label": "Time Delays and Impact on Systems",
     "sortOrder": 12
   },
   {
-    "id": "kako-efikasno-koristiti-autoritet-u-radu-sa-ljudima",
-    "parentId": "koncepti-vazni-za-menadzment",
-    "label": "Kako Efikasno Koristiti Autoritet u Radu sa Ljudima?",
+    "id": "how-to-effectively-use-authority-when-working-with-people",
+    "parentId": "key-concepts-for-management",
+    "label": "How to Effectively Use Authority When Working with People?",
     "sortOrder": 1
   },
   {
-    "id": "obaveza-i-doslednost",
-    "parentId": "koncepti-vazni-za-menadzment",
-    "label": "Obaveza i Doslednost",
+    "id": "commitment-and-consistency",
+    "parentId": "key-concepts-for-management",
+    "label": "Commitment and Consistency",
     "sortOrder": 2
   },
   {
-    "id": "moc",
-    "parentId": "koncepti-vazni-za-menadzment",
-    "label": "Moć",
+    "id": "power",
+    "parentId": "key-concepts-for-management",
+    "label": "Power",
     "sortOrder": 2
   },
   {
-    "id": "moc-komande",
-    "parentId": "koncepti-vazni-za-menadzment",
-    "label": "Moć Komande",
+    "id": "command-power",
+    "parentId": "key-concepts-for-management",
+    "label": "Command Power",
     "sortOrder": 3
   },
   {
-    "id": "razlog-zasto",
-    "parentId": "koncepti-vazni-za-menadzment",
-    "label": "Razlog Zašto",
+    "id": "the-reason-why",
+    "parentId": "key-concepts-for-management",
+    "label": "The Reason Why",
     "sortOrder": 5
   },
   {
-    "id": "ocekivanja",
-    "parentId": "koncepti-vazni-za-menadzment",
-    "label": "Očekivanja",
+    "id": "expectations",
+    "parentId": "key-concepts-for-management",
+    "label": "Expectations",
     "sortOrder": 6
   },
   {
-    "id": "klanovi",
-    "parentId": "koncepti-vazni-za-menadzment",
-    "label": "Klanovi",
+    "id": "clans",
+    "parentId": "key-concepts-for-management",
+    "label": "Clans",
     "sortOrder": 7
   },
   {
-    "id": "konvergencija-i-divergencija",
-    "parentId": "koncepti-vazni-za-menadzment",
-    "label": "Konvergencija i Divergencija",
+    "id": "convergence-and-divergence",
+    "parentId": "key-concepts-for-management",
+    "label": "Convergence and Divergence",
     "sortOrder": 8
   },
   {
-    "id": "prekomerna-komunikacija",
-    "parentId": "koncepti-vazni-za-menadzment",
-    "label": "Prekomerna Komunikacija",
+    "id": "overcommunication",
+    "parentId": "key-concepts-for-management",
+    "label": "Overcommunication",
     "sortOrder": 9
   },
   {
-    "id": "ogranicenja-kognitivnog-kapaciteta",
-    "parentId": "koncepti-vazni-za-menadzment",
-    "label": "Ograničenja Kognitivnog Kapaciteta",
+    "id": "cognitive-capacity-limitations",
+    "parentId": "key-concepts-for-management",
+    "label": "Cognitive Capacity Limitations",
     "sortOrder": 10
   },
   {
-    "id": "efekat-posmatraca",
-    "parentId": "koncepti-vazni-za-menadzment",
-    "label": "Efekat Posmatrača",
+    "id": "bystander-effect",
+    "parentId": "key-concepts-for-management",
+    "label": "Bystander Effect",
     "sortOrder": 11
   },
   {
-    "id": "podsticaji",
-    "parentId": "koncepti-vazni-za-menadzment",
-    "label": "Podsticaji",
+    "id": "incentives",
+    "parentId": "key-concepts-for-management",
+    "label": "Incentives",
     "sortOrder": 12
   },
   {
-    "id": "zabulde-prilikom-planiranja",
-    "parentId": "koncepti-vazni-za-menadzment",
-    "label": "Zabulde prilikom Planiranja",
+    "id": "planning-fallacies",
+    "parentId": "key-concepts-for-management",
+    "label": "Planning Fallacies",
     "sortOrder": 13
   },
   {
-    "id": "empatija",
-    "parentId": "koncepti-vazni-za-rad-sa-ljudima",
-    "label": "Empatija",
+    "id": "empathy",
+    "parentId": "key-concepts-for-working-with-people",
+    "label": "Empathy",
     "sortOrder": 1
   },
   {
-    "id": "koncepti-vazni-za-rad-sa-ljudima-rad-sa-ljudima",
-    "parentId": "koncepti-vazni-za-rad-sa-ljudima",
-    "label": "Rad sa Ljudima",
+    "id": "key-concepts-for-working-with-people-working-with-people",
+    "parentId": "key-concepts-for-working-with-people",
+    "label": "Working with People",
     "sortOrder": 1
   },
   {
-    "id": "postovanje",
-    "parentId": "koncepti-vazni-za-rad-sa-ljudima",
-    "label": "Poštovanje",
+    "id": "respect",
+    "parentId": "key-concepts-for-working-with-people",
+    "label": "Respect",
     "sortOrder": 2
   },
   {
-    "id": "vaznost",
-    "parentId": "koncepti-vazni-za-rad-sa-ljudima",
-    "label": "Važnost",
+    "id": "importance",
+    "parentId": "key-concepts-for-working-with-people",
+    "label": "Importance",
     "sortOrder": 3
   },
   {
-    "id": "sigurnost",
-    "parentId": "koncepti-vazni-za-rad-sa-ljudima",
-    "label": "Sigurnost",
+    "id": "safety",
+    "parentId": "key-concepts-for-working-with-people",
+    "label": "Safety",
     "sortOrder": 4
   },
   {
-    "id": "svaljivanje-krivice",
-    "parentId": "koncepti-vazni-za-rad-sa-ljudima",
-    "label": "Svaljivanje Krivice",
+    "id": "blame-shifting",
+    "parentId": "key-concepts-for-working-with-people",
+    "label": "Blame Shifting",
     "sortOrder": 5
   },
   {
-    "id": "sukobi",
-    "parentId": "koncepti-vazni-za-rad-sa-ljudima",
-    "label": "Sukobi",
+    "id": "conflicts",
+    "parentId": "key-concepts-for-working-with-people",
+    "label": "Conflicts",
     "sortOrder": 6
   },
   {
-    "id": "kontrola-percepcije-kontrola-percepcije",
-    "parentId": "kontrola-percepcije",
-    "label": "Kontrola Percepcije",
+    "id": "perception-control-perception-control",
+    "parentId": "perception-control",
+    "label": "Perception Control",
     "sortOrder": 1
   },
   {
-    "id": "referentni-nivo",
-    "parentId": "kontrola-percepcije",
-    "label": "Referentni Nivo",
+    "id": "reference-level",
+    "parentId": "perception-control",
+    "label": "Reference Level",
     "sortOrder": 2
   },
   {
-    "id": "planiranje-akvizicije",
-    "parentId": "kupovina-i-prodaja-poslovanja",
-    "label": "Planiranje Akvizicije",
+    "id": "acquisition-planning",
+    "parentId": "buying-and-selling-a-business",
+    "label": "Acquisition Planning",
     "sortOrder": 1
   },
   {
-    "id": "spajanja-i-akvizicije-m-a",
-    "parentId": "kupovina-i-prodaja-poslovanja",
-    "label": "Spajanja i Akvizicije (M&A)",
+    "id": "mergers-and-acquisitions-manda",
+    "parentId": "buying-and-selling-a-business",
+    "label": "Mergers and Acquisitions (M&A)",
     "sortOrder": 1
   },
   {
-    "id": "integracija-kroz-lanac-vrednosti",
-    "parentId": "kupovina-i-prodaja-poslovanja",
-    "label": "Integracija kroz Lanac Vrednosti",
+    "id": "value-chain-integration",
+    "parentId": "buying-and-selling-a-business",
+    "label": "Value Chain Integration",
     "sortOrder": 2
   },
   {
-    "id": "akvizicija-od-strane-menadzmenta-mbo",
-    "parentId": "kupovina-i-prodaja-poslovanja",
-    "label": "Akvizicija od strane Menadžmenta (MBO)",
+    "id": "management-buyout-mbo",
+    "parentId": "buying-and-selling-a-business",
+    "label": "Management Buyout (MBO)",
     "sortOrder": 3
   },
   {
-    "id": "diverstitura-korporativno-oslobadjanje",
-    "parentId": "kupovina-i-prodaja-poslovanja",
-    "label": "Diverstitura (Korporativno Oslobađanje)",
+    "id": "divestiture-corporate-divestment",
+    "parentId": "buying-and-selling-a-business",
+    "label": "Divestiture (Corporate Divestment)",
     "sortOrder": 4
   },
   {
-    "id": "ljudski-resursi-ljudski-resursi",
-    "parentId": "ljudski-resursi",
-    "label": "Ljudski Resursi",
+    "id": "human-resources-human-resources",
+    "parentId": "human-resources",
+    "label": "Human Resources",
     "sortOrder": 1
   },
   {
-    "id": "tok-hr-aktivnosti",
-    "parentId": "ljudski-resursi",
-    "label": "Tok HR Aktivnosti",
+    "id": "hr-activity-flow",
+    "parentId": "human-resources",
+    "label": "HR Activity Flow",
     "sortOrder": 1
   },
   {
-    "id": "selekcija-zaposlenih",
-    "parentId": "ljudski-resursi",
-    "label": "Selekcija Zaposlenih",
+    "id": "employee-selection",
+    "parentId": "human-resources",
+    "label": "Employee Selection",
     "sortOrder": 2
   },
   {
-    "id": "regrutovanje-i-obuka-zaposlenih",
-    "parentId": "ljudski-resursi",
-    "label": "Regrutovanje i Obuka Zaposlenih",
+    "id": "employee-recruitment-and-training",
+    "parentId": "human-resources",
+    "label": "Employee Recruitment and Training",
     "sortOrder": 3
   },
   {
-    "id": "selekcija-zasnovana-na-ucinku",
-    "parentId": "ljudski-resursi",
-    "label": "Selekcija Zasnovana na Učinku",
+    "id": "performance-based-selection",
+    "parentId": "human-resources",
+    "label": "Performance-Based Selection",
     "sortOrder": 4
   },
   {
-    "id": "kako-meriti-rezultate-motivisati-i-promovisati-zaposlene",
-    "parentId": "ljudski-resursi",
-    "label": "Kako Meriti Rezultate, Motivisati i Promovisati Zaposlene?",
+    "id": "how-to-measure-results-motivate-and-promote-employees",
+    "parentId": "human-resources",
+    "label": "How to Measure Results, Motivate and Promote Employees?",
     "sortOrder": 5
   },
   {
-    "id": "motivacione-strategije-i-sistemi-nagradjivanja",
-    "parentId": "ljudski-resursi",
-    "label": "Motivacione Strategije i Sistemi Nagrađivanja",
+    "id": "motivational-strategies-and-reward-systems",
+    "parentId": "human-resources",
+    "label": "Motivational Strategies and Reward Systems",
     "sortOrder": 6
   },
   {
-    "id": "interakcija-i-komunikacija-sa-zaposlenima",
-    "parentId": "ljudski-resursi",
-    "label": "Interakcija i Komunikacija sa Zaposlenima",
+    "id": "employee-interaction-and-communication",
+    "parentId": "human-resources",
+    "label": "Employee Interaction and Communication",
     "sortOrder": 7
   },
   {
-    "id": "upravljanje-odnosima-sa-zaposlenima",
-    "parentId": "ljudski-resursi",
-    "label": "Upravljanje odnosima sa Zaposlenima",
+    "id": "employee-relationship-management",
+    "parentId": "human-resources",
+    "label": "Employee Relationship Management",
     "sortOrder": 8
   },
   {
-    "id": "raskidanje-radnih-odnosa",
-    "parentId": "ljudski-resursi",
-    "label": "Raskidanje Radnih Odnosa",
+    "id": "employment-termination",
+    "parentId": "human-resources",
+    "label": "Employment Termination",
     "sortOrder": 9
   },
   {
-    "id": "karakteristike-hr-profesionalaca",
-    "parentId": "ljudski-resursi",
-    "label": "Karakteristike HR Profesionalaca",
+    "id": "hr-professional-characteristics",
+    "parentId": "human-resources",
+    "label": "HR Professional Characteristics",
     "sortOrder": 10
   },
   {
-    "id": "uvod-u-marketing",
+    "id": "introduction-to-marketing",
     "parentId": "marketing",
-    "label": "Uvod u Marketing",
+    "label": "Introduction to Marketing",
     "sortOrder": 1
   },
   {
-    "id": "razumevanje-trzista",
+    "id": "understanding-the-market",
     "parentId": "marketing",
-    "label": "Razumevanje Tržišta",
+    "label": "Understanding the Market",
     "sortOrder": 2
   },
   {
-    "id": "analiza-konkurencije",
+    "id": "competitive-analysis",
     "parentId": "marketing",
-    "label": "Analiza Konkurencije",
+    "label": "Competitive Analysis",
     "sortOrder": 3
   },
   {
-    "id": "privlacenje-paznje",
+    "id": "capturing-attention",
     "parentId": "marketing",
-    "label": "Privlačenje Pažnje",
+    "label": "Capturing Attention",
     "sortOrder": 4
   },
   {
-    "id": "marketing-pristupi",
+    "id": "marketing-approaches",
     "parentId": "marketing",
-    "label": "Marketing Pristupi",
+    "label": "Marketing Approaches",
     "sortOrder": 5
   },
   {
-    "id": "marketing-miks",
+    "id": "marketing-mix",
     "parentId": "marketing",
-    "label": "Marketing Miks",
+    "label": "Marketing Mix",
     "sortOrder": 6
   },
   {
-    "id": "stvaranje-zajednice-kupaca",
+    "id": "building-a-customer-community",
     "parentId": "marketing",
-    "label": "Stvaranje Zajednice Kupaca",
+    "label": "Building a Customer Community",
     "sortOrder": 7
   },
   {
-    "id": "martech-spoj-marketinga-i-tehnologije",
+    "id": "martech-marketing-and-technology-combined",
     "parentId": "marketing",
-    "label": "MarTech - Spoj Marketinga i Tehnologije",
+    "label": "MarTech - Marketing and Technology Combined",
     "sortOrder": 8
   },
   {
-    "id": "inovacija-vrednosti-radikalna-diversifikacija",
+    "id": "value-innovation-radical-diversification",
     "parentId": "marketing",
-    "label": "Inovacija Vrednosti - Radikalna Diversifikacija",
+    "label": "Value Innovation - Radical Diversification",
     "sortOrder": 9
   },
   {
-    "id": "odnosi-sa-javnoscu-pr",
+    "id": "public-relations-pr",
     "parentId": "marketing",
-    "label": "Odnosi sa Javnošću (PR)",
+    "label": "Public Relations (PR)",
     "sortOrder": 10
   },
   {
-    "id": "marketnig-miks",
-    "parentId": "marketing-miks",
-    "label": "Marketnig Miks",
+    "id": "marketing-mix-marketing-mix",
+    "parentId": "marketing-mix",
+    "label": "Marketing Mix",
     "sortOrder": 1
   },
   {
-    "id": "uloga-proizvoda-u-marketing-miksu",
-    "parentId": "marketing-miks",
-    "label": "Uloga Proizvoda u Marketing Miksu",
+    "id": "role-of-product-in-marketing-mix",
+    "parentId": "marketing-mix",
+    "label": "Role of Product in Marketing Mix",
     "sortOrder": 2
   },
   {
-    "id": "nisni-marketing-kako-ciljati-specificne-grupe",
-    "parentId": "marketing-pristupi",
-    "label": "Nišni Marketing - Kako Ciljati Specifične Grupe",
+    "id": "niche-marketing-how-to-target-specific-groups",
+    "parentId": "marketing-approaches",
+    "label": "Niche Marketing - How to Target Specific Groups",
     "sortOrder": 1
   },
   {
-    "id": "osnove-tradicionalnog-marketinga",
-    "parentId": "marketing-pristupi",
-    "label": "Osnove Tradicionalnog Marketinga",
+    "id": "traditional-marketing-fundamentals",
+    "parentId": "marketing-approaches",
+    "label": "Traditional Marketing Fundamentals",
     "sortOrder": 1
   },
   {
-    "id": "upotreba-razlicitih-marketinskih-pristupa",
-    "parentId": "marketing-pristupi",
-    "label": "Upotreba Različitih Marketinških Pristupa",
+    "id": "using-different-marketing-approaches",
+    "parentId": "marketing-approaches",
+    "label": "Using Different Marketing Approaches",
     "sortOrder": 1
   },
   {
-    "id": "tradicionlano-oglasavanje",
-    "parentId": "marketing-pristupi",
-    "label": "Tradicionlano Oglašavanje",
+    "id": "traditional-advertising",
+    "parentId": "marketing-approaches",
+    "label": "Traditional Advertising",
     "sortOrder": 2
   },
   {
-    "id": "digitalni-marketing",
-    "parentId": "marketing-pristupi",
-    "label": "Digitalni Marketing",
+    "id": "digital-marketing",
+    "parentId": "marketing-approaches",
+    "label": "Digital Marketing",
     "sortOrder": 2
   },
   {
-    "id": "inbound-marketing-marketing-privlacenja",
-    "parentId": "marketing-pristupi",
-    "label": "Inbound Marketing (Marketing Privlačenja)",
+    "id": "inbound-marketing-attraction-marketing",
+    "parentId": "marketing-approaches",
+    "label": "Inbound Marketing (Attraction Marketing)",
     "sortOrder": 2
   },
   {
     "id": "vidcasting",
-    "parentId": "marketing-pristupi",
+    "parentId": "marketing-approaches",
     "label": "Vidcasting",
     "sortOrder": 3
   },
   {
-    "id": "outbound-izlazni-marketing",
-    "parentId": "marketing-pristupi",
-    "label": "Outbound (Izlazni) Marketing",
+    "id": "outbound-marketing",
+    "parentId": "marketing-approaches",
+    "label": "Outbound Marketing",
     "sortOrder": 3
   },
   {
-    "id": "marketing-angazovanja-strategije-i-tehnike",
-    "parentId": "marketing-pristupi",
-    "label": "Marketing Angažovanja - Strategije i Tehnike",
+    "id": "engagement-marketing-strategies-and-techniques",
+    "parentId": "marketing-approaches",
+    "label": "Engagement Marketing - Strategies and Techniques",
     "sortOrder": 3
   },
   {
-    "id": "japanski-pristup-marketingu",
-    "parentId": "marketing-pristupi",
-    "label": "Japanski pristup Marketingu",
+    "id": "japanese-marketing-approach",
+    "parentId": "marketing-approaches",
+    "label": "Japanese Marketing Approach",
     "sortOrder": 4
   },
   {
-    "id": "blogovanje",
-    "parentId": "marketing-pristupi",
-    "label": "Blogovanje",
+    "id": "blogging",
+    "parentId": "marketing-approaches",
+    "label": "Blogging",
     "sortOrder": 4
   },
   {
-    "id": "tehnike-senzornog-marketinga",
-    "parentId": "marketing-pristupi",
-    "label": "Tehnike Senzornog Marketinga",
+    "id": "sensory-marketing-techniques",
+    "parentId": "marketing-approaches",
+    "label": "Sensory Marketing Techniques",
     "sortOrder": 4
   },
   {
-    "id": "karakteristike-kompanija-sa-efektivnim-marketingom",
-    "parentId": "marketing-pristupi",
-    "label": "Karakteristike Kompanija sa Efektivnim Marketingom",
+    "id": "characteristics-of-companies-with-effective-marketing",
+    "parentId": "marketing-approaches",
+    "label": "Characteristics of Companies with Effective Marketing",
     "sortOrder": 5
   },
   {
-    "id": "marketing-odnosa-strategije-i-tehnike",
-    "parentId": "marketing-pristupi",
-    "label": "Marketing Odnosa - Strategije i Tehnike",
+    "id": "relationship-marketing-strategies-and-techniques",
+    "parentId": "marketing-approaches",
+    "label": "Relationship Marketing - Strategies and Techniques",
     "sortOrder": 5
   },
   {
-    "id": "marketing-kroz-drustvene-mreze",
-    "parentId": "marketing-pristupi",
-    "label": "Marketing kroz Društvene Mreže",
+    "id": "social-media-marketing",
+    "parentId": "marketing-approaches",
+    "label": "Social Media Marketing",
     "sortOrder": 5
   },
   {
-    "id": "marketing-direktne-poste",
-    "parentId": "marketing-pristupi",
-    "label": "Marketing Direktne Pošte",
+    "id": "direct-mail-marketing",
+    "parentId": "marketing-approaches",
+    "label": "Direct Mail Marketing",
     "sortOrder": 6
   },
   {
-    "id": "optimizacija-za-pretrazivace-seo",
-    "parentId": "marketing-pristupi",
-    "label": "Optimizacija za Pretraživače (SEO)",
+    "id": "search-engine-optimization-seo",
+    "parentId": "marketing-approaches",
+    "label": "Search Engine Optimization (SEO)",
     "sortOrder": 6
   },
   {
     "id": "telemarketing",
-    "parentId": "marketing-pristupi",
+    "parentId": "marketing-approaches",
     "label": "Telemarketing",
     "sortOrder": 7
   },
   {
-    "id": "sponzorstva",
-    "parentId": "marketing-pristupi",
-    "label": "Sponzorstva",
+    "id": "sponsorships",
+    "parentId": "marketing-approaches",
+    "label": "Sponsorships",
     "sortOrder": 8
   },
   {
-    "id": "menadzment-menadzment",
-    "parentId": "menadzment",
-    "label": "Menadžment",
+    "id": "management-management",
+    "parentId": "management",
+    "label": "Management",
     "sortOrder": 1
   },
   {
-    "id": "kompanijska-hijerarhija",
-    "parentId": "menadzment",
-    "label": "Kompanijska Hijerarhija",
+    "id": "company-hierarchy",
+    "parentId": "management",
+    "label": "Company Hierarchy",
     "sortOrder": 2
   },
   {
-    "id": "razumevanje-funkcija-upravnog-odbora",
-    "parentId": "menadzment",
-    "label": "Razumevanje Funkcija Upravnog Odbora",
+    "id": "understanding-board-of-directors-functions",
+    "parentId": "management",
+    "label": "Understanding Board of Directors Functions",
     "sortOrder": 3
   },
   {
-    "id": "odabir-pravog-stila-rukovodjenja",
-    "parentId": "menadzment",
-    "label": "Odabir Pravog Stila Rukovođenja",
+    "id": "choosing-the-right-leadership-style",
+    "parentId": "management",
+    "label": "Choosing the Right Leadership Style",
     "sortOrder": 4
   },
   {
-    "id": "kako-liderstvo-oblikuje-efikasne-timove",
-    "parentId": "menadzment",
-    "label": "Kako Liderstvo Oblikuje Efikasne Timove?",
+    "id": "how-leadership-shapes-effective-teams",
+    "parentId": "management",
+    "label": "How Leadership Shapes Effective Teams?",
     "sortOrder": 5
   },
   {
-    "id": "upravljanje-projektima",
-    "parentId": "menadzment",
-    "label": "Upravljanje Projektima",
+    "id": "project-management",
+    "parentId": "management",
+    "label": "Project Management",
     "sortOrder": 6
   },
   {
-    "id": "vaznost-cross-funkcionalnih-timova",
-    "parentId": "menadzment",
-    "label": "Važnost Cross-funkcionalnih Timova",
+    "id": "importance-of-cross-functional-teams",
+    "parentId": "management",
+    "label": "Importance of Cross-Functional Teams",
     "sortOrder": 7
   },
   {
-    "id": "upravljanje-zasnovano-na-vremenu",
-    "parentId": "menadzment",
-    "label": "Upravljanje zasnovano na Vremenu",
+    "id": "time-based-management",
+    "parentId": "management",
+    "label": "Time-Based Management",
     "sortOrder": 8
   },
   {
-    "id": "zainteresovane-strane",
-    "parentId": "menadzment",
-    "label": "Zainteresovane Strane",
+    "id": "stakeholders",
+    "parentId": "management",
+    "label": "Stakeholders",
     "sortOrder": 9
   },
   {
-    "id": "proizvod",
-    "parentId": "oblici-vrednosti",
-    "label": "Proizvod",
+    "id": "product",
+    "parentId": "types-of-value-forms-of-value",
+    "label": "Product",
     "sortOrder": 1
   },
   {
-    "id": "oblici-vrednosti-oblici-vrednosti",
-    "parentId": "oblici-vrednosti",
-    "label": "Oblici Vrednosti",
+    "id": "forms-of-value",
+    "parentId": "types-of-value-forms-of-value",
+    "label": "Forms of Value",
     "sortOrder": 1
   },
   {
-    "id": "usluga-servis",
-    "parentId": "oblici-vrednosti",
-    "label": "Usluga, Servis",
+    "id": "service",
+    "parentId": "types-of-value-forms-of-value",
+    "label": "Service",
     "sortOrder": 2
   },
   {
-    "id": "deljeni-resurs",
-    "parentId": "oblici-vrednosti",
-    "label": "Deljeni Resurs",
+    "id": "shared-resource",
+    "parentId": "types-of-value-forms-of-value",
+    "label": "Shared Resource",
     "sortOrder": 3
   },
   {
-    "id": "pretplata",
-    "parentId": "oblici-vrednosti",
-    "label": "Pretplata",
+    "id": "subscription",
+    "parentId": "types-of-value-forms-of-value",
+    "label": "Subscription",
     "sortOrder": 4
   },
   {
-    "id": "preprodaja",
-    "parentId": "oblici-vrednosti",
-    "label": "Preprodaja",
+    "id": "resale",
+    "parentId": "types-of-value-forms-of-value",
+    "label": "Resale",
     "sortOrder": 5
   },
   {
-    "id": "zakup",
-    "parentId": "oblici-vrednosti",
-    "label": "Zakup",
+    "id": "lease",
+    "parentId": "types-of-value-forms-of-value",
+    "label": "Lease",
     "sortOrder": 6
   },
   {
-    "id": "sakupljanje-publike",
-    "parentId": "oblici-vrednosti",
-    "label": "Sakupljanje Publike",
+    "id": "audience-aggregation",
+    "parentId": "types-of-value-forms-of-value",
+    "label": "Audience Aggregation",
     "sortOrder": 7
   },
   {
-    "id": "zajam",
-    "parentId": "oblici-vrednosti",
-    "label": "Zajam",
+    "id": "loan",
+    "parentId": "types-of-value-forms-of-value",
+    "label": "Loan",
     "sortOrder": 8
   },
   {
-    "id": "opcija",
-    "parentId": "oblici-vrednosti",
-    "label": "Opcija",
+    "id": "option",
+    "parentId": "types-of-value-forms-of-value",
+    "label": "Option",
     "sortOrder": 9
   },
   {
-    "id": "osiguranje",
-    "parentId": "oblici-vrednosti",
-    "label": "Osiguranje",
+    "id": "insurance",
+    "parentId": "types-of-value-forms-of-value",
+    "label": "Insurance",
     "sortOrder": 10
   },
   {
-    "id": "kapital",
-    "parentId": "oblici-vrednosti",
-    "label": "Kapital",
+    "id": "capital",
+    "parentId": "types-of-value-forms-of-value",
+    "label": "Capital",
     "sortOrder": 11
   },
   {
-    "id": "besplatna-vrednost",
-    "parentId": "oblici-vrednosti",
-    "label": "Besplatna Vrednost",
+    "id": "free-value",
+    "parentId": "types-of-value-forms-of-value",
+    "label": "Free Value",
     "sortOrder": 12
   },
   {
-    "id": "sponzorstvo",
-    "parentId": "oblici-vrednosti",
-    "label": "Sponzorstvo",
+    "id": "sponsorship",
+    "parentId": "types-of-value-forms-of-value",
+    "label": "Sponsorship",
     "sortOrder": 13
   },
   {
-    "id": "program-lojalnosti",
-    "parentId": "oblici-vrednosti",
-    "label": "Program Lojalnosti",
+    "id": "loyalty-program",
+    "parentId": "types-of-value-forms-of-value",
+    "label": "Loyalty Program",
     "sortOrder": 14
   },
   {
-    "id": "odluke-odluke",
-    "parentId": "odluke",
-    "label": "Odluke",
+    "id": "decisions",
+    "parentId": "self-management-decisions",
+    "label": "Decisions",
     "sortOrder": 1
   },
   {
-    "id": "ciljevi",
-    "parentId": "odluke",
-    "label": "Ciljevi",
+    "id": "goals",
+    "parentId": "self-management-decisions",
+    "label": "Goals",
     "sortOrder": 2
   },
   {
-    "id": "najvazniji-zadaci",
-    "parentId": "odluke",
-    "label": "Najvažniji Zadaci",
+    "id": "most-important-tasks",
+    "parentId": "self-management-decisions",
+    "label": "Most Important Tasks",
     "sortOrder": 3
   },
   {
-    "id": "obavljanje-uklanjanje-delegiranje-i-odlaganje",
-    "parentId": "odluke",
-    "label": "Obavljanje, Uklanjanje, Delegiranje i Odlaganje",
+    "id": "do-eliminate-delegate-and-defer",
+    "parentId": "self-management-decisions",
+    "label": "Do, Eliminate, Delegate, and Defer",
     "sortOrder": 4
   },
   {
-    "id": "stanja-bica",
-    "parentId": "odluke",
-    "label": "Stanja Bića",
+    "id": "states-of-being",
+    "parentId": "self-management-decisions",
+    "label": "States of Being",
     "sortOrder": 5
   },
   {
-    "id": "metoda-4-kako",
-    "parentId": "odluke",
-    "label": "Metoda \"4 Kako\"",
+    "id": "the-4-how-method",
+    "parentId": "self-management-decisions",
+    "label": "The \"4 How\" Method",
     "sortOrder": 6
   },
   {
-    "id": "metoda-5-zasto",
-    "parentId": "odluke",
-    "label": "Metoda \"5 Zašto\"",
+    "id": "the-5-why-method",
+    "parentId": "self-management-decisions",
+    "label": "The \"5 Why\" Method",
     "sortOrder": 7
   },
   {
-    "id": "uvod-u-odredjivanje-cena",
-    "parentId": "odredjivanje-cene",
-    "label": "Uvod u Određivanje Cena",
+    "id": "introduction-to-pricing",
+    "parentId": "pricing",
+    "label": "Introduction to Pricing",
     "sortOrder": 1
   },
   {
-    "id": "taktike",
-    "parentId": "odredjivanje-cene",
-    "label": "Taktike",
+    "id": "tactics",
+    "parentId": "pricing",
+    "label": "Tactics",
     "sortOrder": 2
   },
   {
-    "id": "uvod-u-operacije-i-proizvodnju",
-    "parentId": "operacije-i-proizvodnja",
-    "label": "Uvod u Operacije i Proizvodnju",
+    "id": "introduction-to-operations-and-production",
+    "parentId": "operations-and-production",
+    "label": "Introduction to Operations & Production",
     "sortOrder": 1
   },
   {
-    "id": "tipovi-proizvodnje",
-    "parentId": "operacije-i-proizvodnja",
-    "label": "Tipovi Proizvodnje",
+    "id": "production-types",
+    "parentId": "operations-and-production",
+    "label": "Production Types",
     "sortOrder": 2
   },
   {
-    "id": "upravljanje-kvalitetom",
-    "parentId": "operacije-i-proizvodnja",
-    "label": "Upravljanje Kvalitetom",
+    "id": "quality-management",
+    "parentId": "operations-and-production",
+    "label": "Quality Management",
     "sortOrder": 3
   },
   {
-    "id": "primena-hibridnih-procesa-u-operacijama",
-    "parentId": "operacije-i-proizvodnja",
-    "label": "Primena Hibridnih Procesa u Operacijama",
+    "id": "applying-hybrid-processes-in-operations",
+    "parentId": "operations-and-production",
+    "label": "Applying Hybrid Processes in Operations",
     "sortOrder": 4
   },
   {
-    "id": "outsourcing-upravljanje-spoljnim-saradnicima-u-proizvodnji",
-    "parentId": "operacije-i-proizvodnja",
-    "label": "Outsourcing - Upravljanje Spoljnim Saradnicima u Proizvodnji",
+    "id": "outsourcing-managing-external-partners-in-production",
+    "parentId": "operations-and-production",
+    "label": "Outsourcing - Managing External Partners in Production",
     "sortOrder": 5
   },
   {
-    "id": "kako-efikasno-koristiti-offshoring",
-    "parentId": "operacije-i-proizvodnja",
-    "label": "Kako Efikasno Koristiti Offshoring?",
+    "id": "how-to-effectively-use-offshoring",
+    "parentId": "operations-and-production",
+    "label": "How to Effectively Use Offshoring?",
     "sortOrder": 6
   },
   {
-    "id": "inovacije-i-pronalasci",
-    "parentId": "operacije-i-proizvodnja",
-    "label": "Inovacije i Pronalasci",
+    "id": "innovations-and-inventions",
+    "parentId": "operations-and-production",
+    "label": "Innovations and Inventions",
     "sortOrder": 7
   },
   {
-    "id": "metode-prikupljanja-povratnih-informacija",
-    "parentId": "operacije-i-proizvodnja",
-    "label": "Metode Prikupljanja Povratnih Informacija",
+    "id": "feedback-collection-methods",
+    "parentId": "operations-and-production",
+    "label": "Feedback Collection Methods",
     "sortOrder": 8
   },
   {
-    "id": "saglasnost-compliance",
-    "parentId": "operacije-i-proizvodnja",
-    "label": "Saglasnost (Compliance)",
+    "id": "compliance",
+    "parentId": "operations-and-production",
+    "label": "Compliance",
     "sortOrder": 9
   },
   {
-    "id": "tehnike-za-privlacenje-paznje-u-marketingu",
-    "parentId": "osnove-privlacenja-paznje",
-    "label": "Tehnike za Privlačenje Pažnje u Marketingu",
+    "id": "attention-grabbing-techniques-in-marketing",
+    "parentId": "attention-fundamentals",
+    "label": "Attention-Grabbing Techniques in Marketing",
     "sortOrder": 1
   },
   {
-    "id": "kome-privuci-paznju",
-    "parentId": "osnove-privlacenja-paznje",
-    "label": "Kome Privući Pažnju?",
+    "id": "whose-attention-to-capture",
+    "parentId": "attention-fundamentals",
+    "label": "Whose Attention to Capture?",
     "sortOrder": 2
   },
   {
-    "id": "kako-pretvoriti-paznju-u-akciju",
-    "parentId": "osnove-privlacenja-paznje",
-    "label": "Kako Pretvoriti Pažnju u Akciju?",
+    "id": "how-to-convert-attention-into-action",
+    "parentId": "attention-fundamentals",
+    "label": "How to Convert Attention into Action?",
     "sortOrder": 3
   },
   {
     "id": "aida",
-    "parentId": "osnove-privlacenja-paznje",
+    "parentId": "attention-fundamentals",
     "label": "AIDA",
     "sortOrder": 4
   },
   {
-    "id": "udica",
-    "parentId": "osnove-privlacenja-paznje",
-    "label": "Udica",
+    "id": "hook",
+    "parentId": "attention-fundamentals",
+    "label": "Hook",
     "sortOrder": 5
   },
   {
-    "id": "poziv-na-akciju",
-    "parentId": "osnove-privlacenja-paznje",
-    "label": "Poziv na Akciju",
+    "id": "call-to-action",
+    "parentId": "attention-fundamentals",
+    "label": "Call to Action",
     "sortOrder": 6
   },
   {
-    "id": "krajnji-rezultat-sta-vasi-klijenti-zaista-zele-da-postignu",
-    "parentId": "osnove-privlacenja-paznje",
-    "label": "Krajnji Rezultat - Šta vaši klijenti zaista žele da Postignu?",
+    "id": "end-result-what-your-clients-really-want-to-achieve",
+    "parentId": "attention-fundamentals",
+    "label": "End Result - What Your Clients Really Want to Achieve?",
     "sortOrder": 7
   },
   {
-    "id": "sadrzaj",
-    "parentId": "osnove-privlacenja-paznje",
-    "label": "Sadržaj",
+    "id": "content",
+    "parentId": "attention-fundamentals",
+    "label": "Content",
     "sortOrder": 8
   },
   {
-    "id": "strategija-distribucije-sadrzaja",
-    "parentId": "osnove-privlacenja-paznje",
-    "label": "Strategija Distribucije Sadržaja",
+    "id": "content-distribution-strategy",
+    "parentId": "attention-fundamentals",
+    "label": "Content Distribution Strategy",
     "sortOrder": 9
   },
   {
-    "id": "pripovedanje-u-marketingu",
-    "parentId": "osnove-privlacenja-paznje",
-    "label": "Pripovedanje u Marketingu",
+    "id": "storytelling-in-marketing",
+    "parentId": "attention-fundamentals",
+    "label": "Storytelling in Marketing",
     "sortOrder": 10
   },
   {
-    "id": "drustveni-dokazi-u-marketingu",
-    "parentId": "osnove-privlacenja-paznje",
-    "label": "Društveni Dokazi u Marketingu",
+    "id": "social-proof-in-marketing",
+    "parentId": "attention-fundamentals",
+    "label": "Social Proof in Marketing",
     "sortOrder": 11
   },
   {
-    "id": "kako-kreirati-zarazan-sadrzaj",
-    "parentId": "osnove-privlacenja-paznje",
-    "label": "Kako kreirati Zarazan Sadržaj?",
+    "id": "how-to-create-viral-content",
+    "parentId": "attention-fundamentals",
+    "label": "How to Create Viral Content?",
     "sortOrder": 12
   },
   {
-    "id": "nostalgija",
-    "parentId": "osnovne-sklonosti",
-    "label": "Nostalgija",
+    "id": "nostalgia",
+    "parentId": "basic-biases",
+    "label": "Nostalgia",
     "sortOrder": 1
   },
   {
-    "id": "oskudica",
-    "parentId": "osnovne-sklonosti",
-    "label": "Oskudica",
+    "id": "scarcity",
+    "parentId": "basic-biases",
+    "label": "Scarcity",
     "sortOrder": 2
   },
   {
-    "id": "izbegavanje-gubitka",
-    "parentId": "osnovne-sklonosti",
-    "label": "Izbegavanje Gubitka",
+    "id": "loss-aversion",
+    "parentId": "basic-biases",
+    "label": "Loss Aversion",
     "sortOrder": 3
   },
   {
-    "id": "uporedjivanje",
-    "parentId": "osnovne-sklonosti",
-    "label": "Upoređivanje",
+    "id": "comparison",
+    "parentId": "basic-biases",
+    "label": "Comparison",
     "sortOrder": 4
   },
   {
-    "id": "princip-familijarnosti",
-    "parentId": "osnovne-sklonosti",
-    "label": "Princip Familijarnosti",
+    "id": "familiarity-principle",
+    "parentId": "basic-biases",
+    "label": "Familiarity Principle",
     "sortOrder": 5
   },
   {
-    "id": "princip-noviteta",
-    "parentId": "osnovne-sklonosti",
-    "label": "Princip Noviteta",
+    "id": "novelty-principle",
+    "parentId": "basic-biases",
+    "label": "Novelty Principle",
     "sortOrder": 6
   },
   {
-    "id": "princip-obaveze",
-    "parentId": "osnovne-sklonosti",
-    "label": "Princip Obaveze",
+    "id": "commitment-principle",
+    "parentId": "basic-biases",
+    "label": "Commitment Principle",
     "sortOrder": 7
   },
   {
-    "id": "princip-vagona",
-    "parentId": "osnovne-sklonosti",
-    "label": "Princip Vagona",
+    "id": "bandwagon-principle",
+    "parentId": "basic-biases",
+    "label": "Bandwagon Principle",
     "sortOrder": 8
   },
   {
-    "id": "forner-barner-efekat",
-    "parentId": "osnovne-sklonosti",
-    "label": "Forner-Barner Efekat",
+    "id": "forer-barnum-effect",
+    "parentId": "basic-biases",
+    "label": "Forer-Barnum Effect",
     "sortOrder": 9
   },
   {
-    "id": "mentalne-veze",
-    "parentId": "osnovne-sklonosti",
-    "label": "Mentalne Veze",
+    "id": "mental-associations",
+    "parentId": "basic-biases",
+    "label": "Mental Associations",
     "sortOrder": 10
   },
   {
-    "id": "add-on-poslovni-model-dodatak",
-    "parentId": "poslovni-modeli",
-    "label": "Add-on Poslovni Model (Dodatak)",
+    "id": "add-on-business-model",
+    "parentId": "business-models",
+    "label": "Add-on Business Model",
     "sortOrder": 1
   },
   {
-    "id": "poslovni-modeli-poslovni-modeli",
-    "parentId": "poslovni-modeli",
-    "label": "Poslovni Modeli",
+    "id": "business-models-business-models",
+    "parentId": "business-models",
+    "label": "Business Models",
     "sortOrder": 1
   },
   {
-    "id": "affiliation-poslovni-model-udruzenje",
-    "parentId": "poslovni-modeli",
-    "label": "Affiliation Poslovni Model (Udruženje)",
+    "id": "affiliation-business-model",
+    "parentId": "business-models",
+    "label": "Affiliation Business Model",
     "sortOrder": 2
   },
   {
-    "id": "agencija-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Agencija (Poslovni Model)",
+    "id": "agency-business-model",
+    "parentId": "business-models",
+    "label": "Agency (Business Model)",
     "sortOrder": 3
   },
   {
-    "id": "aikido-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Aikido Poslovni Model",
+    "id": "aikido-business-model",
+    "parentId": "business-models",
+    "label": "Aikido Business Model",
     "sortOrder": 4
   },
   {
-    "id": "bankomat-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Bankomat (Poslovni Model)",
+    "id": "atm-business-model",
+    "parentId": "business-models",
+    "label": "ATM Business Model",
     "sortOrder": 6
   },
   {
-    "id": "brendiranje-sastojaka-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Brendiranje Sastojaka (Poslovni Model)",
+    "id": "ingredient-branding-business-model",
+    "parentId": "business-models",
+    "label": "Ingredient Branding (Business Model)",
     "sortOrder": 7
   },
   {
-    "id": "crowdfunding-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Crowdfunding (Poslovni Model)",
+    "id": "crowdfunding-business-model",
+    "parentId": "business-models",
+    "label": "Crowdfunding (Business Model)",
     "sortOrder": 8
   },
   {
-    "id": "brijac-i-zilet",
-    "parentId": "poslovni-modeli",
-    "label": "Brijač i Žilet",
+    "id": "razor-and-blade",
+    "parentId": "business-models",
+    "label": "Razor and Blade",
     "sortOrder": 8
   },
   {
-    "id": "crowdsourcing-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Crowdsourcing (Poslovni Model)",
+    "id": "crowdsourcing-business-model",
+    "parentId": "business-models",
+    "label": "Crowdsourcing (Business Model)",
     "sortOrder": 9
   },
   {
-    "id": "deljenje-prihoda",
-    "parentId": "poslovni-modeli",
-    "label": "Deljenje Prihoda",
+    "id": "revenue-sharing",
+    "parentId": "business-models",
+    "label": "Revenue Sharing",
     "sortOrder": 10
   },
   {
-    "id": "digitalizacija-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Digitalizacija (Poslovni Model)",
+    "id": "digitalization-business-model",
+    "parentId": "business-models",
+    "label": "Digitalization (Business Model)",
     "sortOrder": 11
   },
   {
-    "id": "direktna-prodaja-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Direktna Prodaja (Poslovni Model)",
+    "id": "direct-sales-business-model",
+    "parentId": "business-models",
+    "label": "Direct Sales (Business Model)",
     "sortOrder": 12
   },
   {
-    "id": "dobavljac-resenja-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Dobavljač Rešenja (Poslovni Model)",
+    "id": "solution-provider-business-model",
+    "parentId": "business-models",
+    "label": "Solution Provider (Business Model)",
     "sortOrder": 13
   },
   {
-    "id": "dugacki-rep-long-tail-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Dugački Rep (Long Tail Poslovni Model)",
+    "id": "long-tail-business-model",
+    "parentId": "business-models",
+    "label": "Long Tail (Business Model)",
     "sortOrder": 14
   },
   {
-    "id": "dvostrano-trziste-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Dvostrano Tržište (Poslovni Model)",
+    "id": "two-sided-market-business-model",
+    "parentId": "business-models",
+    "label": "Two-Sided Market (Business Model)",
     "sortOrder": 15
   },
   {
-    "id": "e-trgovina",
-    "parentId": "poslovni-modeli",
-    "label": "E-trgovina",
+    "id": "e-commerce",
+    "parentId": "business-models",
+    "label": "E-commerce",
     "sortOrder": 16
   },
   {
-    "id": "ekspert-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Ekspert (Poslovni Model)",
+    "id": "expert-business-model",
+    "parentId": "business-models",
+    "label": "Expert (Business Model)",
     "sortOrder": 17
   },
   {
-    "id": "frakciono-vlasnistvo",
-    "parentId": "poslovni-modeli",
-    "label": "Frakciono Vlasništvo",
+    "id": "fractional-ownership",
+    "parentId": "business-models",
+    "label": "Fractional Ownership",
     "sortOrder": 18
   },
   {
-    "id": "fransiza-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Franšiza (Poslovni Model)",
+    "id": "franchise-business-model",
+    "parentId": "business-models",
+    "label": "Franchise (Business Model)",
     "sortOrder": 19
   },
   {
     "id": "from-push-to-pull",
-    "parentId": "poslovni-modeli",
+    "parentId": "business-models",
     "label": "From Push to Pull",
     "sortOrder": 20
   },
   {
-    "id": "garantovana-dostupnost-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Garantovana Dostupnost (Poslovni Model)",
+    "id": "guaranteed-availability-business-model",
+    "parentId": "business-models",
+    "label": "Guaranteed Availability (Business Model)",
     "sortOrder": 21
   },
   {
-    "id": "integrator-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Integrator (Poslovni Model)",
+    "id": "integrator-business-model",
+    "parentId": "business-models",
+    "label": "Integrator (Business Model)",
     "sortOrder": 22
   },
   {
-    "id": "iznajmi-umesto-da-kupis-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Iznajmi umesto da Kupiš (Poslovni Model)",
+    "id": "rent-instead-of-buy-business-model",
+    "parentId": "business-models",
+    "label": "Rent Instead of Buy (Business Model)",
     "sortOrder": 23
   },
   {
-    "id": "korisnicki-dizajn",
-    "parentId": "poslovni-modeli",
-    "label": "Korisnički Dizajn",
+    "id": "user-design",
+    "parentId": "business-models",
+    "label": "User Design",
     "sortOrder": 24
   },
   {
-    "id": "krajnji-luksuz-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Krajnji Luksuz (Poslovni Model)",
+    "id": "ultimate-luxury-business-model",
+    "parentId": "business-models",
+    "label": "Ultimate Luxury (Business Model)",
     "sortOrder": 25
   },
   {
-    "id": "licenciranje-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Licenciranje (Poslovni Model)",
+    "id": "licensing-business-model",
+    "parentId": "business-models",
+    "label": "Licensing (Business Model)",
     "sortOrder": 26
   },
   {
-    "id": "lojalnost-kupaca",
-    "parentId": "poslovni-modeli",
-    "label": "Lojalnost Kupaca",
+    "id": "customer-loyalty",
+    "parentId": "business-models",
+    "label": "Customer Loyalty",
     "sortOrder": 27
   },
   {
-    "id": "masovno-prilagodjavanje-mass-customization",
-    "parentId": "poslovni-modeli",
-    "label": "Masovno Prilagođavanje (Mass Customization)",
+    "id": "mass-customization-business-model",
+    "parentId": "business-models",
+    "label": "Mass Customization (Business Model)",
     "sortOrder": 28
   },
   {
-    "id": "model-aukcije",
-    "parentId": "poslovni-modeli",
-    "label": "Model Aukcije",
+    "id": "auction-model",
+    "parentId": "business-models",
+    "label": "Auction Model",
     "sortOrder": 29
   },
   {
-    "id": "model-besplatne-vrednosti",
-    "parentId": "poslovni-modeli",
-    "label": "Model Besplatne Vrednosti",
+    "id": "free-value-model",
+    "parentId": "business-models",
+    "label": "Free Value Model",
     "sortOrder": 30
   },
   {
-    "id": "model-fransize",
-    "parentId": "poslovni-modeli",
-    "label": "Model Franšize",
+    "id": "franchise-model",
+    "parentId": "business-models",
+    "label": "Franchise Model",
     "sortOrder": 31
   },
   {
-    "id": "model-klijentskih-podataka",
-    "parentId": "poslovni-modeli",
-    "label": "Model Klijentskih Podataka",
+    "id": "client-data-model",
+    "parentId": "business-models",
+    "label": "Client Data Model",
     "sortOrder": 32
   },
   {
-    "id": "model-pretplate",
-    "parentId": "poslovni-modeli",
-    "label": "Model Pretplate",
+    "id": "subscription-model",
+    "parentId": "business-models",
+    "label": "Subscription Model",
     "sortOrder": 33
   },
   {
-    "id": "model-zakljucavanja",
-    "parentId": "poslovni-modeli",
-    "label": "Model Zaključavanja",
+    "id": "lock-in-model",
+    "parentId": "business-models",
+    "label": "Lock-in Model",
     "sortOrder": 34
   },
   {
-    "id": "obrnuta-inovacija",
-    "parentId": "poslovni-modeli",
-    "label": "Obrnuta Inovacija",
+    "id": "reverse-innovation",
+    "parentId": "business-models",
+    "label": "Reverse Innovation",
     "sortOrder": 35
   },
   {
-    "id": "obrnuti-inzenjering",
-    "parentId": "poslovni-modeli",
-    "label": "Obrnuti Inženjering",
+    "id": "reverse-engineering",
+    "parentId": "business-models",
+    "label": "Reverse Engineering",
     "sortOrder": 36
   },
   {
-    "id": "od-osobe-do-osobe-p2p-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Od osobe do osobe (P2P Poslovni Model)",
+    "id": "person-to-person-p2p-business-model",
+    "parentId": "business-models",
+    "label": "Person to Person (P2P Business Model)",
     "sortOrder": 37
   },
   {
     "id": "open-source",
-    "parentId": "poslovni-modeli",
+    "parentId": "business-models",
     "label": "Open Source",
     "sortOrder": 38
   },
   {
-    "id": "opsluzite-siromasne",
-    "parentId": "poslovni-modeli",
-    "label": "Opslužite Siromašne",
+    "id": "serve-the-poor",
+    "parentId": "business-models",
+    "label": "Serve the Poor",
     "sortOrder": 39
   },
   {
-    "id": "orkestrator",
-    "parentId": "poslovni-modeli",
-    "label": "Orkestrator",
+    "id": "orchestrator",
+    "parentId": "business-models",
+    "label": "Orchestrator",
     "sortOrder": 40
   },
   {
-    "id": "otvoreno-poslovanje",
-    "parentId": "poslovni-modeli",
-    "label": "Otvoreno Poslovanje",
+    "id": "open-business",
+    "parentId": "business-models",
+    "label": "Open Business",
     "sortOrder": 41
   },
   {
-    "id": "pausal-flat-rate-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "Paušal (Flat Rate Poslovni Model)",
+    "id": "flat-rate-business-model",
+    "parentId": "business-models",
+    "label": "Flat Rate (Business Model)",
     "sortOrder": 42
   },
   {
-    "id": "placanje-po-koriscenju",
-    "parentId": "poslovni-modeli",
-    "label": "Plaćanje po Korišćenju",
+    "id": "pay-per-use",
+    "parentId": "business-models",
+    "label": "Pay Per Use",
     "sortOrder": 43
   },
   {
-    "id": "plati-koliko-zelis",
-    "parentId": "poslovni-modeli",
-    "label": "Plati koliko Želiš",
+    "id": "pay-what-you-want",
+    "parentId": "business-models",
+    "label": "Pay What You Want",
     "sortOrder": 44
   },
   {
-    "id": "pretvorite-otpad-u-gotovinu",
-    "parentId": "poslovni-modeli",
-    "label": "Pretvorite Otpad u Gotovinu",
+    "id": "turn-trash-into-cash",
+    "parentId": "business-models",
+    "label": "Turn Trash into Cash",
     "sortOrder": 45
   },
   {
-    "id": "prodaja-iskustva",
-    "parentId": "poslovni-modeli",
-    "label": "Prodaja iskustva",
+    "id": "experience-selling",
+    "parentId": "business-models",
+    "label": "Experience Selling",
     "sortOrder": 46
   },
   {
-    "id": "prodavnica-unutar-prodavnice",
-    "parentId": "poslovni-modeli",
-    "label": "Prodavnica unutar prodavnice",
+    "id": "shop-in-shop",
+    "parentId": "business-models",
+    "label": "Shop-in-Shop",
     "sortOrder": 47
   },
   {
-    "id": "razmena",
-    "parentId": "poslovni-modeli",
-    "label": "Razmena",
+    "id": "barter",
+    "parentId": "business-models",
+    "label": "Barter",
     "sortOrder": 48
   },
   {
-    "id": "robin-hud",
-    "parentId": "poslovni-modeli",
-    "label": "Robin Hud",
+    "id": "robin-hood",
+    "parentId": "business-models",
+    "label": "Robin Hood",
     "sortOrder": 49
   },
   {
-    "id": "samo-neophodno",
-    "parentId": "poslovni-modeli",
-    "label": "Samo Neophodno",
+    "id": "no-frills",
+    "parentId": "business-models",
+    "label": "No Frills",
     "sortOrder": 50
   },
   {
-    "id": "samousluzivanje",
-    "parentId": "poslovni-modeli",
-    "label": "Samousluživanje",
+    "id": "self-service",
+    "parentId": "business-models",
+    "label": "Self-Service",
     "sortOrder": 51
   },
   {
-    "id": "skriveni-prihodi",
-    "parentId": "poslovni-modeli",
-    "label": "Skriveni Prihodi",
+    "id": "hidden-revenue",
+    "parentId": "business-models",
+    "label": "Hidden Revenue",
     "sortOrder": 52
   },
   {
     "id": "supermarket",
-    "parentId": "poslovni-modeli",
+    "parentId": "business-models",
     "label": "Supermarket",
     "sortOrder": 53
   },
   {
-    "id": "ugovaranje-zasnovano-na-ucinku",
-    "parentId": "poslovni-modeli",
-    "label": "Ugovaranje zasnovano na Učinku",
+    "id": "performance-based-contracting",
+    "parentId": "business-models",
+    "label": "Performance-Based Contracting",
     "sortOrder": 54
   },
   {
-    "id": "unakrsna-prodaja-cross-selling",
-    "parentId": "poslovni-modeli",
-    "label": "Unakrsna Prodaja (Cross-selling)",
+    "id": "cross-selling",
+    "parentId": "business-models",
+    "label": "Cross-Selling",
     "sortOrder": 55
   },
   {
-    "id": "white-label-poslovni-model",
-    "parentId": "poslovni-modeli",
-    "label": "White Label (Poslovni Model)",
+    "id": "white-label-business-model",
+    "parentId": "business-models",
+    "label": "White Label (Business Model)",
     "sortOrder": 56
   },
   {
-    "id": "kljucne-strategije-pregovaranja-u-prodaji",
-    "parentId": "pregovaranje",
-    "label": "Ključne Strategije Pregovaranja u Prodaji",
+    "id": "key-negotiation-strategies-in-sales",
+    "parentId": "negotiation",
+    "label": "Key Negotiation Strategies in Sales",
     "sortOrder": 1
   },
   {
-    "id": "dimenzije-pregovora",
-    "parentId": "pregovaranje",
-    "label": "Dimenzije Pregovora",
+    "id": "negotiation-dimensions",
+    "parentId": "negotiation",
+    "label": "Negotiation Dimensions",
     "sortOrder": 2
   },
   {
-    "id": "pregovaranje-dimenzije-pregovora",
-    "parentId": "pregovaranje",
-    "label": "Dimenzije Pregovora",
+    "id": "negotiation-negotiation-dimensions",
+    "parentId": "negotiation",
+    "label": "Negotiation Dimensions",
     "sortOrder": 3
   },
   {
-    "id": "3-univerzalne-valute",
-    "parentId": "pregovaranje",
-    "label": "3 Univerzalne Valute",
+    "id": "3-universal-currencies",
+    "parentId": "negotiation",
+    "label": "3 Universal Currencies",
     "sortOrder": 4
   },
   {
-    "id": "ubedjivanje",
-    "parentId": "pregovaranje",
-    "label": "Ubeđivanje",
+    "id": "persuasion",
+    "parentId": "negotiation",
+    "label": "Persuasion",
     "sortOrder": 5
   },
   {
-    "id": "osnove-privlacenja-paznje",
-    "parentId": "privlacenje-paznje",
-    "label": "Osnove Privlačenja Pažnje",
+    "id": "attention-fundamentals",
+    "parentId": "capturing-attention",
+    "label": "Attention Fundamentals",
     "sortOrder": 1
   },
   {
-    "id": "faktori-koji-uticu-na-privlacenje-paznje",
-    "parentId": "privlacenje-paznje",
-    "label": "Faktori koji utiču na Privlačenje Pažnje",
+    "id": "factors-affecting-attention-capture",
+    "parentId": "capturing-attention",
+    "label": "Factors Affecting Attention Capture",
     "sortOrder": 2
   },
   {
-    "id": "uvod-u-prodaju",
-    "parentId": "prodaja",
-    "label": "Uvod u Prodaju",
+    "id": "introduction-to-sales",
+    "parentId": "sales",
+    "label": "Introduction to Sales",
     "sortOrder": 1
   },
   {
-    "id": "koncepti-koji-podsticu-prodaju",
-    "parentId": "prodaja",
-    "label": "Koncepti koji podstiču Prodaju",
+    "id": "concepts-that-drive-sales",
+    "parentId": "sales",
+    "label": "Concepts that Drive Sales",
     "sortOrder": 2
   },
   {
-    "id": "pregovaranje",
-    "parentId": "prodaja",
-    "label": "Pregovaranje",
+    "id": "negotiation",
+    "parentId": "sales",
+    "label": "Negotiation",
     "sortOrder": 3
   },
   {
-    "id": "tipovi-prodaje",
-    "parentId": "prodaja",
-    "label": "Tipovi Prodaje",
+    "id": "sales-types",
+    "parentId": "sales",
+    "label": "Sales Types",
     "sortOrder": 4
   },
   {
-    "id": "kako-efikasno-otkloniti-rizik-u-prodaji",
-    "parentId": "prodaja",
-    "label": "Kako Efikasno Otkloniti Rizik u Prodaji?",
+    "id": "how-to-effectively-mitigate-risk-in-sales",
+    "parentId": "sales",
+    "label": "How to Effectively Mitigate Risk in Sales?",
     "sortOrder": 5
   },
   {
-    "id": "kako-efikasno-upravljati-novcem-od-prodaje",
-    "parentId": "prodaja",
-    "label": "Kako Efikasno Upravljati Novcem od Prodaje?",
+    "id": "how-to-effectively-manage-sales-revenue",
+    "parentId": "sales",
+    "label": "How to Effectively Manage Sales Revenue?",
     "sortOrder": 6
   },
   {
-    "id": "promptovi-promptovi",
-    "parentId": "promptovi",
-    "label": "Promptovi",
+    "id": "prompts-prompts",
+    "parentId": "prompts",
+    "label": "Prompts",
     "sortOrder": 1
   },
   {
-    "id": "koncepti-vazni-za-rad-sa-ljudima",
-    "parentId": "rad-sa-ljudima",
-    "label": "Koncepti važni za Rad sa Ljudima",
+    "id": "key-concepts-for-working-with-people",
+    "parentId": "working-with-people",
+    "label": "Key Concepts for Working with People",
     "sortOrder": 1
   },
   {
-    "id": "koncepti-vazni-za-menadzment",
-    "parentId": "rad-sa-ljudima",
-    "label": "Koncepti važni za Menadžment",
+    "id": "key-concepts-for-management",
+    "parentId": "working-with-people",
+    "label": "Key Concepts for Management",
     "sortOrder": 2
   },
   {
-    "id": "razumevanje-trzista-razumevanje-trzista",
-    "parentId": "razumevanje-trzista",
-    "label": "Razumevanje Tržišta",
+    "id": "understanding-the-market-understanding-the-market",
+    "parentId": "understanding-the-market",
+    "label": "Understanding the Market",
     "sortOrder": 2
   },
   {
-    "id": "nacini-da-testirate-trziste",
-    "parentId": "razumevanje-trzista",
-    "label": "Načini da testirate Tržište",
+    "id": "ways-to-test-the-market",
+    "parentId": "understanding-the-market",
+    "label": "Ways to Test the Market",
     "sortOrder": 2
   },
   {
-    "id": "trenutak-ulaska-u-trziste",
-    "parentId": "razumevanje-trzista",
-    "label": "Trenutak ulaska u Tržište",
+    "id": "market-entry-timing",
+    "parentId": "understanding-the-market",
+    "label": "Market Entry Timing",
     "sortOrder": 4
   },
   {
-    "id": "metoda-ask",
-    "parentId": "razumevanje-trzista",
-    "label": "Metoda \"Ask\"",
+    "id": "the-ask-method",
+    "parentId": "understanding-the-market",
+    "label": "The \"Ask\" Method",
     "sortOrder": 5
   },
   {
-    "id": "trzisni-udeo",
-    "parentId": "razumevanje-trzista",
-    "label": "Tržišni Udeo",
+    "id": "market-share",
+    "parentId": "understanding-the-market",
+    "label": "Market Share",
     "sortOrder": 6
   },
   {
-    "id": "pastel-analiza",
-    "parentId": "razumevanje-trzista",
-    "label": "PASTEL Analiza",
+    "id": "pestle-analysis",
+    "parentId": "understanding-the-market",
+    "label": "PESTLE Analysis",
     "sortOrder": 7
   },
   {
-    "id": "generisanje-lidova",
-    "parentId": "razvoj-poslovanja",
-    "label": "Generisanje Lidova",
+    "id": "lead-generation",
+    "parentId": "business-development",
+    "label": "Lead Generation",
     "sortOrder": 1
   },
   {
-    "id": "razvoj-poslovanja-razvoj-poslovanja",
-    "parentId": "razvoj-poslovanja",
-    "label": "Razvoj Poslovanja",
+    "id": "business-development-business-development",
+    "parentId": "business-development",
+    "label": "Business Development",
     "sortOrder": 1
   },
   {
-    "id": "konverzija-lidova",
-    "parentId": "razvoj-poslovanja",
-    "label": "Konverzija Lidova",
+    "id": "lead-conversion",
+    "parentId": "business-development",
+    "label": "Lead Conversion",
     "sortOrder": 2
   },
   {
-    "id": "tehnike-zadrzavanja-kupaca",
-    "parentId": "razvoj-poslovanja",
-    "label": "Tehnike Zadržavanja Kupaca?",
+    "id": "customer-retention-techniques",
+    "parentId": "business-development",
+    "label": "Customer Retention Techniques",
     "sortOrder": 3
   },
   {
-    "id": "uvod-u-sisteme",
-    "parentId": "sistemi",
-    "label": "Uvod u Sisteme",
+    "id": "introduction-to-systems",
+    "parentId": "systems",
+    "label": "Introduction to Systems",
     "sortOrder": 1
   },
   {
-    "id": "koncepti-koji-uticu-na-sisteme",
-    "parentId": "sistemi",
-    "label": "Koncepti koji utiču na Sisteme",
+    "id": "concepts-that-affect-systems",
+    "parentId": "systems",
+    "label": "Concepts that Affect Systems",
     "sortOrder": 2
   },
   {
-    "id": "upravljanje-medjuzavisnostima-u-kompleksnim-sistemima",
-    "parentId": "sistemi",
-    "label": "Upravljanje međuzavisnostima u kompleksnim sistemima",
+    "id": "managing-interdependencies-in-complex-systems",
+    "parentId": "systems",
+    "label": "Managing Interdependencies in Complex Systems",
     "sortOrder": 3
   },
   {
-    "id": "primena-sistemskog-razmisljanja-u-svakodnevnom-zivotu",
-    "parentId": "sistemi",
-    "label": "Primena Sistemskog Razmišljanja u Svakodnevnom Životu",
+    "id": "applying-systems-thinking-in-everyday-life",
+    "parentId": "systems",
+    "label": "Applying Systems Thinking in Everyday Life",
     "sortOrder": 4
   },
   {
-    "id": "akrazija",
-    "parentId": "sklonosti",
-    "label": "Akrazija",
+    "id": "akrasia",
+    "parentId": "tendencies",
+    "label": "Akrasia",
     "sortOrder": 1
   },
   {
-    "id": "eksternalizacija",
-    "parentId": "sklonosti",
-    "label": "Eksternalizacija",
+    "id": "externalization",
+    "parentId": "tendencies",
+    "label": "Externalization",
     "sortOrder": 2
   },
   {
-    "id": "kognitivni-zastoj-nakon-pretnje",
-    "parentId": "sklonosti",
-    "label": "Kognitivni Zastoj Nakon Pretnje",
+    "id": "cognitive-freeze-after-threat",
+    "parentId": "tendencies",
+    "label": "Cognitive Freeze After Threat",
     "sortOrder": 3
   },
   {
-    "id": "lokus-kontrole",
-    "parentId": "sklonosti",
-    "label": "Lokus Kontrole",
+    "id": "locus-of-control",
+    "parentId": "tendencies",
+    "label": "Locus of Control",
     "sortOrder": 4
   },
   {
-    "id": "ogranicavajuce-verovanje",
-    "parentId": "sklonosti",
-    "label": "Ograničavajuće Verovanje",
+    "id": "limiting-belief",
+    "parentId": "tendencies",
+    "label": "Limiting Belief",
     "sortOrder": 5
   },
   {
-    "id": "pristrasnost",
-    "parentId": "sklonosti",
-    "label": "Pristrasnost",
+    "id": "bias",
+    "parentId": "tendencies",
+    "label": "Bias",
     "sortOrder": 6
   },
   {
-    "id": "privlacnost-visokih-pozicija",
-    "parentId": "sklonosti",
-    "label": "Privlačnost Visokih Pozicija",
+    "id": "attraction-to-high-positions",
+    "parentId": "tendencies",
+    "label": "Attraction to High Positions",
     "sortOrder": 7
   },
   {
-    "id": "zabluda-uporedjivanja",
-    "parentId": "sklonosti",
-    "label": "Zabluda Upoređivanja",
+    "id": "comparison-fallacy",
+    "parentId": "tendencies",
+    "label": "Comparison Fallacy",
     "sortOrder": 8
   },
   {
-    "id": "vezanost",
-    "parentId": "sklonosti",
-    "label": "Vezanost",
+    "id": "attachment",
+    "parentId": "tendencies",
+    "label": "Attachment",
     "sortOrder": 9
   },
   {
-    "id": "hedonisticka-adaptacija",
-    "parentId": "sklonosti",
-    "label": "Hedonistička Adaptacija",
+    "id": "hedonic-adaptation",
+    "parentId": "tendencies",
+    "label": "Hedonic Adaptation",
     "sortOrder": 10
   },
   {
-    "id": "programiranje-ponasanja",
-    "parentId": "sklonosti",
-    "label": "Programiranje Ponašanja",
+    "id": "behavioral-programming",
+    "parentId": "tendencies",
+    "label": "Behavioral Programming",
     "sortOrder": 11
   },
   {
@@ -2028,1017 +2028,1017 @@
     "sortOrder": 1
   },
   {
-    "id": "tipovi-startup-a",
+    "id": "types-of-startups",
     "parentId": "startup",
-    "label": "Tipovi Startup-a",
+    "label": "Types of Startups",
     "sortOrder": 1
   },
   {
-    "id": "poslovni-plan",
+    "id": "business-plan",
     "parentId": "startup",
-    "label": "Poslovni Plan",
+    "label": "Business Plan",
     "sortOrder": 2
   },
   {
-    "id": "finansiranje-poslovanja",
+    "id": "business-financing",
     "parentId": "startup",
-    "label": "Finansiranje Poslovanja",
+    "label": "Business Financing",
     "sortOrder": 3
   },
   {
-    "id": "nacini-finansiranja-startapa",
+    "id": "startup-financing-methods",
     "parentId": "startup",
-    "label": "Načini Finansiranja Startapa",
+    "label": "Startup Financing Methods",
     "sortOrder": 4
   },
   {
-    "id": "uloga-poslovnih-akseleratora-i-inkubatora-u-startup-ekosistemu",
+    "id": "role-of-business-accelerators-and-incubators-in-startup-ecosystem",
     "parentId": "startup",
-    "label": "Uloga Poslovnih Akseleratora i Inkubatora u Startup Ekosistemu",
+    "label": "Role of Business Accelerators and Incubators in Startup Ecosystem",
     "sortOrder": 5
   },
   {
-    "id": "strategije-analize-konkurencije-strategije-analize-konkurencije",
-    "parentId": "strategije-analize-konkurencije",
-    "label": "Strategije Analize Konkurencije",
+    "id": "competitive-analysis-strategies-competitive-analysis-strategies",
+    "parentId": "competitive-analysis-strategies",
+    "label": "Competitive Analysis Strategies",
     "sortOrder": 1
   },
   {
-    "id": "swot-analiza",
-    "parentId": "strategije-analize-konkurencije",
-    "label": "SWOT Analiza",
+    "id": "swot-analysis",
+    "parentId": "competitive-analysis-strategies",
+    "label": "SWOT Analysis",
     "sortOrder": 2
   },
   {
-    "id": "razumevanje-snaga-vase-konkurencije",
-    "parentId": "strategije-analize-konkurencije",
-    "label": "Razumevanje Snaga vaše Konkurencije",
+    "id": "understanding-your-competitors-strengths",
+    "parentId": "competitive-analysis-strategies",
+    "label": "Understanding Your Competitors Strengths",
     "sortOrder": 3
   },
   {
-    "id": "razumevanje-slabosti-vase-konkurencije",
-    "parentId": "strategije-analize-konkurencije",
-    "label": "Razumevanje Slabosti vaše Konkurencije",
+    "id": "understanding-your-competitors-weaknesses",
+    "parentId": "competitive-analysis-strategies",
+    "label": "Understanding Your Competitors Weaknesses",
     "sortOrder": 4
   },
   {
-    "id": "mape-pozicioniranja-proizvoda",
-    "parentId": "strategije-analize-konkurencije",
-    "label": "Mape Pozicioniranja Proizvoda",
+    "id": "product-positioning-maps",
+    "parentId": "competitive-analysis-strategies",
+    "label": "Product Positioning Maps",
     "sortOrder": 5
   },
   {
-    "id": "matrica-karakteristika",
-    "parentId": "strategije-analize-konkurencije",
-    "label": "Matrica Karakteristika",
+    "id": "feature-matrix",
+    "parentId": "competitive-analysis-strategies",
+    "label": "Feature Matrix",
     "sortOrder": 6
   },
   {
-    "id": "recenzije-korisnika",
-    "parentId": "strategije-analize-konkurencije",
-    "label": "Recenzije Korisnika",
+    "id": "user-reviews",
+    "parentId": "competitive-analysis-strategies",
+    "label": "User Reviews",
     "sortOrder": 7
   },
   {
-    "id": "kako-kreirati-vrednost",
-    "parentId": "stvaranje-vrednosti",
-    "label": "Kako kreirati vrednost?",
+    "id": "how-to-create-value",
+    "parentId": "creating-value",
+    "label": "How to Create Value?",
     "sortOrder": 1
   },
   {
-    "id": "ponuda-vrednosti",
-    "parentId": "stvaranje-vrednosti",
-    "label": "Ponuda Vrednosti",
+    "id": "value-proposition",
+    "parentId": "creating-value",
+    "label": "Value Proposition",
     "sortOrder": 2
   },
   {
-    "id": "prototip",
-    "parentId": "stvaranje-vrednosti",
-    "label": "Prototip",
+    "id": "prototype",
+    "parentId": "creating-value",
+    "label": "Prototype",
     "sortOrder": 3
   },
   {
-    "id": "najmanji-odrzivi-proizvod-mvp",
-    "parentId": "stvaranje-vrednosti",
-    "label": "Najmanji Održivi Proizvod (MVP)",
+    "id": "minimum-viable-product-mvp",
+    "parentId": "creating-value",
+    "label": "Minimum Viable Product (MVP)",
     "sortOrder": 4
   },
   {
-    "id": "klijentov-model-vrednosti",
-    "parentId": "stvaranje-vrednosti",
-    "label": "Klijentov Model Vrednosti",
+    "id": "customer-value-model",
+    "parentId": "creating-value",
+    "label": "Customer Value Model",
     "sortOrder": 5
   },
   {
-    "id": "stvaranje-zajednice",
-    "parentId": "stvaranje-zajednice-kupaca",
-    "label": "Stvaranje Zajednice",
+    "id": "community-building",
+    "parentId": "building-a-customer-community",
+    "label": "Community Building",
     "sortOrder": 1
   },
   {
-    "id": "od-kupaca-do-fanova-fanocracy",
-    "parentId": "stvaranje-zajednice-kupaca",
-    "label": "Od Kupaca do Fanova (Fanocracy)",
+    "id": "from-customers-to-fans-fanocracy",
+    "parentId": "building-a-customer-community",
+    "label": "From Customers to Fans (Fanocracy)",
     "sortOrder": 2
   },
   {
-    "id": "kako-koristiti-cenu-kao-mamac",
-    "parentId": "taktike",
-    "label": "Kako koristiti Cenu kao Mamac?",
+    "id": "how-to-use-price-as-a-decoy",
+    "parentId": "tactics",
+    "label": "How to Use Price as a Decoy?",
     "sortOrder": 1
   },
   {
-    "id": "neparno-i-parno-odredjivanje-cena",
-    "parentId": "taktike",
-    "label": "Neparno i Parno određivanje cena",
+    "id": "odd-and-even-pricing",
+    "parentId": "tactics",
+    "label": "Odd and Even Pricing",
     "sortOrder": 2
   },
   {
-    "id": "odabir-pravog-broja-za-cenu-vaseg-proizvoda",
-    "parentId": "taktike",
-    "label": "Odabir Pravog Broja za Cenu vašeg Proizvoda",
+    "id": "choosing-the-right-number-for-your-product-price",
+    "parentId": "tactics",
+    "label": "Choosing the Right Number for Your Product Price",
     "sortOrder": 3
   },
   {
-    "id": "princip-nesigurnosti-cene",
-    "parentId": "taktike",
-    "label": "Princip Nesigurnosti Cene",
+    "id": "price-uncertainty-principle",
+    "parentId": "tactics",
+    "label": "Price Uncertainty Principle",
     "sortOrder": 4
   },
   {
-    "id": "psiholosko-odredjivanje-cena",
-    "parentId": "taktike",
-    "label": "Psiholosko odredjivanje cena",
+    "id": "psychological-pricing",
+    "parentId": "tactics",
+    "label": "Psychological Pricing",
     "sortOrder": 5
   },
   {
-    "id": "taktike-creaming-i-skimming-u-cenovnoj-strategiji",
-    "parentId": "taktike",
-    "label": "Taktike \"Creaming\" i \"Skimming\" u Cenovnoj Strategiji",
+    "id": "creaming-and-skimming-pricing-tactics",
+    "parentId": "tactics",
+    "label": "Creaming and Skimming Pricing Tactics",
     "sortOrder": 6
   },
   {
-    "id": "korporacije",
-    "parentId": "tipovi-kompanija",
-    "label": "Korporacije",
+    "id": "corporations",
+    "parentId": "types-of-companies",
+    "label": "Corporations",
     "sortOrder": 1
   },
   {
-    "id": "modeli-vlasnistva",
-    "parentId": "tipovi-kompanija",
-    "label": "Modeli Vlasništva",
+    "id": "ownership-models",
+    "parentId": "types-of-companies",
+    "label": "Ownership Models",
     "sortOrder": 1
   },
   {
-    "id": "privatne-i-javne-kompanije",
-    "parentId": "tipovi-kompanija",
-    "label": "Privatne i Javne Kompanije",
+    "id": "private-and-public-companies",
+    "parentId": "types-of-companies",
+    "label": "Private and Public Companies",
     "sortOrder": 2
   },
   {
-    "id": "samostalna-vlasnistva-i-parnerstva",
-    "parentId": "tipovi-kompanija",
-    "label": "Samostalna Vlasništva i Parnerstva",
+    "id": "sole-proprietorships-and-partnerships",
+    "parentId": "types-of-companies",
+    "label": "Sole Proprietorships and Partnerships",
     "sortOrder": 3
   },
   {
-    "id": "multinacionalne-kompanije",
-    "parentId": "tipovi-kompanija",
-    "label": "Multinacionalne Kompanije",
+    "id": "multinational-companies",
+    "parentId": "types-of-companies",
+    "label": "Multinational Companies",
     "sortOrder": 4
   },
   {
-    "id": "neprofitne-organizacije",
-    "parentId": "tipovi-kompanija",
-    "label": "Neprofitne Organizacije",
+    "id": "non-profit-organizations",
+    "parentId": "types-of-companies",
+    "label": "Non-Profit Organizations",
     "sortOrder": 5
   },
   {
-    "id": "prodaja-zasnovana-na-vrednosti",
-    "parentId": "tipovi-prodaje",
-    "label": "Prodaja zasnovana na Vrednosti",
+    "id": "value-based-selling",
+    "parentId": "sales-types",
+    "label": "Value-Based Selling",
     "sortOrder": 1
   },
   {
-    "id": "prodaja-zasnovana-na-edukaciji",
-    "parentId": "tipovi-prodaje",
-    "label": "Prodaja zasnovana na Edukaciji",
+    "id": "education-based-selling",
+    "parentId": "sales-types",
+    "label": "Education-Based Selling",
     "sortOrder": 2
   },
   {
-    "id": "prodaja-koriscenjem-posrednika",
-    "parentId": "tipovi-prodaje",
-    "label": "Prodaja korišćenjem Posrednika",
+    "id": "selling-through-intermediaries",
+    "parentId": "sales-types",
+    "label": "Selling Through Intermediaries",
     "sortOrder": 3
   },
   {
-    "id": "aukcija",
-    "parentId": "tipovi-prodaje",
-    "label": "Aukcija",
+    "id": "auction",
+    "parentId": "sales-types",
+    "label": "Auction",
     "sortOrder": 4
   },
   {
-    "id": "strategije-za-prevazilazenje-otpora-prema-ubedjivanju",
-    "parentId": "tipovi-prodaje",
-    "label": "Strategije za Prevazilaženje Otpora prema Ubeđivanju",
+    "id": "strategies-for-overcoming-resistance-to-persuasion",
+    "parentId": "sales-types",
+    "label": "Strategies for Overcoming Resistance to Persuasion",
     "sortOrder": 5
   },
   {
-    "id": "agilni-pristup-proizvodnji",
-    "parentId": "tipovi-proizvodnje",
-    "label": "Agilni Pristup Proizvodnji",
+    "id": "agile-production-approach",
+    "parentId": "production-types",
+    "label": "Agile Production Approach",
     "sortOrder": 1
   },
   {
-    "id": "serijska-proizvodnja",
-    "parentId": "tipovi-proizvodnje",
-    "label": "Serijska Proizvodnja",
+    "id": "batch-production",
+    "parentId": "production-types",
+    "label": "Batch Production",
     "sortOrder": 2
   },
   {
-    "id": "kontinuirana-proizvodnja",
-    "parentId": "tipovi-proizvodnje",
-    "label": "Kontinuirana Proizvodnja",
+    "id": "continuous-production",
+    "parentId": "production-types",
+    "label": "Continuous Production",
     "sortOrder": 3
   },
   {
-    "id": "proizvodnja-tacno-na-vreme",
-    "parentId": "tipovi-proizvodnje",
-    "label": "Proizvodnja Tačno-na-vreme",
+    "id": "just-in-time-production",
+    "parentId": "production-types",
+    "label": "Just-in-Time Production",
     "sortOrder": 4
   },
   {
-    "id": "proizvodnja-posla",
-    "parentId": "tipovi-proizvodnje",
-    "label": "Proizvodnja Posla",
+    "id": "job-production",
+    "parentId": "production-types",
+    "label": "Job Production",
     "sortOrder": 5
   },
   {
-    "id": "masovna-proizvodnja",
-    "parentId": "tipovi-proizvodnje",
-    "label": "Masovna Proizvodnja",
+    "id": "mass-production",
+    "parentId": "production-types",
+    "label": "Mass Production",
     "sortOrder": 6
   },
   {
-    "id": "masovno-prilagodjavanje",
-    "parentId": "tipovi-proizvodnje",
-    "label": "Masovno Prilagođavanje",
+    "id": "mass-customization",
+    "parentId": "production-types",
+    "label": "Mass Customization",
     "sortOrder": 7
   },
   {
-    "id": "lean-proizvodnja",
-    "parentId": "tipovi-proizvodnje",
-    "label": "Lean Proizvodnja",
+    "id": "lean-production",
+    "parentId": "production-types",
+    "label": "Lean Production",
     "sortOrder": 8
   },
   {
     "id": "kaizen",
-    "parentId": "tipovi-proizvodnje",
+    "parentId": "production-types",
     "label": "Kaizen",
     "sortOrder": 9
   },
   {
     "id": "six-sigma",
-    "parentId": "tipovi-proizvodnje",
+    "parentId": "production-types",
     "label": "Six Sigma",
     "sortOrder": 10
   },
   {
-    "id": "upravljanje-kvalitetom-upravljanje-kvalitetom",
-    "parentId": "upravljanje-kvalitetom",
-    "label": "Upravljanje Kvalitetom",
+    "id": "quality-management-quality-management",
+    "parentId": "quality-management",
+    "label": "Quality Management",
     "sortOrder": 1
   },
   {
-    "id": "kontrola-kvaliteta",
-    "parentId": "upravljanje-kvalitetom",
-    "label": "Kontrola Kvaliteta",
+    "id": "quality-control",
+    "parentId": "quality-management",
+    "label": "Quality Control",
     "sortOrder": 2
   },
   {
-    "id": "proizvodnja-i-kontrola-kvaliteta",
-    "parentId": "upravljanje-kvalitetom",
-    "label": "Proizvodnja i Kontrola Kvaliteta",
+    "id": "production-and-quality-control",
+    "parentId": "quality-management",
+    "label": "Production and Quality Control",
     "sortOrder": 3
   },
   {
-    "id": "totalni-menadzment-kvaliteta",
-    "parentId": "upravljanje-kvalitetom",
-    "label": "Totalni Menadžment Kvaliteta",
+    "id": "total-quality-management",
+    "parentId": "quality-management",
+    "label": "Total Quality Management",
     "sortOrder": 4
   },
   {
-    "id": "prikupljanje-korisnickih-podataka",
-    "parentId": "upravljanje-podacima",
-    "label": "Prikupljanje Korisničkih Podataka",
+    "id": "collecting-user-data",
+    "parentId": "data-management",
+    "label": "Collecting User Data",
     "sortOrder": 1
   },
   {
-    "id": "skladistenje-podataka",
-    "parentId": "upravljanje-podacima",
-    "label": "Skladištenje Podataka",
+    "id": "data-storage",
+    "parentId": "data-management",
+    "label": "Data Storage",
     "sortOrder": 1
   },
   {
-    "id": "upravljanje-korisnickim-podacima",
-    "parentId": "upravljanje-podacima",
-    "label": "Upravljanje Korisničkim Podacima",
+    "id": "user-data-management",
+    "parentId": "data-management",
+    "label": "User Data Management",
     "sortOrder": 2
   },
   {
     "id": "big-data",
-    "parentId": "upravljanje-podacima",
+    "parentId": "data-management",
     "label": "Big Data",
     "sortOrder": 3
   },
   {
-    "id": "poslovna-inteligencija-bi",
-    "parentId": "upravljanje-podacima",
-    "label": "Poslovna Inteligencija (BI)",
+    "id": "business-intelligence-bi",
+    "parentId": "data-management",
+    "label": "Business Intelligence (BI)",
     "sortOrder": 4
   },
   {
-    "id": "upotreba-podataka-za-donosenje-odluka",
-    "parentId": "upravljanje-podacima",
-    "label": "Upotreba Podataka za Donošenje Odluka",
+    "id": "using-data-for-decision-making",
+    "parentId": "data-management",
+    "label": "Using Data for Decision Making",
     "sortOrder": 5
   },
   {
-    "id": "upravljanje-informacijama",
-    "parentId": "upravljanje-podacima",
-    "label": "Upravljanje Informacijama",
+    "id": "information-management",
+    "parentId": "data-management",
+    "label": "Information Management",
     "sortOrder": 6
   },
   {
-    "id": "uvod",
-    "parentId": "upravljanje-svojim-radom",
-    "label": "Uvod",
+    "id": "introduction",
+    "parentId": "self-management",
+    "label": "Introduction",
     "sortOrder": 1
   },
   {
-    "id": "fokus",
-    "parentId": "upravljanje-svojim-radom",
-    "label": "Fokus",
+    "id": "focus",
+    "parentId": "self-management",
+    "label": "Focus",
     "sortOrder": 2
   },
   {
-    "id": "energija",
-    "parentId": "upravljanje-svojim-radom",
-    "label": "Energija",
+    "id": "energy",
+    "parentId": "self-management",
+    "label": "Energy",
     "sortOrder": 3
   },
   {
-    "id": "upravljanje-vremenom",
-    "parentId": "upravljanje-svojim-radom",
-    "label": "Upravljanje Vremenom",
+    "id": "time-management",
+    "parentId": "self-management",
+    "label": "Time Management",
     "sortOrder": 4
   },
   {
-    "id": "odluke",
-    "parentId": "upravljanje-svojim-radom",
-    "label": "Odluke",
+    "id": "self-management-decisions",
+    "parentId": "self-management",
+    "label": "Decisions",
     "sortOrder": 5
   },
   {
-    "id": "sklonosti",
-    "parentId": "upravljanje-svojim-radom",
-    "label": "Sklonosti",
+    "id": "tendencies",
+    "parentId": "self-management",
+    "label": "Tendencies",
     "sortOrder": 6
   },
   {
-    "id": "testiranje",
-    "parentId": "upravljanje-svojim-radom",
-    "label": "Testiranje",
+    "id": "testing",
+    "parentId": "self-management",
+    "label": "Testing",
     "sortOrder": 7
   },
   {
-    "id": "parkinsonov-zakon",
-    "parentId": "upravljanje-vremenom",
-    "label": "Parkinsonov Zakon",
+    "id": "parkinsons-law",
+    "parentId": "time-management",
+    "label": "Parkinson's Law",
     "sortOrder": 1
   },
   {
-    "id": "pomodoro-tehnika",
-    "parentId": "upravljanje-vremenom",
-    "label": "Pomodoro Tehnika",
+    "id": "pomodoro-technique",
+    "parentId": "time-management",
+    "label": "Pomodoro Technique",
     "sortOrder": 2
   },
   {
-    "id": "sledeca-radnja",
-    "parentId": "upravljanje-vremenom",
-    "label": "Sledeća Radnja",
+    "id": "next-action",
+    "parentId": "time-management",
+    "label": "Next Action",
     "sortOrder": 3
   },
   {
-    "id": "licni-razvoj",
-    "parentId": "uvod",
-    "label": "Lični Razvoj",
+    "id": "personal-development",
+    "parentId": "introduction",
+    "label": "Personal Development",
     "sortOrder": 1
   },
   {
-    "id": "uvod-upravljanje-svojim-radom",
-    "parentId": "uvod",
-    "label": "Upravljanje Svojim Radom",
+    "id": "introduction-self-management",
+    "parentId": "introduction",
+    "label": "Self-Management",
     "sortOrder": 1
   },
   {
-    "id": "navike",
-    "parentId": "uvod",
-    "label": "Navike",
+    "id": "habits",
+    "parentId": "introduction",
+    "label": "Habits",
     "sortOrder": 2
   },
   {
-    "id": "uvod-u-analizu-konkurencije-analiza-konkurencije",
-    "parentId": "uvod-u-analizu-konkurencije",
-    "label": "Analiza Konkurencije",
+    "id": "introduction-to-competitive-analysis-competitive-analysis",
+    "parentId": "introduction-to-competitive-analysis",
+    "label": "Competitive Analysis",
     "sortOrder": 1
   },
   {
-    "id": "benefiti-analize-konkurencije",
-    "parentId": "uvod-u-analizu-konkurencije",
-    "label": "Benefiti Analize Konkurencije",
+    "id": "benefits-of-competitive-analysis",
+    "parentId": "introduction-to-competitive-analysis",
+    "label": "Benefits of Competitive Analysis",
     "sortOrder": 2
   },
   {
-    "id": "ko-je-vasa-konkurencija",
-    "parentId": "uvod-u-analizu-konkurencije",
-    "label": "Ko je vaša konkurencija?",
+    "id": "who-is-your-competition",
+    "parentId": "introduction-to-competitive-analysis",
+    "label": "Who Is Your Competition?",
     "sortOrder": 3
   },
   {
-    "id": "kako-mozete-uciti-od-konkurencije",
-    "parentId": "uvod-u-analizu-konkurencije",
-    "label": "Kako možete učiti od Konkurencije?",
+    "id": "how-can-you-learn-from-your-competition",
+    "parentId": "introduction-to-competitive-analysis",
+    "label": "How Can You Learn from Your Competition?",
     "sortOrder": 4
   },
   {
-    "id": "kako-se-vasa-konkurencija-oglasava",
-    "parentId": "uvod-u-analizu-konkurencije",
-    "label": "Kako se vaša Konkurencija oglašava?",
+    "id": "how-does-your-competition-advertise",
+    "parentId": "introduction-to-competitive-analysis",
+    "label": "How Does Your Competition Advertise?",
     "sortOrder": 5
   },
   {
-    "id": "koliko-vasa-konkurencija-naplacuje",
-    "parentId": "uvod-u-analizu-konkurencije",
-    "label": "Koliko vaša Konkurencija naplaćuje?",
+    "id": "how-much-does-your-competition-charge",
+    "parentId": "introduction-to-competitive-analysis",
+    "label": "How Much Does Your Competition Charge?",
     "sortOrder": 6
   },
   {
-    "id": "uvod-u-finansije-finansije",
-    "parentId": "uvod-u-finansije",
-    "label": "Finansije",
+    "id": "introduction-to-finance-finance",
+    "parentId": "introduction-to-finance",
+    "label": "Finance",
     "sortOrder": 1
   },
   {
-    "id": "tok-gotovine",
-    "parentId": "uvod-u-finansije",
-    "label": "Tok Gotovine",
+    "id": "cash-flow",
+    "parentId": "introduction-to-finance",
+    "label": "Cash Flow",
     "sortOrder": 1
   },
   {
     "id": "profit",
-    "parentId": "uvod-u-finansije",
+    "parentId": "introduction-to-finance",
     "label": "Profit",
     "sortOrder": 2
   },
   {
-    "id": "troskovi",
-    "parentId": "uvod-u-finansije",
-    "label": "Troškovi",
+    "id": "costs",
+    "parentId": "introduction-to-finance",
+    "label": "Costs",
     "sortOrder": 3
   },
   {
-    "id": "profitna-marza",
-    "parentId": "uvod-u-finansije",
-    "label": "Profitna Marža",
+    "id": "profit-margin",
+    "parentId": "introduction-to-finance",
+    "label": "Profit Margin",
     "sortOrder": 4
   },
   {
-    "id": "pristupi-kalkulaciji-troskova",
-    "parentId": "uvod-u-finansije",
-    "label": "Pristupi Kalkulaciji Troškova",
+    "id": "cost-calculation-approaches",
+    "parentId": "introduction-to-finance",
+    "label": "Cost Calculation Approaches",
     "sortOrder": 5
   },
   {
-    "id": "hvatanje-vrednosti-value-capture",
-    "parentId": "uvod-u-finansije",
-    "label": "Hvatanje Vrednosti (Value Capture)",
+    "id": "value-capture",
+    "parentId": "introduction-to-finance",
+    "label": "Value Capture",
     "sortOrder": 6
   },
   {
-    "id": "racunovodstvo",
-    "parentId": "uvod-u-finansije",
-    "label": "Računovodstvo",
+    "id": "accounting",
+    "parentId": "introduction-to-finance",
+    "label": "Accounting",
     "sortOrder": 7
   },
   {
-    "id": "budzeti-planiranje-finansijskih-sredstava",
-    "parentId": "uvod-u-finansije",
-    "label": "Budžeti (Planiranje Finansijskih Sredstava)",
+    "id": "budgets-financial-resource-planning",
+    "parentId": "introduction-to-finance",
+    "label": "Budgets (Financial Resource Planning)",
     "sortOrder": 8
   },
   {
-    "id": "predvidjanje-finansija-forkastiranje",
-    "parentId": "uvod-u-finansije",
-    "label": "Predvidjanje Finansija (Forkastiranje)",
+    "id": "financial-forecasting",
+    "parentId": "introduction-to-finance",
+    "label": "Financial Forecasting",
     "sortOrder": 9
   },
   {
-    "id": "kljucni-finansijski-indikatori",
-    "parentId": "uvod-u-finansije",
-    "label": "Ključni Finansijski Indikatori",
+    "id": "key-financial-indicators",
+    "parentId": "introduction-to-finance",
+    "label": "Key Financial Indicators",
     "sortOrder": 10
   },
   {
-    "id": "evaluacija-ucinka",
-    "parentId": "uvod-u-finansije",
-    "label": "Evaluacija Učinka",
+    "id": "performance-evaluation",
+    "parentId": "introduction-to-finance",
+    "label": "Performance Evaluation",
     "sortOrder": 11
   },
   {
-    "id": "amortizacija-deprecijacija",
-    "parentId": "uvod-u-finansije",
-    "label": "Amortizacija (Deprecijacija)",
+    "id": "depreciation",
+    "parentId": "introduction-to-finance",
+    "label": "Depreciation",
     "sortOrder": 12
   },
   {
-    "id": "finansijski-koeficijenti",
-    "parentId": "uvod-u-finansije",
-    "label": "FInansijski Koeficijenti",
+    "id": "financial-ratios",
+    "parentId": "introduction-to-finance",
+    "label": "Financial Ratios",
     "sortOrder": 13
   },
   {
-    "id": "uvod-u-kognitivne-sklonosti-kognitivne-sklonosti",
-    "parentId": "uvod-u-kognitivne-sklonosti",
-    "label": "Kognitivne Sklonosti",
+    "id": "introduction-to-cognitive-biases-cognitive-biases",
+    "parentId": "introduction-to-cognitive-biases",
+    "label": "Cognitive Biases",
     "sortOrder": 1
   },
   {
-    "id": "dizajniranje-izbora",
-    "parentId": "uvod-u-kognitivne-sklonosti",
-    "label": "Dizajniranje Izbora",
+    "id": "choice-architecture",
+    "parentId": "introduction-to-cognitive-biases",
+    "label": "Choice Architecture",
     "sortOrder": 2
   },
   {
-    "id": "kontrast-ustede",
-    "parentId": "uvod-u-kognitivne-sklonosti",
-    "label": "Kontrast Uštede",
+    "id": "savings-contrast",
+    "parentId": "introduction-to-cognitive-biases",
+    "label": "Savings Contrast",
     "sortOrder": 3
   },
   {
-    "id": "dobro-nasuprot-losem",
-    "parentId": "uvod-u-kognitivne-sklonosti",
-    "label": "Dobro nasuprot Lošem",
+    "id": "good-vs-bad",
+    "parentId": "introduction-to-cognitive-biases",
+    "label": "Good vs Bad",
     "sortOrder": 4
   },
   {
-    "id": "mi-u-odnosu-na-njih",
-    "parentId": "uvod-u-kognitivne-sklonosti",
-    "label": "Mi u odnosu na Njih",
+    "id": "us-vs-them",
+    "parentId": "introduction-to-cognitive-biases",
+    "label": "Us vs Them",
     "sortOrder": 5
   },
   {
-    "id": "kontrast-izmedju-novog-i-starog",
-    "parentId": "uvod-u-kognitivne-sklonosti",
-    "label": "Kontrast Između Novog i Starog",
+    "id": "new-vs-old-contrast",
+    "parentId": "introduction-to-cognitive-biases",
+    "label": "New vs Old Contrast",
     "sortOrder": 6
   },
   {
-    "id": "paradoks-izbora",
-    "parentId": "uvod-u-kognitivne-sklonosti",
-    "label": "Paradoks Izbora",
+    "id": "paradox-of-choice",
+    "parentId": "introduction-to-cognitive-biases",
+    "label": "Paradox of Choice",
     "sortOrder": 7
   },
   {
-    "id": "princip-usidravanja-anchoring",
-    "parentId": "uvod-u-kognitivne-sklonosti",
-    "label": "Princip Usidravanja (Anchoring)",
+    "id": "anchoring-principle",
+    "parentId": "introduction-to-cognitive-biases",
+    "label": "Anchoring Principle",
     "sortOrder": 8
   },
   {
-    "id": "segmentacija-trzista",
-    "parentId": "uvod-u-marketing",
-    "label": "Segmentacija Tržišta",
+    "id": "market-segmentation",
+    "parentId": "introduction-to-marketing",
+    "label": "Market Segmentation",
     "sortOrder": 1
   },
   {
-    "id": "uvod-u-marketing-marketing",
-    "parentId": "uvod-u-marketing",
+    "id": "introduction-to-marketing-marketing",
+    "parentId": "introduction-to-marketing",
     "label": "Marketing",
     "sortOrder": 1
   },
   {
-    "id": "ciljno-trziste-i-profil-vaseg-kupca",
-    "parentId": "uvod-u-marketing",
-    "label": "Ciljno Tržiste i Profil vašeg Kupca",
+    "id": "target-market-and-customer-profile",
+    "parentId": "introduction-to-marketing",
+    "label": "Target Market and Customer Profile",
     "sortOrder": 2
   },
   {
-    "id": "pozicioniranje",
-    "parentId": "uvod-u-marketing",
-    "label": "Pozicioniranje",
+    "id": "positioning",
+    "parentId": "introduction-to-marketing",
+    "label": "Positioning",
     "sortOrder": 3
   },
   {
-    "id": "konkurentska-prednost",
-    "parentId": "uvod-u-marketing",
-    "label": "Konkurentska Prednost",
+    "id": "competitive-advantage",
+    "parentId": "introduction-to-marketing",
+    "label": "Competitive Advantage",
     "sortOrder": 4
   },
   {
-    "id": "diversifikacija-usp",
-    "parentId": "uvod-u-marketing",
-    "label": "Diversifikacija (USP)",
+    "id": "differentiation-usp",
+    "parentId": "introduction-to-marketing",
+    "label": "Differentiation (USP)",
     "sortOrder": 5
   },
   {
-    "id": "brendiranje",
-    "parentId": "uvod-u-marketing",
-    "label": "Brendiranje",
+    "id": "branding",
+    "parentId": "introduction-to-marketing",
+    "label": "Branding",
     "sortOrder": 6
   },
   {
-    "id": "licni-brend",
-    "parentId": "uvod-u-marketing",
-    "label": "Lični Brend",
+    "id": "personal-brand",
+    "parentId": "introduction-to-marketing",
+    "label": "Personal Brand",
     "sortOrder": 7
   },
   {
-    "id": "ugled-reputacija",
-    "parentId": "uvod-u-marketing",
-    "label": "Ugled, Reputacija",
+    "id": "reputation",
+    "parentId": "introduction-to-marketing",
+    "label": "Reputation",
     "sortOrder": 8
   },
   {
-    "id": "strategija-odredjivanja-cena",
-    "parentId": "uvod-u-odredjivanje-cena",
-    "label": "Strategija Određivanja Cena",
+    "id": "pricing-strategy",
+    "parentId": "introduction-to-pricing",
+    "label": "Pricing Strategy",
     "sortOrder": 1
   },
   {
-    "id": "sta-je-to-odredjivanje-cene",
-    "parentId": "uvod-u-odredjivanje-cena",
-    "label": "Šta je to Određivanje Cene?",
+    "id": "what-is-pricing",
+    "parentId": "introduction-to-pricing",
+    "label": "What Is Pricing?",
     "sortOrder": 1
   },
   {
-    "id": "uvod-u-odredjivanje-cena-odredjivanje-cene",
-    "parentId": "uvod-u-odredjivanje-cena",
-    "label": "Određivanje Cene",
+    "id": "introduction-to-pricing-pricing",
+    "parentId": "introduction-to-pricing",
+    "label": "Pricing",
     "sortOrder": 1
   },
   {
-    "id": "sta-je-to-trosak",
-    "parentId": "uvod-u-odredjivanje-cena",
-    "label": "Šta je to Trošak?",
+    "id": "what-is-cost",
+    "parentId": "introduction-to-pricing",
+    "label": "What Is Cost?",
     "sortOrder": 2
   },
   {
-    "id": "sta-je-to-strategija-odredjivanja-cene",
-    "parentId": "uvod-u-odredjivanje-cena",
-    "label": "Šta je to Strategija Određivanja Cene?",
+    "id": "what-is-a-pricing-strategy",
+    "parentId": "introduction-to-pricing",
+    "label": "What Is a Pricing Strategy?",
     "sortOrder": 3
   },
   {
-    "id": "kako-postaviti-strategiju-cena-kljucna-pitanja",
-    "parentId": "uvod-u-odredjivanje-cena",
-    "label": "Kako Postaviti Strategiju Cena - Ključna Pitanja",
+    "id": "how-to-set-a-pricing-strategy-key-questions",
+    "parentId": "introduction-to-pricing",
+    "label": "How to Set a Pricing Strategy - Key Questions",
     "sortOrder": 4
   },
   {
-    "id": "faktori-koji-oblikuju-cenovnu-strategiju",
-    "parentId": "uvod-u-odredjivanje-cena",
-    "label": "Faktori koji Oblikuju Cenovnu Strategiju",
+    "id": "factors-shaping-pricing-strategy",
+    "parentId": "introduction-to-pricing",
+    "label": "Factors Shaping Pricing Strategy",
     "sortOrder": 5
   },
   {
-    "id": "razlicite-strategije-odredjivanja-cena",
-    "parentId": "uvod-u-odredjivanje-cena",
-    "label": "Različite Strategije određivanja Cena",
+    "id": "different-pricing-strategies",
+    "parentId": "introduction-to-pricing",
+    "label": "Different Pricing Strategies",
     "sortOrder": 6
   },
   {
-    "id": "odredjivanje-cene-na-osnovu-troska",
-    "parentId": "uvod-u-odredjivanje-cena",
-    "label": "Određivanje Cene na osnovu Troška",
+    "id": "cost-based-pricing",
+    "parentId": "introduction-to-pricing",
+    "label": "Cost-Based Pricing",
     "sortOrder": 7
   },
   {
-    "id": "odredjivanje-cene-prema-segmentima-kupaca",
-    "parentId": "uvod-u-odredjivanje-cena",
-    "label": "Određivanje Cene Prema Segmentima Kupaca",
+    "id": "customer-segment-based-pricing",
+    "parentId": "introduction-to-pricing",
+    "label": "Customer Segment-Based Pricing",
     "sortOrder": 8
   },
   {
-    "id": "cetiri-pristupa-za-formiranje-cene-proizvoda",
-    "parentId": "uvod-u-odredjivanje-cena",
-    "label": "Četiri Pristupa za Formiranje Cene Proizvoda",
+    "id": "four-approaches-to-product-pricing",
+    "parentId": "introduction-to-pricing",
+    "label": "Four Approaches to Product Pricing",
     "sortOrder": 9
   },
   {
-    "id": "lanac-vrednosti",
-    "parentId": "uvod-u-operacije-i-proizvodnju",
-    "label": "Lanac Vrednosti",
+    "id": "value-chain",
+    "parentId": "introduction-to-operations-and-production",
+    "label": "Value Chain",
     "sortOrder": 1
   },
   {
-    "id": "uvod-u-operacije-i-proizvodnju-operacije-i-proizvodnja",
-    "parentId": "uvod-u-operacije-i-proizvodnju",
-    "label": "Operacije i Proizvodnja",
+    "id": "introduction-to-operations-and-production-operations-and-production",
+    "parentId": "introduction-to-operations-and-production",
+    "label": "Operations & Production",
     "sortOrder": 1
   },
   {
-    "id": "proces-razvoja-novog-proizvoda",
-    "parentId": "uvod-u-operacije-i-proizvodnju",
-    "label": "Proces Razvoja Novog Proizvoda",
+    "id": "new-product-development-process",
+    "parentId": "introduction-to-operations-and-production",
+    "label": "New Product Development Process",
     "sortOrder": 2
   },
   {
-    "id": "poslovna-analiza-ba",
-    "parentId": "uvod-u-operacije-i-proizvodnju",
-    "label": "Poslovna Analiza (BA)",
+    "id": "business-analysis-ba",
+    "parentId": "introduction-to-operations-and-production",
+    "label": "Business Analysis (BA)",
     "sortOrder": 3
   },
   {
-    "id": "dizajn",
-    "parentId": "uvod-u-operacije-i-proizvodnju",
-    "label": "Dizajn",
+    "id": "design",
+    "parentId": "introduction-to-operations-and-production",
+    "label": "Design",
     "sortOrder": 4
   },
   {
-    "id": "proizvod-product",
-    "parentId": "uvod-u-operacije-i-proizvodnju",
-    "label": "Proizvod (Product)",
+    "id": "introduction-to-operations-and-production-product",
+    "parentId": "introduction-to-operations-and-production",
+    "label": "Product",
     "sortOrder": 5
   },
   {
-    "id": "razumevanje-matrice-proizvod-proces",
-    "parentId": "uvod-u-operacije-i-proizvodnju",
-    "label": "Razumevanje Matrice Proizvod-Proces",
+    "id": "understanding-product-process-matrix",
+    "parentId": "introduction-to-operations-and-production",
+    "label": "Understanding Product-Process Matrix",
     "sortOrder": 6
   },
   {
-    "id": "poslovni-procesi",
-    "parentId": "uvod-u-operacije-i-proizvodnju",
-    "label": "Poslovni Procesi",
+    "id": "business-processes",
+    "parentId": "introduction-to-operations-and-production",
+    "label": "Business Processes",
     "sortOrder": 7
   },
   {
-    "id": "upravljanje-nabavkom-materijala-u-proizvodnji",
-    "parentId": "uvod-u-operacije-i-proizvodnju",
-    "label": "Upravljanje Nabavkom Materijala u Proizvodnji",
+    "id": "managing-material-procurement-in-production",
+    "parentId": "introduction-to-operations-and-production",
+    "label": "Managing Material Procurement in Production",
     "sortOrder": 8
   },
   {
-    "id": "upravljanje-kapacitetom-u-proizvodnji",
-    "parentId": "uvod-u-operacije-i-proizvodnju",
-    "label": "Upravljanje Kapacitetom u Proizvodnji",
+    "id": "managing-production-capacity",
+    "parentId": "introduction-to-operations-and-production",
+    "label": "Managing Production Capacity",
     "sortOrder": 9
   },
   {
-    "id": "inventar-zalihe",
-    "parentId": "uvod-u-operacije-i-proizvodnju",
-    "label": "Inventar (Zalihe)",
+    "id": "introduction-to-operations-and-production-inventory",
+    "parentId": "introduction-to-operations-and-production",
+    "label": "Inventory",
     "sortOrder": 10
   },
   {
-    "id": "uloga-kontrole-u-operacijama-i-proizvodnji",
-    "parentId": "uvod-u-operacije-i-proizvodnju",
-    "label": "Uloga Kontrole u Operacijama i Proizvodnji",
+    "id": "role-of-control-in-operations-and-production",
+    "parentId": "introduction-to-operations-and-production",
+    "label": "Role of Control in Operations and Production",
     "sortOrder": 11
   },
   {
-    "id": "upotreba-benchmarkinga-u-operacijama",
-    "parentId": "uvod-u-operacije-i-proizvodnju",
-    "label": "Upotreba Benchmarkinga u Operacijama",
+    "id": "using-benchmarking-in-operations",
+    "parentId": "introduction-to-operations-and-production",
+    "label": "Using Benchmarking in Operations",
     "sortOrder": 12
   },
   {
-    "id": "ekonomija-i-disekonomija-obima",
-    "parentId": "uvod-u-operacije-i-proizvodnju",
-    "label": "Ekonomija i disekonomija obima",
+    "id": "economies-and-diseconomies-of-scale",
+    "parentId": "introduction-to-operations-and-production",
+    "label": "Economies and Diseconomies of Scale",
     "sortOrder": 13
   },
   {
-    "id": "obrnuti-lanac-snabdevanja",
-    "parentId": "uvod-u-operacije-i-proizvodnju",
-    "label": "Obrnuti Lanac Snabdevanja",
+    "id": "reverse-supply-chain",
+    "parentId": "introduction-to-operations-and-production",
+    "label": "Reverse Supply Chain",
     "sortOrder": 14
   },
   {
-    "id": "poslovanje",
-    "parentId": "uvod-u-poslovanje",
-    "label": "Poslovanje",
+    "id": "business",
+    "parentId": "introduction-to-business",
+    "label": "Business",
     "sortOrder": 1
   },
   {
-    "id": "kultura-poslovanja",
-    "parentId": "uvod-u-poslovanje",
-    "label": "Kultura Poslovanja",
+    "id": "business-culture",
+    "parentId": "introduction-to-business",
+    "label": "Business Culture",
     "sortOrder": 2
   },
   {
-    "id": "uvod-u-prodaju-prodaja",
-    "parentId": "uvod-u-prodaju",
-    "label": "Prodaja",
+    "id": "introduction-to-sales-sales",
+    "parentId": "introduction-to-sales",
+    "label": "Sales",
     "sortOrder": 1
   },
   {
-    "id": "kvalifikacija-izbor-pravih-kupaca",
-    "parentId": "uvod-u-prodaju",
-    "label": "Kvalifikacija (Izbor Pravih Kupaca)",
+    "id": "qualification-selecting-the-right-customers",
+    "parentId": "introduction-to-sales",
+    "label": "Qualification (Selecting the Right Customers)",
     "sortOrder": 2
   },
   {
-    "id": "profilisanje-kupaca",
-    "parentId": "uvod-u-prodaju",
-    "label": "Profilisanje Kupaca",
+    "id": "customer-profiling",
+    "parentId": "introduction-to-sales",
+    "label": "Customer Profiling",
     "sortOrder": 3
   },
   {
-    "id": "poverenje",
-    "parentId": "uvod-u-prodaju",
-    "label": "Poverenje",
+    "id": "trust",
+    "parentId": "introduction-to-sales",
+    "label": "Trust",
     "sortOrder": 4
   },
   {
-    "id": "prezentacija",
-    "parentId": "uvod-u-prodaju",
-    "label": "Prezentacija",
+    "id": "presentation",
+    "parentId": "introduction-to-sales",
+    "label": "Presentation",
     "sortOrder": 5
   },
   {
-    "id": "adresiranje-prigovora",
-    "parentId": "uvod-u-prodaju",
-    "label": "Adresiranje Prigovora",
+    "id": "addressing-objections",
+    "parentId": "introduction-to-sales",
+    "label": "Addressing Objections",
     "sortOrder": 6
   },
   {
-    "id": "zajednicki-teren",
-    "parentId": "uvod-u-prodaju",
-    "label": "Zajednički Teren",
+    "id": "common-ground",
+    "parentId": "introduction-to-sales",
+    "label": "Common Ground",
     "sortOrder": 7
   },
   {
-    "id": "transakcija",
-    "parentId": "uvod-u-prodaju",
-    "label": "Transakcija",
+    "id": "transaction",
+    "parentId": "introduction-to-sales",
+    "label": "Transaction",
     "sortOrder": 8
   },
   {
-    "id": "preporuke",
-    "parentId": "uvod-u-prodaju",
-    "label": "Preporuke",
+    "id": "referrals",
+    "parentId": "introduction-to-sales",
+    "label": "Referrals",
     "sortOrder": 9
   },
   {
-    "id": "upravljanje-odnosima-sa-kupcima-crm",
-    "parentId": "uvod-u-prodaju",
-    "label": "Upravljanje Odnosima sa Kupcima (CRM)",
+    "id": "customer-relationship-management-crm",
+    "parentId": "introduction-to-sales",
+    "label": "Customer Relationship Management (CRM)",
     "sortOrder": 10
   },
   {
-    "id": "razumevanje-sistema",
-    "parentId": "uvod-u-sisteme",
-    "label": "Razumevanje Sistema",
+    "id": "understanding-systems",
+    "parentId": "introduction-to-systems",
+    "label": "Understanding Systems",
     "sortOrder": 1
   },
   {
-    "id": "tok",
-    "parentId": "uvod-u-sisteme",
-    "label": "Tok",
+    "id": "flow",
+    "parentId": "introduction-to-systems",
+    "label": "Flow",
     "sortOrder": 1
   },
   {
-    "id": "resursi",
-    "parentId": "uvod-u-sisteme",
-    "label": "Resursi",
+    "id": "resources",
+    "parentId": "introduction-to-systems",
+    "label": "Resources",
     "sortOrder": 2
   },
   {
-    "id": "zalihe-tok-i-povratne-sprege",
-    "parentId": "uvod-u-sisteme",
-    "label": "Zalihe, Tok, i Povratne Sprege",
+    "id": "stocks-flows-and-feedback-loops",
+    "parentId": "introduction-to-systems",
+    "label": "Stocks, Flows, and Feedback Loops",
     "sortOrder": 3
   },
   {
-    "id": "visak",
-    "parentId": "uvod-u-sisteme",
-    "label": "Višak",
+    "id": "surplus",
+    "parentId": "introduction-to-systems",
+    "label": "Surplus",
     "sortOrder": 4
   },
   {
-    "id": "ogranicenja",
-    "parentId": "uvod-u-sisteme",
-    "label": "Ograničenja",
+    "id": "constraints",
+    "parentId": "introduction-to-systems",
+    "label": "Constraints",
     "sortOrder": 5
   },
   {
-    "id": "povratna-petlja",
-    "parentId": "uvod-u-sisteme",
-    "label": "Povratna Petlja",
+    "id": "feedback-loop",
+    "parentId": "introduction-to-systems",
+    "label": "Feedback Loop",
     "sortOrder": 6
   },
   {
-    "id": "galov-zakon",
-    "parentId": "uvod-u-sisteme",
-    "label": "Galov Zakon",
+    "id": "galls-law",
+    "parentId": "introduction-to-systems",
+    "label": "Gall's Law",
     "sortOrder": 7
   },
   {
-    "id": "kako-ljudi-vrednuju-stvari",
-    "parentId": "uvod-u-vrednost",
-    "label": "Kako ljudi vrednuju stvari?",
+    "id": "how-do-people-value-things",
+    "parentId": "introduction-to-value",
+    "label": "How Do People Value Things?",
     "sortOrder": 1
   },
   {
-    "id": "uvod-u-vrednost-vrednost",
-    "parentId": "uvod-u-vrednost",
-    "label": "Vrednost",
+    "id": "introduction-to-value-value",
+    "parentId": "introduction-to-value",
+    "label": "Value",
     "sortOrder": 1
   },
   {
-    "id": "maslova-hijerarhija-potreba",
-    "parentId": "uvod-u-vrednost",
-    "label": "Maslova Hijerarhija Potreba",
+    "id": "maslows-hierarchy-of-needs",
+    "parentId": "introduction-to-value",
+    "label": "Maslow's Hierarchy of Needs",
     "sortOrder": 2
   },
   {
-    "id": "kako-ljudi-procenjuju-vasu-ponudu",
-    "parentId": "uvod-u-vrednost",
-    "label": "Kako ljudi procenjuju vašu ponudu?",
+    "id": "how-do-people-evaluate-your-offer",
+    "parentId": "introduction-to-value",
+    "label": "How Do People Evaluate Your Offer?",
     "sortOrder": 3
   },
   {
-    "id": "potreba-za-statusom",
-    "parentId": "uvod-u-vrednost",
-    "label": "Potreba za Statusom",
+    "id": "need-for-status",
+    "parentId": "introduction-to-value",
+    "label": "Need for Status",
     "sortOrder": 4
   },
   {
-    "id": "standardne-vrednosti-ponude",
-    "parentId": "uvod-u-vrednost",
-    "label": "Standardne Vrednosti Ponude",
+    "id": "standard-offer-values",
+    "parentId": "introduction-to-value",
+    "label": "Standard Offer Values",
     "sortOrder": 5
   },
   {
-    "id": "uvod-u-vrednost",
-    "parentId": "vrednost",
-    "label": "Uvod u Vrednost",
+    "id": "introduction-to-value",
+    "parentId": "value",
+    "label": "Introduction to Value",
     "sortOrder": 1
   },
   {
-    "id": "vrste-vrednosti",
-    "parentId": "vrednost",
-    "label": "Vrste Vrednosti",
+    "id": "types-of-value",
+    "parentId": "value",
+    "label": "Types of Value",
     "sortOrder": 2
   },
   {
-    "id": "stvaranje-vrednosti",
-    "parentId": "vrednost",
-    "label": "Stvaranje Vrednosti",
+    "id": "creating-value",
+    "parentId": "value",
+    "label": "Creating Value",
     "sortOrder": 3
   },
   {
-    "id": "kako-uciniti-ponudu-vrednijom",
-    "parentId": "vrednost",
-    "label": "Kako učiniti ponudu vrednijom?",
+    "id": "value-how-to-make-your-offer-more-valuable",
+    "parentId": "value",
+    "label": "How to Make Your Offer More Valuable?",
     "sortOrder": 4
   },
   {
-    "id": "oblici-vrednosti",
-    "parentId": "vrste-vrednosti",
-    "label": "Oblici Vrednosti",
+    "id": "types-of-value-forms-of-value",
+    "parentId": "types-of-value",
+    "label": "Forms of Value",
     "sortOrder": 1
   },
   {
-    "id": "kategorije-vrednosti",
-    "parentId": "vrste-vrednosti",
-    "label": "Kategorije Vrednosti",
+    "id": "value-categories",
+    "parentId": "types-of-value",
+    "label": "Value Categories",
     "sortOrder": 2
   },
   {
-    "id": "kompanijske-vrednosti",
-    "parentId": "vrste-vrednosti",
-    "label": "Kompanijske Vrednosti",
+    "id": "company-values",
+    "parentId": "types-of-value",
+    "label": "Company Values",
     "sortOrder": 3
   },
   {
-    "id": "osnovne-i-aspiracione-vrednosti",
-    "parentId": "vrste-vrednosti",
-    "label": "Osnovne i Aspiracione Vrednosti",
+    "id": "core-and-aspirational-values",
+    "parentId": "types-of-value",
+    "label": "Core and Aspirational Values",
     "sortOrder": 4
   },
   {
-    "id": "primeri-vrednosti",
-    "parentId": "vrste-vrednosti",
-    "label": "Primeri Vrednosti",
+    "id": "value-examples",
+    "parentId": "types-of-value",
+    "label": "Value Examples",
     "sortOrder": 5
   },
   {
-    "id": "intelekutalni-kapital",
-    "parentId": "vrste-vrednosti",
-    "label": "Intelekutalni Kapital",
+    "id": "intellectual-capital",
+    "parentId": "types-of-value",
+    "label": "Intellectual Capital",
     "sortOrder": 6
   }
 ]

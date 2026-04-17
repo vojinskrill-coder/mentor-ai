@@ -34,6 +34,9 @@ import { BridgeModule } from './bridge/bridge.module';
 import { ProcessModule } from './process/process.module';
 import { FigmaModule } from './figma/figma.module';
 import { BrochureModule } from './brochure/brochure.module';
+import { McpServerModule } from './mcp-server/mcp-server.module';
+import { AgentRegistryModule } from './agent-registry/agent-registry.module';
+import { AgentProvisioningModule } from './agent-provisioning/agent-provisioning.module';
 
 // Serve Angular static files in production (combined deploy)
 const staticPath = join(__dirname, '..', '..', 'web', 'browser');
@@ -84,6 +87,9 @@ const serveStaticImports = existsSync(staticPath)
     ProcessModule,
     FigmaModule,
     BrochureModule,
+    McpServerModule,
+    AgentRegistryModule,
+    AgentProvisioningModule,
   ],
   controllers: [AppController],
   providers: [AppService],

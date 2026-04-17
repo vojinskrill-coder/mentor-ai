@@ -791,7 +791,7 @@ export class MaturityEngineService {
         data: {
           id: noteId,
           title: conceptName,
-          content: `Istraži koncept: ${conceptName}`,
+          content: `Enrich: ${conceptName}`,
           source: NoteSource.ONBOARDING,
           noteType: NoteType.TASK,
           status: NoteStatus.PENDING,

@@ -333,6 +333,26 @@ async function main() {
     if (unmatched > 0) {
       console.log(`Unmatched: ${unmatched} concepts (no curriculum node found)`);
     }
+
+    // ─── Pass 1.6: Use English curriculum labels as concept names + slugs ──
+    console.log('\n=== Pass 1.6: Setting English names from curriculum ===');
+    const currNodeById = new Map<string, CurriculumNode>(
+      curriculumNodes.map((n) => [n.id, n])
+    );
+    let namesUpdated = 0;
+    for (const concept of concepts) {
+      if (concept.curriculumId) {
+        const currNode = currNodeById.get(concept.curriculumId);
+        if (currNode) {
+          // ROOT FIX: curriculum.json is the English source of truth.
+          // The filename is Serbian — we replace it with the curriculum label.
+          concept.name = currNode.label;
+          concept.slug = slugify(currNode.label);
+          namesUpdated++;
+        }
+      }
+    }
+    console.log(`Updated ${namesUpdated} concept names to English from curriculum`);
   }
 
   // ─── Pass 2: Build relationships from wikilinks ────────

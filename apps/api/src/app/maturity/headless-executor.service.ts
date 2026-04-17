@@ -208,7 +208,7 @@ export class HeadlessExecutorService {
         taskId,
         agent: 'maturity',
         status: 'running',
-        message: `Izvršavanje: ${taskNote.title?.substring(0, 60)}`,
+        message: `Executing: ${taskNote.title?.substring(0, 60)}`,
         timestamp: new Date().toISOString(),
       });
 
